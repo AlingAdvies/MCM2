@@ -155,3 +155,94 @@ ALTER TABLE "clm"."vendor_contact" ADD CONSTRAINT "vendor_contact_vendor_id_fkey
 
 -- AddForeignKey
 ALTER TABLE "clm"."vendor_tag" ADD CONSTRAINT "vendor_tag_vendor_id_fkey" FOREIGN KEY ("vendor_id") REFERENCES "clm"."vendor"("vendor_id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- =============================================================================
+-- Row Level Security — tenant isolatie
+-- Principe: de NestJS-app zet aan het begin van elke request-transactie:
+--   SET LOCAL app.current_tenant_id = '<uuid>';
+-- Alle policies vergelijken tenant_id met deze sessie-variabele.
+-- =============================================================================
+
+CREATE OR REPLACE FUNCTION clm.current_tenant_id()
+RETURNS UUID LANGUAGE sql STABLE AS $$
+    SELECT NULLIF(current_setting('app.current_tenant_id', TRUE), '')::UUID
+$$;
+
+COMMENT ON FUNCTION clm.current_tenant_id() IS
+    'Leest tenant_id uit de PostgreSQL sessie-variabele app.current_tenant_id, gezet door TenantMiddleware.';
+
+-- updated_at trigger-functie
+CREATE OR REPLACE FUNCTION clm.set_updated_at()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_user_updated_at
+    BEFORE UPDATE ON clm."user"
+    FOR EACH ROW EXECUTE FUNCTION clm.set_updated_at();
+
+CREATE TRIGGER trg_vendor_updated_at
+    BEFORE UPDATE ON clm.vendor
+    FOR EACH ROW EXECUTE FUNCTION clm.set_updated_at();
+
+CREATE TRIGGER trg_vendor_contact_updated_at
+    BEFORE UPDATE ON clm.vendor_contact
+    FOR EACH ROW EXECUTE FUNCTION clm.set_updated_at();
+
+-- RLS inschakelen
+ALTER TABLE clm.tenant         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clm."user"         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clm.vendor         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clm.vendor_contact ENABLE ROW LEVEL SECURITY;
+ALTER TABLE clm.vendor_tag     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE audit.audit_event  ENABLE ROW LEVEL SECURITY;
+
+-- Policies — elke tabel krijgt zowel USING als WITH CHECK (Database-regel 3)
+CREATE POLICY tenant_isolation ON clm.tenant
+    USING (tenant_id = clm.current_tenant_id())
+    WITH CHECK (tenant_id = clm.current_tenant_id());
+
+CREATE POLICY user_isolation ON clm."user"
+    USING (tenant_id = clm.current_tenant_id() AND deleted_at IS NULL)
+    WITH CHECK (tenant_id = clm.current_tenant_id());
+
+CREATE POLICY vendor_isolation ON clm.vendor
+    USING (tenant_id = clm.current_tenant_id() AND deleted_at IS NULL)
+    WITH CHECK (tenant_id = clm.current_tenant_id());
+
+CREATE POLICY vendor_contact_isolation ON clm.vendor_contact
+    USING (tenant_id = clm.current_tenant_id() AND deleted_at IS NULL)
+    WITH CHECK (tenant_id = clm.current_tenant_id());
+
+CREATE POLICY vendor_tag_isolation ON clm.vendor_tag
+    USING (tenant_id = clm.current_tenant_id())
+    WITH CHECK (tenant_id = clm.current_tenant_id());
+
+CREATE POLICY audit_event_tenant_isolation ON audit.audit_event
+    USING (tenant_id = clm.current_tenant_id())
+    WITH CHECK (tenant_id = clm.current_tenant_id());
+
+-- ref-schema: bewust geen RLS (tenant-agnostische lookup-data)
+
+-- Seed-data voor lookup-tabellen
+INSERT INTO ref.vendor_category (code, label) VALUES
+    ('other', 'Overig'),
+    ('it_services', 'IT-diensten'),
+    ('consultancy', 'Consultancy');
+
+INSERT INTO ref.business_criticality (code, label) VALUES
+    ('low', 'Laag'),
+    ('medium', 'Gemiddeld'),
+    ('high', 'Hoog');
+
+INSERT INTO ref.compliance_status (code, label) VALUES
+    ('no_requirements', 'Geen vereisten'),
+    ('compliant', 'Voldoet'),
+    ('non_compliant', 'Voldoet niet');
+
+-- Demo-tenant voor lokale ontwikkeling (fallback in TenantMiddleware)
+INSERT INTO clm.tenant (tenant_id, name) VALUES
+    (gen_random_uuid(), 'demo');
