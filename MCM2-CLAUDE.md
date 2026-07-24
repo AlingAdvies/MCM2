@@ -174,6 +174,20 @@ Deze regels bestaan omdat vergelijkbare afwijkingen al eerder zijn gevonden in `
 
 ---
 
+## Sessiestatus — vervolg (bijgewerkt 2026-07-24, sessie 2)
+
+**Uitvoeringswijze besloten:** inline uitvoeren in dit gesprek (niet subagents) — reden: gebruiker is eerder door tokenbudget heen gevlogen bij subagent-gebruik; bij dit plan (16 lineair op elkaar voortbouwende taken in één samenhangend NestJS-project) is inline zowel goedkoper als praktischer. Subagents lonen vooral bij onafhankelijke, parallelliseerbare taken — niet van toepassing hier.
+
+**Blocker gevonden bij start van Taak 1:** Docker is niet geïnstalleerd op deze machine (`docker --version` faalt zowel in Git Bash als PowerShell). Dit blokkeert Taak 3 (Docker Compose), Taak 13/14 (e2e-tests tegen lokale database) en Taak 16 (volledige stackverificatie) — niet Taak 1, 2, 4–12 (skeleton, Prisma-schema, unit-tests met mocks kunnen zonder Docker).
+
+**Gebruiker koos:** eerst Docker Desktop installeren (niet "doorwerken zonder Docker"), om het plan strikt in volgorde te kunnen uitvoeren. Dit vereist WSL2-installatie + herstart van de computer — actie op de gebruikers eigen machine, buiten bereik van Claude Code.
+
+**Nog niet gestart:** geen enkele taak uit het implementatieplan is uitgevoerd. Er staat nog geen NestJS-code, geen `package.json`, geen Prisma-schema — de branch bevat alleen documentatie (spec + plan + dit statusbestand).
+
+**Eerstvolgende stap ná herstart:** controleren of Docker werkt (`docker --version` en `docker ps`), en zo ja: starten met Taak 1 (feature-branch bestaat al — `git checkout -b` in Taak 1 Step 1 overslaan/aanpassen omdat `feat/fase0-skeleton-vendors` al bestaat — NestJS-scaffold is de eerste echte actie).
+
+---
+
 ## Sessiestart protocol
 
 Begin elke nieuwe sessie met:
