@@ -229,6 +229,45 @@ Wachtwoord staat in `mvm-api-pilot/appsettings.Development.json` bij `ClmConnect
 
 ---
 
+## Sessiestatus — vervolg (bijgewerkt 2026-07-24, sessie 5: uitvoering Taken 1-4, versie-audit, database-reset)
+
+**Taak 1 (NestJS-skeleton) en Taak 2 (health-check) zijn voltooid en gecommit.** Build en e2e-test slagen. Kleine afwijkingen t.o.v. het plan, geen inhoudelijke impact:
+- NestJS CLI genereert nu `eslint.config.mjs` in plaats van `.eslintrc.js` (huidige NestJS-standaard) — geen `.gitignore` werd meegegenereerd met `--skip-git`, zelf aangemaakt volgens plan-inhoud.
+- `supertest` 7.x vereist `import request from 'supertest'` (default import), niet `import * as request` zoals het plan (oudere syntax) voorschreef.
+
+**Vóór Taak 3/4 is een volledige versie-audit uitgevoerd** (op uitdrukkelijk verzoek van de gebruiker: "analyseer het hele ontwerp op gebruikte bibliotheken... zeker dat we de laatste versie gaan gebruiken, VOORDAT we de hele boel uitwerken"). Belangrijkste bevinding: **Prisma zit inmiddels op major-versie 7**, wat een aantal harde breaking changes t.o.v. het plan (geschreven voor Prisma 5/6) veroorzaakt:
+- `generator client` provider moet `"prisma-client"` zijn (niet `"prisma-client-js"`) mét verplicht `output`-pad (`../generated/prisma`).
+- `datasource db { url = env("DATABASE_URL") }` wordt niet meer geaccepteerd in `schema.prisma`. De connectiestring voor de CLI (migraties) staat nu in een los `prisma.config.ts` (`datasource: { url: env('DATABASE_URL') }`), de runtime-client krijgt de connectie via een verplichte **adapter** (`@prisma/adapter-pg`, package `pg` als afhankelijkheid) doorgegeven aan de `PrismaClient`-constructor (`new PrismaClient({ adapter })`) — dit raakt Taak 6 (`PrismaService`) nog, zie hieronder.
+- `multiSchema` preview-flag is niet meer nodig (GA sinds Prisma 6.13) — verwijderd uit `generator client`.
+- Alle `import { PrismaClient, Prisma } from '@prisma/client'` moeten voortaan via het generated-pad — opgelost met een centrale re-export `src/prisma/generated-client.ts` (`export { PrismaClient, Prisma } from '../../generated/prisma/client'`), zodat Taak 6/11/12 hier gewoon `from '../prisma/generated-client'` importeren i.p.v. overal relatieve paden naar `generated/` te herhalen.
+- `generated/` toegevoegd aan `.gitignore` (regenereren via `npx prisma generate`).
+
+**Overige versiebeslissingen (gebruiker gevraagd, allemaal akkoord):**
+- Docker Node-image: `node:20-alpine` → **`node:24-alpine`** (consistent met dev-machine, actieve LTS).
+- Docker Redis-image: `redis:7-alpine` → **`valkey/valkey:8.1-alpine`** (Redis Ltd. licentie is niet meer vrij sinds RSALv2/SSPL; Valkey is de Linux Foundation BSD-3-fork, 100% protocolcompatibel, `REDIS_URL`-naamgeving blijft ongewijzigd).
+- GitHub Actions: `actions/checkout@v4`/`actions/setup-node@v4` → **`@v5`** (nog toe te passen in Taak 15).
+- `@nestjs/mapped-types`, class-validator/class-transformer-versies: geen wijziging nodig, bevestigd compatibel met NestJS 11.
+
+**Belangrijke tussentijdse gebeurtenis: Supabase-project bleek gepauzeerd.** Bij de eerste verbindingspoging naar `agojesdovwsupidwlevh` (ClmConnection/clm-enterprise) gaf de pooler "tenant/user not found" — geen netwerkfout maar een gepauzeerd-project-symptoom. Gebruiker heeft het project via het Supabase-dashboard hervat ("resume"); daarna verbond de database probleemloos. **Bevestigde Postgres-serverversie: 17.6** — dit bepaalt de CI-Postgres-image-keuze in Taak 15 (`postgres:17-alpine`, niet 16 zoals het plan zegt).
+
+**Kritieke bevinding vlak vóór Taak 4's migratie:** de bestaande `audit`/`clm`/`ref`-schemas in Supabase bleken **niet leeg** — ze bevatten het volledige, al gevulde `mvm-api-pilot`-schema (tientallen tabellen: contract, task, issue, certification, document, vendor_interaction, alle ref-lookup-tabellen, etc.). Prisma Migrate signaleerde dit als "drift" en wilde de schemas resetten. **Hier is expliciet en apart om bevestiging gevraagd** (twee vragen: (1) mag deze data sowieso weg, (2) definitieve go voor de destructieve actie) voordat er iets is uitgevoerd — conform de globale regel dat destructieve database-acties altijd losse bevestiging vereisen. Gebruiker bevestigde: inhoud is wegwerpbare ontwikkeldata, geen productiedata. Uitgevoerd als **expliciete, zichtbare SQL** (`DROP SCHEMA audit CASCADE; DROP SCHEMA clm CASCADE; DROP SCHEMA ref CASCADE;` via een tijdelijk Node-script, direct na gebruik verwijderd) — bewust niet via het ondoorzichtige `prisma migrate reset`-commando. Twee andere bestaande schemas (`notification`, `staging`) stonden niet in het plan en zijn met rust gelaten. Systeemschemas (`auth`, `extensions`, `graphql`, `pgbouncer`, `public`, `realtime`, `storage`, `vault`) zijn nooit aangeraakt.
+
+**Taak 3 (Docker Compose) is gestart maar nog niet afgerond:** `Dockerfile`, `docker-compose.yml`, `.dockerignore` zijn aangemaakt (nog niet gecommit, staan als untracked bestanden) volgens de bijgewerkte versies (node:24-alpine, valkey i.p.v. redis in docker-compose.yml — **let op: docker-compose.yml zelf is nog niet bijgewerkt met de valkey-image, dat gebruikt nu nog de originele `redis:7-alpine`-tekst uit het plan; dit moet nog gecorrigeerd worden**). `docker-compose up --build` faalde initieel omdat `prisma/schema.prisma` nog niet bestond (RUN npx prisma generate in Dockerfile) — daarom is Taak 4 eerst afgerond. Nu Taak 4 klaar is: Dockerfile-build zou moeten slagen, nog niet opnieuw getest.
+
+**Taak 4 is voltooid en gecommit** (commit `58c0bd5`): Prisma-schema (4 modellen: Tenant, User, Vendor-cluster, AuditEvent + ref-lookups), `prisma.config.ts`, eerste migratie gegenereerd (`20260724140521_init_tenant_vendor_audit`) tegen de nu lege schemas. Migratie is nog **niet uitgevoerd** (`prisma migrate dev` zonder `--create-only`) — dat gebeurt in Taak 5, ná het toevoegen van de RLS-policies aan het migratiebestand.
+
+**`.env` staat lokaal klaar** (niet gecommit) met de werkende `DATABASE_URL` naar het clm-enterprise-project.
+
+**Secrets-beheer:** voor nu blijft lokale `.env` de werkwijze; gebruiker wil bewust rekening houden met een latere Doppler/1Password-CLI-inrichting (zie sessie 4 hierboven) — geen actie nu, wel de env-var-discipline volhouden.
+
+**Eerstvolgende stap:** 
+1. `docker-compose.yml` corrigeren naar `valkey/valkey:8.1-alpine` (nog niet gedaan, per abuis nog oude tekst).
+2. Taak 3 afronden: Docker-stack bouwen/starten, health-check via Docker verifiëren, committen.
+3. Taak 5: RLS-policies + Hay CDM-triggers + seed-data toevoegen aan de bestaande migratie, dan pas `prisma migrate dev` (zonder --create-only) draaien om 'm daadwerkelijk uit te voeren.
+4. Taken 6-16 volgen het plan, met de Prisma 7-aanpassingen hierboven toegepast op Taak 6 (PrismaService met adapter) en Taak 11 (imports via `src/prisma/generated-client`).
+
+---
+
 ## Sessiestart protocol
 
 Begin elke nieuwe sessie met:
