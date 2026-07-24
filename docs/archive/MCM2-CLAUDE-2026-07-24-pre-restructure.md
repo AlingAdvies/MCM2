@@ -1,0 +1,380 @@
+> **Historisch archief. Niet gebruiken als actieve instructie.**
+> Vervangen door de actuele `MCM2-CLAUDE.md` op 2026-07-24.
+> Bevat sessiehistorie, oude plannen en mogelijk achterhaalde besluiten.
+
+---
+
+# MCM2 — NestJS Backend (AWS-gericht)
+## Claude Code projectcontext — lees dit altijd volledig bij het starten van een sessie
+
+> Git-ritueel en algemene principes staan in `C:\Users\cmali\.claude\CLAUDE.md` (globaal).
+> MVM platform-context staat in `C:\dev\CLAUDE.md` (workspace).
+> Dit bestand bevat alleen MCM2-specifieke aanvullingen.
+
+**Werkhouding bij architectuur-, security- en onderhoudsvraagstukken:** benader dit als een onafhankelijke lead software architect / security reviewer, niet als "doe-doe-doe/fix-fix-fix". Bij een evaluatie of beoordeling: eerst begrijpen, toetsen en structureren, dan pas een onderbouwd voorstel — niet meteen naar een oplossing springen, en zeker niet uitgaan van een oplossing alleen omdat die eerder in het gesprek genoemd is.
+
+---
+
+## Wat is dit project?
+
+MCM2 is de nieuwe backend van het MVM_V2-platform — een NestJS/TypeScript API die de C#-pilot (`mvm-api-pilot`) vervangt en vanaf de eerste regel code zo gebouwd wordt dat migreren naar AWS (ECS Fargate) een configuratiewijziging is, geen herbouw. Achtergrond en volledige afwegingen: `MVM_V2/docs/architectuur-hosting-onderhoud-sessie-2026-07-23.md` en `MVM_V2/docs/platform-architectuur-aws.md`.
+
+**Verhouding tot de andere twee mappen — nooit uit het oog verliezen:**
+
+| Map | Rol tijdens de bouw van MCM2 |
+|---|---|
+| `MVM_V2` (Next.js) | Blijft ongewijzigd. Praat via `NEXT_PUBLIC_API_URL` met mock-data of `mvm-api-pilot`; wordt herwezen naar MCM2 zodra een endpoint daar werkt. Geen frontendcode aanpassen vanuit dit project. |
+| `mvm-api-pilot` (C#) | Dient als **specificatie**, niet als bron om over te nemen. Eerst opzoeken hoe de C#-versie een endpoint oplost, dan in NestJS navertalen — niet opnieuw ontwerpen. |
+| `MCM2` (dit project) | De daadwerkelijke bouwplaats. |
+
+Database: dezelfde Supabase `clm-enterprise` (Session Pooler, eu-west-1) als `mvm-api-pilot` gebruikt — schema, RLS en audit-trail blijven ongewijzigd. Zie `MVM_V2/docs/database-schema-kwaliteitsborging.md` voor de regels die hieronder in de sectie "Database-regels" zijn overgenomen.
+
+**De belangrijkste ontwerpprioriteit is NIET maximale technische elegantie, performance of de nieuwste tooling. De prioriteit is:** een veilig, begrijpelijk en aantoonbaar onderhoudbaar SaaS-platform dat de eigenaar met VS Code en Claude Code kan beheren, ook zonder fulltime IT-professional te zijn. De eigenaar is technisch sterk genoeg om documentatie, logs, prompts en stappenplannen te gebruiken, maar wil expliciet **geen** afhankelijkheid van:
+- verborgen handmatige serverhandelingen;
+- kwetsbare versiecombinaties (zie Versiebeleid hieronder);
+- impliciete kennis (alles wat een beslissing verklaart hoort in documentatie, niet alleen in iemands hoofd of chatgeschiedenis);
+- complexe cloudinfrastructuur zonder directe noodzaak;
+- veel losse services;
+- afhankelijkheden die alleen een specialist kan herstellen.
+
+Toets nieuwe technische keuzes hieraan, niet alleen aan of iets "beter" of "moderner" is.
+
+---
+
+## Architectuur — beknopt schema
+
+### Lokaal (nu — geen AWS-account nodig)
+
+```
+Developer machine
+  └── docker-compose up
+        ├── mcm2-api        NestJS, hot-reload, poort 5001
+        ├── minio            S3-nabootsing (documentopslag)
+        └── valkey            BullMQ-wachtrij (e-mail) — niet Redis, zie Versiebeleid
+              │
+              └──▶ Supabase PostgreSQL — clm-enterprise (Session Pooler)
+                     (zelfde database als mvm-api-pilot, ongewijzigd schema)
+
+MVM_V2 (Next.js, aparte map, ongewijzigd)
+  └── NEXT_PUBLIC_API_URL=http://localhost:5001 → wijst naar mcm2-api
+```
+
+Alle instellingen (databaseverbinding, sleutels) komen uit omgevingsvariabelen (`.env`, nooit gecommit) — dezelfde namen/structuur als de AWS Secrets Manager-variabelen die er later voor in de plaats komen. Documentopslag wordt vanaf dag 1 tegen de S3-API gecodeerd, lokaal getest tegen MinIO — omzetten naar echte S3 is dan een configuratiewijziging, geen nieuwe code.
+
+### AWS-doelarchitectuur (Fase 5, later)
+
+```
+Route 53 → Application Load Balancer → ECS Fargate (Docker)
+                                          ├── mcm2-api service
+                                          └── frontend service (Vercel of Fargate — nog open)
+                                                ├── ElastiCache (Redis)
+                                                ├── Amazon S3 (documenten)
+                                                ├── AWS Secrets Manager
+                                                ├── AWS Cognito (SSO-federatielaag — zie hieronder)
+                                                └── Supabase PostgreSQL (ongewijzigd)
+```
+
+Volledige AWS-detaillering: `MVM_V2/docs/platform-architectuur-aws.md`. Dit project bouwt er *naartoe*, niet *tegenaan* — AWS-vormige gewoontes (Docker, env-vars, S3-API) vanaf Fase 0, maar de volledige AWS-doelarchitectuur (ECS Fargate-cluster, alle beveiligingsdiensten) blijft uitgesteld tot Fase 5. **Uitzondering, per pilot bepaald:** vóór de eerste concrete klantpilot kan een kleine, minimale AWS-acceptatieomgeving nodig zijn om te bewijzen dat het Docker-image ook buiten de lokale machine draait — zie `docs/architecture-review/2026-07-24/06-prioritized-roadmap.md`. Dit is een bewuste, beperkte uitzondering, geen vooruitlopen op Fase 5.
+
+**Algemeen principe voor AWS-diensten: stel uit totdat er een functionele, contractuele, schaal- of securityreden is** — nooit "omdat het kan" of "omdat het later toch nodig is". Ontwerp via duidelijke interfaces (env-vars, S3-API, etc.) zodat toevoegen later een configuratiewijziging is, geen herbouw. Supabase PostgreSQL is een bewuste kandidaat als managed database, maar dat vervangt niet de plicht om expliciet te toetsen of het gekozen security-, logging-, backup- en dataverwerkingsmodel daadwerkelijk voldoet — zie Database-regels en Guardrails.
+
+---
+
+## Authenticatie — AWS Cognito vóór Entra ID (besluit 2026-07-24)
+
+**Regel voor Claude Code: authenticatie (Fase 2) bouwen tegen AWS Cognito, nooit rechtstreeks tegen Microsoft's MSAL/Entra ID-library.**
+
+- Cognito fungeert als federatielaag: Microsoft-tenants loggen nog gewoon in via Entra ID (SAML/OIDC), Cognito routeert dat verzoek en geeft daarna zelf het JWT uit. Dit vervangt Entra ID niet — het maakt Entra ID "één geconfigureerde koppeling" in plaats van hardgecodeerd de enige, zodat een tweede IdP later een configuratie-actie is, geen herbouw.
+- Configureer de user pool in de **Plus-tier** (compromised credential detection, risk-based adaptive authentication, exporteerbare activiteits-/dreigingslogs) — dit is de NIS2-onderbouwing en sluit rechtstreeks aan op `audit.access_log` en CloudWatch.
+- Kosten blijven laag: federatie via SAML/OIDC kost 50 gratis/maand + $0,015/gebruiker daarna, op elke tier gelijk — bij de verwachte schaal (~2.000 actieve gebruikers) ongeveer $30/maand.
+- Reden om dit nu al zo te bouwen, niet later: zelfde "goedkoopste moment"-logica als de backend-stackkeuze — rechtstreeks tegen Entra ID bouwen en er later een broker voor zetten is een herbouw; vanaf Fase 2 al via Cognito bouwen niet.
+- Volledige onderbouwing: `MVM_V2/docs/architectuur-hosting-onderhoud-sessie-2026-07-23.md`, sectie 10.
+
+---
+
+## Aanvullende AWS-beveiligingsdiensten — groep 1 (besluit 2026-07-24)
+
+**Regel voor Claude Code: deze zes diensten horen standaard bij de AWS-doelarchitectuur van MCM2, niet als losse "nice to have" maar als vaste basislaag — inbouwen vanaf Fase 0/1, niet uitstellen tot vlak vóór Fase 5.**
+
+| Dienst | Waarvoor | Richtprijs/maand |
+|---|---|---|
+| AWS WAF | Vóór de ALB — verwacht basisniveau bij (semi)publieke inkoop/pentest | $15 – $45 |
+| Amazon GuardDuty | Geautomatiseerde dreigingsdetectie | $10 – $60 |
+| AWS KMS (customer-managed keys) | Maakt encryptie-at-rest aantoonbaar (lost de in `database-schema-kwaliteitsborging.md` gevonden onbewezen PII-encryptieclaim op) | $4 – $10 |
+| AWS CloudTrail | Audit-trail van het AWS-account zelf, los van `audit.audit_event` | $5 – $20 |
+| Amazon SNS | CloudWatch-alarmen → e-mail/Slack | $0 – $3 |
+| Malware-scan op uploads (ClamAV, kleine Fargate-taak) | Vult de bestaande "quarantainezone"-regel (zie Guardrails) daadwerkelijk in — nu nog puur procedureel | $5 – $20 |
+
+Later, pas bij een concrete trigger (niet nu al bouwen): CloudFront (alleen bij S3-hosted frontend), AWS Config/Security Hub (bij klant-audits op de infrastructuur), Amazon Macie (PII-scanning, begrenzen i.v.m. kosten bij volledige scans), EventBridge/Step Functions (orkestratie, kan later Redis/BullMQ aanvullen). Volledige pricing-onderbouwing: `MVM_V2/docs/architectuur-hosting-onderhoud-sessie-2026-07-23.md`, sectie 11 + Bijlage H.
+
+---
+
+## Ontwikkel- en onderhoudsproces — OTAP, altijd volledig doorlopen
+
+Elke wijziging — bugfix, feature, dependency-update — doorloopt **alle vier** de stappen, in deze volgorde, nooit een stap overslaan:
+
+| OTAP-stap | In dit project | Wat hier moet gebeuren |
+|---|---|---|
+| **O — Ontwikkel** | Lokale machine, `docker-compose up` | Code op een feature-branch (`feat/[onderwerp]`), nooit rechtstreeks op `main`. Lokaal draaien en handmatig verifiëren vóór een commit. |
+| **T — Test** | GitHub Actions, bij elke push/PR | Automatisch: linten, typechecken, unit- en integratietests, migraties tegen een verse database uitvoeren (zie Database-regels), Docker-image bouwen. Faalt één stap, dan is de PR niet mergebaar. |
+| **A — Acceptatie** | Staging-deploy + preview-URL | Automatische deploy naar staging na een groene Test-stap. Bij klantspecifieke wijzigingen: preview-URL delen, expliciet akkoord vragen vóór merge. Bij interne wijzigingen: zelf de staging-omgeving als laatste check doorlopen. |
+| **P — Productie** | Handmatige promotie | Nooit automatisch. Een bewuste actie na Acceptatie, met feature flags standaard **uit** voor nieuwe/klantspecifieke functionaliteit — zichtbaarheid per tenant is een losse, snelle actie ná de deploy, geen nieuwe release. |
+
+**Regel voor Claude Code: nooit voorstellen om een stap over te slaan** — ook niet bij een "kleine" wijziging, ook niet onder tijdsdruk. Een migratie die niet eerst door de Test-stap (schone-database-check) is gegaan, wordt niet naar Acceptatie of Productie voorgesteld.
+
+**Aanvullende, niet-onderhandelbare OTAP-principes:**
+- **Nooit handmatige productiepatches via SSH.** Elke wijziging gaat via de OTAP-straat, ook een "snelle fix".
+- **Dezelfde immutable Docker-image die op acceptatie draaide, wordt gepromoveerd naar productie** — nooit een nieuwe build specifiek voor productie maken.
+- **Rollback is een gedocumenteerde, eenvoudige actie**: de vorige immutable image opnieuw activeren, geen ad-hoc herstelprocedure die alleen een specialist kan uitvoeren.
+- **Geen Kubernetes, geen microservices** tenzij de huidige eisen aantoonbaar niet met een modulaire monolith in te vullen zijn — niet standaard overwegen "omdat het schaalbaarder is".
+
+---
+
+## Benodigde tooling
+
+| Categorie | Tool | Waarvoor |
+|---|---|---|
+| Runtime | Node.js LTS, NestJS CLI | De backend zelf |
+| Containers | Docker + Docker Compose | Lokaal draaien op een manier die AWS-vormig is (zie Architectuur) |
+| Lokale S3-nabootsing | MinIO | Documentupload/-download testen zonder AWS-account |
+| Lokale queue | Redis (via Docker) | BullMQ e-mailwachtrij testen |
+| Database-CLI | Supabase CLI | Migraties beheren, lokale types genereren |
+| Versiebeheer | Git + GitHub | Broncode, PR's, Actions |
+| CI/CD | GitHub Actions | Bouwen, testen, migratie-check, Docker-image, deploy naar staging |
+| Codekwaliteit | ESLint + Prettier | Consistente stijl, geen stijldiscussies in reviews |
+| Testen | Jest of Vitest | Unit-, integratie- en tenant-isolatietests |
+| Backlog | Linear | Bugs, features, `schema-debt`-issues (zie Database-regels) |
+| Later, vanaf Fase 5 | AWS CLI, AWS CDK, Amazon ECR | Daadwerkelijke AWS-deploy — niet eerder nodig |
+
+---
+
+## Versiebeleid — verplichte check vóór elke nieuwe taak/feature die een library/tool toevoegt of gebruikt
+
+**Regel voor Claude Code: vóór het uitvoeren van een nieuwe taak die een dependency, Docker-image of CI-actie toevoegt of aanraakt, controleren of dit nog de actuele/aanbevolen versie is — niet blind een implementatieplan of eerdere sessie volgen.** Reden: dit project bleek al binnen één sessie tegen een Prisma-major-versie-sprong (5/6 → 7, met harde breaking changes) aan te lopen die een vooraf geschreven plan onbruikbaar maakte zonder deze check.
+
+**Wat dit concreet betekent:**
+- Bij het toevoegen van een nieuwe npm-package: even nagaan of de laatste major-versie geen breaking changes heeft t.o.v. wat een plan/voorbeeld aanneemt (via npm registry, changelog, of officiële migratiegids — niet uit trainingsgeheugen aannemen).
+- Bij het aanpassen van een Dockerfile/docker-compose.yml: controleren of de gebruikte base-images nog actief onderhouden worden (Node.js LTS-status, Postgres-major, licentiestatus van images zoals Redis/Valkey).
+- Bij het aanpassen van GitHub Actions-workflows: controleren of gebruikte actions (`actions/checkout`, `actions/setup-node`, etc.) nog op de laatste major-versie staan.
+- Postgres-versie in CI moet altijd matchen met de daadwerkelijke Supabase-projectversie (query `SHOW server_version`), niet zomaar de nieuwste of een uit een plan overgenomen versie.
+
+**Beslisregel bij gelijkwaardige technische opties:** kies de optie met de laagste langetermijnbeheerlast en de grootste kans op herstel door een niet-IT-professional — niet automatisch de nieuwste, snelste, of meest "elegante" optie. Geef bij een keuze altijd een voorkeursadvies, niet alleen een lijst met opties.
+
+**Stijlregels bij aanbevelingen en documentatie:** vermijd marketingtaal en ongefundeerde complianceclaims (bijv. nooit stellen dat een tool op zichzelf "NIS2-compliant" is — compliance zit in hoe iets geconfigureerd en gebruikt wordt, niet in de toolkeuze alleen). Gebruik nooit `"latest"` als versiebeleid voor een dependency of Docker-image — altijd een expliciete, geverifieerde versie.
+
+**Laatste vastgestelde versietabel (2026-07-24, sessie 5 — bijwerken zodra iets hiervan wijzigt):**
+
+| Onderdeel | Versie/keuze | Toelichting |
+|---|---|---|
+| Node.js (Docker + dev) | 24 (`node:24-alpine`) | Actieve LTS, consistent met dev-machine |
+| Prisma / @prisma/client | 7.9.0 | Vereist `prisma.config.ts` + `@prisma/adapter-pg`, zie Sessiestatus sessie 5 |
+| PostgreSQL (Supabase clm-enterprise) | 17.6 | Bepaalt CI-image-keuze (`postgres:17-alpine`) |
+| Redis/Valkey (Docker) | `valkey/valkey:8.1-alpine` | Niet `redis:*` — Redis Ltd. licentie is niet meer vrij (RSALv2/SSPL) sinds Redis 7.4+ |
+| NestJS | 11.x | `@nestjs/common`, `@nestjs/core`, `@nestjs/cli`, etc. |
+| GitHub Actions | `actions/checkout@v5`, `actions/setup-node@v5` | |
+| class-validator / class-transformer | 0.15.x / 0.5.x | Compatibel met NestJS 11 en `@nestjs/mapped-types` |
+
+Bij twijfel of deze tabel nog klopt: opnieuw verifiëren in plaats van blind aannemen dat een eerdere sessie het nog steeds bij het juiste eind had — versies veranderen, deze tabel is een momentopname.
+
+**Prisma 7 generator-instellingen (vastgesteld tijdens Taak 6, noodzakelijk, niet optioneel):** de `prisma-client`-provider is ESM-first en genereert standaard `import.meta.url`, wat ts-jest (CommonJS-transform, gebruikt door de NestJS-standaard Jest-config) niet kan parsen (`SyntaxError: Cannot use 'import.meta' outside a module`). Vereist in `generator client`-block:
+```prisma
+generator client {
+  provider            = "prisma-client"
+  output              = "../generated/prisma"
+  moduleFormat        = "cjs"
+  importFileExtension = "ts"
+}
+```
+`moduleFormat = "cjs"` alleen is niet genoeg — geeft daarna `Cannot find module './internal/class.js'` (ts-jest lost `.js`-imports niet op naar `.ts`-bronbestanden); `importFileExtension = "ts"` erbij lost dat op. Geverifieerd: beide compilatiepaden (`npm run test` via ts-jest, `npm run build` via `nest build`) werken met deze instellingen.
+
+---
+
+## Kruischeck-verplichting — na elke architectuur-/onderhoudsevaluatie, vóór beslissen en coderen
+
+**Regel voor Claude Code: elke evaluatie die architectuur-, security- of onderhoudsbevindingen oplevert (een reviewdocument, een geactualiseerde roadmap, een scope-wijziging) wordt afgesloten met een expliciete kruischeck vóórdat er een besluit genomen of code geschreven wordt.** Reden: bij de eerste Transdev-scope-toevoeging (2026-07-24) bleken zonder deze stap drie technische bevindingen stilzwijgend uit de roadmap gevallen, vier items zonder motivatie van prioriteit verschoven, en één document een inconsistentie bevatten met een net genomen besluit — pas op expliciete vraag van de gebruiker aan het licht gekomen. Deze regel voorkomt dat dit stilzwijgend blijft gebeuren.
+
+**Wanneer dit verplicht is:**
+- Na het opleveren of bijwerken van architectuurbeoordelingsdocumenten (zoals `docs/architecture-review/`).
+- Na elke scope- of prioriteitswijziging die meerdere documenten raakt.
+- Vóór een definitief besluit (ADR, ORM-keuze, go/no-go) wordt vastgelegd.
+- Vóór implementatiecode wordt geschreven op basis van een evaluatie.
+
+**Kruischeck-format (verplicht te gebruiken, niet vrij invullen):**
+
+| Bevinding/item | Bron (document + regel/sectie) | Huidige plek in de roadmap/besluit | Status | Toelichting bij afwijking |
+|---|---|---|---|---|
+| *(korte omschrijving)* | *(welk document constateerde dit oorspronkelijk)* | *(waar staat het nu — P0/Before pilot/Before production/Later, of "nergens meer")* | ✅ meegenomen / ⚠️ verschoven zonder motivatie / ❌ ontbreekt | *(verplicht in te vullen zodra Status niet ✅ is — nooit stilzwijgend laten staan)* |
+
+**Werkwijze:**
+1. Lijst alle bevindingen op uit de brondocumenten (inventaris, security-analyse, decision log, etc.) — niet uit het geheugen van het gesprek, maar door de documenten daadwerkelijk opnieuw te lezen.
+2. Zoek elke bevinding op in het actuele besluit-/roadmapdocument.
+3. Vul de tabel in. Alles met status ⚠️ of ❌ krijgt vóór het vervolg een expliciete beslissing: alsnog opnemen, of bewust en beargumenteerd laten vervallen — nooit onopgemerkt laten liggen.
+4. Rapporteer de kruischeck-tabel aan de gebruiker vóórdat verder gegaan wordt met beslissen of coderen.
+
+---
+
+## Database-regels — verplicht, afgeleid van `database-schema-kwaliteitsborging.md`
+
+Deze regels bestaan omdat vergelijkbare afwijkingen al eerder zijn gevonden in `mvm-api-pilot`. Claude Code handhaaft ze zonder uitzondering:
+
+1. **Nooit schema wijzigen buiten een migratiebestand.** Geen directe wijzigingen via de Supabase-dashboard vanuit deze workflow.
+2. **Elke migratie moet foutloos draaien tegen een lege database** — dit is een verplichte CI-stap (zie OTAP-stap Test), niet optioneel.
+3. **Elke nieuwe `clm.*`-tabel krijgt**: de Hay CDM-standaardkolommen, RLS ingeschakeld, én een policy met zowel `USING` als `WITH CHECK` — nooit alleen `USING`.
+4. **Elke nieuwe tabel met `tenant_id` krijgt een tenant-isolatietest** (twee testtenants, lezen én schrijven cross-tenant geblokkeerd) vóórdat de migratie als voltooid geldt.
+5. **Geen "FK later toevoegen"-commentaar.** Dependency-volgorde aanpassen, of een Linear-issue met label `schema-debt` aanmaken en het issuenummer in de migratie zetten.
+6. **Compliance-comments** (PII, encryptie e.d.) alleen toevoegen mét verwijzing naar de implementatie of naar een Linear-issue — nooit als kale belofte.
+7. **Tenantcontext wordt uitsluitend afgeleid uit geverifieerde identiteit, tenant-membership en autorisatie — nooit blind uit een client-header of query-parameter.** Dit is bevestigd fout gegaan in de Fase 0-implementatie (`TenantMiddleware` accepteerde elke `X-Tenant-Id`-header zonder verificatie, zie `docs/architecture-review/2026-07-24/03-data-security-and-rls.md`) — acceptabel als tijdelijke, expliciet gedateerde uitzondering zolang er geen externe/tweede tenant is, nooit als permanente aanpak.
+8. **Database-owner/migratie-rol en runtime-rol zijn strikt gescheiden — de applicatierol mag nooit `BYPASSRLS` hebben.** Verifiëren met `SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user;` vóór een rol als "klaar" geldt. Dit ging al eens fout: de connectiestring wees naar de Supabase `postgres`-superuser-rol (`rolbypassrls: true`), waardoor RLS-policies stilzwijgend werden genegeerd ondanks correct opgestelde `USING`/`WITH CHECK`-clausules.
+
+---
+
+## Guardrails — checklist vóór elke wijziging als "klaar" geldt
+
+**Stop en vraag expliciet toestemming, ook tijdens een evaluatie/inventarisatie (nog vóórdat er iets gewijzigd wordt), zodra een actie:** secrets/wachtwoorden kan blootleggen of raken, een echte productie- of gedeelde-database-connectie aanspreekt op een manier die verder gaat dan lezen, kosten kan veroorzaken (bijv. een cloud-resource aanmaken), of anderszins onomkeerbaar is. Dit geldt ook voor schijnbaar onschuldige diagnose-commando's — `docker compose config` toonde in deze projectgeschiedenis bijvoorbeeld een database-wachtwoord in leesbare tekst in de terminal-output, puur door omgevingsvariabelen te interpoleren.
+
+```
+[ ] Feature-branch gebruikt, niet rechtstreeks op main gewerkt
+[ ] Lokaal getest via docker-compose (niet los van Docker gedraaid)
+[ ] Migratie (indien van toepassing) getest tegen een lege database
+[ ] Nieuwe clm.*-tabel voldoet aan Database-regel 3 en 4
+[ ] Geen secrets/sleutels hardcoded — alles via omgevingsvariabelen
+[ ] Feature flag toegevoegd en standaard uit bij nieuwe/klantspecifieke functionaliteit
+[ ] Alle vier OTAP-stappen doorlopen vóór productie-promotie wordt voorgesteld
+[ ] Endpoint-vorm gecontroleerd tegen mvm-api-pilot als referentie (indien van toepassing)
+[ ] Na een architectuur-/onderhoudsevaluatie: kruischeck-tabel uitgevoerd en gerapporteerd (zie sectie "Kruischeck-verplichting") vóórdat besloten of gecodeerd wordt
+```
+
+---
+
+## Sessiestatus — waar we gebleven zijn (laatst bijgewerkt 2026-07-24)
+
+**Fase:** 0 (alles moet nog worden opgezet — geen code geschreven, alleen ontwerp + plan).
+
+**Wat er al staat:**
+- Git-repository geïnitialiseerd. Branch `main` bevat alleen `MCM2-CLAUDE.md` + de design-spec.
+- Feature-branch `feat/fase0-skeleton-vendors` aangemaakt, bevat tot nu toe alleen het implementatieplan (nog geen code).
+- Design-spec: `docs/superpowers/specs/2026-07-24-fase0-skeleton-vendors-design.md` — architectuur voor NestJS-skeleton, tenant-resolutie/RLS, eerste schone Prisma-migratie, Vendors-endpoints. Goedgekeurd.
+- Implementatieplan: `docs/superpowers/plans/2026-07-24-fase0-skeleton-vendors.md` — 16 bite-sized taken (TDD, elke stap met volledige code), van NestJS-init tot handmatige MVM_V2-koppeling. Nog **niet uitgevoerd**.
+
+**Belangrijke besluiten die in deze sessie zijn genomen (staan verwerkt in de spec):**
+- Database wordt **niet** hergebouwd door de oude 16 migraties van `mvm-api-pilot` te kopiëren — volledig schone herbouw binnen hetzelfde Supabase-project (`clm-enterprise`), met de oude migraties als spec, niet als bron. Zie `MVM_V2/docs/database-schema-kwaliteitsborging.md` sectie 5 voor de volledige entiteiteninventaris (Fase 0 doet alleen tenant/user/vendor-cluster/audit_event; de rest komt endpoint-voor-endpoint mee).
+- Database-toegang: **Prisma ORM** gekozen (niet Supabase JS client, niet Kysely) — expliciet omdat de opdrachtgever geen IT-professional is en fool-proof/onderhoudbaar zwaarder weegt dan minimale abstractie.
+- Eerste endpoint: **Vendors, volledige CRUD** (niet alleen GET) — 1-op-1 vorm van `mvm-api-pilot/Controllers/V2/VendorsController.cs`.
+- Tenant-resolutie: header → query → fallback "demo", 1-op-1 overgenomen uit de C#-pilot.
+- Feature flag: wél toegepast vanaf deze allereerste implementatie (`FEATURE_VENDORS_ENABLED`, standaard uit) — bewuste keuze, afwijkend van het eerste voorstel (overslaan) na expliciete vraag aan de gebruiker.
+- `NESTJS_MIGRATION_PLAN.md` (in `mvm-api-pilot`, gedateerd 2026-05-28) noemt nog "Azure Container Apps" — is achterhaald, dit project volgt AWS ECS Fargate + Cognito (besluit 2026-07-24, zie boven in dit bestand). Niet als bron gebruiken voor hosting-beslissingen, wel voor de endpoint-volgorde (vendor → contract → task → issue → cert → interaction).
+
+**Bekend, niet-blokkerend aandachtspunt (ander project):** in `mvm-api-pilot/appsettings.Development.json` staat een Supabase-wachtwoord in leesbare tekst, waarschijnlijk al gecommit in git. Bewust geparkeerd tot na MCM2 Fase 0 — nog oppakken (roteren + uit git-historie verwijderen).
+
+**Eerstvolgende stap:** implementatieplan uitvoeren. Bij sessiestart is nog niet gekozen tussen subagent-driven uitvoering of inline uitvoering (zie `docs/superpowers/plans/2026-07-24-fase0-skeleton-vendors.md`, sectie "Execution Handoff") — dat is de eerste vraag om te beantwoorden voordat het bouwen start.
+
+---
+
+## Sessiestatus — vervolg (bijgewerkt 2026-07-24, sessie 2)
+
+**Uitvoeringswijze besloten:** inline uitvoeren in dit gesprek (niet subagents) — reden: gebruiker is eerder door tokenbudget heen gevlogen bij subagent-gebruik; bij dit plan (16 lineair op elkaar voortbouwende taken in één samenhangend NestJS-project) is inline zowel goedkoper als praktischer. Subagents lonen vooral bij onafhankelijke, parallelliseerbare taken — niet van toepassing hier.
+
+**Blocker gevonden bij start van Taak 1:** Docker is niet geïnstalleerd op deze machine (`docker --version` faalt zowel in Git Bash als PowerShell). Dit blokkeert Taak 3 (Docker Compose), Taak 13/14 (e2e-tests tegen lokale database) en Taak 16 (volledige stackverificatie) — niet Taak 1, 2, 4–12 (skeleton, Prisma-schema, unit-tests met mocks kunnen zonder Docker).
+
+**Gebruiker koos:** eerst Docker Desktop installeren (niet "doorwerken zonder Docker"), om het plan strikt in volgorde te kunnen uitvoeren. Dit vereist WSL2-installatie + herstart van de computer — actie op de gebruikers eigen machine, buiten bereik van Claude Code.
+
+**Nog niet gestart:** geen enkele taak uit het implementatieplan is uitgevoerd. Er staat nog geen NestJS-code, geen `package.json`, geen Prisma-schema — de branch bevat alleen documentatie (spec + plan + dit statusbestand).
+
+**Eerstvolgende stap ná herstart:** controleren of Docker werkt (`docker --version` en `docker ps`), en zo ja: starten met Taak 1 (feature-branch bestaat al — `git checkout -b` in Taak 1 Step 1 overslaan/aanpassen omdat `feat/fase0-skeleton-vendors` al bestaat — NestJS-scaffold is de eerste echte actie).
+
+---
+
+## Sessiestatus — vervolg (bijgewerkt 2026-07-24, sessie 3: WSL2-installatietraject)
+
+Onderweg naar Docker Desktop bleek WSL2 zelf nog niet werkend op deze machine. Traject om dat op te lossen, voor het geval een volgende sessie hier weer instapt:
+
+1. `wsl --install` gaf "term not recognized" — bleek te komen doordat de gebruikte PowerShell-vensters niet echt verhoogd (Administrator) waren, ondanks "als administrator uitvoeren".
+2. Na een écht verhoogd venster (bevestigd met `IsInRole(Administrator)` = True nodig — controleer dit eerst bij twijfel) gaf `wsl.exe --version` alsnog: "Het Windows-subsysteem voor Linux is niet geïnstalleerd."
+3. Root cause gevonden via `dism.exe /online /get-featureinfo /featurename:Microsoft-Windows-Subsystem-Linux`: **State: Disabled**. (`VirtualMachinePlatform` stond wél al op Enabled.)
+4. Opgelost met: `dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart` — liep door naar 100%, succesvol.
+5. **Computer moet herstart worden** om de feature-wijziging actief te maken. Dit is de stap waar de gebruiker nu voor staat.
+
+**Eerstvolgende stap ná déze herstart:** in een Administrator PowerShell `wsl --install` draaien (zou nu wel moeten werken nu de feature aan staat) — dit installeert de Linux-kernel + Ubuntu, mogelijk gevolgd door nóg een herstart. Pas daarna Docker Desktop installeren/opstarten, dan pas terug naar het Fase 0-implementatieplan (zie sessiestatus hierboven, sessie 2).
+
+---
+
+## Sessiestatus — vervolg (bijgewerkt 2026-07-24, sessie 4: WSL/Docker werkend, DB-connectiestring + secrets-beheer)
+
+**WSL2 en Docker Desktop werken nu.** Geverifieerd: `wsl --version` geeft versie 2.7.10 + kernel actief; `docker info` geeft server-versie 29.6.2 en `docker ps` reageert. Geen Docker-account/login nodig voor lokaal gebruik. Alle blockers voor Taak 1 zijn opgelost.
+
+**Database-connectiestring uitgezocht:** `mvm-api-pilot` gebruikt twee gescheiden Supabase-projecten via twee EF Core DbContexts (`Program.cs`):
+- `DefaultConnection` (project `adcmcslyimttpskyzpwy`) → `AppDbContext`, oude losstaande pilot-database, alleen simpele `public.vendors`-tabel. **Niet gebruiken voor MCM2.**
+- `ClmConnection` (project `agojesdovwsupidwlevh`) → `ClmDbContext`, dit ís de `clm-enterprise`-database met het volledige Hay CDM-schema (`clm.vendor`, `clm.tenant`, `audit.audit_event`, etc.). **Dit is de juiste voor MCM2's `DATABASE_URL`.**
+
+Bevestigd via `Data/ClmDbContext.cs` doc-comment ("EF Core DbContext for the clm-enterprise Supabase project") en `.ToTable(..., "clm")`-mappings.
+
+**Bekend lek (nog niet opgelost, staat los van MCM2):** `mvm-api-pilot/appsettings.Development.json` bevat het wachtwoord voor beide connecties in leesbare tekst. Bestand zit **niet** in `git ls-files` (dus niet gecommit in de huidige HEAD) — maar mogelijk wel in eerdere commits; nog te verifiëren. Bestand staat nog niet in `mvm-api-pilot/.gitignore`. Blijft een aparte, niet-blokkerende to-do (roteren + `.gitignore` + geschiedenis opschonen) — niet iets voor de MCM2-branch om op te lossen.
+
+**Besluit over secrets-beheer (gebruiker gevraagd, 2026-07-24):** voor Fase 0 blijft een lokale `.env` (niet gecommit, al in `.gitignore`) de werkwijze — geen overkill voor een éénpersoons lokale devomgeving. Gebruiker wil wél **rekening houden met een toekomstige inrichting van Doppler of 1Password-CLI** zodra er met meerdere mensen gewerkt wordt of secrets centraal beheerd moeten worden. Concreet betekent dit voor nu:
+- Alle secrets consequent via omgevingsvariabelen laten lopen (staat al in Guardrails-checklist) — dat is exact de vorm die Doppler/1Password-CLI later gewoon injecteren in plaats van een `.env`-bestand te lezen, dus geen aparte voorbereiding nodig, wel de discipline volhouden.
+- Geen namen/structuur bedenken die specifiek zijn voor één secrets-tool — bij een latere overstap verandert alleen **hoe** de env-vars gevuld worden (`doppler run -- npm run start:dev` of `op run -- npm run start:dev` in plaats van `.env` lezen), niet de variabele-namen zelf.
+- Los vervolgpunt (niet blokkerend voor Fase 0): het `appsettings.Development.json`-lek in `mvm-api-pilot` is een goede eerste concrete case om Doppler/1Password-CLI ooit op te introduceren — maar dat is een aparte sessie/beslissing, geen onderdeel van dit MCM2-implementatieplan.
+
+**DATABASE_URL voor `.env` (Prisma-vorm, gebruiker vult zelf het wachtwoord in):**
+```
+DATABASE_URL="postgresql://postgres.agojesdovwsupidwlevh:<WACHTWOORD>@aws-1-eu-west-1.pooler.supabase.com:5432/postgres?schema=public"
+```
+Wachtwoord staat in `mvm-api-pilot/appsettings.Development.json` bij `ClmConnection` — gebruiker vult dit zelf in, niet door Claude Code opnieuw laten tonen/kopiëren in toekomstige sessies tenzij nodig.
+
+**Eerstvolgende stap:** Taak 1 van het implementatieplan starten (NestJS scaffolden) — feature-branch bestaat al, dus Taak 1 Step 1 (`git checkout -b`) overslaan.
+
+---
+
+## Sessiestatus — vervolg (bijgewerkt 2026-07-24, sessie 5: uitvoering Taken 1-4, versie-audit, database-reset)
+
+**Taak 1 (NestJS-skeleton) en Taak 2 (health-check) zijn voltooid en gecommit.** Build en e2e-test slagen. Kleine afwijkingen t.o.v. het plan, geen inhoudelijke impact:
+- NestJS CLI genereert nu `eslint.config.mjs` in plaats van `.eslintrc.js` (huidige NestJS-standaard) — geen `.gitignore` werd meegegenereerd met `--skip-git`, zelf aangemaakt volgens plan-inhoud.
+- `supertest` 7.x vereist `import request from 'supertest'` (default import), niet `import * as request` zoals het plan (oudere syntax) voorschreef.
+
+**Vóór Taak 3/4 is een volledige versie-audit uitgevoerd** (op uitdrukkelijk verzoek van de gebruiker: "analyseer het hele ontwerp op gebruikte bibliotheken... zeker dat we de laatste versie gaan gebruiken, VOORDAT we de hele boel uitwerken"). Belangrijkste bevinding: **Prisma zit inmiddels op major-versie 7**, wat een aantal harde breaking changes t.o.v. het plan (geschreven voor Prisma 5/6) veroorzaakt:
+- `generator client` provider moet `"prisma-client"` zijn (niet `"prisma-client-js"`) mét verplicht `output`-pad (`../generated/prisma`).
+- `datasource db { url = env("DATABASE_URL") }` wordt niet meer geaccepteerd in `schema.prisma`. De connectiestring voor de CLI (migraties) staat nu in een los `prisma.config.ts` (`datasource: { url: env('DATABASE_URL') }`), de runtime-client krijgt de connectie via een verplichte **adapter** (`@prisma/adapter-pg`, package `pg` als afhankelijkheid) doorgegeven aan de `PrismaClient`-constructor (`new PrismaClient({ adapter })`) — dit raakt Taak 6 (`PrismaService`) nog, zie hieronder.
+- `multiSchema` preview-flag is niet meer nodig (GA sinds Prisma 6.13) — verwijderd uit `generator client`.
+- Alle `import { PrismaClient, Prisma } from '@prisma/client'` moeten voortaan via het generated-pad — opgelost met een centrale re-export `src/prisma/generated-client.ts` (`export { PrismaClient, Prisma } from '../../generated/prisma/client'`), zodat Taak 6/11/12 hier gewoon `from '../prisma/generated-client'` importeren i.p.v. overal relatieve paden naar `generated/` te herhalen.
+- `generated/` toegevoegd aan `.gitignore` (regenereren via `npx prisma generate`).
+
+**Overige versiebeslissingen (gebruiker gevraagd, allemaal akkoord):**
+- Docker Node-image: `node:20-alpine` → **`node:24-alpine`** (consistent met dev-machine, actieve LTS).
+- Docker Redis-image: `redis:7-alpine` → **`valkey/valkey:8.1-alpine`** (Redis Ltd. licentie is niet meer vrij sinds RSALv2/SSPL; Valkey is de Linux Foundation BSD-3-fork, 100% protocolcompatibel, `REDIS_URL`-naamgeving blijft ongewijzigd).
+- GitHub Actions: `actions/checkout@v4`/`actions/setup-node@v4` → **`@v5`** (nog toe te passen in Taak 15).
+- `@nestjs/mapped-types`, class-validator/class-transformer-versies: geen wijziging nodig, bevestigd compatibel met NestJS 11.
+
+**Belangrijke tussentijdse gebeurtenis: Supabase-project bleek gepauzeerd.** Bij de eerste verbindingspoging naar `agojesdovwsupidwlevh` (ClmConnection/clm-enterprise) gaf de pooler "tenant/user not found" — geen netwerkfout maar een gepauzeerd-project-symptoom. Gebruiker heeft het project via het Supabase-dashboard hervat ("resume"); daarna verbond de database probleemloos. **Bevestigde Postgres-serverversie: 17.6** — dit bepaalt de CI-Postgres-image-keuze in Taak 15 (`postgres:17-alpine`, niet 16 zoals het plan zegt).
+
+**Kritieke bevinding vlak vóór Taak 4's migratie:** de bestaande `audit`/`clm`/`ref`-schemas in Supabase bleken **niet leeg** — ze bevatten het volledige, al gevulde `mvm-api-pilot`-schema (tientallen tabellen: contract, task, issue, certification, document, vendor_interaction, alle ref-lookup-tabellen, etc.). Prisma Migrate signaleerde dit als "drift" en wilde de schemas resetten. **Hier is expliciet en apart om bevestiging gevraagd** (twee vragen: (1) mag deze data sowieso weg, (2) definitieve go voor de destructieve actie) voordat er iets is uitgevoerd — conform de globale regel dat destructieve database-acties altijd losse bevestiging vereisen. Gebruiker bevestigde: inhoud is wegwerpbare ontwikkeldata, geen productiedata. Uitgevoerd als **expliciete, zichtbare SQL** (`DROP SCHEMA audit CASCADE; DROP SCHEMA clm CASCADE; DROP SCHEMA ref CASCADE;` via een tijdelijk Node-script, direct na gebruik verwijderd) — bewust niet via het ondoorzichtige `prisma migrate reset`-commando. Twee andere bestaande schemas (`notification`, `staging`) stonden niet in het plan en zijn met rust gelaten. Systeemschemas (`auth`, `extensions`, `graphql`, `pgbouncer`, `public`, `realtime`, `storage`, `vault`) zijn nooit aangeraakt.
+
+**Taak 3 (Docker Compose) is gestart maar nog niet afgerond:** `Dockerfile`, `docker-compose.yml`, `.dockerignore` zijn aangemaakt (nog niet gecommit, staan als untracked bestanden) volgens de bijgewerkte versies (node:24-alpine, valkey i.p.v. redis in docker-compose.yml — **let op: docker-compose.yml zelf is nog niet bijgewerkt met de valkey-image, dat gebruikt nu nog de originele `redis:7-alpine`-tekst uit het plan; dit moet nog gecorrigeerd worden**). `docker-compose up --build` faalde initieel omdat `prisma/schema.prisma` nog niet bestond (RUN npx prisma generate in Dockerfile) — daarom is Taak 4 eerst afgerond. Nu Taak 4 klaar is: Dockerfile-build zou moeten slagen, nog niet opnieuw getest.
+
+**Taak 4 is voltooid en gecommit** (commit `58c0bd5`): Prisma-schema (4 modellen: Tenant, User, Vendor-cluster, AuditEvent + ref-lookups), `prisma.config.ts`, eerste migratie gegenereerd (`20260724140521_init_tenant_vendor_audit`) tegen de nu lege schemas. Migratie is nog **niet uitgevoerd** (`prisma migrate dev` zonder `--create-only`) — dat gebeurt in Taak 5, ná het toevoegen van de RLS-policies aan het migratiebestand.
+
+**`.env` staat lokaal klaar** (niet gecommit) met de werkende `DATABASE_URL` naar het clm-enterprise-project.
+
+**Secrets-beheer:** voor nu blijft lokale `.env` de werkwijze; gebruiker wil bewust rekening houden met een latere Doppler/1Password-CLI-inrichting (zie sessie 4 hierboven) — geen actie nu, wel de env-var-discipline volhouden.
+
+**Eerstvolgende stap:** 
+1. `docker-compose.yml` corrigeren naar `valkey/valkey:8.1-alpine` (nog niet gedaan, per abuis nog oude tekst).
+2. Taak 3 afronden: Docker-stack bouwen/starten, health-check via Docker verifiëren, committen.
+3. Taak 5: RLS-policies + Hay CDM-triggers + seed-data toevoegen aan de bestaande migratie, dan pas `prisma migrate dev` (zonder --create-only) draaien om 'm daadwerkelijk uit te voeren.
+4. Taken 6-16 volgen het plan, met de Prisma 7-aanpassingen hierboven toegepast op Taak 6 (PrismaService met adapter) en Taak 11 (imports via `src/prisma/generated-client`).
+
+---
+
+## Sessiestart protocol
+
+Begin elke nieuwe sessie met:
+
+1. Dit bestand volledig lezen, inclusief de sectie "Sessiestatus" hierboven.
+2. Als er een openstaande sessiestatus is: eerst die afronden vragen ("we waren bezig met X, wil je daarmee doorgaan?") vóór iets nieuws wordt gestart.
+3. Vragen: "Welke endpoint of welk onderdeel bouwen we vandaag?" — bij twijfel eerst de C#-pilot als specificatie opzoeken.
+4. Bevestigen: welke OTAP-stap is dit — nieuwe code (Ontwikkel), of een wijziging die al bij Test/Acceptatie staat?
+5. Controleren of de Database-regels van toepassing zijn (raakt de wijziging het schema?).
+6. Pas beginnen met bouwen als dit protocol doorlopen is.
+
+---
+
+*Dit bestand is opgesteld op 2026-07-24, gebaseerd op de architectuur-, hosting- en onderhoudssessie vastgelegd in `MVM_V2/docs/architectuur-hosting-onderhoud-sessie-2026-07-23.md` en `MVM_V2/docs/database-schema-kwaliteitsborging.md`. Bijwerken zodra nieuwe beslissingen worden genomen — dit bestand is voor MCM2 wat `CLAUDE.md` voor `MVM_V2` en `mvm-api-pilot` is.*
