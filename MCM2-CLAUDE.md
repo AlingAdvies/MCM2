@@ -5,6 +5,8 @@
 > MVM platform-context staat in `C:\dev\CLAUDE.md` (workspace).
 > Dit bestand bevat alleen MCM2-specifieke aanvullingen.
 
+**Werkhouding bij architectuur-, security- en onderhoudsvraagstukken:** benader dit als een onafhankelijke lead software architect / security reviewer, niet als "doe-doe-doe/fix-fix-fix". Bij een evaluatie of beoordeling: eerst begrijpen, toetsen en structureren, dan pas een onderbouwd voorstel — niet meteen naar een oplossing springen, en zeker niet uitgaan van een oplossing alleen omdat die eerder in het gesprek genoemd is.
+
 ---
 
 ## Wat is dit project?
@@ -21,6 +23,16 @@ MCM2 is de nieuwe backend van het MVM_V2-platform — een NestJS/TypeScript API 
 
 Database: dezelfde Supabase `clm-enterprise` (Session Pooler, eu-west-1) als `mvm-api-pilot` gebruikt — schema, RLS en audit-trail blijven ongewijzigd. Zie `MVM_V2/docs/database-schema-kwaliteitsborging.md` voor de regels die hieronder in de sectie "Database-regels" zijn overgenomen.
 
+**De belangrijkste ontwerpprioriteit is NIET maximale technische elegantie, performance of de nieuwste tooling. De prioriteit is:** een veilig, begrijpelijk en aantoonbaar onderhoudbaar SaaS-platform dat de eigenaar met VS Code en Claude Code kan beheren, ook zonder fulltime IT-professional te zijn. De eigenaar is technisch sterk genoeg om documentatie, logs, prompts en stappenplannen te gebruiken, maar wil expliciet **geen** afhankelijkheid van:
+- verborgen handmatige serverhandelingen;
+- kwetsbare versiecombinaties (zie Versiebeleid hieronder);
+- impliciete kennis (alles wat een beslissing verklaart hoort in documentatie, niet alleen in iemands hoofd of chatgeschiedenis);
+- complexe cloudinfrastructuur zonder directe noodzaak;
+- veel losse services;
+- afhankelijkheden die alleen een specialist kan herstellen.
+
+Toets nieuwe technische keuzes hieraan, niet alleen aan of iets "beter" of "moderner" is.
+
 ---
 
 ## Architectuur — beknopt schema
@@ -32,7 +44,7 @@ Developer machine
   └── docker-compose up
         ├── mcm2-api        NestJS, hot-reload, poort 5001
         ├── minio            S3-nabootsing (documentopslag)
-        └── redis             BullMQ-wachtrij (e-mail)
+        └── valkey            BullMQ-wachtrij (e-mail) — niet Redis, zie Versiebeleid
               │
               └──▶ Supabase PostgreSQL — clm-enterprise (Session Pooler)
                      (zelfde database als mvm-api-pilot, ongewijzigd schema)
@@ -56,7 +68,9 @@ Route 53 → Application Load Balancer → ECS Fargate (Docker)
                                                 └── Supabase PostgreSQL (ongewijzigd)
 ```
 
-Volledige AWS-detaillering: `MVM_V2/docs/platform-architectuur-aws.md`. Dit project bouwt er *naartoe*, niet *tegenaan* — geen AWS-specifieke code vóór Fase 5, wel AWS-vormige gewoontes (Docker, env-vars, S3-API) vanaf Fase 0.
+Volledige AWS-detaillering: `MVM_V2/docs/platform-architectuur-aws.md`. Dit project bouwt er *naartoe*, niet *tegenaan* — AWS-vormige gewoontes (Docker, env-vars, S3-API) vanaf Fase 0, maar de volledige AWS-doelarchitectuur (ECS Fargate-cluster, alle beveiligingsdiensten) blijft uitgesteld tot Fase 5. **Uitzondering, per pilot bepaald:** vóór de eerste concrete klantpilot kan een kleine, minimale AWS-acceptatieomgeving nodig zijn om te bewijzen dat het Docker-image ook buiten de lokale machine draait — zie `docs/architecture-review/2026-07-24/06-prioritized-roadmap.md`. Dit is een bewuste, beperkte uitzondering, geen vooruitlopen op Fase 5.
+
+**Algemeen principe voor AWS-diensten: stel uit totdat er een functionele, contractuele, schaal- of securityreden is** — nooit "omdat het kan" of "omdat het later toch nodig is". Ontwerp via duidelijke interfaces (env-vars, S3-API, etc.) zodat toevoegen later een configuratiewijziging is, geen herbouw. Supabase PostgreSQL is een bewuste kandidaat als managed database, maar dat vervangt niet de plicht om expliciet te toetsen of het gekozen security-, logging-, backup- en dataverwerkingsmodel daadwerkelijk voldoet — zie Database-regels en Guardrails.
 
 ---
 
@@ -102,6 +116,12 @@ Elke wijziging — bugfix, feature, dependency-update — doorloopt **alle vier*
 
 **Regel voor Claude Code: nooit voorstellen om een stap over te slaan** — ook niet bij een "kleine" wijziging, ook niet onder tijdsdruk. Een migratie die niet eerst door de Test-stap (schone-database-check) is gegaan, wordt niet naar Acceptatie of Productie voorgesteld.
 
+**Aanvullende, niet-onderhandelbare OTAP-principes:**
+- **Nooit handmatige productiepatches via SSH.** Elke wijziging gaat via de OTAP-straat, ook een "snelle fix".
+- **Dezelfde immutable Docker-image die op acceptatie draaide, wordt gepromoveerd naar productie** — nooit een nieuwe build specifiek voor productie maken.
+- **Rollback is een gedocumenteerde, eenvoudige actie**: de vorige immutable image opnieuw activeren, geen ad-hoc herstelprocedure die alleen een specialist kan uitvoeren.
+- **Geen Kubernetes, geen microservices** tenzij de huidige eisen aantoonbaar niet met een modulaire monolith in te vullen zijn — niet standaard overwegen "omdat het schaalbaarder is".
+
 ---
 
 ## Benodigde tooling
@@ -131,6 +151,10 @@ Elke wijziging — bugfix, feature, dependency-update — doorloopt **alle vier*
 - Bij het aanpassen van een Dockerfile/docker-compose.yml: controleren of de gebruikte base-images nog actief onderhouden worden (Node.js LTS-status, Postgres-major, licentiestatus van images zoals Redis/Valkey).
 - Bij het aanpassen van GitHub Actions-workflows: controleren of gebruikte actions (`actions/checkout`, `actions/setup-node`, etc.) nog op de laatste major-versie staan.
 - Postgres-versie in CI moet altijd matchen met de daadwerkelijke Supabase-projectversie (query `SHOW server_version`), niet zomaar de nieuwste of een uit een plan overgenomen versie.
+
+**Beslisregel bij gelijkwaardige technische opties:** kies de optie met de laagste langetermijnbeheerlast en de grootste kans op herstel door een niet-IT-professional — niet automatisch de nieuwste, snelste, of meest "elegante" optie. Geef bij een keuze altijd een voorkeursadvies, niet alleen een lijst met opties.
+
+**Stijlregels bij aanbevelingen en documentatie:** vermijd marketingtaal en ongefundeerde complianceclaims (bijv. nooit stellen dat een tool op zichzelf "NIS2-compliant" is — compliance zit in hoe iets geconfigureerd en gebruikt wordt, niet in de toolkeuze alleen). Gebruik nooit `"latest"` als versiebeleid voor een dependency of Docker-image — altijd een expliciete, geverifieerde versie.
 
 **Laatste vastgestelde versietabel (2026-07-24, sessie 5 — bijwerken zodra iets hiervan wijzigt):**
 
@@ -193,10 +217,14 @@ Deze regels bestaan omdat vergelijkbare afwijkingen al eerder zijn gevonden in `
 4. **Elke nieuwe tabel met `tenant_id` krijgt een tenant-isolatietest** (twee testtenants, lezen én schrijven cross-tenant geblokkeerd) vóórdat de migratie als voltooid geldt.
 5. **Geen "FK later toevoegen"-commentaar.** Dependency-volgorde aanpassen, of een Linear-issue met label `schema-debt` aanmaken en het issuenummer in de migratie zetten.
 6. **Compliance-comments** (PII, encryptie e.d.) alleen toevoegen mét verwijzing naar de implementatie of naar een Linear-issue — nooit als kale belofte.
+7. **Tenantcontext wordt uitsluitend afgeleid uit geverifieerde identiteit, tenant-membership en autorisatie — nooit blind uit een client-header of query-parameter.** Dit is bevestigd fout gegaan in de Fase 0-implementatie (`TenantMiddleware` accepteerde elke `X-Tenant-Id`-header zonder verificatie, zie `docs/architecture-review/2026-07-24/03-data-security-and-rls.md`) — acceptabel als tijdelijke, expliciet gedateerde uitzondering zolang er geen externe/tweede tenant is, nooit als permanente aanpak.
+8. **Database-owner/migratie-rol en runtime-rol zijn strikt gescheiden — de applicatierol mag nooit `BYPASSRLS` hebben.** Verifiëren met `SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user;` vóór een rol als "klaar" geldt. Dit ging al eens fout: de connectiestring wees naar de Supabase `postgres`-superuser-rol (`rolbypassrls: true`), waardoor RLS-policies stilzwijgend werden genegeerd ondanks correct opgestelde `USING`/`WITH CHECK`-clausules.
 
 ---
 
 ## Guardrails — checklist vóór elke wijziging als "klaar" geldt
+
+**Stop en vraag expliciet toestemming, ook tijdens een evaluatie/inventarisatie (nog vóórdat er iets gewijzigd wordt), zodra een actie:** secrets/wachtwoorden kan blootleggen of raken, een echte productie- of gedeelde-database-connectie aanspreekt op een manier die verder gaat dan lezen, kosten kan veroorzaken (bijv. een cloud-resource aanmaken), of anderszins onomkeerbaar is. Dit geldt ook voor schijnbaar onschuldige diagnose-commando's — `docker compose config` toonde in deze projectgeschiedenis bijvoorbeeld een database-wachtwoord in leesbare tekst in de terminal-output, puur door omgevingsvariabelen te interpoleren.
 
 ```
 [ ] Feature-branch gebruikt, niet rechtstreeks op main gewerkt
