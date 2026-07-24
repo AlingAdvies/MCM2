@@ -1,0 +1,32 @@
+services:
+  mcm2-api:
+    build: .
+    ports:
+      - "5001:5001"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - /app/node_modules
+    depends_on:
+      - valkey
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+
+  valkey:
+    image: valkey/valkey:8.1-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  minio-data:
