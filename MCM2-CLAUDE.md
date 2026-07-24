@@ -146,6 +146,41 @@ Elke wijziging — bugfix, feature, dependency-update — doorloopt **alle vier*
 
 Bij twijfel of deze tabel nog klopt: opnieuw verifiëren in plaats van blind aannemen dat een eerdere sessie het nog steeds bij het juiste eind had — versies veranderen, deze tabel is een momentopname.
 
+**Prisma 7 generator-instellingen (vastgesteld tijdens Taak 6, noodzakelijk, niet optioneel):** de `prisma-client`-provider is ESM-first en genereert standaard `import.meta.url`, wat ts-jest (CommonJS-transform, gebruikt door de NestJS-standaard Jest-config) niet kan parsen (`SyntaxError: Cannot use 'import.meta' outside a module`). Vereist in `generator client`-block:
+```prisma
+generator client {
+  provider            = "prisma-client"
+  output              = "../generated/prisma"
+  moduleFormat        = "cjs"
+  importFileExtension = "ts"
+}
+```
+`moduleFormat = "cjs"` alleen is niet genoeg — geeft daarna `Cannot find module './internal/class.js'` (ts-jest lost `.js`-imports niet op naar `.ts`-bronbestanden); `importFileExtension = "ts"` erbij lost dat op. Geverifieerd: beide compilatiepaden (`npm run test` via ts-jest, `npm run build` via `nest build`) werken met deze instellingen.
+
+---
+
+## Kruischeck-verplichting — na elke architectuur-/onderhoudsevaluatie, vóór beslissen en coderen
+
+**Regel voor Claude Code: elke evaluatie die architectuur-, security- of onderhoudsbevindingen oplevert (een reviewdocument, een geactualiseerde roadmap, een scope-wijziging) wordt afgesloten met een expliciete kruischeck vóórdat er een besluit genomen of code geschreven wordt.** Reden: bij de eerste Transdev-scope-toevoeging (2026-07-24) bleken zonder deze stap drie technische bevindingen stilzwijgend uit de roadmap gevallen, vier items zonder motivatie van prioriteit verschoven, en één document een inconsistentie bevatten met een net genomen besluit — pas op expliciete vraag van de gebruiker aan het licht gekomen. Deze regel voorkomt dat dit stilzwijgend blijft gebeuren.
+
+**Wanneer dit verplicht is:**
+- Na het opleveren of bijwerken van architectuurbeoordelingsdocumenten (zoals `docs/architecture-review/`).
+- Na elke scope- of prioriteitswijziging die meerdere documenten raakt.
+- Vóór een definitief besluit (ADR, ORM-keuze, go/no-go) wordt vastgelegd.
+- Vóór implementatiecode wordt geschreven op basis van een evaluatie.
+
+**Kruischeck-format (verplicht te gebruiken, niet vrij invullen):**
+
+| Bevinding/item | Bron (document + regel/sectie) | Huidige plek in de roadmap/besluit | Status | Toelichting bij afwijking |
+|---|---|---|---|---|
+| *(korte omschrijving)* | *(welk document constateerde dit oorspronkelijk)* | *(waar staat het nu — P0/Before pilot/Before production/Later, of "nergens meer")* | ✅ meegenomen / ⚠️ verschoven zonder motivatie / ❌ ontbreekt | *(verplicht in te vullen zodra Status niet ✅ is — nooit stilzwijgend laten staan)* |
+
+**Werkwijze:**
+1. Lijst alle bevindingen op uit de brondocumenten (inventaris, security-analyse, decision log, etc.) — niet uit het geheugen van het gesprek, maar door de documenten daadwerkelijk opnieuw te lezen.
+2. Zoek elke bevinding op in het actuele besluit-/roadmapdocument.
+3. Vul de tabel in. Alles met status ⚠️ of ❌ krijgt vóór het vervolg een expliciete beslissing: alsnog opnemen, of bewust en beargumenteerd laten vervallen — nooit onopgemerkt laten liggen.
+4. Rapporteer de kruischeck-tabel aan de gebruiker vóórdat verder gegaan wordt met beslissen of coderen.
+
 ---
 
 ## Database-regels — verplicht, afgeleid van `database-schema-kwaliteitsborging.md`
@@ -172,6 +207,7 @@ Deze regels bestaan omdat vergelijkbare afwijkingen al eerder zijn gevonden in `
 [ ] Feature flag toegevoegd en standaard uit bij nieuwe/klantspecifieke functionaliteit
 [ ] Alle vier OTAP-stappen doorlopen vóór productie-promotie wordt voorgesteld
 [ ] Endpoint-vorm gecontroleerd tegen mvm-api-pilot als referentie (indien van toepassing)
+[ ] Na een architectuur-/onderhoudsevaluatie: kruischeck-tabel uitgevoerd en gerapporteerd (zie sectie "Kruischeck-verplichting") vóórdat besloten of gecodeerd wordt
 ```
 
 ---
