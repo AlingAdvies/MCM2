@@ -122,6 +122,32 @@ Elke wijziging — bugfix, feature, dependency-update — doorloopt **alle vier*
 
 ---
 
+## Versiebeleid — verplichte check vóór elke nieuwe taak/feature die een library/tool toevoegt of gebruikt
+
+**Regel voor Claude Code: vóór het uitvoeren van een nieuwe taak die een dependency, Docker-image of CI-actie toevoegt of aanraakt, controleren of dit nog de actuele/aanbevolen versie is — niet blind een implementatieplan of eerdere sessie volgen.** Reden: dit project bleek al binnen één sessie tegen een Prisma-major-versie-sprong (5/6 → 7, met harde breaking changes) aan te lopen die een vooraf geschreven plan onbruikbaar maakte zonder deze check.
+
+**Wat dit concreet betekent:**
+- Bij het toevoegen van een nieuwe npm-package: even nagaan of de laatste major-versie geen breaking changes heeft t.o.v. wat een plan/voorbeeld aanneemt (via npm registry, changelog, of officiële migratiegids — niet uit trainingsgeheugen aannemen).
+- Bij het aanpassen van een Dockerfile/docker-compose.yml: controleren of de gebruikte base-images nog actief onderhouden worden (Node.js LTS-status, Postgres-major, licentiestatus van images zoals Redis/Valkey).
+- Bij het aanpassen van GitHub Actions-workflows: controleren of gebruikte actions (`actions/checkout`, `actions/setup-node`, etc.) nog op de laatste major-versie staan.
+- Postgres-versie in CI moet altijd matchen met de daadwerkelijke Supabase-projectversie (query `SHOW server_version`), niet zomaar de nieuwste of een uit een plan overgenomen versie.
+
+**Laatste vastgestelde versietabel (2026-07-24, sessie 5 — bijwerken zodra iets hiervan wijzigt):**
+
+| Onderdeel | Versie/keuze | Toelichting |
+|---|---|---|
+| Node.js (Docker + dev) | 24 (`node:24-alpine`) | Actieve LTS, consistent met dev-machine |
+| Prisma / @prisma/client | 7.9.0 | Vereist `prisma.config.ts` + `@prisma/adapter-pg`, zie Sessiestatus sessie 5 |
+| PostgreSQL (Supabase clm-enterprise) | 17.6 | Bepaalt CI-image-keuze (`postgres:17-alpine`) |
+| Redis/Valkey (Docker) | `valkey/valkey:8.1-alpine` | Niet `redis:*` — Redis Ltd. licentie is niet meer vrij (RSALv2/SSPL) sinds Redis 7.4+ |
+| NestJS | 11.x | `@nestjs/common`, `@nestjs/core`, `@nestjs/cli`, etc. |
+| GitHub Actions | `actions/checkout@v5`, `actions/setup-node@v5` | |
+| class-validator / class-transformer | 0.15.x / 0.5.x | Compatibel met NestJS 11 en `@nestjs/mapped-types` |
+
+Bij twijfel of deze tabel nog klopt: opnieuw verifiëren in plaats van blind aannemen dat een eerdere sessie het nog steeds bij het juiste eind had — versies veranderen, deze tabel is een momentopname.
+
+---
+
 ## Database-regels — verplicht, afgeleid van `database-schema-kwaliteitsborging.md`
 
 Deze regels bestaan omdat vergelijkbare afwijkingen al eerder zijn gevonden in `mvm-api-pilot`. Claude Code handhaaft ze zonder uitzondering:
