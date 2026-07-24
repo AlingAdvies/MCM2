@@ -188,6 +188,20 @@ Deze regels bestaan omdat vergelijkbare afwijkingen al eerder zijn gevonden in `
 
 ---
 
+## Sessiestatus — vervolg (bijgewerkt 2026-07-24, sessie 3: WSL2-installatietraject)
+
+Onderweg naar Docker Desktop bleek WSL2 zelf nog niet werkend op deze machine. Traject om dat op te lossen, voor het geval een volgende sessie hier weer instapt:
+
+1. `wsl --install` gaf "term not recognized" — bleek te komen doordat de gebruikte PowerShell-vensters niet echt verhoogd (Administrator) waren, ondanks "als administrator uitvoeren".
+2. Na een écht verhoogd venster (bevestigd met `IsInRole(Administrator)` = True nodig — controleer dit eerst bij twijfel) gaf `wsl.exe --version` alsnog: "Het Windows-subsysteem voor Linux is niet geïnstalleerd."
+3. Root cause gevonden via `dism.exe /online /get-featureinfo /featurename:Microsoft-Windows-Subsystem-Linux`: **State: Disabled**. (`VirtualMachinePlatform` stond wél al op Enabled.)
+4. Opgelost met: `dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart` — liep door naar 100%, succesvol.
+5. **Computer moet herstart worden** om de feature-wijziging actief te maken. Dit is de stap waar de gebruiker nu voor staat.
+
+**Eerstvolgende stap ná déze herstart:** in een Administrator PowerShell `wsl --install` draaien (zou nu wel moeten werken nu de feature aan staat) — dit installeert de Linux-kernel + Ubuntu, mogelijk gevolgd door nóg een herstart. Pas daarna Docker Desktop installeren/opstarten, dan pas terug naar het Fase 0-implementatieplan (zie sessiestatus hierboven, sessie 2).
+
+---
+
 ## Sessiestart protocol
 
 Begin elke nieuwe sessie met:
