@@ -202,6 +202,33 @@ Onderweg naar Docker Desktop bleek WSL2 zelf nog niet werkend op deze machine. T
 
 ---
 
+## Sessiestatus — vervolg (bijgewerkt 2026-07-24, sessie 4: WSL/Docker werkend, DB-connectiestring + secrets-beheer)
+
+**WSL2 en Docker Desktop werken nu.** Geverifieerd: `wsl --version` geeft versie 2.7.10 + kernel actief; `docker info` geeft server-versie 29.6.2 en `docker ps` reageert. Geen Docker-account/login nodig voor lokaal gebruik. Alle blockers voor Taak 1 zijn opgelost.
+
+**Database-connectiestring uitgezocht:** `mvm-api-pilot` gebruikt twee gescheiden Supabase-projecten via twee EF Core DbContexts (`Program.cs`):
+- `DefaultConnection` (project `adcmcslyimttpskyzpwy`) → `AppDbContext`, oude losstaande pilot-database, alleen simpele `public.vendors`-tabel. **Niet gebruiken voor MCM2.**
+- `ClmConnection` (project `agojesdovwsupidwlevh`) → `ClmDbContext`, dit ís de `clm-enterprise`-database met het volledige Hay CDM-schema (`clm.vendor`, `clm.tenant`, `audit.audit_event`, etc.). **Dit is de juiste voor MCM2's `DATABASE_URL`.**
+
+Bevestigd via `Data/ClmDbContext.cs` doc-comment ("EF Core DbContext for the clm-enterprise Supabase project") en `.ToTable(..., "clm")`-mappings.
+
+**Bekend lek (nog niet opgelost, staat los van MCM2):** `mvm-api-pilot/appsettings.Development.json` bevat het wachtwoord voor beide connecties in leesbare tekst. Bestand zit **niet** in `git ls-files` (dus niet gecommit in de huidige HEAD) — maar mogelijk wel in eerdere commits; nog te verifiëren. Bestand staat nog niet in `mvm-api-pilot/.gitignore`. Blijft een aparte, niet-blokkerende to-do (roteren + `.gitignore` + geschiedenis opschonen) — niet iets voor de MCM2-branch om op te lossen.
+
+**Besluit over secrets-beheer (gebruiker gevraagd, 2026-07-24):** voor Fase 0 blijft een lokale `.env` (niet gecommit, al in `.gitignore`) de werkwijze — geen overkill voor een éénpersoons lokale devomgeving. Gebruiker wil wél **rekening houden met een toekomstige inrichting van Doppler of 1Password-CLI** zodra er met meerdere mensen gewerkt wordt of secrets centraal beheerd moeten worden. Concreet betekent dit voor nu:
+- Alle secrets consequent via omgevingsvariabelen laten lopen (staat al in Guardrails-checklist) — dat is exact de vorm die Doppler/1Password-CLI later gewoon injecteren in plaats van een `.env`-bestand te lezen, dus geen aparte voorbereiding nodig, wel de discipline volhouden.
+- Geen namen/structuur bedenken die specifiek zijn voor één secrets-tool — bij een latere overstap verandert alleen **hoe** de env-vars gevuld worden (`doppler run -- npm run start:dev` of `op run -- npm run start:dev` in plaats van `.env` lezen), niet de variabele-namen zelf.
+- Los vervolgpunt (niet blokkerend voor Fase 0): het `appsettings.Development.json`-lek in `mvm-api-pilot` is een goede eerste concrete case om Doppler/1Password-CLI ooit op te introduceren — maar dat is een aparte sessie/beslissing, geen onderdeel van dit MCM2-implementatieplan.
+
+**DATABASE_URL voor `.env` (Prisma-vorm, gebruiker vult zelf het wachtwoord in):**
+```
+DATABASE_URL="postgresql://postgres.agojesdovwsupidwlevh:<WACHTWOORD>@aws-1-eu-west-1.pooler.supabase.com:5432/postgres?schema=public"
+```
+Wachtwoord staat in `mvm-api-pilot/appsettings.Development.json` bij `ClmConnection` — gebruiker vult dit zelf in, niet door Claude Code opnieuw laten tonen/kopiëren in toekomstige sessies tenzij nodig.
+
+**Eerstvolgende stap:** Taak 1 van het implementatieplan starten (NestJS scaffolden) — feature-branch bestaat al, dus Taak 1 Step 1 (`git checkout -b`) overslaan.
+
+---
+
 ## Sessiestart protocol
 
 Begin elke nieuwe sessie met:
