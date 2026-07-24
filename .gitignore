@@ -2,6 +2,9 @@
 /dist
 /node_modules
 
+# Prisma generated client (regenereren via `npx prisma generate`)
+/generated
+
 # Logs
 logs
 *.log

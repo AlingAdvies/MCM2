@@ -1,0 +1,162 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["clm", "ref", "audit"]
+}
+
+// ─── ref schema: lookup-tabellen ──────────────────────────────────────────
+
+model VendorCategory {
+  code String @id
+  label String
+
+  vendors Vendor[]
+
+  @@map("vendor_category")
+  @@schema("ref")
+}
+
+model BusinessCriticality {
+  code  String @id
+  label String
+
+  vendors Vendor[]
+
+  @@map("business_criticality")
+  @@schema("ref")
+}
+
+model ComplianceStatus {
+  code  String @id
+  label String
+
+  vendors Vendor[]
+
+  @@map("compliance_status")
+  @@schema("ref")
+}
+
+// ─── clm schema: fundament ────────────────────────────────────────────────
+
+model Tenant {
+  tenantId  String   @id @default(uuid()) @map("tenant_id") @db.Uuid
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  users   User[]
+  vendors Vendor[]
+
+  @@map("tenant")
+  @@schema("clm")
+}
+
+model User {
+  userId    String    @id @default(uuid()) @map("user_id") @db.Uuid
+  tenantId  String    @map("tenant_id") @db.Uuid
+  fullName  String    @map("full_name")
+  email     String?
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt DateTime? @map("updated_at") @db.Timestamptz
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz
+
+  tenant        Tenant   @relation(fields: [tenantId], references: [tenantId])
+  ownedVendors  Vendor[] @relation("VendorOwner")
+
+  @@map("user")
+  @@schema("clm")
+}
+
+// ─── clm schema: vendor-cluster ───────────────────────────────────────────
+
+model Vendor {
+  vendorId                String    @id @default(uuid()) @map("vendor_id") @db.Uuid
+  tenantId                String    @map("tenant_id") @db.Uuid
+  name                    String
+  kvkNumber                String?   @map("kvk_number")
+  vestigingsnummer         String?
+  statutoryName            String?   @map("statutory_name")
+  tradeNames               String[]  @map("trade_names")
+  legalForm                String?   @map("legal_form")
+  incorporationDate        DateTime? @map("incorporation_date") @db.Date
+  sbiCode                  String?   @map("sbi_code")
+  sbiDescription            String?   @map("sbi_description")
+  categoryCode              String?   @map("category_code")
+  businessCriticalityCode   String?   @map("business_criticality_code")
+  complianceStatusCode      String?   @map("compliance_status_code")
+  country                   String    @default("NL")
+  city                      String?
+  website                   String?
+  annualSpendEur            Decimal?  @map("annual_spend_eur") @db.Decimal(15, 2)
+  riskScore                 Int?      @map("risk_score") @db.SmallInt
+  ownerUserId                String?   @map("owner_user_id") @db.Uuid
+  lastReviewDate             DateTime? @map("last_review_date") @db.Date
+  nextReviewDate              DateTime? @map("next_review_date") @db.Date
+  createdAt                  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt                  DateTime? @map("updated_at") @db.Timestamptz
+  deletedAt                  DateTime? @map("deleted_at") @db.Timestamptz
+
+  tenant             Tenant                @relation(fields: [tenantId], references: [tenantId])
+  owner               User?                 @relation("VendorOwner", fields: [ownerUserId], references: [userId])
+  category            VendorCategory?       @relation(fields: [categoryCode], references: [code])
+  businessCriticality BusinessCriticality?  @relation(fields: [businessCriticalityCode], references: [code])
+  complianceStatus    ComplianceStatus?     @relation(fields: [complianceStatusCode], references: [code])
+  contacts            VendorContact[]
+  tags                VendorTag[]
+
+  @@unique([tenantId, kvkNumber])
+  @@map("vendor")
+  @@schema("clm")
+}
+
+model VendorContact {
+  contactId       String    @id @default(uuid()) @map("contact_id") @db.Uuid
+  vendorId        String    @map("vendor_id") @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  fullName        String    @map("full_name")
+  email           String?
+  phone           String?
+  jobTitle        String?   @map("job_title")
+  roleDescription String?   @map("role_description")
+  isPrimary       Boolean   @default(false) @map("is_primary")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt       DateTime? @map("updated_at") @db.Timestamptz
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz
+
+  vendor Vendor @relation(fields: [vendorId], references: [vendorId], onDelete: Cascade)
+
+  @@map("vendor_contact")
+  @@schema("clm")
+}
+
+model VendorTag {
+  vendorId  String   @map("vendor_id") @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  tag       String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  vendor Vendor @relation(fields: [vendorId], references: [vendorId], onDelete: Cascade)
+
+  @@id([vendorId, tag])
+  @@map("vendor_tag")
+  @@schema("clm")
+}
+
+// ─── audit schema ──────────────────────────────────────────────────────────
+
+model AuditEvent {
+  auditEventId String   @id @default(uuid()) @map("audit_event_id") @db.Uuid
+  tenantId     String   @map("tenant_id") @db.Uuid
+  actionType   String   @map("action_type")
+  entityType   String   @map("entity_type")
+  entityId     String   @map("entity_id") @db.Uuid
+  oldValues    Json?    @map("old_values")
+  newValues    Json?    @map("new_values")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  @@map("audit_event")
+  @@schema("audit")
+}
