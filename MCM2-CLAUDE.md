@@ -150,15 +150,40 @@ Deze regels bestaan omdat vergelijkbare afwijkingen al eerder zijn gevonden in `
 
 ---
 
+## Sessiestatus — waar we gebleven zijn (laatst bijgewerkt 2026-07-24)
+
+**Fase:** 0 (alles moet nog worden opgezet — geen code geschreven, alleen ontwerp + plan).
+
+**Wat er al staat:**
+- Git-repository geïnitialiseerd. Branch `main` bevat alleen `MCM2-CLAUDE.md` + de design-spec.
+- Feature-branch `feat/fase0-skeleton-vendors` aangemaakt, bevat tot nu toe alleen het implementatieplan (nog geen code).
+- Design-spec: `docs/superpowers/specs/2026-07-24-fase0-skeleton-vendors-design.md` — architectuur voor NestJS-skeleton, tenant-resolutie/RLS, eerste schone Prisma-migratie, Vendors-endpoints. Goedgekeurd.
+- Implementatieplan: `docs/superpowers/plans/2026-07-24-fase0-skeleton-vendors.md` — 16 bite-sized taken (TDD, elke stap met volledige code), van NestJS-init tot handmatige MVM_V2-koppeling. Nog **niet uitgevoerd**.
+
+**Belangrijke besluiten die in deze sessie zijn genomen (staan verwerkt in de spec):**
+- Database wordt **niet** hergebouwd door de oude 16 migraties van `mvm-api-pilot` te kopiëren — volledig schone herbouw binnen hetzelfde Supabase-project (`clm-enterprise`), met de oude migraties als spec, niet als bron. Zie `MVM_V2/docs/database-schema-kwaliteitsborging.md` sectie 5 voor de volledige entiteiteninventaris (Fase 0 doet alleen tenant/user/vendor-cluster/audit_event; de rest komt endpoint-voor-endpoint mee).
+- Database-toegang: **Prisma ORM** gekozen (niet Supabase JS client, niet Kysely) — expliciet omdat de opdrachtgever geen IT-professional is en fool-proof/onderhoudbaar zwaarder weegt dan minimale abstractie.
+- Eerste endpoint: **Vendors, volledige CRUD** (niet alleen GET) — 1-op-1 vorm van `mvm-api-pilot/Controllers/V2/VendorsController.cs`.
+- Tenant-resolutie: header → query → fallback "demo", 1-op-1 overgenomen uit de C#-pilot.
+- Feature flag: wél toegepast vanaf deze allereerste implementatie (`FEATURE_VENDORS_ENABLED`, standaard uit) — bewuste keuze, afwijkend van het eerste voorstel (overslaan) na expliciete vraag aan de gebruiker.
+- `NESTJS_MIGRATION_PLAN.md` (in `mvm-api-pilot`, gedateerd 2026-05-28) noemt nog "Azure Container Apps" — is achterhaald, dit project volgt AWS ECS Fargate + Cognito (besluit 2026-07-24, zie boven in dit bestand). Niet als bron gebruiken voor hosting-beslissingen, wel voor de endpoint-volgorde (vendor → contract → task → issue → cert → interaction).
+
+**Bekend, niet-blokkerend aandachtspunt (ander project):** in `mvm-api-pilot/appsettings.Development.json` staat een Supabase-wachtwoord in leesbare tekst, waarschijnlijk al gecommit in git. Bewust geparkeerd tot na MCM2 Fase 0 — nog oppakken (roteren + uit git-historie verwijderen).
+
+**Eerstvolgende stap:** implementatieplan uitvoeren. Bij sessiestart is nog niet gekozen tussen subagent-driven uitvoering of inline uitvoering (zie `docs/superpowers/plans/2026-07-24-fase0-skeleton-vendors.md`, sectie "Execution Handoff") — dat is de eerste vraag om te beantwoorden voordat het bouwen start.
+
+---
+
 ## Sessiestart protocol
 
 Begin elke nieuwe sessie met:
 
-1. Dit bestand volledig lezen.
-2. Vragen: "Welke endpoint of welk onderdeel bouwen we vandaag?" — bij twijfel eerst de C#-pilot als specificatie opzoeken.
-3. Bevestigen: welke OTAP-stap is dit — nieuwe code (Ontwikkel), of een wijziging die al bij Test/Acceptatie staat?
-4. Controleren of de Database-regels van toepassing zijn (raakt de wijziging het schema?).
-5. Pas beginnen met bouwen als dit protocol doorlopen is.
+1. Dit bestand volledig lezen, inclusief de sectie "Sessiestatus" hierboven.
+2. Als er een openstaande sessiestatus is: eerst die afronden vragen ("we waren bezig met X, wil je daarmee doorgaan?") vóór iets nieuws wordt gestart.
+3. Vragen: "Welke endpoint of welk onderdeel bouwen we vandaag?" — bij twijfel eerst de C#-pilot als specificatie opzoeken.
+4. Bevestigen: welke OTAP-stap is dit — nieuwe code (Ontwikkel), of een wijziging die al bij Test/Acceptatie staat?
+5. Controleren of de Database-regels van toepassing zijn (raakt de wijziging het schema?).
+6. Pas beginnen met bouwen als dit protocol doorlopen is.
 
 ---
 
