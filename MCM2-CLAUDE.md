@@ -386,7 +386,7 @@ Nieuwe bugs, feature-ideeën en technische taken worden vastgelegd als GitHub Is
 
 Verwijder of wijzig geen historisch document zonder expliciete toestemming. Verplaats verouderde actieve instructies naar `docs/archive/` en markeer waarom zij zijn vervangen.
 
-### 13a. Verplichte STATUS.md-updatemomenten
+### 13b. Verplichte STATUS.md-updatemomenten
 
 `docs/STATUS.md` is de enige actuele waarheid over fase, blockers en eerstvolgende stap. Dat werkt alleen als het op de juiste momenten wordt bijgewerkt — niet "zo nu en dan".
 
@@ -410,7 +410,7 @@ Begin iedere nieuwe sessie als volgt:
 1. Lees dit bestand volledig.
 2. Lees `docs/STATUS.md`.
 3. Verifieer STATUS.md tegen de werkelijke repository-status vóórdat je erop vertrouwt: `git status`, `git branch -a`. Wijkt de vermelde branch of git-status af van de realiteit? Corrigeer STATUS.md direct en meld dit expliciet aan de gebruiker — ga niet stilzwijgend uit van het document.
-4. Controleer open P0/P1-blockers en actuele branche/status.
+4. Haal de actuele backlog op met `gh issue list --repo AlingAdvies/MCM2 --state open` en controleer open P0/P1-blockers en actuele branche/status. STATUS.md verwijst naar issuenummers, maar de Issues zelf zijn de bron van waarheid over wat werkelijk nog open staat.
 5. Bepaal of de vraag analyse, ontwerp, wijziging, test, acceptatie of productie betreft.
 6. Lees relevante ADR’s, reviewdocumenten en runbooks.
 7. Controleer of database-, security-, OTAP- of toestemmingregels van toepassing zijn.
@@ -431,6 +431,25 @@ Security en expliciete actuele blokkades
       -> projectdocumentatie
         -> oude plannen, pilots en sessiehistorie
 ```
+
+---
+
+## 14b. Sessieafsluitprotocol
+
+Een sessie eindigt vaak met een `/clear` of het sluiten van de editor. Alles wat op dat moment niet op schijf staat, is weg — de volgende sessie begint met uitsluitend de documenten en de repository. Loop daarom vóór het afsluiten deze punten na.
+
+Voer dit uit zodra de gebruiker aangeeft te willen stoppen, afsluiten, clearen of "voor vandaag klaar" te zijn. Wacht niet tot erom gevraagd wordt.
+
+1. **Backlog naast de sessie leggen.** Haal de open Issues op (`gh issue list --repo AlingAdvies/MCM2 --state open`) en vergelijk met wat er die sessie feitelijk is gebeurd:
+   - Is een Issue tijdens deze sessie aantoonbaar afgerond? Sluit het, met een korte afsluitreactie die het bewijs benoemt (`gh issue close <nr> --comment "..."`). Sluit nooit op gevoel — §13a eist verificatie van het acceptatiecriterium.
+   - Is er een nieuwe bevinding, blokkade, restpunt of bewust uitgesteld idee ontstaan? Maak daar een Issue voor, met verplicht type- en prioriteitslabel. Een bevinding die alleen in een reviewdocument of in het gesprek blijft hangen, is verloren.
+   - Is de status van een bestaand Issue wezenlijk veranderd zonder dat het afgerond is? Zet dat als comment onder het Issue, niet alleen in STATUS.md.
+2. **STATUS.md synchroon maken** conform §13b — met name `## Huidige branch en Git-status`, `## Actieve blokkades` en `## Eerstvolgende goedgekeurde stap`. Verifieer de git-status zelf (`git status`, `git branch -a`); kopieer niets uit gespreksgeheugen.
+3. **Git afhandelen** conform het branch-ritueel: niet-gecommit werk committen of bewust benoemen, en bij een openstaande feature branch expliciet vragen of die gemerged of geparkeerd wordt. Een geparkeerde branch is prima, een vergeten branch niet.
+4. **Openstaande punten expliciet benoemen** in het afsluitbericht aan de gebruiker: wat is er niet afgemaakt, welke aanname is onbevestigd gebleven, en welke informatie zit alleen bij de gebruiker (bijvoorbeeld een secret dat niet in git hoort). Verzwijg geen half werk om een sessie netjes te laten eindigen.
+5. **Controleren of de volgende sessie genoeg heeft.** Stel jezelf de vraag: als ik straks alleen `MCM2-CLAUDE.md`, `docs/STATUS.md` en de repository heb, kan ik dan verder zonder de gebruiker opnieuw te laten uitleggen wat er speelde? Zo nee, vul dat gat nu — niet met een samenvatting van het gesprek, maar met de feiten, ID's, paden en besluiten die nodig zijn.
+
+Vermeld bij het afsluiten expliciet wanneer een van deze punten bewust is overgeslagen, en waarom.
 
 ---
 
