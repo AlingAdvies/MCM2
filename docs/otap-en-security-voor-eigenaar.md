@@ -57,7 +57,38 @@ Dit is bewust uitgesteld, omdat er nog een openstaande technische knoop is met e
 
 ---
 
-## 3. Welke NIS2-achtige thema's raakt dit ontwerp?
+## 3. Hoe houden we bugs, ideeën en de planning bij?
+
+Tot 2026-07-27 stond dit in een los Word/Markdown-achtig document (`06-prioritized-roadmap.md`). Dat document bleek een bekend probleem te hebben: het werd geschreven op één moment, maar niemand werkte het structureel bij zodra er iets werd opgelost of nieuw ontstond. Na een paar dagen klopte het dus al niet meer — precies zoals een papieren to-do-lijst die je nooit doorstreept.
+
+**De oplossing: GitHub Issues.**
+
+GitHub (waar de code ook staat) heeft een ingebouwd systeem voor "dingen die nog gedaan moeten worden": een lijst met kaartjes, elk met een titel, een beschrijving, en een status (open of gesloten). Zie het als een digitaal, doorzoekbaar Post-it-bord dat bij de code zelf hoort — je hoeft er geen apart abonnement voor te nemen, het zit al bij de repository die er al is.
+
+### Wat staat er in elk kaartje ("Issue")?
+
+- **Titel** — kort, wat moet er gebeuren.
+- **Beschrijving** — waarom dit nodig is, en wanneer het "klaar" is (het acceptatiecriterium).
+- **Type-label** — is het een **bug** (iets werkt niet zoals het zou moeten), een **enhancement** (iets nieuws, een feature-idee), of een **chore** (technisch onderhoud, bijv. "versie van een bibliotheek bijwerken")?
+- **Prioriteit-label** — vier niveaus, dezelfde indeling die al in de oude roadmap stond, nu als label in plaats van als losse rij in een tabel:
+  - `priority:p0` — moet gebeuren vóórdat er ook maar één regel nieuwe functionaliteit bij komt.
+  - `priority:before-pilot` — nodig vóór de eerste Transdev-pilot.
+  - `priority:before-production` — nodig vóórdat er (meerdere) betalende klanten op draaien.
+  - `priority:later` — bewust uitgesteld, tenzij er een concrete aanleiding ontstaat.
+
+### Hoe kijk je dit zelf na, zonder dat ik het moet uitleggen?
+
+Je kunt gewoon naar `https://github.com/AlingAdvies/MCM2/issues` gaan in je browser — dat is een normale webpagina, geen speciale tool nodig. Je kunt filteren op label (bijvoorbeeld: "toon me alleen de dingen die vóór de pilot moeten gebeuren") en zien of iets nog open staat of al is afgerond ("gesloten").
+
+### Wat betekent dit voor jou in de praktijk?
+
+- Als jij een bug tegenkomt of een idee hebt: dat wordt een nieuw kaartje, niet een regel in een chatgesprek die daarna kwijtraakt.
+- Als ik iets oplos: ik verwijs in de commit (de opgeslagen wijziging) naar het kaartjesnummer, zodat je achteraf kan terugvinden welke code-wijziging bij welk kaartje hoorde.
+- `docs/STATUS.md` blijft de plek voor "waar staan we nu, in het algemeen" — de Issues zijn de plek voor "wat moet er nog specifiek gebeuren, punt voor punt".
+
+---
+
+## 4. Welke NIS2-achtige thema's raakt dit ontwerp?
 
 NIS2 is een Europese wet die eisen stelt aan hoe organisaties omgaan met cyberrisico's — met name rond risicobeheer, toegangsbeheer, logging en incidentrespons. **MCM2 is op dit moment geen NIS2-compliant systeem, en dit document claimt dat ook niet.** Wat hier volgt is een eerlijk overzicht van welke *thema's* uit NIS2 dit ontwerp raakt, en wat daarvan al staat versus nog ontbreekt.
 
@@ -65,7 +96,7 @@ NIS2 is een Europese wet die eisen stelt aan hoe organisaties omgaan met cyberri
 
 **Wat er nu staat:**
 Database-toegang is opgesplitst in gescheiden rollen met elk een beperkt doel:
-- Een rol die de applicatie zelf gebruikt (kan alleen data lezen/schrijven binnen de eigen tenant, dankzij een technische maatregel genaamd Row-Level Security — zie hoofdstuk 4).
+- Een rol die de applicatie zelf gebruikt (kan alleen data lezen/schrijven binnen de eigen tenant, dankzij een technische maatregel genaamd Row-Level Security — zie hoofdstuk 5).
 - Een aparte rol die uitsluitend gebruikt wordt om het datamodel te wijzigen (bijv. een nieuwe tabel toevoegen) — deze rol wordt nooit door de applicatie zelf gebruikt.
 - Geen van beide rollen kan de veiligheidsmaatregel (Row-Level Security) omzeilen.
 
@@ -106,7 +137,7 @@ Een automatische scan die waarschuwt als een gebruikte softwarebibliotheek een b
 
 ---
 
-## 4. Kort: wat is die "Row-Level Security" waar steeds naar verwezen wordt?
+## 5. Kort: wat is die "Row-Level Security" waar steeds naar verwezen wordt?
 
 Omdat dit begrip in bijna elk thema hierboven terugkomt: Row-Level Security (RLS) is een beveiligingsfunctie die **in de database zelf** zit, niet in de applicatiecode. Het werkt als een onzichtbare filter die de database dwingt: "toon en accepteer alleen de rijen die bij de huidige klant horen — wat de applicatie ook vraagt."
 
@@ -114,7 +145,7 @@ Het belang hiervan: zelfs als er ooit een fout in de applicatiecode zou zitten d
 
 ---
 
-## 5. Samenvatting: waar staan we, in één oogopslag
+## 6. Samenvatting: waar staan we, in één oogopslag
 
 | Onderdeel | Status |
 |---|---|
@@ -127,5 +158,6 @@ Het belang hiervan: zelfs als er ooit een fout in de applicatiecode zou zitten d
 | Audit-logboek (basis) | 🟡 Bestaat, nog niet gekoppeld aan functionaliteit |
 | Geschreven incidentplan | ❌ Bestaat nog niet |
 | Bewuste, gedocumenteerde leveranciersafweging | ✅ Gedaan voor de databasetechnologie |
+| Actuele, doorzoekbare backlog (bugs/features/planning) | ✅ GitHub Issues, sinds 2026-07-27 |
 
 Voor de actuele, meest up-to-date versie van deze lijst: zie altijd `docs/STATUS.md` — dat document wordt bijgewerkt bij elke relevante wijziging, dit document (`docs/otap-en-security-voor-eigenaar.md`) is bedoeld als uitleg van de *concepten*, niet als dagelijkse statustracker.
