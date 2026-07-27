@@ -1,9 +1,10 @@
 # Entra External ID PoC — technische bevindingen (2026-07-27)
 
-## Status: federatie werkt, sign-up-flow loopt vast op een clientside UI-fout
+## Status: PoC geslaagd — volledige federatieketen werkt end-to-end
 
 Dit document legt vast wat is opgebouwd voor de Entra External ID-proof-of-concept
-(zie ADR-006, herzien), wat aantoonbaar werkt, en waar de flow precies vastloopt.
+(zie ADR-006, herzien), wat aantoonbaar werkt, en welke diagnose is uitgevoerd op een
+tijdelijke blokkade die uiteindelijk vanzelf verdween zonder configuratiewijziging.
 Bedoeld als startpunt voor de volgende sessie — niet opnieuw vanaf nul beginnen.
 
 ---
@@ -54,93 +55,94 @@ Twee app-registraties:
 
 ## Wat aantoonbaar werkt
 
-1. **De hele OIDC-federatieketen tot en met token-uitgifte door `alingadvies.nl`**:
-   - "Run user flow" toont de knop "Sign in with AlingAdvies" op het inlogscherm
-     (na een eerdere propagatievertraging: uitvinken/opslaan/aanvinken/opslaan als
-     workaround toegepast).
-   - Klikken daarop redirect correct naar `alingadvies.nl`'s eigen inlogscherm.
-   - Inloggen met `kees@alingadvies.nl` + Microsoft Authenticator (MFA) slaagt.
-   - De Network-trace toont een correcte `ProcessAuth` → `oauth2` (callback naar
-     `mcm2ciam-federation-trust`'s redirect endpoint) → `attribute-collection-fabric`
-     keten, allemaal HTTP 200.
-2. **De reply-URL-configuratie werkt**: een bewust geannuleerde flow (via de
-   "Cancel"-knop op het attribute-collection-scherm) resulteert correct in een
-   `?error=access_denied&error_subcode=cancel`-redirect naar `https://jwt.ms` — het
-   verwachte, correcte gedrag bij annulering. Dit bewijst dat de volledige
-   redirect/callback-keten (inclusief `mcm2-api-poc`'s reply URL) functioneel juist
-   is geconfigureerd.
+De volledige keten is end-to-end doorlopen en geslaagd op 2026-07-27:
 
-## Waar het vastloopt
+1. **"Run user flow"** toont de knop "Sign in with AlingAdvies" op het inlogscherm
+   (na een eerdere propagatievertraging: uitvinken/opslaan/aanvinken/opslaan als
+   workaround toegepast).
+2. **Federatie-redirect** naar `alingadvies.nl`'s eigen inlogscherm werkt.
+3. **Authenticatie** met `kees@alingadvies.nl` + Microsoft Authenticator (MFA) slaagt.
+4. **Callback** naar `mcm2ciam-federation-trust`'s redirect endpoint (`/federation/oauth2`),
+   HTTP 200 — zichtbaar in de Network-trace als `ProcessAuth` → `oauth2`.
+5. **Attribute collection** ("Add details", Surname-veld) laadt en verstuurt correct:
+   het `POST .../common/validateuserattributes`-request (fetch, HTTP 200, 4.0 kB)
+   is waargenomen in de Network-tab onder het Fetch/XHR-filter.
+6. **Gebruikersaanmaak in `mcm2ciam`** en aflevering van een geldige authorization code
+   op de reply-URL:
+   `https://jwt.ms/?code=1.AbMAW1O1Fw...&session_state=006ef65a-...`
+   Geen `error=`-parameter. Dit is het bewijs dat de PoC geslaagd is.
 
-Op het **"Add details" / attribute-collection-scherm** (na succesvolle federatie-login,
-vóór de daadwerkelijke gebruikersaanmaak in `mcm2ciam`):
+**Waarom `jwt.ms` er leeg uitzag ondanks succes:** de user flow is geconfigureerd met
+`Response type: code` (authorization code flow). Daarbij komt er géén token in het
+URL-fragment, maar een authorization code die server-to-server ingewisseld moet worden.
+`jwt.ms` leest alleen tokens uit het fragment en blijft daarom leeg. Dit is correct
+gedrag, geen fout — de `?code=`-parameter in de adresbalk is het daadwerkelijke resultaat.
 
-- Het scherm vraagt om **Surname** (verplicht "Collect attribute").
-- Na het (zelf, expliciet) invullen van een waarde en klikken op **Next**:
-  gebeurt er **niets zichtbaars** — geen navigatie, geen foutmelding, geen nieuw
-  request in de Network-tab na de klik.
-- De **Cancel**-knop op hetzelfde scherm werkt wel (zie hierboven).
-- Een handmatige **reload** van de pagina op dit punt resulteert in
-  `AADSTS900144: The request body must contain the following parameter: 'state'`
-  — dit is een **verwachte bijwerking van de reload zelf** (reload gooit de
-  OAuth `state`-parameter weg), **geen** aanwijzing voor de onderliggende oorzaak
-  van het vastlopen van "Next".
+## Tijdelijke blokkade — opgetreden en verdwenen, oorzaak niet vastgesteld
 
-### Uitgesloten oorzaken
+Tussen de eerste pogingen en de geslaagde run trad een blokkade op die het vastleggen
+waard is, omdat hij zich mogelijk opnieuw voordoet.
 
-- **Niet** een server-/federatieprobleem: de keten tot dit scherm werkt aantoonbaar
-  (zie hierboven), en Cancel op hetzelfde scherm functioneert normaal.
-- **Niet** een verkeerd/verlopen client secret: dat gaf eerder een andere,
-  identificeerbare fout (zie "Secret ID vs. Value"-incident hierboven), inmiddels
-  hersteld en de flow komt er nu ver voorbij.
-- **Niet** een user-flow-propagatievertraging: dat speelde eerder (IdP niet
-  zichtbaar op het inlogscherm) en is toen al met de uitvink/aanvink-workaround
-  opgelost.
+**Symptoom:** op het attribute-collection-scherm ("Add details" / Surname) deed de
+**Next**-knop niets zichtbaars — geen navigatie, geen foutmelding, en geen nieuw
+request zichtbaar in de Network-tab. De **Cancel**-knop op hetzelfde scherm werkte wel
+(produceerde correct `?error=access_denied&error_subcode=cancel` naar de reply-URL).
+Een handmatige reload op dat punt gaf `AADSTS900144: The request body must contain the
+following parameter: 'state'` — dat is een bijwerking van de reload zelf (de OAuth
+`state` gaat verloren), geen aanwijzing voor de onderliggende oorzaak.
 
-### Waarschijnlijke oorzaak (nog niet bevestigd)
+**Hoe het is opgelost:** het is **niet** opgelost door een configuratiewijziging.
+Tussen de laatste mislukte en de eerste geslaagde poging is niets aan de Entra-,
+app-registratie- of user-flow-configuratie gewijzigd. Het verschil was een **verse
+incognito-sessie** en een Network-tab gefilterd op Fetch/XHR.
 
-Het patroon — "Cancel" werkt, "Next" doet zichtbaar niets, geen nieuw network-request,
-geen console-fout waargenomen tot nu toe — wijst op een **clientside (JavaScript/UI)
-probleem specifiek op de Next-knop van het attribute-collection-scherm**, niet op de
-achterliggende Entra-configuratie. Kandidaten, in afnemende waarschijnlijkheid:
+**Onderzochte en uitgesloten oorzaken.** Op basis van Microsoft Learn-documentatie zijn
+drie hypotheses onderzocht en alle drie weerlegd door inspectie van de daadwerkelijke
+configuratie:
 
-1. **Browserextensie-interferentie** (ad-blocker, wachtwoordmanager) die een
-   onzichtbare overlay over de knop legt of de klik-event onderschept — in een
-   eerdere Network-trace was `adblock-uiscripts-rightclick_hook.js` zichtbaar,
-   wat een actieve ad-blocker bevestigt. **Nog niet getest**: dezelfde flow in een
-   schoon incognito-venster zonder extensies.
-2. **Stille clientside-validatiefout** op het Surname-veld (bv. minimale lengte,
-   toegestane tekens) die de Next-actie blokkeert zonder zichtbare foutmelding.
-   Nog niet getest met een ander/eenvoudiger woord dan "Aling".
-3. Een JavaScript-fout in de Console specifiek op het moment van de Next-klik —
-   tot nu toe alleen de Network-tab bekeken op dit exacte moment, niet de Console.
+| Hypothese | Uitkomst |
+|---|---|
+| Ontbrekende `email` optional claim op `mcm2ciam-federation-trust` (Token configuration) | **Weerlegd** — `email`, `family_name` en `given_name` stonden er al, en `email` staat op token type **ID** (het enige type dat External ID leest) |
+| Ontbrekende/onvolledige Claims mapping op de OIDC-provider in `mcm2ciam` | **Weerlegd** — de mapping was al correct vooringevuld met de OIDC-standaardnamen (`sub`, `name`, `given_name`, `family_name`, `email`, `email_verified`); er viel niets te wijzigen |
+| Ontbrekende "Return claim"-kolom in de user-flow-wizard | **Weerlegd als probleem** — die kolom bestaat correct niet in external tenants (dat is workforce-tenant-documentatie). In external tenants worden tokenclaims elders geconfigureerd: App registrations → Attributes & Claims |
+
+**Serverside diagnose was niet beschikbaar.** De external tenant biedt geen
+**Sign-up logs** (menu-item ontbreekt; mogelijk niet uitgerold of licentie-afhankelijk —
+tenant draait op Microsoft Entra ID Free). De reguliere **Sign-in logs** bevatten
+uitsluitend de eigen beheersessies (Application: "Azure Portal"), geen enkele regel voor
+`mcm2-api-poc` — consistent met een flow die strandt vóór gebruikersaanmaak en dus geen
+sign-in-event genereert.
+
+**Meest plausibele verklaring, niet bewezen:** sessie-/statevervuiling uit eerdere
+afgebroken pogingen (meerdere half-voltooide flows, reloads middenin een OAuth-sessie).
+Dit is een vermoeden op basis van het feit dat een schone incognito-sessie het enige
+verschil was — er is geen bewijs voor. Genoteerd als waarschuwing, niet als vastgestelde
+oorzaak.
+
+**Praktische les voor volgende keer:** test deze flow altijd in een verse
+incognito-sessie, doorloop hem in één keer zonder reloads, en filter de Network-tab op
+**Fetch/XHR** met zoekterm `validate` om `validateuserattributes` te kunnen zien — dat
+request is een fetch, geen navigatie, en is in een ongefilterde lijst makkelijk te missen.
 
 ---
 
-## Eerstvolgende concrete stappen (nog uit te voeren)
+## Eerstvolgende concrete stappen
 
-In volgorde van meest naar minst waarschijnlijk om de oorzaak snel te vinden:
-
-1. Herhaal de volledige flow in een **schoon incognito-venster zonder extensies**
-   (expliciet controleren dat ad-blocker/wachtwoordmanager niet actief zijn in dat
-   venster — bij Chrome/Edge staat dit standaard uit in incognito tenzij
-   "Allow in incognito" is aangevinkt voor de extensie).
-2. Als dat niet werkt: herhaal met **Console-tab open** (niet Network) op het
-   moment van de Next-klik, en documenteer elke regel die verschijnt.
-3. Als dat niet werkt: probeer een **ander Surname-woord** (bv. "Test") in plaats
-   van "Aling", om een stille validatieregel uit te sluiten.
-4. Als niets hiervan de oorzaak blootlegt: overweeg de **Return claim**-instelling
-   te heroverwegen — deze user-flow-wizard toonde geen "Return claim"-kolom (alleen
-   "Collect attribute"), wat kan betekenen dat deze Entra External ID-tenant een
-   nieuwere wizard-versie gebruikt waarin verplichte attributen anders worden
-   verwerkt dan in de documentatie beschreven. Vergelijk met een test waarbij
-   Surname **niet** als verplicht "Collect attribute" staat (puur ter diagnose,
-   niet als permanente configuratie — e-mail is het enige attribuut dat MCM2
-   functioneel nodig heeft).
-5. Zodra de "Next"-blokkade is opgelost en een token op `jwt.ms` verschijnt:
-   de claims in dat token controleren (met name `email`, `sub`, `oid`/`tid`) —
-   dat bepaalt hoe de NestJS-backend straks de tenant/membership uit het
-   token kan afleiden (vervolgstap van Issue #7, nog niet gestart).
+1. **Authorization code inwisselen voor tokens** (server-to-server, `POST` naar het
+   `/token`-endpoint van `mcm2ciam` met de code, client ID en PKCE-verifier). Pas daarna
+   zijn de daadwerkelijke claims zichtbaar. Dit hoort thuis in de NestJS-backend, niet in
+   een browsertest.
+2. **Claims inspecteren** in het verkregen ID-token — met name `email`, `sub`, `oid`,
+   `tid`. Dat bepaalt hoe de backend de tenant en membership kan afleiden (de kern van
+   Issue #7).
+3. **NestJS-guard bouwen** die het ID-token verifieert tegen de JWKS van `mcm2ciam` en de
+   tenantcontext daaruit afleidt — in plaats van uit een ongeverifieerde header. Bouw dit
+   config-gedreven (issuer-URL, JWKS-endpoint, client ID als environment-variabelen), zodat
+   een latere verhuizing naar een Bizaline-tenant een configuratiewijziging blijft.
+4. **Opruimen:** de ongebruikte app-registratie `MCM2-Cognito-Federation` in
+   `alingadvies.nl` (overblijfsel van de losgelaten Cognito-poging) kan verwijderd worden.
+   Het AWS-account `727732213368` is niet meer nodig voor identity — er zijn geen
+   Cognito-resources aangemaakt, dus er valt niets af te breken.
 
 ## Wat dit niet oplost (ter herinnering, uit ADR-006)
 
