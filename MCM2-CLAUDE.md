@@ -367,6 +367,21 @@ Houd documentatie kort, feitelijk en actueel.
 
 Verwijder of wijzig geen historisch document zonder expliciete toestemming. Verplaats verouderde actieve instructies naar `docs/archive/` en markeer waarom zij zijn vervangen.
 
+### 13a. Verplichte STATUS.md-updatemomenten
+
+`docs/STATUS.md` is de enige actuele waarheid over fase, blockers en eerstvolgende stap. Dat werkt alleen als het op de juiste momenten wordt bijgewerkt — niet "zo nu en dan".
+
+Werk `docs/STATUS.md` **in dezelfde sessie, direct** bij op elk van deze momenten:
+
+- een branch wordt gemerged naar `main`, verwijderd, of nieuw aangemaakt;
+- een P0- of P1-blocker wordt (gedeeltelijk) opgelost, verzwaard of van status verandert;
+- een test, migratie of RLS-verificatie die eerder "niet bewezen" was, is nu aantoonbaar bewezen (of andersom);
+- een sessie eindigt met een andere git-status (branch, commit, open wijzigingen) dan waarmee de sessie begon.
+
+Bij zo'n moment werk je minimaal bij: `## Huidige branch en Git-status` en, indien relevant, `## Actieve blokkades`, `## Aantoonbaar werkend` en `## Eerstvolgende goedgekeurde stap`. Een commit die de git-status wijzigt (merge, branch-verwijdering) en die niet gepaard gaat met een STATUS.md-update is onvolledig werk, geen losse vervolgstap.
+
+Zet nooit een branchnaam, blocker-status of "aantoonbaar werkend"-claim in STATUS.md die je niet zojuist zelf hebt geverifieerd (`git status`, `git branch`, een daadwerkelijk uitgevoerde test) — kopieer dit nooit ongecontroleerd uit gespreksgeheugen of een eerdere versie van het document.
+
 ---
 
 ## 14. Sessiestartprotocol
@@ -375,17 +390,18 @@ Begin iedere nieuwe sessie als volgt:
 
 1. Lees dit bestand volledig.
 2. Lees `docs/STATUS.md`.
-3. Controleer open P0/P1-blockers en actuele branche/status.
-4. Bepaal of de vraag analyse, ontwerp, wijziging, test, acceptatie of productie betreft.
-5. Lees relevante ADR’s, reviewdocumenten en runbooks.
-6. Controleer of database-, security-, OTAP- of toestemmingregels van toepassing zijn.
-7. Geef een kort plan met:
+3. Verifieer STATUS.md tegen de werkelijke repository-status vóórdat je erop vertrouwt: `git status`, `git branch -a`. Wijkt de vermelde branch of git-status af van de realiteit? Corrigeer STATUS.md direct en meld dit expliciet aan de gebruiker — ga niet stilzwijgend uit van het document.
+4. Controleer open P0/P1-blockers en actuele branche/status.
+5. Bepaal of de vraag analyse, ontwerp, wijziging, test, acceptatie of productie betreft.
+6. Lees relevante ADR’s, reviewdocumenten en runbooks.
+7. Controleer of database-, security-, OTAP- of toestemmingregels van toepassing zijn.
+8. Geef een kort plan met:
    - doel;
    - bestanden/systemen die worden geraadpleegd;
    - risico’s;
    - acties die toestemming vereisen;
    - concrete acceptatiecriteria.
-8. Vraag alleen om toestemming wanneer de geplande actie echt iets wijzigt, secrets kan raken, kosten maakt of een externe/gedeelde omgeving beïnvloedt.
+9. Vraag alleen om toestemming wanneer de geplande actie echt iets wijzigt, secrets kan raken, kosten maakt of een externe/gedeelde omgeving beïnvloedt.
 
 Bij conflicten geldt deze prioriteit:
 

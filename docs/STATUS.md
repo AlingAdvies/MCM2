@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-24
+2026-07-27
 
 ## Doel
 Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
@@ -33,9 +33,9 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Huidige branch en Git-status
 
-- Branch: `chore/restructure-project-context` (afgesplitst van `feat/fase0-skeleton-vendors`).
-- Working tree bevat op moment van schrijven ongecommitte wijzigingen van vóór deze herstructurering (`prisma/schema.prisma`, `src/app.module.ts`, nieuwe `src/prisma/*` en `src/common/*`-bestanden uit een eerdere, niet-afgeronde Taak 6) — deze zijn **niet** onderdeel van deze documentatie-herstructurering en worden hier niet gewijzigd of gecommit.
-- Deze herstructurering zelf raakt uitsluitend documentatiebestanden (zie `docs/context-restructure-report.md` voor de volledige lijst).
+- Branch: `main`. Working tree schoon (geverifieerd via `git status` op 2026-07-27).
+- `chore/restructure-project-context` is inmiddels in `main` opgegaan (laatste commit op die lijn: `beb3e66`, "docs(fase0): archiveer opdrachtinstructie en eerdere techstack-evaluatie") en bestaat niet meer als losse branch.
+- Open, niet-gemergede branch: `feat/fase0-skeleton-vendors` — bevat vermoedelijk de niet-afgeronde Taak 6 (PrismaService, TenantMiddleware, with-tenant; zie commit `4581edd`, "wip(fase0): Taak 6 tussenstand"). Nog niet beoordeeld of gemerged of bewust geparkeerd; dit moet expliciet met de eigenaar worden afgestemd.
 
 ## Eerstvolgende goedgekeurde stap
 
