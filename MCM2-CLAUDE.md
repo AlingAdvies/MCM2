@@ -189,6 +189,12 @@ Doe geen ORM-migratie, nieuwe Prisma-workaround of domeinuitbreiding zonder expl
 - Gebruik één centrale `TenantTransactionService`; domeincode mag niet zelfstandig de databaseclient openen.
 - Iedere nieuwe tabel met `tenant_id` krijgt geautomatiseerde cross-tenant read- én write-tests.
 
+### Bij onverwacht Supabase/PostgreSQL-rolgedrag: opzoeken, niet gokken
+
+Loop je tegen een onverwachte permission-fout, roluitzondering of ander rolrechten-gedrag aan (bijv. `permission denied to grant role`, `permission denied for schema`, afwijkend `GRANT`/`OWNER TO`-gedrag): zoek dit eerst gericht op in `https://supabase.com/docs` en de officiële PostgreSQL-documentatie (`postgresql.org/docs/current/`) vóórdat je een volgende SQL-variant probeert tegen de database. Trial-and-error tegen een gedeelde database — ook Supabase's testomgeving — is geen vervanging voor het lezen van de bron.
+
+Reden: Supabase wijkt op punten bewust af van "kale" PostgreSQL (bijv. `postgres` is daar geen echte superuser, `rolcreaterole` ligt bij `supabase_admin`), en recente PostgreSQL-versies (16+) hebben rolrechten-gedrag aangescherpt (bijv. geen automatische `ADMIN OPTION` meer bij `CREATE ROLE`). Beide zijn gedocumenteerd, bekend gedrag — geen giswerk waard, en giswerk op een gedeelde database is precies het risico dat §6 hier wil vermijden.
+
 ### Secrets en risicovolle acties
 
 Stop en vraag expliciet toestemming vóór een actie die:
