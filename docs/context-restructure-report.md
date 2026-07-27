@@ -21,7 +21,7 @@
 | `docs/adr/ADR-003-multi-schema-indeling.md` | `clm`/`ref`/`audit`-schema-indeling |
 | `docs/adr/ADR-004-valkey-in-plaats-van-redis.md` | Valkey i.p.v. Redis |
 | `docs/adr/ADR-005-nodejs-versie.md` | Node.js 24 |
-| `docs/adr/ADR-006-cognito-als-federatielaag.md` | Cognito-principe, uitvoering nog niet afgerond |
+| `docs/adr/ADR-006-cognito-als-federatielaag.md` | Cognito-principe, uitvoering nog niet afgerond — *nadien herzien: het besluit is op 2026-07-27 gewijzigd naar Microsoft Entra External ID en het bestand is hernoemd naar `ADR-006-ciam-laag-entra-external-id.md`* |
 | `docs/context-restructure-report.md` | Dit rapport |
 | Mappen: `docs/archive/`, `docs/context/`, `docs/adr/`, `docs/runbooks/` | Nieuwe doelstructuur (runbooks blijft leeg, geen functionaliteit om over te schrijven) |
 

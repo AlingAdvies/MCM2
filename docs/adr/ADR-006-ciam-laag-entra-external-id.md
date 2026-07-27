@@ -1,4 +1,9 @@
-# ADR-006 — Microsoft Entra External ID als CIAM-laag (herzien; was: AWS Cognito)
+# ADR-006 — Microsoft Entra External ID als CIAM-laag
+
+> **Bestandsnaam gewijzigd op 2026-07-27.** Dit ADR heette `ADR-006-cognito-als-federatielaag.md`
+> toen het oorspronkelijke besluit nog AWS Cognito was. Na de herziening (zie hieronder)
+> dekte die naam de inhoud niet meer. Verwijzingen naar de oude bestandsnaam in
+> historische documenten zijn bewust niet aangepast.
 
 - Status: **Herzien op 2026-07-27. Cognito-spoor stopgezet vóór productieopzet; Microsoft Entra External ID is het nieuwe besluit.**
 - Datum: oorspronkelijk besluit 2026-07-24 (Cognito), herzien 2026-07-27
@@ -18,7 +23,7 @@ Tegelijk is **rechtstreeks, kaal Entra ID** (zoals het 2026-03-30-platformdocume
 Authenticatie voor interne beheerders wordt gebouwd tegen **Microsoft Entra External ID** (voorheen Azure AD B2C) als CIAM-laag, niet tegen AWS Cognito en niet rechtstreeks kaal tegen Entra ID.
 
 - Entra External ID federeert met Entra ID (en desgewenst later Google Workspace of andere OIDC/SAML-IdP's) binnen hetzelfde Microsoft-ecosysteem — geen cross-cloud federatie, geen los AWS-account.
-- Voor de Transdev-pilot: `alingadvies.nl` blijft de voorbeeld-/testtenant (zelfde beperking als bij het Cognito-spoor — geen toegang tot een Transdev-tenant). De al aangemaakte Entra app-registratie (`MCM2-Cognito-Federation`, client ID `d369dcf9-26ec-4b6d-8a58-911884891107`, tenant `3ce5523c-cc8b-4422-a310-8bdfa3715168`) blijft bruikbaar, wordt hernoemd/hergebruikt voor de External ID-opzet in plaats van weggegooid.
+- Voor de Transdev-pilot: `alingadvies.nl` blijft de voorbeeld-/testtenant (zelfde beperking als bij het Cognito-spoor — geen toegang tot een Transdev-tenant). Voor de federatie is een **nieuwe** app-registratie aangemaakt in `alingadvies.nl` (`mcm2ciam-federation-trust`, client ID `aab9af4b-ae9f-4a30-945f-4ed199879a83`), omdat Microsoft's documentatie specifieke redirect-URI's (`.../federation/oauth2`) voorschrijft die niet overeenkwamen met de Cognito-opzet. De oude registratie `MCM2-Cognito-Federation` (`d369dcf9-26ec-4b6d-8a58-911884891107`) is daarmee ongebruikt en kan worden opgeruimd.
 - Het AWS-account `727732213368` (tijdelijk aangemaakt voor de Cognito-proof-of-concept) is niet langer nodig voor identity. Er is geen Cognito User Pool aangemaakt (de opzet is gestopt vóór dat punt), dus er is niets af te breken of te migreren.
 
 ## Alternatieven (afgewogen op 2026-07-27)
