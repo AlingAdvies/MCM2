@@ -281,6 +281,8 @@ Gebruik managed diensten wanneer zij aantoonbaar onderhoudslast verminderen. Voe
 
 ## 10. OTAP en releasebeleid
 
+> **Implementatiestatus:** dit beschrijft het doelbeleid. Werkelijk geïmplementeerd is nu alleen de eerste rij van de Test-stap (format/lint/typecheck via GitHub Actions, `.github/workflows/ci.yml`) — zie ADR-007 en `docs/STATUS.md` voor de actuele stand. Unit/e2e-tests, RLS-tests, migration test, Docker-build en de Acceptatie/Productie-stappen bestaan nog niet.
+
 Iedere wijziging doorloopt deze route:
 
 | Stap | Omgeving | Verplichte actie |

@@ -11,7 +11,7 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 - **P0:** de runtime database role heeft `BYPASSRLS`. RLS is momenteel geen effectieve tenant-isolatiegrens, ongeacht hoe correct de policies zelf zijn. Bevestigd via `SELECT rolname, rolbypassrls FROM pg_roles WHERE rolname = current_user;` tegen de actieve connectie.
 - **P0:** tenantcontext komt nog blind uit client-input (`X-Tenant-Id`-header of query-parameter), zonder koppeling aan geverifieerde identiteit. Acceptabel als tijdelijke, expliciet erkende uitzondering zolang er geen externe/tweede tenant is — niet acceptabel zodra de Transdev-pilot echte externe leveranciers krijgt.
 - **P1:** ORM-keuze Prisma 6 versus Drizzle is nog open. Prisma 7 is geblokkeerd voor verdere featurebouw wegens een bevestigd, reproduceerbaar conflict tussen Jest-tests, de Prisma 7 Client Engine/generator-output en de gecompileerde Docker-productiebuild.
-- Geen CI/CD-workflows actief (`.github/workflows/` bestaat niet in de repository — feitelijk geverifieerd op 2026-07-24).
+- CI dekt nog uitsluitend format/lint/typecheck (zie hieronder). Geen geautomatiseerde tests, Docker-build of migratietest in CI — expliciet uitgesteld tot na de Prisma 6/Drizzle-spike (ADR-007). Geen branch-protection op `main` ingesteld: een falende CI-check blokkeert een merge nu nog niet automatisch.
 - Vijf Transdev-klantvragen nog open: exportformaat, of toelichting bij bepaalde survey-antwoordopties verplicht is, upload-validatie-eisen voor het certificaat, welke van de vijf vragen welk vraagtype heeft, en de SMTP-verbindingsdetails voor `contractmanagement@transdev.nl` (expliciet nog "volgt").
 - Interne-authenticatie-spike (Cognito+Entra ID via een Microsoft-zakelijk account van de eigenaar) nog niet uitgevoerd — bepaalt of een volwaardige federatie haalbaar is binnen de deadline, of dat een tijdelijk vereenvoudigd alternatief nodig is.
 
@@ -22,6 +22,7 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 - Eerste Prisma-schema (Tenant, User, Vendor-cluster, AuditEvent + ref-lookups) en migratie: uitgevoerd tegen de Supabase `clm-enterprise`-database, inclusief RLS-policies (`USING`+`WITH CHECK`) en seed-data.
 - WSL2 en Docker Desktop: werkend op de ontwikkelmachine.
 - Vier database-rollen (`clm_api`, `clm_admin`, `clm_readonly`, `clm_audit_reader`) bestaan in de database met `rolbypassrls=false` — geverifieerd via `pg_roles`-query. Ontbrekend: koppeling aan een inlogbare gebruiker.
+- CI-workflow `.github/workflows/ci.yml` (GitHub Actions): format-check, lint-check en typecheck op elke PR/push naar `main`. Lokaal geverifieerd groen op 2026-07-27 (`npm run format:check`, `npm run lint:check`, `npm run typecheck`); nog niet bevestigd dat de workflow ook daadwerkelijk groen draait ín GitHub Actions zelf (nog geen PR doorlopen). Zie ADR-007.
 
 ## Niet als bewezen beschouwen
 
@@ -48,7 +49,7 @@ Geen featurebouw, ORM-migratie of productievoorstel totdat P0 is afgerond. Eerst
 ## Belangrijke verwijzingen
 
 - Architectuurreview: `docs/architecture-review/2026-07-24/` (00 t/m 09)
-- Actieve ADR's: `docs/adr/`
+- Actieve ADR's: `docs/adr/`, inclusief ADR-007 (CI-platform: GitHub Actions; eerste CI-scope: format/lint/typecheck, test/build bewust uitgesteld tot na de ORM-spike)
 - Runbooks: `docs/runbooks/` (nog leeg — eerste runbooks volgen zodra de bijbehorende functionaliteit bestaat)
 - Historisch projectcontextdocument: `docs/context/PROJECT-HISTORY-2026-07-24.md`
 - Volledig gearchiveerd, vervangen instructiebestand: `docs/archive/MCM2-CLAUDE-2026-07-24-pre-restructure.md`

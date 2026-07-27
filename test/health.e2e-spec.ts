@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import type { Server } from 'http';
 import { AppModule } from '../src/app.module';
 
 describe('HealthController (e2e)', () => {
@@ -20,10 +21,10 @@ describe('HealthController (e2e)', () => {
   });
 
   it('GET /health returns ok status', () => {
-    return request(app.getHttpServer())
+    return request(app.getHttpServer() as Server)
       .get('/health')
       .expect(200)
-      .expect((res) => {
+      .expect((res: { body: { status: string } }) => {
         expect(res.body.status).toBe('ok');
       });
   });
