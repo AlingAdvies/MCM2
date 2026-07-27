@@ -346,16 +346,16 @@ Na elke architectuurreview, securityreview, scopewijziging, roadmapupdate of ORM
 
 Gebruik exact deze tabel:
 
-| Bevinding/item | Bron | Huidige plek in roadmap/besluit | Status | Toelichting bij afwijking |
+| Bevinding/item | Bron | GitHub Issue (nummer, of "ontbreekt") | Status | Toelichting bij afwijking |
 |---|---|---|---|---|
-| Korte omschrijving | Document + sectie | P0 / Nu / Voor pilot / Voor productie / Later / nergens | ✅ / ⚠️ / ❌ | Verplicht bij ⚠️ of ❌ |
+| Korte omschrijving | Document + sectie | `#12` / ontbreekt | ✅ / ⚠️ / ❌ | Verplicht bij ⚠️ of ❌ |
 
 Werkwijze:
 
 1. Lees de brondocumenten opnieuw; vertrouw niet op gespreksgeheugen.
 2. Inventariseer alle relevante bevindingen.
-3. Zoek ieder item terug in actuele roadmap, ADR’s en status.
-4. Motiveer ieder verschoven of ontbrekend item expliciet.
+3. Zoek ieder item terug in de open GitHub Issues (`gh issue list`), ADR’s en `docs/STATUS.md`.
+4. Motiveer ieder verschoven of ontbrekend item expliciet; maak een nieuw Issue aan voor elk item dat nog geen Issue heeft.
 5. Rapporteer de tabel vóór een definitief besluit of implementatievoorstel.
 
 ---
@@ -367,11 +367,22 @@ Houd documentatie kort, feitelijk en actueel.
 | Bestand/map | Doel |
 |---|---|
 | `docs/STATUS.md` | Eén actuele waarheid: fase, blockers, laatste bewezen tests, eerstvolgende stap |
+| GitHub Issues (`AlingAdvies/MCM2`) | De actuele backlog: bugs, features en chores, gelabeld met type (`bug`/`enhancement`/`chore`) en prioriteit (`priority:p0`/`priority:before-pilot`/`priority:before-production`/`priority:later`) |
 | `docs/adr/` | Definitieve besluiten: context, opties, besluit, gevolgen en reviewmoment |
 | `docs/architecture-review/` | Reviews, inventarisaties, securityanalyse en technische spikes |
 | `docs/runbooks/` | Herhaalbare instructies voor deploy, rollback, incidenten, databaseherstel en secrets |
 | `docs/archive/` | Historische sessiestatussen, vervangen plannen en oude onderzoeken |
 | `README.md` | Lokaal starten, testen, veelvoorkomende fouten en basale projectinstructies |
+
+### 13a. Backlog-werkwijze: GitHub Issues
+
+Nieuwe bugs, feature-ideeën en technische taken worden vastgelegd als GitHub Issue, niet als losse regel in een Markdown-bestand — een Markdown-roadmap veroudert stil, Issues blijven doorzoekbaar en labelbaar.
+
+- **Type-label verplicht:** `bug` (iets werkt niet zoals bedoeld), `enhancement` (iets bestaat nog niet), of `chore` (technisch onderhoud, geen functiewijziging) — sluit aan bij de commit-conventies.
+- **Prioriteit-label verplicht:** `priority:p0` (vóór elke volgende regel productiecode), `priority:before-pilot` (aantoonbaar nodig voor de actuele MVP-slice), `priority:before-production` (vóór betalende klanten), `priority:later` (geen actie nu, expliciet uitgesteld).
+- Verwijs in commits en PR's naar het issuenummer (`#12`) zodat de geschiedenis traceerbaar blijft.
+- Sluit een Issue pas nadat het acceptatiecriterium uit de beschrijving daadwerkelijk is geverifieerd — niet omdat de code "klaar aanvoelt".
+- Een nieuwe technical spike, architectuurreview of security-bevinding levert direct Issues op voor de openstaande actiepunten, niet alleen een los reviewdocument dat niemand terugleest.
 
 Verwijder of wijzig geen historisch document zonder expliciete toestemming. Verplaats verouderde actieve instructies naar `docs/archive/` en markeer waarom zij zijn vervangen.
 

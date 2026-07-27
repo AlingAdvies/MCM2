@@ -1,4 +1,10 @@
-# Prioritized Roadmap — MCM2
+> **GEARCHIVEERD op 2026-07-27.** Vervangen door GitHub Issues (`https://github.com/AlingAdvies/MCM2/issues`) als de actuele bron van waarheid voor backlog/roadmap-items. Elk item hieronder dat nog openstond is overgezet naar een eigen Issue met labels (`priority:p0`, `priority:before-pilot`, `priority:before-production`, `priority:later`, plus `bug`/`enhancement`/`chore`). Items die al waren opgelost (P0-1, P0-2 rolkoppeling — deels, zie issue #1 voor het resterende wachtwoordrotatie-punt; P0-3, P0-4, P0-7) zijn niet opnieuw als Issue aangemaakt. Dit bestand blijft staan als historisch document, niet als actuele planning — zie `MCM2-CLAUDE.md` §13a-achtig-equivalent voor Issues, en `docs/STATUS.md` voor de actuele stand.
+>
+> Issue-nummers: #1 (P0-2 wachtwoordrotatie), #2 (P0-5 pg-dependency), #3 (P0-6 tsconfig strict), #4 (BP0 EntraID-verkenning), #5 (BP1 ORM-spike), #6 (BP2 ORM-implementatie), #7 (BP3 identiteitsmechanismen), #8 (BP4 token-mechanisme), #9 (BP5 certificaat-upload), #10 (BP6 token-isolatietest), #11 (BP7 CI-uitbreiding), #12 (BP8 AWS-acceptatie), #13 (BP9 SMTP), #14 (BP10 audit append-only-verificatie), #15 (BP11 klantvragen), #16 (BP12 tenant-scoped achtergrondtaken), #17 (BP13 logging/monitoring), #18 (PR1 OTAP-doorloop), #19 (PR2 backup/restore), #20 (PR3 Dockerfile-hardening), #21 (PR4 AWS-securitydiensten), #22 (PR5 Dependabot), #23 (PR7 MVM_V2-inconsistenties), #24 (Later-verzamelitem).
+
+---
+
+# Prioritized Roadmap — MCM2 (gearchiveerd)
 
 Geprioriteerd naar P0 / Before pilot / Before production / Later. Blokkerende besluiten expliciet gemarkeerd. **Alles onder "Before pilot" wordt getoetst aan één criterium: is het aantoonbaar nodig voor de Transdev Vendor IT Compliance Survey-slice (zie 08-transdev-mvp-scope.md)?** Wat daar niet aan bijdraagt, staat onder Later, ook als het ooit toch nodig wordt.
 

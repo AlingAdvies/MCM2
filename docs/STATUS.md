@@ -45,15 +45,20 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Eerstvolgende goedgekeurde stap
 
-P0 is grotendeels afgerond: databaserol/RLS-bereikbaarheid, migration-rol en geautomatiseerde RLS-test zijn klaar (zie hierboven, ADR-008/ADR-009). Eén P0-punt resteert: tenantcontext-verificatie. Geen featurebouw, ORM-migratie of productievoorstel totdat ook dit is afgerond. Eerstvolgende toegestane acties, in volgorde:
+P0 is grotendeels afgerond: databaserol/RLS-bereikbaarheid, migration-rol en geautomatiseerde RLS-test zijn klaar (zie hierboven, ADR-008/ADR-009). Eén P0-punt resteert: tenantcontext-verificatie (issue #7). Geen featurebouw, ORM-migratie of productievoorstel totdat ook dit is afgerond. Eerstvolgende toegestane acties, in volgorde — zie de bijbehorende GitHub Issue voor het volledige acceptatiecriterium:
 
-1. P0-restpunt (laatste): tenantcontext-verificatie herontwerpen (van blinde header/query-param naar geverifieerde identiteit + membership) — dit is de enige nog resterende P0-blocker.
-2. Na volledige P0: de goedgekeurde, beperkte technical spike (Prisma 6 vs. Drizzle) tegen de Transdev-survey-slice.
-3. Beantwoorden van de vijf resterende Transdev-klantvragen (kan parallel, is geen technische afhankelijkheid).
+1. **Issue #7** — tenantcontext-verificatie herontwerpen (van blinde header/query-param naar geverifieerde identiteit + membership) — de enige nog resterende P0-blocker.
+2. **Issue #1** — wachtwoordrotatie van de `postgres`-beheerrol (P0, niet aangeraakt door de databaserol-fix van vandaag).
+3. **Issue #4** — EntraID-federatie haalbaarheidscheck (Spoor A vs. B), urgent gezien de deadline.
+4. **Issue #5** — na volledige P0: de goedgekeurde ORM-spike (Prisma 6 vs. Drizzle) tegen de Transdev-survey-slice.
+5. **Issue #15** — beantwoorden van de vijf resterende Transdev-klantvragen (kan parallel, is geen technische afhankelijkheid).
+
+Volledige backlog (alle 24 items, incl. Before production en Later): `gh issue list --repo AlingAdvies/MCM2` of `https://github.com/AlingAdvies/MCM2/issues`.
 
 ## Belangrijke verwijzingen
 
-- Architectuurreview: `docs/architecture-review/2026-07-24/` (00 t/m 09)
+- **Backlog/roadmap: GitHub Issues** (`https://github.com/AlingAdvies/MCM2/issues`), gelabeld met type (`bug`/`enhancement`/`chore`) en prioriteit (`priority:p0`/`priority:before-pilot`/`priority:before-production`/`priority:later`). Vervangt de losse Markdown-roadmap sinds 2026-07-27 (zie `docs/archive/06-prioritized-roadmap-2026-07-24-pre-issues.md` voor de migratieverantwoording en issue-nummer-mapping).
+- Architectuurreview: `docs/architecture-review/2026-07-24/` (00, 02-05, 07-09 — 06 is verplaatst naar `docs/archive/`, zie hierboven)
 - Actieve ADR's: `docs/adr/`, inclusief ADR-007 (CI-platform: GitHub Actions; eerste CI-scope: format/lint/typecheck, test/build bewust uitgesteld tot na de ORM-spike), ADR-008 (P0-databaserolherstel: clm_api_runtime, ontbrekende schema-grants, tijdelijke clm_admin=clm_api-gelijkstelling) en ADR-009 (migration-rol clm_migrator, rollenbootstrap, geautomatiseerde RLS-test in CI via ephemere testdatabase)
 - Runbooks: `docs/runbooks/` (nog leeg — eerste runbooks volgen zodra de bijbehorende functionaliteit bestaat)
 - Historisch projectcontextdocument: `docs/context/PROJECT-HISTORY-2026-07-24.md`
