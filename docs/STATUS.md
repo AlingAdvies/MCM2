@@ -1,7 +1,15 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-27
+2026-07-27 (direct vóór een sessie-clear — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+
+## Voor een nieuwe sessie: lees dit eerst
+
+1. Lees `MCM2-CLAUDE.md` volledig (sessiestartprotocol, §14).
+2. Lees dit document (`docs/STATUS.md`) volledig — het is de enige actuele waarheid over fase en blockers.
+3. Verifieer git-status zelf (`git status`, `git branch -a`) tegen wat hieronder staat — vertrouw niet blind op deze snapshot.
+4. Check de open GitHub Issues (`gh issue list --repo AlingAdvies/MCM2 --state open`) voor de actuele backlog — dit document verwijst naar issue-nummers, maar de Issues zelf zijn de bron van waarheid over wat daadwerkelijk nog open staat.
+5. **Eerste concrete vervolgstap: Issue #7** (tenantcontext-verificatie) — dit is de enige nog resterende P0-blocker. Zie sectie "Eerstvolgende goedgekeurde stap" hieronder.
 
 ## Doel
 Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
@@ -39,7 +47,7 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Huidige branch en Git-status
 
-- Branch: `main`. Working tree schoon (geverifieerd via `git status` op 2026-07-27).
+- Branch: `main`, up to date met `origin/main`. Working tree schoon (geverifieerd via `git status` op 2026-07-27, direct vóór een sessie-clear).
 - `chore/restructure-project-context` is inmiddels in `main` opgegaan (laatste commit op die lijn: `beb3e66`, "docs(fase0): archiveer opdrachtinstructie en eerdere techstack-evaluatie") en bestaat niet meer als losse branch.
 - Open branch: `feat/fase0-skeleton-vendors` (commit `4581edd`, "wip(fase0): Taak 6 tussenstand") — **bewust geparkeerd op 2026-07-27**, niet mergen zonder herbeoordeling. Bevat `TenantMiddleware` die de tenant blind afleidt uit een ongeverifieerde `X-Tenant-Id`-header of een `?tenant=`-query-param — dit is exact het patroon dat P0 als kritiek aanmerkt en dat MCM2-CLAUDE.md §6 verbiedt ("vertrouw nooit blind op X-Tenant-Id, queryparameters..."). Ook `withTenant()` gebruikt `$executeRawUnsafe` met stringinterpolatie van `tenantId` (met voorafgaande UUID-regex-validatie) in plaats van een geparametriseerde aanpak. Deze branch is bovendien fors verouderd t.o.v. `main` (mist de volledige documentatieherstructurering en de CI-workflow van 2026-07-24/27). Herbeoordelen ná P0: het `withTenant`-transactiepatroon (`SET LOCAL` binnen `$transaction`) is bruikbaar als uitgangspunt; de header-gebaseerde tenant-afleiding niet.
 
