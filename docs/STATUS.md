@@ -22,7 +22,8 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 - Eerste Prisma-schema (Tenant, User, Vendor-cluster, AuditEvent + ref-lookups) en migratie: uitgevoerd tegen de Supabase `clm-enterprise`-database, inclusief RLS-policies (`USING`+`WITH CHECK`) en seed-data.
 - WSL2 en Docker Desktop: werkend op de ontwikkelmachine.
 - Vier database-rollen (`clm_api`, `clm_admin`, `clm_readonly`, `clm_audit_reader`) bestaan in de database met `rolbypassrls=false` — geverifieerd via `pg_roles`-query. Ontbrekend: koppeling aan een inlogbare gebruiker.
-- CI-workflow `.github/workflows/ci.yml` (GitHub Actions): format-check, lint-check en typecheck op elke PR/push naar `main`. Lokaal geverifieerd groen op 2026-07-27 (`npm run format:check`, `npm run lint:check`, `npm run typecheck`); nog niet bevestigd dat de workflow ook daadwerkelijk groen draait ín GitHub Actions zelf (nog geen PR doorlopen). Zie ADR-007.
+- CI-workflow `.github/workflows/ci.yml` (GitHub Actions): format-check, lint-check en typecheck op elke PR/push naar `main`. Groen bevestigd zowel lokaal als in GitHub Actions zelf (run `30239546165`, 2026-07-27, na de eerste push naar `origin/main`). Zie ADR-007.
+- Repository staat op GitHub: `https://github.com/AlingAdvies/MCM2` (privé), remote `origin`, aangemaakt en voor het eerst gepusht op 2026-07-27. Hiervoor bestond alleen een lokale repository zonder remote.
 
 ## Niet als bewezen beschouwen
 
