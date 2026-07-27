@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-27 (direct vóór een sessie-clear — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+2026-07-27 (Entra External ID PoC geslaagd — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
 
 ## Voor een nieuwe sessie: lees dit eerst
 
@@ -23,7 +23,8 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 - CI dekt format/lint/typecheck én de RLS-isolatietest (zie hieronder). Geen `docker build` of de volledige `npm test`/`npm run build` in CI — expliciet uitgesteld tot na de Prisma 6/Drizzle-spike (ADR-007).
 - Geen branch-protection op `main`: technisch geblokkeerd, niet vergeten. GitHub Branch Protection op een privérepository vereist een betaald plan (Pro/Team) voor de organisatie `AlingAdvies`; dat is nu niet actief (bevestigd via de GitHub API op 2026-07-27: `403 Upgrade to GitHub Pro or make this repository public`). Tot een upgrade is geregeld, is "nooit rechtstreeks op main werken" (MCM2-CLAUDE.md §10) uitsluitend een werkregel, geen technische afdwinging — een falende CI-check of een directe push naar `main` wordt nu niet door GitHub tegengehouden.
 - Vijf Transdev-klantvragen nog open: exportformaat, of toelichting bij bepaalde survey-antwoordopties verplicht is, upload-validatie-eisen voor het certificaat, welke van de vijf vragen welk vraagtype heeft, en de SMTP-verbindingsdetails voor `contractmanagement@transdev.nl` (expliciet nog "volgt").
-- Interne-authenticatie-spike (Cognito+Entra ID via een Microsoft-zakelijk account van de eigenaar) nog niet uitgevoerd — bepaalt of een volwaardige federatie haalbaar is binnen de deadline, of dat een tijdelijk vereenvoudigd alternatief nodig is.
+- **Issue #7 (P0-restpunt, tenantcontext-verificatie) — in uitvoering:** vereist twee gescheiden mechanismen (interne beheerder, externe leverancier via tokengebaseerde toegang). Interne-beheerderkant is **herzien op 2026-07-27**: AWS Cognito losgelaten vóór er een User Pool werd aangemaakt (geen opruimwerk nodig), nieuw besluit is **Microsoft Entra External ID** als CIAM-laag. Zie ADR-006 (herzien) voor de volledige motivatie. Het tijdelijke AWS-account `727732213368` is niet langer nodig voor identity.
+- **Entra External ID PoC — geslaagd (2026-07-27):** tenant `mcm2ciam.onmicrosoft.com` aangemaakt, federatie met `alingadvies.nl` werkt end-to-end: IdP-knop → login + MFA → callback → attribute collection → gebruikersaanmaak → geldige authorization code op de reply-URL (`?code=...`, geen error). Volledige configuratie (tenant-ID's, client-ID's, endpoints) en een gedocumenteerde tijdelijke blokkade die zonder configuratiewijziging verdween: `docs/architecture-review/2026-07-27/01-entra-external-id-poc-bevindingen.md`. Vervolgstap valt samen met Issue #7: authorization code inwisselen voor tokens (server-to-server) en de NestJS-guard bouwen die de tenantcontext uit het geverifieerde ID-token afleidt.
 
 ## Aantoonbaar werkend
 
@@ -36,6 +37,8 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 - Geautomatiseerde cross-tenant RLS-isolatietest (`test/tenant-rls-isolation.e2e-spec.ts`): geen `BYPASSRLS`, geen rijen zonder tenant-context, correcte read/write-isolatie tussen twee tenants, en een cross-tenant write wordt geweigerd door de `WITH CHECK`-policy. Draait lokaal (`npm run test:e2e`) én automatisch in CI tegen een ephemere testdatabase. Zie ADR-009.
 - CI-workflow `.github/workflows/ci.yml` (GitHub Actions), twee jobs: `quality` (format-check, lint-check, typecheck) en `rls-isolation` (bootstrap + migraties via `clm_migrator` + RLS-test via `clm_api_runtime` tegen een ephemere Postgres-servicecontainer). Beide jobs groen bevestigd in GitHub Actions zelf (run `30242917733`, 2026-07-27). Zie ADR-007 en ADR-009.
 - Repository staat op GitHub: `https://github.com/AlingAdvies/MCM2` (privé), remote `origin`, aangemaakt en voor het eerst gepusht op 2026-07-27. Hiervoor bestond alleen een lokale repository zonder remote.
+- **Issue #4 (EntraID-haalbaarheidscheck) afgerond op 2026-07-27:** `kees@alingadvies.nl` heeft Global Administrator in de Entra ID-tenant `alingadvies.nl`, ruim voldoende voor app-registraties; geen Azure-subscription gekoppeld maar dat blokkeert Entra-app-registraties niet. Rechtencheck is tegen `alingadvies.nl` gedaan, niet tegen een Transdev-tenant (geen toegang tot Transdev's Entra-omgeving) — `alingadvies.nl` dient als voorbeeld-/testtenant. De destijds gekozen uitvoeringsvorm (Cognito) is nadien herzien, zie hieronder.
+- **ADR-006 herzien op 2026-07-27 (Cognito → Entra External ID):** vóór er een Cognito User Pool werd aangemaakt bleek de tweede cloudlaag (los AWS-account, cross-cloud federatie) onnodige complexiteit t.o.v. Microsoft Entra External ID, dat dezelfde multi-IdP-flexibiliteit biedt binnen het Microsoft-ecosysteem — geen los AWS-account, gratis tot 50.000 MAU. Reden om niet simpelweg "kaal" Entra ID te gebruiken (zoals een ouder platformdocument uit 2026-03-30 voorstelde): MCM2's multi-tenant-toekomst qua identity-providers is onzeker (niet aantoonbaar Microsoft-only), dus een CIAM-laag blijft gewenst. De al aangemaakte Entra app-registratie (`MCM2-Cognito-Federation`, client ID `d369dcf9-26ec-4b6d-8a58-911884891107`) blijft bruikbaar voor de External ID-opzet. Zie ADR-006.
 
 ## Niet als bewezen beschouwen
 
@@ -47,7 +50,7 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Huidige branch en Git-status
 
-- Branch: `main`, up to date met `origin/main`. Working tree schoon (geverifieerd via `git status` op 2026-07-27, direct vóór een sessie-clear).
+- Branch: `chore/issue-4-entraid-haalbaarheid`, drie commits vóór `main` (Issue #4-afronding, ADR-006-herziening naar Entra External ID, PoC-bevindingendocument). Nog niet gepusht naar `origin` op het moment van dit schrijven. Bevat uitsluitend documentatie — geen codewijzigingen.
 - `chore/restructure-project-context` is inmiddels in `main` opgegaan (laatste commit op die lijn: `beb3e66`, "docs(fase0): archiveer opdrachtinstructie en eerdere techstack-evaluatie") en bestaat niet meer als losse branch.
 - Open branch: `feat/fase0-skeleton-vendors` (commit `4581edd`, "wip(fase0): Taak 6 tussenstand") — **bewust geparkeerd op 2026-07-27**, niet mergen zonder herbeoordeling. Bevat `TenantMiddleware` die de tenant blind afleidt uit een ongeverifieerde `X-Tenant-Id`-header of een `?tenant=`-query-param — dit is exact het patroon dat P0 als kritiek aanmerkt en dat MCM2-CLAUDE.md §6 verbiedt ("vertrouw nooit blind op X-Tenant-Id, queryparameters..."). Ook `withTenant()` gebruikt `$executeRawUnsafe` met stringinterpolatie van `tenantId` (met voorafgaande UUID-regex-validatie) in plaats van een geparametriseerde aanpak. Deze branch is bovendien fors verouderd t.o.v. `main` (mist de volledige documentatieherstructurering en de CI-workflow van 2026-07-24/27). Herbeoordelen ná P0: het `withTenant`-transactiepatroon (`SET LOCAL` binnen `$transaction`) is bruikbaar als uitgangspunt; de header-gebaseerde tenant-afleiding niet.
 
@@ -55,9 +58,9 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 P0 is grotendeels afgerond: databaserol/RLS-bereikbaarheid, migration-rol en geautomatiseerde RLS-test zijn klaar (zie hierboven, ADR-008/ADR-009). Eén P0-punt resteert: tenantcontext-verificatie (issue #7). Geen featurebouw, ORM-migratie of productievoorstel totdat ook dit is afgerond. Eerstvolgende toegestane acties, in volgorde — zie de bijbehorende GitHub Issue voor het volledige acceptatiecriterium:
 
-1. **Issue #7** — tenantcontext-verificatie herontwerpen (van blinde header/query-param naar geverifieerde identiteit + membership) — de enige nog resterende P0-blocker.
+1. **Issue #7** — tenantcontext-verificatie herontwerpen (van blinde header/query-param naar geverifieerde identiteit + membership) — de enige nog resterende P0-blocker. De identity-infrastructuur staat en werkt (Entra External ID-PoC geslaagd, zie hierboven). Vervolgstap nu concreet: (a) authorization code server-to-server inwisselen voor tokens en de claims inspecteren, (b) NestJS-guard bouwen die het ID-token tegen de JWKS van `mcm2ciam` verifieert en daaruit de tenantcontext afleidt, config-gedreven via environment-variabelen. Daarnaast, als apart spoor binnen hetzelfde issue: het tokengebaseerde mechanisme voor externe leveranciers (nog niet gestart).
 2. **Issue #1** — wachtwoordrotatie van de `postgres`-beheerrol (P0, niet aangeraakt door de databaserol-fix van vandaag).
-3. **Issue #4** — EntraID-federatie haalbaarheidscheck (Spoor A vs. B), urgent gezien de deadline.
+3. ~~**Issue #4** — EntraID-federatie haalbaarheidscheck~~ — **afgerond 2026-07-27**, zie hierboven en ADR-006.
 4. **Issue #5** — na volledige P0: de goedgekeurde ORM-spike (Prisma 6 vs. Drizzle) tegen de Transdev-survey-slice.
 5. **Issue #15** — beantwoorden van de vijf resterende Transdev-klantvragen (kan parallel, is geen technische afhankelijkheid).
 
