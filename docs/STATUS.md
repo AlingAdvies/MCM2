@@ -8,8 +8,8 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Actieve blokkades
 
-- **P0:** de runtime database role heeft `BYPASSRLS`. RLS is momenteel geen effectieve tenant-isolatiegrens, ongeacht hoe correct de policies zelf zijn. Bevestigd via `SELECT rolname, rolbypassrls FROM pg_roles WHERE rolname = current_user;` tegen de actieve connectie.
-- **P0:** tenantcontext komt nog blind uit client-input (`X-Tenant-Id`-header of query-parameter), zonder koppeling aan geverifieerde identiteit. Acceptabel als tijdelijke, expliciet erkende uitzondering zolang er geen externe/tweede tenant is — niet acceptabel zodra de Transdev-pilot echte externe leveranciers krijgt.
+- **P0 — opgelost op 2026-07-27:** de runtime database-connectie gebruikte de Supabase-rol `postgres` (`rolbypassrls: true`). Nieuwe login-rol `clm_api_runtime` aangemaakt (`LOGIN`, erft van `clm_api`, `rolbypassrls: false`), `DATABASE_URL` in `.env` bijgewerkt. Tussentijdse extra bevinding: geen van de vier `clm_*`-rollen had ooit `USAGE`-rechten op de schemas `clm`/`ref`/`audit` — hersteld via migratie `20260727053702_grant_schema_and_table_privileges`. Cross-tenant RLS-isolatie aantoonbaar geverifieerd via `clm_api_runtime` (twee testtenants, context van tenant A toont uitsluitend tenant A). Zie ADR-008 voor volledige details en het openstaande controlepunt (aparte migration-rol ontbreekt nog, migraties lopen nu nog via `postgres`).
+- **P0 — nog open:** tenantcontext komt nog blind uit client-input (`X-Tenant-Id`-header of query-parameter), zonder koppeling aan geverifieerde identiteit. Acceptabel als tijdelijke, expliciet erkende uitzondering zolang er geen externe/tweede tenant is — niet acceptabel zodra de Transdev-pilot echte externe leveranciers krijgt. Dit is een apart ontwerpvraagstuk (identiteit/membership-verificatie), niet opgelost door de databaserol-fix hierboven.
 - **P1:** ORM-keuze Prisma 6 versus Drizzle is nog open. Prisma 7 is geblokkeerd voor verdere featurebouw wegens een bevestigd, reproduceerbaar conflict tussen Jest-tests, de Prisma 7 Client Engine/generator-output en de gecompileerde Docker-productiebuild.
 - CI dekt nog uitsluitend format/lint/typecheck (zie hieronder). Geen geautomatiseerde tests, Docker-build of migratietest in CI — expliciet uitgesteld tot na de Prisma 6/Drizzle-spike (ADR-007).
 - Geen branch-protection op `main`: technisch geblokkeerd, niet vergeten. GitHub Branch Protection op een privérepository vereist een betaald plan (Pro/Team) voor de organisatie `AlingAdvies`; dat is nu niet actief (bevestigd via de GitHub API op 2026-07-27: `403 Upgrade to GitHub Pro or make this repository public`). Tot een upgrade is geregeld, is "nooit rechtstreeks op main werken" (MCM2-CLAUDE.md §10) uitsluitend een werkregel, geen technische afdwinging — een falende CI-check of een directe push naar `main` wordt nu niet door GitHub tegengehouden.
@@ -22,13 +22,13 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 - Docker Compose-stack (mcm2-api + minio + valkey): opgezet, health-check via Docker geverifieerd.
 - Eerste Prisma-schema (Tenant, User, Vendor-cluster, AuditEvent + ref-lookups) en migratie: uitgevoerd tegen de Supabase `clm-enterprise`-database, inclusief RLS-policies (`USING`+`WITH CHECK`) en seed-data.
 - WSL2 en Docker Desktop: werkend op de ontwikkelmachine.
-- Vier database-rollen (`clm_api`, `clm_admin`, `clm_readonly`, `clm_audit_reader`) bestaan in de database met `rolbypassrls=false` — geverifieerd via `pg_roles`-query. Ontbrekend: koppeling aan een inlogbare gebruiker.
+- Vier database-rollen (`clm_api`, `clm_admin`, `clm_readonly`, `clm_audit_reader`) bestaan in de database met `rolbypassrls=false`, hebben nu `USAGE`+tabelrechten op `clm`/`ref`/`audit`, en `clm_api` heeft een inlogbare runtime-rol (`clm_api_runtime`) die de app daadwerkelijk gebruikt — geverifieerd via `pg_roles`-query én een werkende cross-tenant RLS-test. Zie ADR-008.
 - CI-workflow `.github/workflows/ci.yml` (GitHub Actions): format-check, lint-check en typecheck op elke PR/push naar `main`. Groen bevestigd zowel lokaal als in GitHub Actions zelf (run `30239546165`, 2026-07-27, na de eerste push naar `origin/main`). Zie ADR-007.
 - Repository staat op GitHub: `https://github.com/AlingAdvies/MCM2` (privé), remote `origin`, aangemaakt en voor het eerst gepusht op 2026-07-27. Hiervoor bestond alleen een lokale repository zonder remote.
 
 ## Niet als bewezen beschouwen
 
-- RLS-tenant-isolatie zolang de runtime-role nog `BYPASSRLS` heeft (zie P0 hierboven) — een eerdere "RLS werkt"-verificatie in deze projectgeschiedenis was vals-positief (lege tabel, geen bewijs van daadwerkelijke blokkade).
+- RLS-tenant-isolatie was tot 2026-07-27 niet bewezen zolang de runtime-role nog `BYPASSRLS` had — een eerdere "RLS werkt"-verificatie in deze projectgeschiedenis was vals-positief (lege tabel, geen bewijs van daadwerkelijke blokkade). **Nu wel aantoonbaar bewezen** via `clm_api_runtime` (zie hierboven en ADR-008) — dit betrof een handmatige, ad-hoc verificatie tijdens het herstelwerk, geen geautomatiseerde, herhaalbare test. Een geautomatiseerde tenant-isolatietest (onderdeel van de "eerstvolgende toegestane acties" hieronder) ontbreekt nog.
 - Elke aanname uit `docs/context/PROJECT-HISTORY-2026-07-24.md` die alleen op historische sessienotities berust: **historisch gemeld; opnieuw verifiëren bij de volgende technische fase.** Dit geldt met name voor:
   - de exacte Prisma-7-generatorinstellingen (voorwaardelijk aan een ORM-keuze die nog niet definitief is);
   - of het `mvm-api-pilot`-wachtwoordlek inmiddels is opgelost (nooit definitief bevestigd);
@@ -42,16 +42,18 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Eerstvolgende goedgekeurde stap
 
-Geen featurebouw, ORM-migratie of productievoorstel totdat P0 is afgerond. Eerstvolgende toegestane acties, in volgorde:
+P0 is deels afgerond (databaserol/RLS-bereikbaarheid, zie hierboven), maar nog niet volledig — tenantcontext-verificatie staat nog open. Geen featurebouw, ORM-migratie of productievoorstel totdat P0 volledig is afgerond. Eerstvolgende toegestane acties, in volgorde:
 
-1. P0-securityherstel: inlogbare gebruiker koppelen aan de bestaande `clm_api`-rol, wachtwoordrotatie, tenantcontext-verificatie herontwerpen.
-2. Na P0: de goedgekeurde, beperkte technical spike (Prisma 6 vs. Drizzle) tegen de Transdev-survey-slice.
-3. Beantwoorden van de vijf resterende Transdev-klantvragen (kan parallel, is geen technische afhankelijkheid).
+1. P0-restpunt: tenantcontext-verificatie herontwerpen (van blinde header/query-param naar geverifieerde identiteit + membership).
+2. P0-restpunt: aparte migration-rol inrichten, los van zowel `postgres` (te breed) als `clm_api_runtime` (te smal voor DDL/GRANT) — zie ADR-008, openstaand controlepunt.
+3. P0-afronding: geautomatiseerde cross-tenant read/write-isolatietest toevoegen (de huidige verificatie was handmatig, ad-hoc — zie "Niet als bewezen beschouwen").
+4. Na volledige P0: de goedgekeurde, beperkte technical spike (Prisma 6 vs. Drizzle) tegen de Transdev-survey-slice.
+5. Beantwoorden van de vijf resterende Transdev-klantvragen (kan parallel, is geen technische afhankelijkheid).
 
 ## Belangrijke verwijzingen
 
 - Architectuurreview: `docs/architecture-review/2026-07-24/` (00 t/m 09)
-- Actieve ADR's: `docs/adr/`, inclusief ADR-007 (CI-platform: GitHub Actions; eerste CI-scope: format/lint/typecheck, test/build bewust uitgesteld tot na de ORM-spike)
+- Actieve ADR's: `docs/adr/`, inclusief ADR-007 (CI-platform: GitHub Actions; eerste CI-scope: format/lint/typecheck, test/build bewust uitgesteld tot na de ORM-spike) en ADR-008 (P0-databaserolherstel: clm_api_runtime, ontbrekende schema-grants, tijdelijke clm_admin=clm_api-gelijkstelling)
 - Runbooks: `docs/runbooks/` (nog leeg — eerste runbooks volgen zodra de bijbehorende functionaliteit bestaat)
 - Historisch projectcontextdocument: `docs/context/PROJECT-HISTORY-2026-07-24.md`
 - Volledig gearchiveerd, vervangen instructiebestand: `docs/archive/MCM2-CLAUDE-2026-07-24-pre-restructure.md`
