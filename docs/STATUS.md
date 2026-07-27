@@ -38,7 +38,7 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 - Branch: `main`. Working tree schoon (geverifieerd via `git status` op 2026-07-27).
 - `chore/restructure-project-context` is inmiddels in `main` opgegaan (laatste commit op die lijn: `beb3e66`, "docs(fase0): archiveer opdrachtinstructie en eerdere techstack-evaluatie") en bestaat niet meer als losse branch.
-- Open, niet-gemergede branch: `feat/fase0-skeleton-vendors` — bevat vermoedelijk de niet-afgeronde Taak 6 (PrismaService, TenantMiddleware, with-tenant; zie commit `4581edd`, "wip(fase0): Taak 6 tussenstand"). Nog niet beoordeeld of gemerged of bewust geparkeerd; dit moet expliciet met de eigenaar worden afgestemd.
+- Open branch: `feat/fase0-skeleton-vendors` (commit `4581edd`, "wip(fase0): Taak 6 tussenstand") — **bewust geparkeerd op 2026-07-27**, niet mergen zonder herbeoordeling. Bevat `TenantMiddleware` die de tenant blind afleidt uit een ongeverifieerde `X-Tenant-Id`-header of een `?tenant=`-query-param — dit is exact het patroon dat P0 als kritiek aanmerkt en dat MCM2-CLAUDE.md §6 verbiedt ("vertrouw nooit blind op X-Tenant-Id, queryparameters..."). Ook `withTenant()` gebruikt `$executeRawUnsafe` met stringinterpolatie van `tenantId` (met voorafgaande UUID-regex-validatie) in plaats van een geparametriseerde aanpak. Deze branch is bovendien fors verouderd t.o.v. `main` (mist de volledige documentatieherstructurering en de CI-workflow van 2026-07-24/27). Herbeoordelen ná P0: het `withTenant`-transactiepatroon (`SET LOCAL` binnen `$transaction`) is bruikbaar als uitgangspunt; de header-gebaseerde tenant-afleiding niet.
 
 ## Eerstvolgende goedgekeurde stap
 
