@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-27 (direct vóór een sessie-clear — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+2026-07-27 (Issue #4 afgerond — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
 
 ## Voor een nieuwe sessie: lees dit eerst
 
@@ -23,7 +23,7 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 - CI dekt format/lint/typecheck én de RLS-isolatietest (zie hieronder). Geen `docker build` of de volledige `npm test`/`npm run build` in CI — expliciet uitgesteld tot na de Prisma 6/Drizzle-spike (ADR-007).
 - Geen branch-protection op `main`: technisch geblokkeerd, niet vergeten. GitHub Branch Protection op een privérepository vereist een betaald plan (Pro/Team) voor de organisatie `AlingAdvies`; dat is nu niet actief (bevestigd via de GitHub API op 2026-07-27: `403 Upgrade to GitHub Pro or make this repository public`). Tot een upgrade is geregeld, is "nooit rechtstreeks op main werken" (MCM2-CLAUDE.md §10) uitsluitend een werkregel, geen technische afdwinging — een falende CI-check of een directe push naar `main` wordt nu niet door GitHub tegengehouden.
 - Vijf Transdev-klantvragen nog open: exportformaat, of toelichting bij bepaalde survey-antwoordopties verplicht is, upload-validatie-eisen voor het certificaat, welke van de vijf vragen welk vraagtype heeft, en de SMTP-verbindingsdetails voor `contractmanagement@transdev.nl` (expliciet nog "volgt").
-- Interne-authenticatie-spike (Cognito+Entra ID via een Microsoft-zakelijk account van de eigenaar) nog niet uitgevoerd — bepaalt of een volwaardige federatie haalbaar is binnen de deadline, of dat een tijdelijk vereenvoudigd alternatief nodig is.
+- **Issue #7 (P0-restpunt, tenantcontext-verificatie) — in uitvoering:** vereist twee gescheiden mechanismen (interne beheerder via Spoor A/Cognito+EntraID, externe leverancier via tokengebaseerde toegang). De Cognito User Pool + app-registratie zelf (proof-of-concept tegen `alingadvies.nl`) moet nog gebouwd worden — zie Issue #4-uitkomst hieronder.
 
 ## Aantoonbaar werkend
 
@@ -36,6 +36,7 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 - Geautomatiseerde cross-tenant RLS-isolatietest (`test/tenant-rls-isolation.e2e-spec.ts`): geen `BYPASSRLS`, geen rijen zonder tenant-context, correcte read/write-isolatie tussen twee tenants, en een cross-tenant write wordt geweigerd door de `WITH CHECK`-policy. Draait lokaal (`npm run test:e2e`) én automatisch in CI tegen een ephemere testdatabase. Zie ADR-009.
 - CI-workflow `.github/workflows/ci.yml` (GitHub Actions), twee jobs: `quality` (format-check, lint-check, typecheck) en `rls-isolation` (bootstrap + migraties via `clm_migrator` + RLS-test via `clm_api_runtime` tegen een ephemere Postgres-servicecontainer). Beide jobs groen bevestigd in GitHub Actions zelf (run `30242917733`, 2026-07-27). Zie ADR-007 en ADR-009.
 - Repository staat op GitHub: `https://github.com/AlingAdvies/MCM2` (privé), remote `origin`, aangemaakt en voor het eerst gepusht op 2026-07-27. Hiervoor bestond alleen een lokale repository zonder remote.
+- **Issue #4 (EntraID-haalbaarheidscheck) afgerond op 2026-07-27:** `kees@alingadvies.nl` heeft Global Administrator in de Entra ID-tenant `alingadvies.nl`, ruim voldoende voor app-registraties; geen Azure-subscription gekoppeld maar dat blokkeert Entra-app-registraties niet. Rechtencheck is tegen `alingadvies.nl` gedaan, niet tegen een Transdev-tenant (geen toegang tot Transdev's Entra-omgeving) — `alingadvies.nl` dient als voorbeeld-/testtenant voor het generieke Cognito+EntraID-patroon. Besluit: **Spoor A gekozen**, Spoor B vervalt. Zie ADR-006.
 
 ## Niet als bewezen beschouwen
 
@@ -47,7 +48,7 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Huidige branch en Git-status
 
-- Branch: `main`, up to date met `origin/main`. Working tree schoon (geverifieerd via `git status` op 2026-07-27, direct vóór een sessie-clear).
+- Branch: `main`, up to date met `origin/main` vóór deze sessie's commit (ADR-006-update + STATUS.md, Issue #4-afronding). Werk voor Issue #7 zelf (Cognito/EntraID-proof-of-concept) is nog niet gestart — geen nieuwe feature-branch aangemaakt op het moment van dit schrijven.
 - `chore/restructure-project-context` is inmiddels in `main` opgegaan (laatste commit op die lijn: `beb3e66`, "docs(fase0): archiveer opdrachtinstructie en eerdere techstack-evaluatie") en bestaat niet meer als losse branch.
 - Open branch: `feat/fase0-skeleton-vendors` (commit `4581edd`, "wip(fase0): Taak 6 tussenstand") — **bewust geparkeerd op 2026-07-27**, niet mergen zonder herbeoordeling. Bevat `TenantMiddleware` die de tenant blind afleidt uit een ongeverifieerde `X-Tenant-Id`-header of een `?tenant=`-query-param — dit is exact het patroon dat P0 als kritiek aanmerkt en dat MCM2-CLAUDE.md §6 verbiedt ("vertrouw nooit blind op X-Tenant-Id, queryparameters..."). Ook `withTenant()` gebruikt `$executeRawUnsafe` met stringinterpolatie van `tenantId` (met voorafgaande UUID-regex-validatie) in plaats van een geparametriseerde aanpak. Deze branch is bovendien fors verouderd t.o.v. `main` (mist de volledige documentatieherstructurering en de CI-workflow van 2026-07-24/27). Herbeoordelen ná P0: het `withTenant`-transactiepatroon (`SET LOCAL` binnen `$transaction`) is bruikbaar als uitgangspunt; de header-gebaseerde tenant-afleiding niet.
 
@@ -55,9 +56,9 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 P0 is grotendeels afgerond: databaserol/RLS-bereikbaarheid, migration-rol en geautomatiseerde RLS-test zijn klaar (zie hierboven, ADR-008/ADR-009). Eén P0-punt resteert: tenantcontext-verificatie (issue #7). Geen featurebouw, ORM-migratie of productievoorstel totdat ook dit is afgerond. Eerstvolgende toegestane acties, in volgorde — zie de bijbehorende GitHub Issue voor het volledige acceptatiecriterium:
 
-1. **Issue #7** — tenantcontext-verificatie herontwerpen (van blinde header/query-param naar geverifieerde identiteit + membership) — de enige nog resterende P0-blocker.
+1. **Issue #7** — tenantcontext-verificatie herontwerpen (van blinde header/query-param naar geverifieerde identiteit + membership) — de enige nog resterende P0-blocker. Vervolgstap nu concreet: Cognito User Pool + Entra ID app-registratie bouwen tegen `alingadvies.nl` als voorbeeldtenant (Spoor A, zie ADR-006/Issue #4), plus het losstaande tokengebaseerde mechanisme voor externe leveranciers.
 2. **Issue #1** — wachtwoordrotatie van de `postgres`-beheerrol (P0, niet aangeraakt door de databaserol-fix van vandaag).
-3. **Issue #4** — EntraID-federatie haalbaarheidscheck (Spoor A vs. B), urgent gezien de deadline.
+3. ~~**Issue #4** — EntraID-federatie haalbaarheidscheck~~ — **afgerond 2026-07-27**, zie hierboven en ADR-006.
 4. **Issue #5** — na volledige P0: de goedgekeurde ORM-spike (Prisma 6 vs. Drizzle) tegen de Transdev-survey-slice.
 5. **Issue #15** — beantwoorden van de vijf resterende Transdev-klantvragen (kan parallel, is geen technische afhankelijkheid).
 
