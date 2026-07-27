@@ -1,30 +1,39 @@
-# ADR-006 — AWS Cognito als federatielaag vóór Entra ID
+# ADR-006 — Microsoft Entra External ID als CIAM-laag (herzien; was: AWS Cognito)
 
-- Status: **Accepted als architectuurprincipe. Spoor A technisch haalbaar bevestigd op 2026-07-27** (zie hieronder) — de daadwerkelijke Cognito+EntraID-implementatie tegen een voorbeeldtenant moet nog gebouwd worden.
-- Datum: oorspronkelijk besluit 2026-07-24, haalbaarheid bevestigd 2026-07-27
-- Context: authenticatie voor interne gebruikers (Transdev-beheerders) moet uiteindelijk tegen Microsoft Entra ID werken (Transdev is een Microsoft-tenant-organisatie). Rechtstreeks tegen Entra ID/MSAL bouwen en er later een federatiebroker voor zetten zou een herbouw zijn.
-- Besluit: authenticatie wordt gebouwd tegen AWS Cognito als federatielaag, niet rechtstreeks tegen Entra ID. Cognito routeert Microsoft-login (SAML/OIDC) door en geeft zelf het JWT uit — dit vervangt Entra ID niet, het maakt Entra ID één geconfigureerde koppeling in plaats van hardgecodeerd de enige optie.
-- Alternatieven: rechtstreeks tegen Entra ID/MSAL bouwen (verworpen — herbouw nodig zodra een tweede identity-provider ooit nodig is); een tijdelijk vereenvoudigd mechanisme permanent aanhouden (verworpen als structurele oplossing — wel acceptabel als **tijdelijke, gedateerde** pilot-uitzondering, zie hieronder).
+- Status: **Herzien op 2026-07-27. Cognito-spoor stopgezet vóór productieopzet; Microsoft Entra External ID is het nieuwe besluit.**
+- Datum: oorspronkelijk besluit 2026-07-24 (Cognito), herzien 2026-07-27
+- Context: authenticatie voor interne gebruikers (Transdev-beheerders, en op termijn mogelijk beheerders van andere klant-tenants) moet tegen de identity-provider(s) van de klantorganisatie werken. MCM2 is een multi-tenant SaaS-platform (MCM2-CLAUDE.md §2); welke identity-provider(s) toekomstige klanten gebruiken, staat niet vast — vermoedelijk overwegend Microsoft Entra ID, maar een niet-Microsoft-klant (bv. Google Workspace) is niet uit te sluiten.
 
-## Haalbaarheidscheck Spoor A — uitkomst (2026-07-27)
+## Herziening: waarom Cognito is losgelaten
 
-Uitgevoerd als onderdeel van Issue #4. Bevindingen:
+Het oorspronkelijke besluit (2026-07-24) koos AWS Cognito als federatielaag vóór Entra ID. Bij de uitvoering (Issue #4/#7, 2026-07-27) kwamen twee bevindingen naar boven die dit besluit heroverwegen:
 
-- Het Microsoft-account `kees@alingadvies.nl` heeft de Entra ID-rol **Global Administrator** in de tenant `alingadvies.nl` (bevestigd via Entra admin center → gebruikersprofiel → Assigned roles). Dat is ruim voldoende voor het aanmaken van app-registraties (minimaal vereist: Application Administrator).
-- De `alingadvies.nl`-tenant heeft **geen gekoppelde Azure-subscription** ("No subscriptions in Aling Advies directory"). Dit blokkeert de haalbaarheid niet: Entra ID-app-registraties en de federatieconfiguratie zelf vereisen geen Azure-subscription, alleen voldoende Entra ID-rol.
-- **Belangrijke nuance:** deze rechtencheck is uitgevoerd tegen `alingadvies.nl`, niet tegen een Transdev-tenant. De eigenaar heeft geen toegang of rechten in een Transdev Entra ID-omgeving. `alingadvies.nl` dient daarom als **voorbeeld-/testtenant** om het Cognito+EntraID-federatiepatroon technisch te bewijzen — dit is een generiek OIDC/SAML-mechanisme, niet Transdev-specifieke code (zie MCM2-CLAUDE.md §8: "bouw tegen een generieke identity-/claimsinterface").
-- Of Transdev's eigen IT-afdeling bereid en in staat is om in hún tenant een vergelijkbare app-registratie te doen, is met deze check **niet** bevestigd en blijft een aparte, latere afhankelijkheid — te bevestigen in overleg met Transdev, geen technische spike.
+1. **Onnodige cross-cloud complexiteit.** Cognito + Entra-federatie voegt een volledige tweede cloudleverancier (AWS) en een apart AWS-account toe, puur voor identity — met eigen billing-relatie, eigen IAM, en een federatiekoppeling die in twee systemen tegelijk synchroon gehouden moet worden (redirect-URI's, secrets). Dit correspondeerde niet met de al bredere platformrichting (zie `Platform-Transitie/2026-03-30_platform-transitie_architectuur-migratie.md`: MVM_V2 is uitgegaan van rechtstreeks "Microsoft Entra ID — MSAL + JWT", zonder Cognito-tussenlaag).
+2. **Cognito's enige onderscheidende waarde (multi-IdP-flexibiliteit) is geen unieke Cognito-eigenschap.** De oorspronkelijke motivatie ("niet vastzitten aan Entra ID als enige IdP") geldt evengoed voor Microsoft Entra External ID: ook dat is een generieke OIDC/SAML-broker die met Entra ID, Google, of iedere andere OIDC/SAML-IdP kan federeren. Er was geen Cognito-specifieke sterkte die verloren gaat.
 
-**Conclusie: Spoor A is technisch haalbaar.** Besluit: Spoor A wordt uitgevoerd, met `alingadvies.nl` als voorbeeldtenant voor de proof-of-concept. Spoor B (tijdelijk vereenvoudigd mechanisme) is niet nodig.
+Tegelijk is **rechtstreeks, kaal Entra ID** (zoals het 2026-03-30-platformdocument voorstelde) ook niet voldoende, om een reden die dat document niet behandelt: MCM2's multi-tenant-toekomst is qua identity-providers onzeker (zie vraag hieronder), en rechtstreeks Entra ID kan geen niet-Microsoft-klant bedienen zonder een tweede auth-pad te bouwen. Een CIAM-laag housing meerdere IdP's achter één consistente interface blijft dus gewenst — alleen niet via AWS Cognito.
 
-## Actuele uitvoeringsstatus (2026-07-27) — proof-of-concept nog te bouwen
+## Besluit
 
-- **Spoor A (gekozen):** Cognito User Pool + Entra ID-federatie bouwen tegen `alingadvies.nl` als voorbeeldtenant. Haalbaarheid technisch bevestigd (zie hierboven); implementatie nog niet gestart.
-- **Spoor B:** niet nodig gebleken, vervalt als actieve optie tenzij Spoor A tijdens de bouw alsnog vastloopt.
-- Vervolgens, als aparte stap: bevestigen met Transdev of een equivalente app-registratie in hún tenant mogelijk is, vóór de pilot live gaat met echte Transdev-beheerders.
+Authenticatie voor interne beheerders wordt gebouwd tegen **Microsoft Entra External ID** (voorheen Azure AD B2C) als CIAM-laag, niet tegen AWS Cognito en niet rechtstreeks kaal tegen Entra ID.
 
-Dit ADR legt vast **dát** Cognito het architectuurprincipe is en dat Spoor A haalbaar is — het legt niet vast dat de federatie al werkt. Zie `docs/STATUS.md` voor de actuele voortgang.
+- Entra External ID federeert met Entra ID (en desgewenst later Google Workspace of andere OIDC/SAML-IdP's) binnen hetzelfde Microsoft-ecosysteem — geen cross-cloud federatie, geen los AWS-account.
+- Voor de Transdev-pilot: `alingadvies.nl` blijft de voorbeeld-/testtenant (zelfde beperking als bij het Cognito-spoor — geen toegang tot een Transdev-tenant). De al aangemaakte Entra app-registratie (`MCM2-Cognito-Federation`, client ID `d369dcf9-26ec-4b6d-8a58-911884891107`, tenant `3ce5523c-cc8b-4422-a310-8bdfa3715168`) blijft bruikbaar, wordt hernoemd/hergebruikt voor de External ID-opzet in plaats van weggegooid.
+- Het AWS-account `727732213368` (tijdelijk aangemaakt voor de Cognito-proof-of-concept) is niet langer nodig voor identity. Er is geen Cognito User Pool aangemaakt (de opzet is gestopt vóór dat punt), dus er is niets af te breken of te migreren.
 
-- Gevolgen: de proof-of-concept (Cognito User Pool + app-registratie in `alingadvies.nl`) moet nog gebouwd worden voordat de vraag "hoe authenticeert de Transdev-beheerder daadwerkelijk" volledig is beantwoord (zie ook P0-restpunt in `docs/STATUS.md`/Issue #7 over tenantcontext-verificatie in het algemeen — dit ADR gaat over de identity-provider-keuze, Issue #7 gaat over hoe de tenantcontext daaruit wordt afgeleid).
-- Reviewmoment: zodra de proof-of-concept werkt, en opnieuw vóór een tweede tenant/klant wordt aangesloten of vóór de daadwerkelijke Transdev-tenant gekoppeld wordt.
-- Bronnen: `docs/architecture-review/2026-07-24/08-transdev-mvp-scope.md` (OV-1 en het tweesporenontwerp), `docs/archive/06-prioritized-roadmap-2026-07-24-pre-issues.md` (BP0/BP3), `docs/context/PROJECT-HISTORY-2026-07-24.md`, GitHub Issue #4.
+## Alternatieven (afgewogen op 2026-07-27)
+
+| Optie | Verworpen omdat |
+|---|---|
+| AWS Cognito + Entra-federatie (oorspronkelijk ADR-006) | Onnodige tweede cloudleverancier voor identity; geen unieke sterkte t.o.v. Entra External ID |
+| Rechtstreeks Entra ID/MSAL, geen CIAM-laag | Kan geen niet-Microsoft-klant bedienen zonder herbouw; MCM2's multi-tenant-toekomst qua IdP is onzeker, niet aantoonbaar Microsoft-only |
+| Auth0 | Volwassen alternatief, maar voegt weer een derde partij toe zonder aantoonbaar voordeel boven Entra External ID gegeven de al bestaande Microsoft/Azure-voetafdruk (MVM_V2 draait op Azure App Service) |
+| Keycloak (self-hosted) | Volledige controle en EU-dataresidentie triviaal, maar verschuift onderhoudslast (patches, uptime, beheer) naar het project zonder aantoonbare noodzaak — in strijd met MCM2-CLAUDE.md §8 ("laagste langetermijnbeheerlast") |
+
+## Wat dit niet oplost
+
+Dit ADR gaat uitsluitend over de **interne beheerder**-authenticatie (Issue #7, spoor 1). Het tokengebaseerde, accountloze mechanisme voor **externe leveranciers** (Issue #7, spoor 2) staat hier volledig los van — een CIAM-laag lost dat niet op, want leveranciers hebben geen Entra ID/Google-account bij de klantorganisatie. Dat mechanisme wordt apart ontworpen en gebouwd.
+
+- Gevolgen: de proof-of-concept (Entra External ID-tenant/directory aanmaken, koppelen aan `alingadvies.nl` als externe IdP, App-registratie voor MCM2) moet nog gebouwd worden. Zie `docs/STATUS.md` voor de actuele voortgang.
+- Reviewmoment: zodra de proof-of-concept werkt, en opnieuw vóór een tweede klant-tenant wordt aangesloten of vóór de daadwerkelijke Transdev-tenant gekoppeld wordt.
+- Bronnen: `docs/architecture-review/2026-07-24/08-transdev-mvp-scope.md` (OV-1, oorspronkelijk tweesporenontwerp), `docs/archive/06-prioritized-roadmap-2026-07-24-pre-issues.md` (BP0/BP3), `docs/context/PROJECT-HISTORY-2026-07-24.md`, GitHub Issue #4 en #7, `C:\Users\cmali\OneDrive - Aling Advies\AI-Workspace\Bizaline\Platform-Transitie\2026-03-30_platform-transitie_architectuur-migratie.md` (bredere platformrichting, gedeeltelijk gedateerd — ging destijds niet in op MCM2's multi-tenant-IdP-onzekerheid).
