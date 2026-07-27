@@ -37,3 +37,51 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+  rls-isolation:
+    name: RLS tenant-isolatietest
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.2
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # CI-eigen, wegwerpbare Postgres-container — geen productiegeheim.
+      PGPASSWORD: postgres
+      MIGRATION_DATABASE_URL: "postgresql://clm_migrator:clm_migrator_ci_pw@localhost:5432/postgres?schema=public"
+      DATABASE_URL: "postgresql://clm_api_runtime:clm_api_runtime_ci_pw@localhost:5432/postgres?schema=public"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Dependencies installeren
+        run: npm ci
+
+      - name: Prisma Client genereren
+        run: npx prisma generate
+
+      - name: Rollen bootstrappen op de CI-database
+        run: |
+          psql "postgresql://postgres:postgres@localhost:5432/postgres" -v ON_ERROR_STOP=1 -f prisma/roles/bootstrap-roles.sql
+          psql "postgresql://postgres:postgres@localhost:5432/postgres" -v ON_ERROR_STOP=1 -c "ALTER ROLE clm_api_runtime PASSWORD 'clm_api_runtime_ci_pw';"
+          psql "postgresql://postgres:postgres@localhost:5432/postgres" -v ON_ERROR_STOP=1 -c "ALTER ROLE clm_migrator PASSWORD 'clm_migrator_ci_pw';"
+
+      - name: Migraties toepassen (via clm_migrator)
+        run: npm run migrate:deploy
+
+      - name: RLS-isolatietest draaien (via clm_api_runtime)
+        run: npx jest --config ./test/jest-e2e.json test/tenant-rls-isolation.e2e-spec.ts
