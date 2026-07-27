@@ -26,13 +26,12 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 - Vier database-rollen (`clm_api`, `clm_admin`, `clm_readonly`, `clm_audit_reader`) bestaan in de database met `rolbypassrls=false`, hebben `USAGE`+tabelrechten op `clm`/`ref`/`audit`, en `clm_api` heeft een inlogbare runtime-rol (`clm_api_runtime`) die de app daadwerkelijk gebruikt. Zie ADR-008.
 - Aparte migration-rol `clm_migrator` (LOGIN, geen `BYPASSRLS`), bootstrap vastgelegd in `prisma/roles/bootstrap-roles.sql`. Migraties (`npm run migrate:deploy`/`migrate:status`) lopen voortaan via `clm_migrator`, nooit meer via `postgres`. Volledige keten (bootstrap → migraties → RLS-test) end-to-end geverifieerd op een verse, lokale Postgres 18.2-container. Zie ADR-009.
 - Geautomatiseerde cross-tenant RLS-isolatietest (`test/tenant-rls-isolation.e2e-spec.ts`): geen `BYPASSRLS`, geen rijen zonder tenant-context, correcte read/write-isolatie tussen twee tenants, en een cross-tenant write wordt geweigerd door de `WITH CHECK`-policy. Draait lokaal (`npm run test:e2e`) én automatisch in CI tegen een ephemere testdatabase. Zie ADR-009.
-- CI-workflow `.github/workflows/ci.yml` (GitHub Actions), twee jobs: `quality` (format-check, lint-check, typecheck — groen bevestigd in GitHub Actions zelf, run `30239546165`, 2026-07-27, zie ADR-007) en `rls-isolation` (bootstrap + migraties + RLS-test tegen een ephemere Postgres-servicecontainer, lokaal end-to-end geverifieerd vóór toevoeging, zie ADR-009; nog niet bevestigd te draaien in GitHub Actions zelf — pas na de volgende push).
+- CI-workflow `.github/workflows/ci.yml` (GitHub Actions), twee jobs: `quality` (format-check, lint-check, typecheck) en `rls-isolation` (bootstrap + migraties via `clm_migrator` + RLS-test via `clm_api_runtime` tegen een ephemere Postgres-servicecontainer). Beide jobs groen bevestigd in GitHub Actions zelf (run `30242917733`, 2026-07-27). Zie ADR-007 en ADR-009.
 - Repository staat op GitHub: `https://github.com/AlingAdvies/MCM2` (privé), remote `origin`, aangemaakt en voor het eerst gepusht op 2026-07-27. Hiervoor bestond alleen een lokale repository zonder remote.
 
 ## Niet als bewezen beschouwen
 
 - RLS-tenant-isolatie was tot 2026-07-27 niet bewezen zolang de runtime-role nog `BYPASSRLS` had — een eerdere "RLS werkt"-verificatie in deze projectgeschiedenis was vals-positief (lege tabel, geen bewijs van daadwerkelijke blokkade). **Nu aantoonbaar bewezen én geautomatiseerd** (zie hierboven en ADR-009) — niet langer een handmatige, ad-hoc verificatie.
-- Dat de CI-workflow (job `rls-isolation`) daadwerkelijk groen draait in GitHub Actions zelf: nog niet bevestigd, alleen lokaal end-to-end geverifieerd. Verifiëren zodra dit naar `origin/main` is gepusht, vóór het als bewezen te beschouwen.
 - Elke aanname uit `docs/context/PROJECT-HISTORY-2026-07-24.md` die alleen op historische sessienotities berust: **historisch gemeld; opnieuw verifiëren bij de volgende technische fase.** Dit geldt met name voor:
   - de exacte Prisma-7-generatorinstellingen (voorwaardelijk aan een ORM-keuze die nog niet definitief is);
   - of het `mvm-api-pilot`-wachtwoordlek inmiddels is opgelost (nooit definitief bevestigd);
@@ -49,9 +48,8 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 P0 is grotendeels afgerond: databaserol/RLS-bereikbaarheid, migration-rol en geautomatiseerde RLS-test zijn klaar (zie hierboven, ADR-008/ADR-009). Eén P0-punt resteert: tenantcontext-verificatie. Geen featurebouw, ORM-migratie of productievoorstel totdat ook dit is afgerond. Eerstvolgende toegestane acties, in volgorde:
 
 1. P0-restpunt (laatste): tenantcontext-verificatie herontwerpen (van blinde header/query-param naar geverifieerde identiteit + membership) — dit is de enige nog resterende P0-blocker.
-2. Bevestigen dat de CI-workflow (job `rls-isolation`) daadwerkelijk groen draait in GitHub Actions zelf, niet alleen lokaal.
-3. Na volledige P0: de goedgekeurde, beperkte technical spike (Prisma 6 vs. Drizzle) tegen de Transdev-survey-slice.
-4. Beantwoorden van de vijf resterende Transdev-klantvragen (kan parallel, is geen technische afhankelijkheid).
+2. Na volledige P0: de goedgekeurde, beperkte technical spike (Prisma 6 vs. Drizzle) tegen de Transdev-survey-slice.
+3. Beantwoorden van de vijf resterende Transdev-klantvragen (kan parallel, is geen technische afhankelijkheid).
 
 ## Belangrijke verwijzingen
 
