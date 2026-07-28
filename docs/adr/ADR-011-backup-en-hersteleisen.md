@@ -92,8 +92,8 @@ Concreet, vóór de eerste leverancierslink de deur uit gaat:
    dataverlies betekenen.
 
 Punt 3 is niet triviaal: een dump op de ontwikkelmachine beschermt tegen "Supabase valt om", niet
-tegen "de laptop valt om". Voor de pilot volstaat een tweede locatie (OneDrive, externe schijf);
-voor productie hoort dit naar objectopslag.
+tegen "de laptop valt om". Voor de pilot volstaat een tweede locatie (OneDrive, externe schijf, of
+de eigen server — zie hieronder); voor productie hoort dit naar objectopslag.
 
 ### Wanneer dit besluit opnieuw op tafel moet
 
@@ -105,6 +105,58 @@ voor productie hoort dit naar objectopslag.
   draagt.
 
 Bij productie geldt onverkort fase 3 hieronder: Free is daar geen optie.
+
+## Overwogen alternatief: database op eigen server (2026-07-28)
+
+De eigenaar draait een oude MacBook Pro als thuisserver, 24/7 aan, bereikbaar via Tailscale
+(`saxombp`, `100.99.51.53`, SSH open, geen PostgreSQL actief op het moment van beoordelen).
+Overwogen als alternatief voor een gehoste database.
+
+**Uitkomst: geschikt voor ontwikkeling en backupopslag, niet als database achter de pilot.**
+
+### Wat ervoor pleit
+
+Geen pauzeerprobleem, geen backuplimiet, geen maandkosten, hardware al aanwezig. Volledige controle
+over versie en configuratie. Dataresidentie is letterlijk het eigen bureau. Technisch werkt het
+gegarandeerd: MCM2 gebruikt uitsluitend standaard PostgreSQL, zoals de Neon-toets van dezelfde dag
+aantoonde.
+
+### Waarom het de pilot niet kan dragen
+
+Dat de machine 24/7 draait neemt één faaloorzaak weg, maar niet de beslissende:
+
+| Bezwaar | Waarom het zwaar weegt voor déze use case |
+|---|---|
+| **Thuisinternet is geen SLA** | Router die herstart, providerstoring, wisselend IP, werkzaamheden in de straat. Elk daarvan maakt een surveylink dood op een moment dat je het niet ziet. |
+| **Bereikbaarheid is niet opgelost** | De machine is bereikbaar via Tailscale — een privaat netwerk met eigen apparaten. Een leverancier van Transdev zit daar niet in. Publieke bereikbaarheid vereist port forwarding of een tunnel, plus certificaat en vast adres, en opent het thuisnetwerk naar buiten. |
+| **Beheer komt bij de eigenaar** | Beveiligingsupdates, Postgres-onderhoud, schijfruimte, monitoring die waarschuwt vóórdat een leverancier het merkt. Botst met het uitgangspunt "beheerbaar zonder specialistische kennis of handmatige serverhandelingen" (MCM2-CLAUDE.md §2). |
+
+De doorslaggevende asymmetrie: valt een gehoste database om, dan is dat iemand anders' probleem dat
+24/7 wordt opgelost. Valt de eigen server om tijdens een vakantie, dan is er niemand. Voor een
+jaarlijkse surveyronde die één keer goed moet gaan, is het risico niet dát het niet werkt — het is
+dat het stil stopt met werken.
+
+Merk op dat dit dezelfde soort storing is als het pauzeren van Supabase Free, waar deze optie juist
+een antwoord op moest zijn — alleen met méér mogelijke oorzaken.
+
+### Waarvoor hij wél wordt ingezet
+
+Besluit eigenaar, 2026-07-28:
+
+1. **Lokale ontwikkeldatabase.** Beter dan Supabase Free voor dit doel: geen pauzeren, geen
+   limieten, vrij te gebruiken. Voor werk aan Issue #7 volstaat dit volledig — de testketen draait
+   toch tegen wegwerpdatabases.
+2. **Tweede opslaglocatie voor de dagelijkse dumps.** Vult voorwaarde 3 hierboven in: een
+   altijd-aanwezige machine in het eigen netwerk, los van de werkmachine. Tailscale is hiervoor
+   wél het juiste gereedschap, want het gaat om eigen apparaten. Concreet: `BACKUP_DIR` naar een
+   map op die server, of de dump er na afloop naartoe kopiëren.
+
+### Wanneer dit heroverwogen kan worden
+
+Als beschikbaarheid aantoonbaar is opgelost — publieke bereikbaarheid met vast adres en geldig
+certificaat, ononderbroken stroomvoorziening, en monitoring die de eigenaar waarschuwt vóórdat een
+gebruiker een storing merkt. Dat is te doen, maar geen middagwerk, en het verplaatst de beheerlast
+naar de eigenaar in plaats van hem weg te nemen.
 
 ## Hoe blijft dit passend bij groei?
 
@@ -145,8 +197,9 @@ De hertest-frequentie hangt aan de fase, niet aan een losse afspraak. Overgang n
 
 ## Openstaand
 
-- De getallen zijn **niet gemeten**. Na de eerste restore-test moet blijken of een RTO van 4 uur realistisch is voor deze provider, of juist ruim.
-- Wat Supabase feitelijk biedt (backupvenster, PITR, SLA) is nog niet vastgesteld — runbook stap 2. Blijkt het aanbod onder deze eisen te liggen, dan is dat een argument in de bredere vraag of Supabase de juiste keuze blijft.
+- ~~De getallen zijn niet gemeten~~ — **eerste meting gedaan op 2026-07-28**: dump 9,8s (21,2 kB), restore 1s, verificatie inclusief 20 e2e-tests. Ruim binnen de RTO van 4 uur. Zegt weinig over een gevulde database; daarvoor is het meetregister in het runbook.
+- ~~Wat Supabase feitelijk biedt is nog niet vastgesteld~~ — **vastgesteld op 2026-07-28** via het dashboard: Free levert **geen enkele backup** ("Free Plan does not include project backups") en pauzeert projecten na ~7 dagen inactiviteit. Pro (~$25/mnd) geeft dagelijkse backups met 7 dagen retentie; Point-in-Time Recovery is een add-on van **$100/mnd bovenop Pro**. Ter vergelijking gemeten: Neon biedt een 7-daags PITR-venster binnen een plan van ~$10–20/mnd, en MCM2 draait daar aantoonbaar op zonder codewijziging (Issue #30). De eigenaar heeft desondanks gekozen voor Free tijdens de pilot — zie de risico-acceptatie hierboven.
+- **De handmatige dump is nu de enige backup.** Dat maakt de betrouwbaarheid van de geplande taak een enkelvoudig faalpunt. Een taak die stil faalt is gevaarlijker dan geen taak, want dan denk je beschermd te zijn. Er is nog geen mechanisme dat waarschuwt als de dump een dag overslaat — te overwegen vóór de pilotstart.
 - Backup van **geüploade bestanden** (certificaten, Issue #9) valt buiten dit ADR: die gaan naar objectopslag (MinIO/S3), niet naar de database. Vereist een eigen afweging zodra dat gebouwd wordt.
 
 ## Reviewmoment

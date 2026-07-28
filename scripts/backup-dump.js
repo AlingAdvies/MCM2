@@ -54,6 +54,26 @@ const stempel = new Date()
   .slice(0, 19);
 const bestandsnaam = `mcm2-${stempel}.dump`;
 
+// Waarschuw als de vorige dump te oud is: dat betekent dat de geplande taak
+// heeft stilgelegen. Een backup-taak die stil faalt is gevaarlijker dan geen
+// taak, want dan denk je beschermd te zijn (ADR-011, openstaand punt).
+const bestaande = fs
+  .readdirSync(backupDir)
+  .filter((b) => /^mcm2-.*\.dump$/.test(b))
+  .map((b) => ({ b, t: fs.statSync(path.join(backupDir, b)).mtimeMs }))
+  .sort((x, y) => y.t - x.t);
+
+if (bestaande.length > 0) {
+  const urenGeleden = (Date.now() - bestaande[0].t) / 3_600_000;
+  if (urenGeleden > 36) {
+    console.warn(
+      `\nWAARSCHUWING: de vorige dump is ${Math.floor(urenGeleden / 24)} dag(en) oud (${bestaande[0].b}).\n` +
+        `De geplande taak heeft kennelijk stilgelegen. Controleer of hij nog draait —\n` +
+        `zolang de pilot op Supabase Free loopt, is deze dump de enige backup.\n`,
+    );
+  }
+}
+
 console.log(`Backup naar ${path.join(backupDir, bestandsnaam)}`);
 
 const start = Date.now();

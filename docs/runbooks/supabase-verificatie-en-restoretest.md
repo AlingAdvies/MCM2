@@ -402,9 +402,18 @@ Register-ScheduledTask -TaskName "MCM2 databasebackup" -Action $actie -Trigger $
 ### 0c. Bewaren op een tweede locatie
 
 **Een dump op de ontwikkelmachine beschermt tegen "de database valt om", niet tegen "de laptop valt
-om".** Zet `BACKUP_DIR` op een map die gesynchroniseerd wordt (OneDrive) of naar een externe schijf.
+om".** Zet `BACKUP_DIR` op een tweede locatie:
+
+- de **eigen thuisserver** (`saxombp`, bereikbaar via Tailscale) — altijd aan, los van de
+  werkmachine. Besluit 2026-07-28, zie ADR-011: die machine draagt de pilot niet, maar is hier wél
+  het juiste gereedschap;
+- of een gesynchroniseerde map (OneDrive), of een externe schijf.
 
 Voor productie hoort dit naar objectopslag; voor de pilot volstaat een tweede fysieke locatie.
+
+> Het script waarschuwt als de vorige dump meer dan 36 uur oud is. Dat is de enige signalering dat
+> de geplande taak heeft stilgelegen — en zolang de pilot op Free draait, is die dump de enige
+> backup. Negeer die waarschuwing niet.
 
 ### 0d. Herstelbaarheid aantonen — minstens één keer
 
