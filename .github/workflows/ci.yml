@@ -106,6 +106,13 @@ jobs:
       - name: Migraties toepassen (via clm_migrator)
         run: npm run migrate:deploy
 
+      # Poort tegen een tenantgebonden tabel zonder RLS. drizzle-kit genereert
+      # geen RLS (ADR-010), dus een nieuwe tabel met tenant_id krijgt niet
+      # automatisch een policy. De verwachting komt uit src/db/schema.ts, niet
+      # uit een lijst die veroudert.
+      - name: Schema-conformiteit en RLS-dekking
+        run: npx jest --config ./test/jest-e2e.json test/schema-conformiteit.e2e-spec.ts
+
       # Beide isolatietests: via ruwe pg-queries én via de Drizzle-querylaag.
       - name: Tenant-isolatietests draaien (via clm_api_runtime)
         run: npx jest --config ./test/jest-e2e.json test/tenant-rls-isolation.e2e-spec.ts test/drizzle-tenant-context.e2e-spec.ts
