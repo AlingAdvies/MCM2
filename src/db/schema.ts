@@ -3,6 +3,7 @@ import {
   boolean,
   date,
   index,
+  integer,
   jsonb,
   numeric,
   pgSchema,
@@ -156,6 +157,94 @@ export const vendorTag = clm.table(
   ],
 );
 
+// ─── clm schema: survey-cluster ───────────────────────────────────────────
+// Zie docs/superpowers/specs/2026-07-28-leveranciertoken-ontwerp.md §4.
+// Bewust minimaal: dit gaat over toegang, niet over de vragenlijst. De
+// vraagstructuur (vraagtype A/B) hangt aan OV-6 en OV-8, die nog openstaan.
+
+export const surveyTemplate = clm.table(
+  'survey_template',
+  {
+    templateId: uuid('template_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    name: text('name').notNull(),
+    // De scope eist versionering (journey B): een lopende run verwijst naar
+    // een vaste versie, zodat een latere templatewijziging bestaande
+    // responses niet met terugwerkende kracht verandert.
+    version: integer('version').notNull().default(1),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('survey_template_tenant_name_version_key').on(
+      t.tenantId,
+      t.name,
+      t.version,
+    ),
+    index('survey_template_tenant_id_idx').on(t.tenantId),
+  ],
+);
+
+export const surveyRun = clm.table(
+  'survey_run',
+  {
+    runId: uuid('run_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    templateId: uuid('template_id')
+      .notNull()
+      .references(() => surveyTemplate.templateId, { onDelete: 'restrict' }),
+    startedAt: timestamp('started_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    // Sluitmoment van de ronde. Wordt door de guard meegewogen: de striktste
+    // van expires_at (per token) en closes_at (per ronde) wint. Zonder die
+    // controle zou een gesloten ronde stilzwijgend bruikbaar blijven — zie
+    // ontwerp §5a.
+    closesAt: timestamp('closes_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => [index('survey_run_tenant_id_idx').on(t.tenantId)],
+);
+
+export const surveyResponse = clm.table(
+  'survey_response',
+  {
+    responseId: uuid('response_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    runId: uuid('run_id')
+      .notNull()
+      // RESTRICT, niet CASCADE zoals vendor_contact/vendor_tag: een ingediende
+      // response is bewijsmateriaal en mag nooit stilzwijgend meeverdwijnen.
+      .references(() => surveyRun.runId, { onDelete: 'restrict' }),
+    vendorId: uuid('vendor_id')
+      .notNull()
+      .references(() => vendor.vendorId, { onDelete: 'restrict' }),
+    // SHA-256 van het ruwe token, nooit het token zelf. Scheidt databasetoegang
+    // van surveytoegang: een databasedump geeft geen toegang tot openstaande
+    // surveys. Geen bcrypt/argon2 — de invoer is 256 bits entropie, dus een
+    // traag algoritme voegt niets toe en kost bij elke request tijd.
+    tokenHash: text('token_hash').notNull(),
+    status: text('status').notNull().default('pending'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('survey_response_token_hash_key').on(t.tokenHash),
+    uniqueIndex('survey_response_run_vendor_key').on(t.runId, t.vendorId),
+    index('survey_response_tenant_id_idx').on(t.tenantId),
+  ],
+);
+
 // ─── audit schema ──────────────────────────────────────────────────────────
 
 export const auditEvent = audit.table(
@@ -227,6 +316,44 @@ export const vendorContactRelations = relations(vendorContact, ({ one }) => ({
 export const vendorTagRelations = relations(vendorTag, ({ one }) => ({
   vendor: one(vendor, {
     fields: [vendorTag.vendorId],
+    references: [vendor.vendorId],
+  }),
+}));
+
+export const surveyTemplateRelations = relations(
+  surveyTemplate,
+  ({ one, many }) => ({
+    tenant: one(tenant, {
+      fields: [surveyTemplate.tenantId],
+      references: [tenant.tenantId],
+    }),
+    runs: many(surveyRun),
+  }),
+);
+
+export const surveyRunRelations = relations(surveyRun, ({ one, many }) => ({
+  tenant: one(tenant, {
+    fields: [surveyRun.tenantId],
+    references: [tenant.tenantId],
+  }),
+  template: one(surveyTemplate, {
+    fields: [surveyRun.templateId],
+    references: [surveyTemplate.templateId],
+  }),
+  responses: many(surveyResponse),
+}));
+
+export const surveyResponseRelations = relations(surveyResponse, ({ one }) => ({
+  tenant: one(tenant, {
+    fields: [surveyResponse.tenantId],
+    references: [tenant.tenantId],
+  }),
+  run: one(surveyRun, {
+    fields: [surveyResponse.runId],
+    references: [surveyRun.runId],
+  }),
+  vendor: one(vendor, {
+    fields: [surveyResponse.vendorId],
     references: [vendor.vendorId],
   }),
 }));

@@ -113,6 +113,7 @@ jobs:
       - name: Schema-conformiteit en RLS-dekking
         run: npx jest --config ./test/jest-e2e.json test/schema-conformiteit.e2e-spec.ts
 
-      # Beide isolatietests: via ruwe pg-queries én via de Drizzle-querylaag.
-      - name: Tenant-isolatietests draaien (via clm_api_runtime)
-        run: npx jest --config ./test/jest-e2e.json test/tenant-rls-isolation.e2e-spec.ts test/drizzle-tenant-context.e2e-spec.ts
+      # Alle isolatietests: via ruwe pg-queries, via de Drizzle-querylaag, en
+      # het tokengebaseerde pad voor externe leveranciers (Issue #10).
+      - name: Tenant- en token-isolatietests draaien (via clm_api_runtime)
+        run: npx jest --config ./test/jest-e2e.json
