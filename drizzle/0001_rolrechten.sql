@@ -1,8 +1,11 @@
 -- =============================================================================
 -- Herstel P0: ontbrekende schema- en tabelrechten voor de vier clm_*-rollen.
 --
--- De vorige migratie (20260724140521_init_tenant_vendor_audit) maakte de
--- schemas, tabellen en RLS-policies aan, maar gaf geen enkel GRANT USAGE of
+-- Overgenomen uit de Prisma-migratie 20260727053702_grant_schema_and_table_
+-- privileges bij de omzetting naar Drizzle (ADR-010), inhoudelijk ongewijzigd.
+--
+-- De vorige migratie (0000_baseline_bestaand_schema) maakt de
+-- schemas, tabellen en RLS-policies aan, maar geeft geen enkel GRANT USAGE of
 -- GRANT op tabellen aan clm_api/clm_admin/clm_readonly/clm_audit_reader.
 -- Zonder deze grants is RLS niet effectief bruikbaar: een rol zonder
 -- BYPASSRLS kan de tabellen dan simpelweg niet bereiken, dus "RLS is actief"

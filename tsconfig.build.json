@@ -1,4 +1,14 @@
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
+  // drizzle.config.ts is bouwgereedschap, geen applicatiecode. Buiten sluiten
+  // houdt src/ de enige invoermap, en daarmee de uitvoer stabiel op
+  // dist/main.js — waar de Dockerfile en start:prod naar verwijzen.
+  "exclude": [
+    "node_modules",
+    "test",
+    "dist",
+    "generated",
+    "drizzle.config.ts",
+    "**/*spec.ts"
+  ]
 }
