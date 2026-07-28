@@ -15,6 +15,13 @@
       "when": 1785238696350,
       "tag": "0001_rolrechten",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785244458206,
+      "tag": "0002_herstel_ontbrekende_defaults",
+      "breakpoints": true
     }
   ]
 }

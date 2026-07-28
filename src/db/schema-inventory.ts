@@ -2,6 +2,12 @@ import { getTableConfig } from 'drizzle-orm/pg-core';
 
 import * as schema from './schema';
 
+export interface KolomInventaris {
+  naam: string;
+  /** Verwacht het schema een DEFAULT-clausule op deze kolom in de database? */
+  heeftDefault: boolean;
+}
+
 export interface TabelInventaris {
   /** Volledige naam, bijv. 'clm.vendor'. */
   volledigeNaam: string;
@@ -9,6 +15,7 @@ export interface TabelInventaris {
   naam: string;
   /** Heeft deze tabel een tenant_id-kolom? Bepaalt of RLS verplicht is. */
   tenantgebonden: boolean;
+  kolommen: KolomInventaris[];
 }
 
 /**
@@ -41,6 +48,14 @@ export function inventariseerSchema(): TabelInventaris[] {
       schema: schemaNaam,
       naam: config.name,
       tenantgebonden: config.columns.some((k) => k.name === 'tenant_id'),
+      // hasDefault dekt zowel SQL-expressies (gen_random_uuid(), now()) als
+      // vaste waarden ('NL'). Beide horen als DEFAULT-clausule in de database
+      // te staan — dat is het verschil met Prisma, dat defaults in de
+      // applicatielaag afhandelde. Zie Issue #29.
+      kolommen: config.columns.map((k) => ({
+        naam: k.name,
+        heeftDefault: k.hasDefault === true,
+      })),
     });
   }
 

@@ -141,6 +141,47 @@ describe('Schema-conformiteit (e2e)', () => {
     expect(gebrekkig).toEqual([]);
   });
 
+  it('heeft op elke kolom met een schema-default ook een DEFAULT in de database', async () => {
+    // Toegevoegd na Issue #29: alle 12 UUID-kolommen in de Supabase-database
+    // misten DEFAULT gen_random_uuid(), terwijl schema en baseline die wel
+    // voorschrijven. Oorzaak: Prisma genereerde UUID's in de applicatielaag
+    // (@default(uuid()) is een Prisma-level default, geen SQL-clausule),
+    // Drizzle verwacht dat de database het doet.
+    //
+    // De vorige versie van deze test gaf GOEDGEKEURD op precies die database.
+    // Een INSERT zonder expliciete UUID faalt dan op een NOT NULL-constraint.
+    const { rows } = await client.query<{
+      volledige_naam: string;
+      column_name: string;
+      column_default: string | null;
+    }>(
+      `SELECT table_schema || '.' || table_name AS volledige_naam,
+              column_name, column_default
+         FROM information_schema.columns
+        WHERE table_schema IN ('clm', 'ref', 'audit')`,
+    );
+
+    const defaultInDb = new Map(
+      rows.map((r) => [
+        `${r.volledige_naam}.${r.column_name}`,
+        r.column_default,
+      ]),
+    );
+
+    const ontbrekend: string[] = [];
+
+    for (const tabel of verwachteTabellen) {
+      for (const kolom of tabel.kolommen.filter((k) => k.heeftDefault)) {
+        const sleutel = `${tabel.volledigeNaam}.${kolom.naam}`;
+        if (!defaultInDb.get(sleutel)) {
+          ontbrekend.push(sleutel);
+        }
+      }
+    }
+
+    expect(ontbrekend).toEqual([]);
+  });
+
   it('draait niet als een rol die RLS omzeilt', async () => {
     const { rows } = await client.query<{ rolbypassrls: boolean }>(
       'SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user',
