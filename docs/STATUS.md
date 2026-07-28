@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-27 (Entra External ID PoC geslaagd — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+2026-07-28 (Drizzle-omzetting uitgevoerd en geverifieerd tegen een verse database — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
 
 ## Voor een nieuwe sessie: lees dit eerst
 
@@ -25,17 +25,20 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
   - **Externe leverancier** — tokengebaseerde, accountloze survey-linktoegang. Staat volledig los van de CIAM-laag (leveranciers hebben geen Entra-account bij de klant). **Nog niet gestart.**
 
   Het tijdelijke AWS-account `727732213368` is niet langer nodig voor identity.
-- **P0 — drie overige open issues, niet aangeraakt door het bovenstaande:** naast #7 staan er nog drie issues op `priority:p0` in de backlog. Ze zijn kleiner van omvang, maar blokkeren volgens MCM2-CLAUDE.md §5 evengoed verdere featurebouw:
+- **P0 — nieuw op 2026-07-28 (Issue #25): Drizzle-migratiestand op de bestaande Supabase-database.** De omzetting naar Drizzle is uitsluitend getest op verse, lege Postgres-containers. De Supabase-database `clm-enterprise` bevat nog de Prisma-migratiehistorie (`public._prisma_migrations`); Drizzle kent die niet en zou bij een `migrate:deploy` de baseline opnieuw willen toepassen op tabellen die al bestaan. **Niet uitproberen zonder plan en backup.** Zie ADR-010, sectie "Openstaand risico".
+- **P0 — twee overige open issues, niet aangeraakt door het bovenstaande:**
   - **#1** — wachtwoordrotatie van de `postgres`-beheerrol.
-  - **#2** — `pg` en `@types/pg` expliciet als directe dependency declareren.
   - **#3** — `tsconfig.json` naar strict-mode, module-systeem-inconsistentie oplossen.
-- **P1:** ORM-keuze Prisma 6 versus Drizzle is nog open. Prisma 7 is geblokkeerd voor verdere featurebouw wegens een bevestigd, reproduceerbaar conflict tussen Jest-tests, de Prisma 7 Client Engine/generator-output en de gecompileerde Docker-productiebuild.
-- CI dekt format/lint/typecheck én de RLS-isolatietest (zie hieronder). Geen `docker build` of de volledige `npm test`/`npm run build` in CI — expliciet uitgesteld tot na de Prisma 6/Drizzle-spike (ADR-007).
+  - ~~**#2** — `pg` en `@types/pg` als directe dependency~~ — **afgerond 2026-07-28**, bijvangst van de Drizzle-omzetting.
+- ~~**P1:** ORM-keuze Prisma 6 versus Drizzle~~ — **besloten en uitgevoerd op 2026-07-28: Drizzle** (ADR-010, commit `e9df0dc`). De vergelijkende spike uit Issue #5 is niet uitgevoerd; in plaats daarvan zijn de zeven criteria uit MCM2-CLAUDE.md §5 getoetst op de daadwerkelijke omzetting. Prisma is volledig verwijderd. Bevinding die de omvang bepaalde: geen enkele regel applicatiecode gebruikte Prisma, dus het oorspronkelijke Prisma 7-conflict was op dat moment niet reproduceerbaar — er was geen code die het kon uitlokken.
+- CI dekt nu format/lint/typecheck, unit tests, een Docker-productiebuild die de image ook daadwerkelijk start, én beide tenant-isolatietests (zie hieronder). De eerdere beperking "geen `docker build` in CI, uitgesteld tot na de ORM-spike" (ADR-007) is daarmee vervallen.
 - Geen branch-protection op `main`: technisch geblokkeerd, niet vergeten. GitHub Branch Protection op een privérepository vereist een betaald plan (Pro/Team) voor de organisatie `AlingAdvies`; dat is nu niet actief (bevestigd via de GitHub API op 2026-07-27: `403 Upgrade to GitHub Pro or make this repository public`). Tot een upgrade is geregeld, is "nooit rechtstreeks op main werken" (MCM2-CLAUDE.md §10) uitsluitend een werkregel, geen technische afdwinging — een falende CI-check of een directe push naar `main` wordt nu niet door GitHub tegengehouden.
 - Vijf Transdev-klantvragen nog open: exportformaat, of toelichting bij bepaalde survey-antwoordopties verplicht is, upload-validatie-eisen voor het certificaat, welke van de vijf vragen welk vraagtype heeft, en de SMTP-verbindingsdetails voor `contractmanagement@transdev.nl` (expliciet nog "volgt").
 
 ## Aantoonbaar werkend
 
+- **Drizzle als databaselaag (2026-07-28, ADR-010, commit `e9df0dc`).** Geverifieerd tegen twee verse Postgres 18.2-containers, niet beredeneerd: migraties draaien op een lege database via `clm_migrator`; de bestaande RLS-isolatietest slaagt **ongewijzigd** (5 tests); een nieuwe test via de Drizzle-querylaag zelf slaagt (6 tests, `test/drizzle-tenant-context.e2e-spec.ts`); de productie-image bouwt, start, verbindt als `clm_api_runtime` en `/health` antwoordt `HTTP 200`; opstarten met een `BYPASSRLS`-rol wordt geweigerd met een expliciete foutmelding; grants correct toegepast (`clm_api` heeft geen DELETE op audit). Prisma is volledig verwijderd — pakketten, schema, migratiehistorie, gegenereerde client en configuratie.
+- **Docker-productiebuild (2026-07-28).** De Dockerfile bouwde de app voorheen niet (`npm install` + `start:dev`); nu multi-stage met `npm ci`, non-root gebruiker en `node dist/main`. Dit was criterium 1 uit §5 en voorheen voor géén enkele ORM toetsbaar. Lost Issue #20 gedeeltelijk op; de base-image is nog niet op een exacte patchversie gepind.
 - NestJS-skeleton en health-check-endpoint: gebouwd, getest, gecommit.
 - Docker Compose-stack (mcm2-api + minio + valkey): opgezet, health-check via Docker geverifieerd.
 - Eerste Prisma-schema (Tenant, User, Vendor-cluster, AuditEvent + ref-lookups) en migratie: uitgevoerd tegen de Supabase `clm-enterprise`-database, inclusief RLS-policies (`USING`+`WITH CHECK`) en seed-data.
@@ -58,22 +61,27 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Huidige branch en Git-status
 
+- **Actieve branch: `feat/issue-5-drizzle-omzetting`** (commit `e9df0dc`). Bevat de volledige Drizzle-omzetting. Nog niet gepusht, nog niet gemerged — wacht op beoordeling door de eigenaar.
+- **Open branch: `docs/issue-7-leveranciertoken-ontwerp`** (commit `a083a24`). Bevat het ontwerpdocument voor het tokengebaseerde leverancierspoor van Issue #7, inclusief §5a over de levensduur van de omliggende gegevens. Nog niet gepusht. Geen code, alleen documentatie.
 - Branch: `main`, up to date met `origin/main`. Working tree schoon.
 - `chore/issue-4-entraid-haalbaarheid` is op 2026-07-27 gemerged naar `main` (vier documentatiecommits: Issue #4-afronding, ADR-006-herziening naar Entra External ID, PoC-bevindingendocument en de bijwerking daarvan naar "geslaagd") en daarna lokaal én op GitHub verwijderd. Daarna is direct op `main` nog een documentatie-consistentieronde gedaan (ADR-006 hernoemd, feitelijke fout over de gebruikte app-registratie gecorrigeerd, Issue #7-status samengevoegd tot één blok), gevolgd door het toevoegen van het sessieafsluitprotocol (MCM2-CLAUDE.md §14b) en de backlog-synchronisatie die daaruit voortkwam.
 - `chore/restructure-project-context` is inmiddels in `main` opgegaan (laatste commit op die lijn: `beb3e66`, "docs(fase0): archiveer opdrachtinstructie en eerdere techstack-evaluatie") en bestaat niet meer als losse branch.
-- Open branch: `feat/fase0-skeleton-vendors` (commit `4581edd`, "wip(fase0): Taak 6 tussenstand") — **bewust geparkeerd op 2026-07-27**, niet mergen zonder herbeoordeling. Bevat `TenantMiddleware` die de tenant blind afleidt uit een ongeverifieerde `X-Tenant-Id`-header of een `?tenant=`-query-param — dit is exact het patroon dat P0 als kritiek aanmerkt en dat MCM2-CLAUDE.md §6 verbiedt ("vertrouw nooit blind op X-Tenant-Id, queryparameters..."). Ook `withTenant()` gebruikt `$executeRawUnsafe` met stringinterpolatie van `tenantId` (met voorafgaande UUID-regex-validatie) in plaats van een geparametriseerde aanpak. Deze branch is bovendien fors verouderd t.o.v. `main` (mist de volledige documentatieherstructurering en de CI-workflow van 2026-07-24/27). Herbeoordelen ná P0: het `withTenant`-transactiepatroon (`SET LOCAL` binnen `$transaction`) is bruikbaar als uitgangspunt; de header-gebaseerde tenant-afleiding niet.
+- Open branch: `feat/fase0-skeleton-vendors` (commit `4581edd`, "wip(fase0): Taak 6 tussenstand") — **bewust geparkeerd op 2026-07-27**, niet mergen zonder herbeoordeling. Bevat `TenantMiddleware` die de tenant blind afleidt uit een ongeverifieerde `X-Tenant-Id`-header of een `?tenant=`-query-param — dit is exact het patroon dat P0 als kritiek aanmerkt en dat MCM2-CLAUDE.md §6 verbiedt ("vertrouw nooit blind op X-Tenant-Id, queryparameters..."). Ook `withTenant()` gebruikt `$executeRawUnsafe` met stringinterpolatie van `tenantId` (met voorafgaande UUID-regex-validatie) in plaats van een geparametriseerde aanpak. Deze branch is bovendien fors verouderd t.o.v. `main` (mist de volledige documentatieherstructurering en de CI-workflow van 2026-07-24/27). Herbeoordelen ná P0. **Bijgewerkt 2026-07-28:** het `withTenant`-transactiepatroon is inmiddels opnieuw gebouwd op `main`-lijn in `src/db/database.service.ts` (Drizzle-transactie, tenantcontext via `set_config()` met een echte queryparameter in plaats van `$executeRawUnsafe` met stringinterpolatie). Deze branch heeft daarmee nog uitsluitend historische waarde; er valt niets bruikbaars meer uit over te nemen. Kan na beoordeling verwijderd worden.
 
 ## Eerstvolgende goedgekeurde stap
 
-De zwaarste P0-punten zijn afgerond: databaserol/RLS-bereikbaarheid, migration-rol en geautomatiseerde RLS-test (zie hierboven, ADR-008/ADR-009). Er staan nog **vier** issues op `priority:p0`: #7 (tenantcontext-verificatie, het zwaarste), plus #1, #2 en #3. Geen featurebouw, ORM-migratie of productievoorstel totdat die zijn afgerond. Eerstvolgende toegestane acties, in volgorde — zie de bijbehorende GitHub Issue voor het volledige acceptatiecriterium:
+De zwaarste P0-punten zijn afgerond: databaserol/RLS-bereikbaarheid, migration-rol en geautomatiseerde RLS-test (ADR-008/ADR-009), en de databaselaag is besloten en omgezet (ADR-010). Er staan nog **vier** issues op `priority:p0`: #7 (tenantcontext-verificatie, het zwaarste), #25 (nieuw, Drizzle-migratiestand op Supabase), #1 en #3. Eerstvolgende toegestane acties, in volgorde — zie de bijbehorende GitHub Issue voor het volledige acceptatiecriterium:
+
+0. **Beoordelen van de twee openstaande branches** (`feat/issue-5-drizzle-omzetting` en `docs/issue-7-leveranciertoken-ontwerp`) en beslissen over mergen. Beide zijn nog niet gepusht.
 
 1. **Issue #7** — tenantcontext-verificatie herontwerpen (van blinde header/query-param naar geverifieerde identiteit + membership) — de enige nog resterende P0-blocker. De identity-infrastructuur staat en werkt (Entra External ID-PoC geslaagd, zie hierboven). Vervolgstap nu concreet: (a) authorization code server-to-server inwisselen voor tokens en de claims inspecteren, (b) NestJS-guard bouwen die het ID-token tegen de JWKS van `mcm2ciam` verifieert en daaruit de tenantcontext afleidt, config-gedreven via environment-variabelen. Daarnaast, als apart spoor binnen hetzelfde issue: het tokengebaseerde mechanisme voor externe leveranciers (nog niet gestart).
-2. **Issue #1** — wachtwoordrotatie van de `postgres`-beheerrol (P0, niet aangeraakt door de databaserol-fix van 2026-07-27).
-3. **Issue #2** — `pg` en `@types/pg` expliciet als directe dependency declareren (P0, klein).
-4. **Issue #3** — `tsconfig.json` naar strict-mode, module-systeem-inconsistentie oplossen (P0, klein). Let op de samenhang met de nog openstaande ORM-keuze: strict-mode kan bestaande typefouten blootleggen die per ORM verschillen.
-5. ~~**Issue #4** — EntraID-federatie haalbaarheidscheck~~ — **afgerond 2026-07-27**, zie hierboven en ADR-006.
-6. **Issue #5** — na volledige P0: de goedgekeurde ORM-spike (Prisma 6 vs. Drizzle) tegen de Transdev-survey-slice.
-7. **Issue #15** — beantwoorden van de vijf resterende Transdev-klantvragen (kan parallel, is geen technische afhankelijkheid).
+2. **Issue #25** — Drizzle-migratiestand initialiseren op de bestaande Supabase-database (P0, nieuw). Blokkeert elke migratie tegen de echte database; raakt gedeelde data, dus vereist een backup-/herstelplan vóór uitvoering.
+3. **Issue #1** — wachtwoordrotatie van de `postgres`-beheerrol (P0, niet aangeraakt door de databaserol-fix van 2026-07-27).
+4. **Issue #3** — `tsconfig.json` naar strict-mode, module-systeem-inconsistentie oplossen (P0, klein). De eerdere kanttekening hierbij ("kan typefouten blootleggen die per ORM verschillen") is vervallen nu de databaselaag vastligt.
+5. ~~**Issue #2** — `pg` en `@types/pg` als directe dependency~~ — **afgerond 2026-07-28**, bijvangst van ADR-010.
+6. ~~**Issue #4** — EntraID-federatie haalbaarheidscheck~~ — **afgerond 2026-07-27**, zie hierboven en ADR-006.
+7. ~~**Issue #5** — ORM-spike Prisma 6 vs. Drizzle~~ — **besloten 2026-07-28: Drizzle** (ADR-010). De spike zelf is niet uitgevoerd; de zeven criteria zijn op de daadwerkelijke omzetting getoetst. Issue #6 (definitieve ORM-implementatie) is hiermee inhoudelijk afgehandeld.
+8. **Issue #15** — beantwoorden van de vijf resterende Transdev-klantvragen (kan parallel, is geen technische afhankelijkheid).
 
 Volledige backlog (alle 24 items, incl. Before production en Later): `gh issue list --repo AlingAdvies/MCM2` of `https://github.com/AlingAdvies/MCM2/issues`.
 
@@ -81,7 +89,7 @@ Volledige backlog (alle 24 items, incl. Before production en Later): `gh issue l
 
 - **Backlog/roadmap: GitHub Issues** (`https://github.com/AlingAdvies/MCM2/issues`), gelabeld met type (`bug`/`enhancement`/`chore`) en prioriteit (`priority:p0`/`priority:before-pilot`/`priority:before-production`/`priority:later`). Vervangt de losse Markdown-roadmap sinds 2026-07-27 (zie `docs/archive/06-prioritized-roadmap-2026-07-24-pre-issues.md` voor de migratieverantwoording en issue-nummer-mapping).
 - Architectuurreview: `docs/architecture-review/2026-07-24/` (00, 02-05, 07-09 — 06 is verplaatst naar `docs/archive/`, zie hierboven)
-- Actieve ADR's: `docs/adr/`, inclusief ADR-006 (CIAM-laag: Microsoft Entra External ID — herzien op 2026-07-27, AWS Cognito verworpen; bestand heette eerder `ADR-006-cognito-als-federatielaag.md`), ADR-007 (CI-platform: GitHub Actions; eerste CI-scope: format/lint/typecheck, test/build bewust uitgesteld tot na de ORM-spike), ADR-008 (P0-databaserolherstel: clm_api_runtime, ontbrekende schema-grants, tijdelijke clm_admin=clm_api-gelijkstelling) en ADR-009 (migration-rol clm_migrator, rollenbootstrap, geautomatiseerde RLS-test in CI via ephemere testdatabase)
+- Actieve ADR's: `docs/adr/`, inclusief ADR-006 (CIAM-laag: Microsoft Entra External ID — herzien op 2026-07-27, AWS Cognito verworpen; bestand heette eerder `ADR-006-cognito-als-federatielaag.md`), ADR-007 (CI-platform: GitHub Actions; eerste CI-scope: format/lint/typecheck, test/build bewust uitgesteld tot na de ORM-spike), ADR-008 (P0-databaserolherstel: clm_api_runtime, ontbrekende schema-grants, tijdelijke clm_admin=clm_api-gelijkstelling), ADR-009 (migration-rol clm_migrator, rollenbootstrap, geautomatiseerde RLS-test in CI via ephemere testdatabase) en ADR-010 (databaselaag Drizzle, Prisma verwijderd; inclusief de toetsing van de zeven §5-criteria en het openstaande Supabase-risico)
 - Runbooks: `docs/runbooks/` (nog leeg — eerste runbooks volgen zodra de bijbehorende functionaliteit bestaat)
 - Historisch projectcontextdocument: `docs/context/PROJECT-HISTORY-2026-07-24.md`
 - Volledig gearchiveerd, vervangen instructiebestand: `docs/archive/MCM2-CLAUDE-2026-07-24-pre-restructure.md`
