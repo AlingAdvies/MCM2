@@ -26,9 +26,6 @@ jobs:
       - name: Dependencies installeren
         run: npm ci
 
-      - name: Prisma Client genereren
-        run: npx prisma generate
-
       - name: Format controleren
         run: npm run format:check
 
@@ -37,6 +34,33 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+  docker-build:
+    name: Docker productiebuild
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Productie-image bouwen
+        run: docker build -t mcm2-api:ci .
+
+      # Een image die bouwt is nog geen image die draait: bij de Prisma
+      # 7-blokkade slaagde de build wel en faalde pas het opstarten. Deze stap
+      # start de container zonder database-URL en verwacht dat hij daarop
+      # afbreekt met de eigen foutmelding — dat bewijst dat het gecompileerde
+      # resultaat daadwerkelijk laadt (MCM2-CLAUDE.md §5, criterium 1).
+      - name: Image start het gecompileerde resultaat
+        run: |
+          output=$(docker run --rm mcm2-api:ci 2>&1 || true)
+          echo "$output"
+          echo "$output" | grep -q "DATABASE_URL ontbreekt" || {
+            echo "::error::Container startte niet tot aan de configuratiecontrole."
+            exit 1
+          }
 
   rls-isolation:
     name: RLS tenant-isolatietest
@@ -71,17 +95,17 @@ jobs:
       - name: Dependencies installeren
         run: npm ci
 
-      - name: Prisma Client genereren
-        run: npx prisma generate
-
       - name: Rollen bootstrappen op de CI-database
         run: |
-          psql "postgresql://postgres:postgres@localhost:5432/postgres" -v ON_ERROR_STOP=1 -f prisma/roles/bootstrap-roles.sql
+          psql "postgresql://postgres:postgres@localhost:5432/postgres" -v ON_ERROR_STOP=1 -f db/roles/bootstrap-roles.sql
           psql "postgresql://postgres:postgres@localhost:5432/postgres" -v ON_ERROR_STOP=1 -c "ALTER ROLE clm_api_runtime PASSWORD 'clm_api_runtime_ci_pw';"
           psql "postgresql://postgres:postgres@localhost:5432/postgres" -v ON_ERROR_STOP=1 -c "ALTER ROLE clm_migrator PASSWORD 'clm_migrator_ci_pw';"
 
+      # Draait tegen een lege database: bewijst dat de migratieketen vanaf
+      # niets reproduceerbaar is (MCM2-CLAUDE.md §5, criterium 5).
       - name: Migraties toepassen (via clm_migrator)
         run: npm run migrate:deploy
 
-      - name: RLS-isolatietest draaien (via clm_api_runtime)
-        run: npx jest --config ./test/jest-e2e.json test/tenant-rls-isolation.e2e-spec.ts
+      # Beide isolatietests: via ruwe pg-queries én via de Drizzle-querylaag.
+      - name: Tenant-isolatietests draaien (via clm_api_runtime)
+        run: npx jest --config ./test/jest-e2e.json test/tenant-rls-isolation.e2e-spec.ts test/drizzle-tenant-context.e2e-spec.ts
