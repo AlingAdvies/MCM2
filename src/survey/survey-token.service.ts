@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 
 import { DatabaseService } from '../db/database.service';
+import { SurveyAuditService } from './survey-audit.service';
 import { hashToken, heeftGeldigeVorm } from './survey-token';
 
 /** Waarom een token geweigerd is. Bepaalt de HTTP-status en de melding. */
@@ -65,7 +66,10 @@ function alsDatum(waarde: Date | string | null): Date | null {
 export class SurveyTokenService {
   private readonly logger = new Logger(SurveyTokenService.name);
 
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly audit: SurveyAuditService,
+  ) {}
 
   /**
    * Zoekt het token op en toetst de geldigheid.
@@ -174,9 +178,19 @@ export class SurveyTokenService {
         this.logger.warn(
           `Indienen geweigerd voor response ${responseId}: al ingediend of verlopen.`,
         );
+        return false;
       }
 
-      return gelukt;
+      // Binnen dezelfde transactie (AC8): rolt de indiening terug, dan
+      // verdwijnt de auditregel mee. Een auditregel voor iets dat niet
+      // gebeurd is, is erger dan geen auditregel.
+      await this.audit.leg(tx, {
+        tenantId,
+        actie: 'survey_response_ingediend',
+        responseId,
+      });
+
+      return true;
     });
   }
 }
