@@ -361,6 +361,61 @@ Dat laatste is de belangrijkste: drizzle-kit genereert geen RLS (ADR-010), dus e
 opvallen. Beide faalscenario's zijn op 2026-07-28 daadwerkelijk uitgelokt om te bevestigen dat de
 test ook rood wordt wanneer dat hoort.
 
+## Stap 0 — Dagelijkse backup inrichten (VERPLICHT vóór de pilot)
+
+**Waarom dit stap 0 is en niet stap 6:** de pilot draait op Supabase Free, dat géén enkele
+providerbackup levert (Issue #30). Deze dump is daarmee niet "extra zekerheid" maar het **enige
+vangnet**. Zonder dit is de pilot niet verdedigbaar tegenover een klant wiens leveranciers gegevens
+hebben aangeleverd. Zie de risico-acceptatie in ADR-011.
+
+Meegenomen voordeel: dagelijkse activiteit voorkomt dat Supabase het project pauzeert na ~7 dagen.
+
+### 0a. Handmatig draaien
+
+```bash
+npm run backup:dump
+
+# Of naar een specifieke map:
+BACKUP_DIR="D:/mcm2-backups" npm run backup:dump
+```
+
+Het script gebruikt `pg_dump` uit de container `postgres:17.6` — dezelfde versie als Supabase — en
+lost de vier valkuilen uit stap 1b-alt zelf op. Het bewaart 14 dagen aan dumps en ruimt oudere op.
+Een lege dump wordt als mislukking behandeld en verwijderd, zodat een afgebroken poging nooit als
+geslaagde backup blijft staan.
+
+Op 2026-07-28 getest tegen `clm-enterprise`: 21,2 kB in 9,8s.
+
+### 0b. Dagelijks inplannen
+
+Op Windows, via Taakplanner:
+
+```powershell
+$actie = New-ScheduledTaskAction -Execute "npm" -Argument "run backup:dump" -WorkingDirectory "C:\DEV\Work\MCM2"
+$trigger = New-ScheduledTaskTrigger -Daily -At 07:00
+Register-ScheduledTask -TaskName "MCM2 databasebackup" -Action $actie -Trigger $trigger -Description "Enige backup van clm-enterprise; Supabase Free levert er geen. Zie ADR-011."
+```
+
+> Controleer na een week of de taak daadwerkelijk draait — een geplande taak die stil faalt is
+> erger dan geen taak, want je denkt beschermd te zijn.
+
+### 0c. Bewaren op een tweede locatie
+
+**Een dump op de ontwikkelmachine beschermt tegen "de database valt om", niet tegen "de laptop valt
+om".** Zet `BACKUP_DIR` op een map die gesynchroniseerd wordt (OneDrive) of naar een externe schijf.
+
+Voor productie hoort dit naar objectopslag; voor de pilot volstaat een tweede fysieke locatie.
+
+### 0d. Herstelbaarheid aantonen — minstens één keer
+
+Een backup die je nooit hebt teruggezet, is een aanname. Doorloop stap 1b-alt met een echte dump en
+sluit af met stap 1c en 1c-bis.
+
+Op 2026-07-28 uitgevoerd: dump → restore in een verse container → rechten → defaults → **20 van 20
+e2e-tests groen**. Herhaal dit maandelijks tijdens actieve surveyrondes (ADR-011).
+
+---
+
 ## Stap 5 — Een andere provider toetsen (optioneel, ~20 minuten)
 
 **Aanleiding:** Supabase Free heeft géén backups en pauzeert projecten na ~7 dagen inactiviteit

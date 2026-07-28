@@ -2,8 +2,11 @@
 /dist
 /node_modules
 
-# Prisma generated client (regenereren via `npx prisma generate`)
-/generated
+# Databasedumps — bevatten een volledige kopie van de productiedata en horen
+# nooit in git. Zie ADR-011 en scripts/backup-dump.js.
+/backups
+*.dump
+*.sql.gz
 
 # Logs
 logs

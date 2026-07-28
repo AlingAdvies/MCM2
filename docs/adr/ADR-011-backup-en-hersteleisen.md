@@ -37,12 +37,18 @@ Deze twee zijn geen technische details maar een bedrijfsbeslissing: ze zeggen ho
 
 ### Fase 2 — Transdev-pilot (vanaf ~1 september 2026)
 
-| Eis | Waarde | Toelichting |
-|---|---|---|
-| RPO | **1 uur** | Een verloren survey-inzending is niet opnieuw op te vragen bij de leverancier. Dagelijkse backups zijn hier niet voldoende: een storing om 16:00 zou een hele werkdag aan inzendingen kosten. Vereist point-in-time recovery. |
-| RTO | **4 uur binnen kantooruren** | De pilot is niet 24/7 kritiek, maar een dag stilstand tijdens een lopende surveyronde is niet uit te leggen aan de klant. |
-| Restore getest | Vóór de pilotstart, met realistische datavolumes | Een restore van een lege database bewijst niets over een gevulde. |
-| Hertest-frequentie | **Elk kwartaal**, plus na elke schemawijziging die tabellen toevoegt | |
+> **Herzien op 2026-07-28 na een expliciete beslissing van de eigenaar: de pilot draait op
+> Supabase Free.** De oorspronkelijke norm hieronder (RPO 1 uur) is niet haalbaar op dat plan.
+> De aangepaste norm en de risico-acceptatie staan in de sectie "Risico-acceptatie Free Plan"
+> verderop. De oorspronkelijke waarden blijven staan als referentie voor wat een betaald plan
+> zou opleveren.
+
+| Eis | Oorspronkelijke norm | Feitelijk op Free | Toelichting |
+|---|---|---|---|
+| RPO | 1 uur | **24 uur**, mits de dagelijkse dump draait — anders **oneindig** | Supabase Free levert geen enkele backup. De 24 uur komt volledig uit de eigen geplande dump (zie hieronder), niet uit de provider. |
+| RTO | 4 uur binnen kantooruren | **4 uur**, onveranderd | Herstel vanuit een dump duurde bij een lege database seconden. Realistisch blijft 4 uur ruim, ook bij groei. |
+| Restore getest | Vóór de pilotstart, met realistische datavolumes | **Onveranderd, en nu strikter nodig** | Zonder providerbackup is de eigen dump het enige vangnet. Die moet aantoonbaar herstelbaar zijn, niet aangenomen. |
+| Hertest-frequentie | Elk kwartaal | **Maandelijks tijdens actieve surveyrondes** | Vaker, juist omdat het vangnet handmatig is. |
 
 ### Fase 3 — Productie met betalende klanten
 
@@ -54,6 +60,51 @@ Deze twee zijn geen technische details maar een bedrijfsbeslissing: ze zeggen ho
 | Aanvullend | Herstel naar een **ander** project/regio minstens één keer bewezen | Beschermt tegen uitval van de provider zelf, niet alleen tegen een fout in de data. |
 
 > De getallen in fase 3 zijn een uitgangspunt. Zodra er contractuele toezeggingen aan klanten worden gedaan, zijn díe leidend en moet dit ADR daarop worden bijgesteld.
+
+## Risico-acceptatie Free Plan (besluit eigenaar, 2026-07-28)
+
+De eigenaar heeft besloten de Transdev-pilot op **Supabase Free** te draaien. Motivatie: bekendheid
+met het platform, en de verwachting het pauzeerprobleem praktisch op te lossen. Dit is een bewuste
+afweging, geen omissie — daarom hier vastgelegd met de risico's die erbij horen.
+
+### Wat je hiermee accepteert
+
+| Risico | Gevolg | Mitigatie |
+|---|---|---|
+| **Geen enkele providerbackup** | Bij verlies van het project is alles weg. Niet "korte bewaartermijn" — géén backup. | Eigen geplande `pg_dump` (zie hieronder). Zonder die dump is er geen vangnet. |
+| **Pauzeren na ~7 dagen inactiviteit** | Een surveylink die 30 dagen geldig is, werkt niet meer als de database slaapt. De leverancier ziet een fout, niet een formulier. | Geplande activiteit (dagelijkse dump houdt het project meteen actief). |
+| **Verwijdering na langere inactiviteit** | Project weg, 90 dagen bewaartermijn op het volume. | Idem — zolang de dump draait, is dit niet aan de orde. |
+| **Ingediende surveys zijn onherhaalbaar** | Een leverancier dient niet opnieuw in omdat wij data kwijt zijn. Indienen is definitief (OV-3, geen correctieflow). | Maximaal 24 uur verlies i.p.v. alles, mits de dump draait. |
+
+### Voorwaarde waaronder dit verdedigbaar is
+
+**De geplande dump is geen aanbeveling maar een voorwaarde.** Zonder dat draait de pilot met een
+onherstelbare database, en dat is niet uit te leggen aan een klant wiens leveranciers gegevens
+hebben aangeleverd.
+
+Concreet, vóór de eerste leverancierslink de deur uit gaat:
+
+1. `npm run backup:dump` draait dagelijks, geautomatiseerd (Windows Taakplanner of een
+   GitHub Actions-schedule).
+2. Minstens één dump is aantoonbaar teruggezet en geverifieerd met `scripts/verify-schema.js`
+   plus de volledige e2e-suite — de route uit runbook stap 1b-alt.
+3. De dumps staan **niet** op dezelfde machine als de enige kopie. Een laptop die stukgaat mag geen
+   dataverlies betekenen.
+
+Punt 3 is niet triviaal: een dump op de ontwikkelmachine beschermt tegen "Supabase valt om", niet
+tegen "de laptop valt om". Voor de pilot volstaat een tweede locatie (OneDrive, externe schijf);
+voor productie hoort dit naar objectopslag.
+
+### Wanneer dit besluit opnieuw op tafel moet
+
+- **Bij de eerste betalende klant** — dan is Free niet langer verdedigbaar.
+- **Bij een tweede tenant** — meer data, meer partijen, hogere impact bij verlies.
+- **Als de dagelijkse dump structureel faalt of wordt overgeslagen** — dan vervalt de enige
+  mitigatie en is er feitelijk geen backup meer.
+- **Als de pilot langer duurt dan één surveyronde** — dan is de tijdelijkheid weg die deze keuze
+  draagt.
+
+Bij productie geldt onverkort fase 3 hieronder: Free is daar geen optie.
 
 ## Hoe blijft dit passend bij groei?
 
