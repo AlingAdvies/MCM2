@@ -416,7 +416,51 @@ het kostenverschil. Twee dingen die het vaakst misgaan bij managed diensten:
   niet zonder aanpassing — een reëel bezwaar, want dat model draagt de tenant-isolatie.
 - Connection pooling werkt anders. Meestal configuratiewerk, geen herbouw, maar wel uitzoeken.
 
-### 5d. Uitkomst vastleggen
+### 5d. Testomgeving opruimen
+
+Een testproject met een volledig schema en zes databaserollen laten staan is onnodige
+aanvalsoppervlakte. Schema's droppen is niet genoeg — de rollen blijven bestaan en houden
+verwijzingen vast.
+
+De volgorde die werkt (op 2026-07-28 doorlopen tegen Neon):
+
+```sql
+DROP SCHEMA IF EXISTS clm CASCADE;
+DROP SCHEMA IF EXISTS ref CASCADE;
+DROP SCHEMA IF EXISTS audit CASCADE;
+DROP SCHEMA IF EXISTS drizzle CASCADE;   -- migratieboekhouding van Drizzle
+
+-- Rollen in deze volgorde: clm_migrator als laatste.
+DROP ROLE IF EXISTS clm_api_runtime;
+DROP ROLE IF EXISTS clm_admin;
+DROP ROLE IF EXISTS clm_readonly;
+DROP ROLE IF EXISTS clm_audit_reader;
+DROP ROLE IF EXISTS clm_api;
+
+-- clm_migrator weigert eerst: twee verwijzingen uit de bootstrap blijven hangen.
+REVOKE clm_migrator FROM <provider-eigenaar>;   -- bij Neon: neondb_owner
+REVOKE ALL ON SCHEMA public FROM clm_migrator;
+DROP ROLE IF EXISTS clm_migrator;
+```
+
+> **Twee valkuilen.** `DROP ROLE clm_migrator` faalt met *"cannot be dropped because some objects
+> depend on it"* zolang (a) de provider-eigenaar er lid van is en (b) de rol `CREATE` heeft op
+> `public` — beide gezet door `bootstrap-roles.sql`. `DROP OWNED BY clm_migrator` is géén oplossing:
+> een gewone projecteigenaar mag dat bij een managed provider niet uitvoeren
+> (*"permission denied to drop objects"*). De twee `REVOKE`-regels hierboven wel.
+
+Controleer daarna dat er niets rest:
+
+```sql
+SELECT rolname FROM pg_roles WHERE rolname LIKE 'clm_%';           -- moet leeg zijn
+SELECT count(*) FROM information_schema.tables
+ WHERE table_schema NOT IN ('pg_catalog','information_schema');    -- moet 0 zijn
+```
+
+**Roteer daarna het wachtwoord** van de testomgeving, of verwijder het project. Een connectiestring
+die in een chat, terminalgeschiedenis of scriptaanroep heeft gestaan, moet je als gelekt beschouwen.
+
+### 5e. Uitkomst vastleggen
 
 Noteer het resultaat in Issue #30 en, bij een keuze, in ADR-011 en ADR-002. Een vergelijking die
 alleen in een gesprek bestaat, is bij de volgende kostenafweging weer weg.
