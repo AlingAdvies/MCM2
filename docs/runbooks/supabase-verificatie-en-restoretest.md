@@ -32,7 +32,7 @@ Deze feiten zijn al bevestigd via de databaseverbinding — niet opnieuw control
 | Host | `aws-1-eu-west-1.pooler.supabase.com:5432` (Session Pooler) |
 | PostgreSQL | **17.6** |
 | Runtime-rol | `clm_api_runtime`, `rolbypassrls = false` ✅ |
-| Tabellen | 5 in `clm`, 3 in `ref`, 1 in `audit` |
+| Tabellen | 5 in `clm`, 3 in `ref`, 1 in `audit` — **stand op 2026-07-28**; dit aantal groeit, de controle in stap 1c is er niet van afhankelijk |
 | Prisma-historie | 3 migraties, alle drie afgerond |
 | Drizzle-historie | `drizzle.__drizzle_migrations` **bestaat niet** |
 | Schema t.o.v. Drizzle-baseline | **Volledig gelijk** — geen afwijking |
@@ -92,24 +92,39 @@ Neem de connectiestring van `clm-restoretest` en draai:
 VERIFY_DATABASE_URL="postgresql://...connectiestring-van-clm-restoretest..." node scripts/verify-schema.js
 ```
 
-Het script is read-only en controleert in één keer:
+Het script is read-only en leidt de verwachting af uit `src/db/schema.ts` — het bevat zelf geen lijst
+van tabellen, dus het blijft kloppen naarmate de applicatie groeit. Het controleert:
 
-- alle negen tabellen (5 `clm`, 3 `ref`, 1 `audit`);
-- RLS actief op de zes tenantgebonden tabellen;
-- de zes policies, elk mét `USING` én `WITH CHECK`;
-- `clm.current_tenant_id()` leest de sessievariabele correct;
-- rijaantallen, ter vergelijking met het origineel.
+- elke tabel uit het schema bestaat ook echt in de database;
+- er staan geen tabellen in de database die níet in het schema zitten;
+- RLS actief op elke tenantgebonden tabel (herkend aan de `tenant_id`-kolom);
+- elke policy heeft zowel `USING` als `WITH CHECK`;
+- de verbinding draait niet als een rol die RLS omzeilt.
 
 **Geslaagd wanneer** het script afsluit met `GOEDGEKEURD`. Bij `AFGEKEURD` somt het per regel op wat
 ontbreekt — dat is de bevinding, niet een reden om het nog eens te proberen.
 
 **Niet** geslaagd bij "de database bestaat en ik kan inloggen" — dat zegt niets over de inhoud.
 
-> **Over de rijaantallen:** de `clm`- en `audit`-tabellen tonen `0` zonder tenant-context. Dat is
-> RLS die werkt, niet een lege tabel. Alleen de drie `ref`-tabellen (elk 3 rijen) zijn direct
-> leesbaar. Vergelijk de uitkomst met die van het origineel — dezelfde patronen horen eruit te komen.
+> **Wat dit script níet controleert: of de dáta is meegekomen.** Het bewijst dat de *structuur*
+> klopt — tabellen, RLS, policies. Een correct herstelde maar lege database zou hier slagen.
+>
+> Dat is geen omissie maar een gevolg van RLS: de runtime-rol ziet zonder tenant-context nul rijen,
+> dus tellen levert altijd `0` op. Controleer de datahoeveelheid daarom via het Supabase-dashboard
+> (Database → Tables toont rijaantallen als beheerder) en vergelijk die met het origineel. Zolang de
+> database in de pilotfase leeg is, is dit een formaliteit; zodra er leveranciersdata in staat, is
+> het de belangrijkste controle van de hele test.
 
-### 1d. Opruimen
+### 1d. Meetwaarden noteren — niet overslaan
+
+Vul de tabel onderaan dit runbook in. Dit is geen administratie om de administratie: een restore van
+een lege database duurt seconden, een gevulde met certificaten kan uren duren. Zonder een reeks
+metingen is die groei onzichtbaar tot het moment dat het een probleem is.
+
+Noteer: datum, databaseomvang, hoe lang de restore duurde (van start tot geverifieerd), en de
+uitkomst van `verify-schema.js`.
+
+### 1e. Opruimen
 
 Verwijder `clm-restoretest` zodra de verificatie klaar is. Een restore-project met echte data dat
 blijft staan is een datalek-in-wording. Noteer de uitkomst in Issue #19 en sluit dat issue.
@@ -184,6 +199,39 @@ Control 4 (NIS2/ISO27001-toetsing van Supabase's dataverwerkingsmodel) blijft da
 is documentonderzoek, geen test, en valt buiten dit runbook.
 
 ---
+
+## Meetregister — invullen bij elke restore-test
+
+Elke rij is één uitgevoerde test. De reeks maakt groei zichtbaar: loopt de hersteltijd op terwijl de
+eisen uit ADR-011 gelijk blijven, dan is dat een signaal vóórdat het een incident wordt.
+
+| Datum | Omvang database | Duur restore (start → geverifieerd) | `verify-schema.js` | Binnen RTO uit ADR-011? | Uitgevoerd door |
+|---|---|---|---|---|---|
+| _(nog niet uitgevoerd)_ | | | | | |
+
+**Hertest-frequentie** hangt aan de projectfase, zie ADR-011:
+
+- Ontwikkeling: bij elke wijziging in de databaselaag
+- Transdev-pilot: elk kwartaal, plus na elke schemawijziging die tabellen toevoegt
+- Productie: elk kwartaal, gedocumenteerd
+
+## Hoe dit runbook meegroeit met de database
+
+Dit runbook noemt bewust **geen** vast aantal tabellen meer. De controle in stap 1c leidt af wat er
+hoort te bestaan uit `src/db/schema.ts` — de bron die per definitie actueel is, want daar worden
+nieuwe tabellen aangemaakt.
+
+`test/schema-conformiteit.e2e-spec.ts` draait ook als CI-poort en faalt bij:
+
+- een tabel uit het schema die in de database ontbreekt;
+- een tabel in de database die niet in het schema staat (buiten de migratieketen om aangemaakt);
+- **een tenantgebonden tabel zonder RLS** — herkend aan de `tenant_id`-kolom;
+- een policy zonder `USING` of zonder `WITH CHECK`.
+
+Dat laatste is de belangrijkste: drizzle-kit genereert geen RLS (ADR-010), dus een nieuwe tabel met
+`tenant_id` krijgt niet automatisch een policy. Zonder deze poort zou dat pas bij een datalek
+opvallen. Beide faalscenario's zijn op 2026-07-28 daadwerkelijk uitgelokt om te bevestigen dat de
+test ook rood wordt wanneer dat hoort.
 
 ## Wat dit runbook niet beantwoordt
 
