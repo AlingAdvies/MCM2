@@ -37,10 +37,16 @@ Deze feiten zijn al bevestigd via de databaseverbinding — niet opnieuw control
 | Drizzle-historie | `drizzle.__drizzle_migrations` **bestaat niet** |
 | Schema t.o.v. Drizzle-baseline | **Volledig gelijk** — geen afwijking |
 
-**Schema-afdrijving uitgesloten.** `node scripts/verify-schema.js` is op 2026-07-28 read-only tegen
-de echte database gedraaid en keurde alles goed: negen tabellen, RLS actief op alle zes
-tenantgebonden tabellen, zes policies met zowel `USING` als `WITH CHECK`, en `clm.current_tenant_id()`
-werkend. Dat was de grootste onzekerheid rond stap 3 — het schema is níet afgedreven van de baseline.
+**Schema-afdrijving uitgesloten — met één uitzondering.** `node scripts/verify-schema.js` is op
+2026-07-28 read-only tegen de echte database gedraaid: tabellen, RLS en policies komen volledig
+overeen met de baseline. Dat was de grootste onzekerheid rond stap 3.
+
+**Maar:** dezelfde dag bleek via de restore-test dat alle vijf UUID-primaire sleutels
+`DEFAULT gen_random_uuid()` missen — een erfenis van Prisma, dat UUID's in de applicatielaag
+genereerde. Zie **Issue #29**. De eerste versie van de controle keek niet naar kolomdefaults en gaf
+daarom `GOEDGEKEURD` op een database waartegen de applicatie niet correct werkt; die controle is
+inmiddels uitgebreid. Migratie `drizzle/0002_herstel_ontbrekende_defaults.sql` lost dit op, maar is
+nog **niet** toegepast op `clm-enterprise` — dat wacht op deze backup-test.
 
 **Al opgelost:** ADR-002 control 3 (runtime-rol zonder BYPASSRLS) is hiermee ook in de echte
 omgeving bevestigd, niet alleen in CI.
@@ -78,11 +84,107 @@ Herstel **niet** over `clm-enterprise` heen. Maak een nieuw, tijdelijk project:
    kies het goedkoopste plan dat een restore toestaat.
 2. In `clm-enterprise` → Backups → kies de meest recente backup → **Restore** / **Download**.
    - Biedt Supabase "restore to new project" aan: kies `clm-restoretest`.
-   - Kan dat niet: download de backup en herstel hem handmatig met `pg_restore` naar het nieuwe project.
-     Vraag om hulp bij dit commando — dat hoort niet uit het hoofd te gebeuren.
+   - Kan dat niet: download de backup en herstel hem handmatig — zie stap 1b-alt hieronder.
 
 > **Let op:** kies bij een restore-dialoog nooit `clm-enterprise` als doel. Dat overschrijft de
 > werkende database. Lees het bevestigingsscherm hardop na voordat je klikt.
+
+### 1b-alt. Handmatig dumpen en herstellen — beproefde commando's
+
+Deze route is op 2026-07-28 volledig doorlopen tegen `clm-enterprise`; de commando's hieronder
+werken. Ook bruikbaar als losse controle náást de dashboard-backup: hij bewijst dat er een
+herstelpad bestaat dat niet van Supabase's eigen backupfunctie afhangt.
+
+**Er staan geen PostgreSQL-tools op de ontwikkelmachine.** Dat hoeft ook niet — de
+Docker-container `postgres:17.6` bevat `pg_dump` en `pg_restore` in exact dezelfde versie als
+Supabase draait. Een oudere client tegen een nieuwere server geeft problemen, dus houd deze
+versie gelijk aan wat `SHOW server_version` op het origineel teruggeeft.
+
+#### Valkuil 1 — de connectiestring bevat een parameter die pg_dump niet kent
+
+`DATABASE_URL` en `MIGRATION_DATABASE_URL` eindigen op `?schema=public`. Dat is een
+Prisma-conventie; `pg_dump` weigert hem:
+
+```
+pg_dump: error: invalid URI query parameter: "schema"
+```
+
+Strip dat deel van de string voordat je hem gebruikt.
+
+#### Valkuil 2 — Git Bash vertaalt paden naar Windows-vorm
+
+Een pad als `/dump/bestand.dump` wordt binnen Git Bash omgezet naar
+`C:/Program Files/Git/dump/bestand.dump`, waarna de container het niet vindt. Omzeil dit door het
+commando binnen de container in een `sh -c '...'` te wikkelen — dan blijft het pad ongemoeid.
+
+#### De dump maken (alleen lezen van productie)
+
+```bash
+# Connectiestring zonder ?schema=, in een variabele die niet in de shell-historie belandt
+PGURL="postgresql://clm_migrator.<project-ref>:<wachtwoord>@aws-1-eu-west-1.pooler.supabase.com:5432/postgres"
+
+docker run --rm -v "/pad/naar/werkmap:/dump" -e PGURL="$PGURL" postgres:17.6 \
+  sh -c 'pg_dump "$PGURL" --format=custom --no-owner --no-privileges \
+         --schema=clm --schema=ref --schema=audit --file=/dump/clm-enterprise.dump'
+```
+
+Gebruik `clm_migrator`, niet de runtime-rol: die laatste ziet door RLS niet alle rijen.
+
+#### Terugzetten in een verse container
+
+```bash
+docker run -d --name mcm2-restore -e POSTGRES_PASSWORD=postgres -p 55436:5432 \
+  -v "/pad/naar/werkmap:/dump" postgres:17.6
+
+# Rollen aanmaken — die zitten NIET in de dump (zie valkuil 3)
+docker exec -i mcm2-restore psql -U postgres -v ON_ERROR_STOP=1 < db/roles/bootstrap-roles.sql
+docker exec -i mcm2-restore psql -U postgres \
+  -c "ALTER ROLE clm_api_runtime PASSWORD 'test'; ALTER ROLE clm_migrator PASSWORD 'test';"
+
+docker exec mcm2-restore sh -c \
+  'pg_restore --dbname="postgresql://clm_migrator:test@localhost:5432/postgres" \
+              --no-owner --no-privileges /dump/clm-enterprise.dump'
+```
+
+#### Valkuil 3 — na een restore heeft de applicatie géén rechten
+
+Dit is de belangrijkste. Een dump bevat geen rollen en (met `--no-privileges`) geen grants. Na de
+restore heeft alleen `clm_migrator` toegang; `clm_api_runtime` — de rol waarmee de applicatie
+draait — heeft niets. De app zou dus niet opstarten, terwijl de database er verder gaaf uitziet.
+
+Herstel dat door de rechten-migratie opnieuw toe te passen:
+
+```bash
+docker exec -i mcm2-restore psql -U postgres -v ON_ERROR_STOP=1 < drizzle/0001_rolrechten.sql
+```
+
+> **Dit is geen theoretisch detail.** Zonder deze stap meldt de verificatie in 1c dat álle tabellen
+> ontbreken — niet omdat ze weg zijn, maar omdat `information_schema.tables` alleen toont waarop je
+> rechten hebt. Precies het soort verwarring dat je tijdens een incident niet wilt.
+
+#### Valkuil 4 — de UUID-defaults ontbreken in de bestaande database
+
+Een uit `clm-enterprise` herstelde database mist `DEFAULT gen_random_uuid()` op de vijf
+UUID-primaire sleutels (Issue #29). Zolang die daar niet is hersteld, geldt dat ook voor elke
+kopie. Toepassen:
+
+```bash
+docker exec -i mcm2-restore psql -U postgres -v ON_ERROR_STOP=1 \
+  < drizzle/0002_herstel_ontbrekende_defaults.sql
+```
+
+Deze migratie is idempotent — hem tweemaal draaien of toepassen op een database die de defaults al
+heeft, verandert niets.
+
+#### Opruimen
+
+```bash
+docker rm -f mcm2-restore
+rm /pad/naar/werkmap/clm-enterprise.dump
+```
+
+> **Verwijder de dump.** Het is een volledige kopie van de productiedatabase. Zodra er
+> leveranciersdata in staat, is een rondslingerend dumpbestand een datalek-in-wording.
 
 ### 1c. Verifiëren dat de restore klopt
 
@@ -99,6 +201,7 @@ van tabellen, dus het blijft kloppen naarmate de applicatie groeit. Het controle
 - er staan geen tabellen in de database die níet in het schema zitten;
 - RLS actief op elke tenantgebonden tabel (herkend aan de `tenant_id`-kolom);
 - elke policy heeft zowel `USING` als `WITH CHECK`;
+- **elke kolom met een default in het schema heeft die ook in de database** (toegevoegd na #29);
 - de verbinding draait niet als een rol die RLS omzeilt.
 
 **Geslaagd wanneer** het script afsluit met `GOEDGEKEURD`. Bij `AFGEKEURD` somt het per regel op wat
@@ -114,6 +217,19 @@ ontbreekt — dat is de bevinding, niet een reden om het nog eens te proberen.
 > (Database → Tables toont rijaantallen als beheerder) en vergelijk die met het origineel. Zolang de
 > database in de pilotfase leeg is, is dit een formaliteit; zodra er leveranciersdata in staat, is
 > het de belangrijkste controle van de hele test.
+
+### 1c-bis. Bewijzen dat de herstelde database ook echt bruikbaar is
+
+De structuurcontrole zegt dat de tabellen kloppen. Deze stap bewijst dat de applicatie er ook mee
+kan werken — een schrijfactie die faalt op een ontbrekende default zou hierboven onopgemerkt blijven.
+
+```bash
+DATABASE_URL="postgresql://clm_api_runtime:test@localhost:55436/postgres" npm run test:e2e
+```
+
+**Geslaagd wanneer alle tests groen zijn.** Op 2026-07-28 faalden hier 6 van de 20 tegen een uit
+productie herstelde database — precies de vijf UUID-sleutels uit #29. Ná toepassing van migratie
+`0002` waren het er 20 van 20. Dat verschil is de reden dat deze stap bestaat.
 
 ### 1d. Meetwaarden noteren — niet overslaan
 
@@ -207,7 +323,19 @@ eisen uit ADR-011 gelijk blijven, dan is dat een signaal vóórdat het een incid
 
 | Datum | Omvang database | Duur restore (start → geverifieerd) | `verify-schema.js` | Binnen RTO uit ADR-011? | Uitgevoerd door |
 |---|---|---|---|---|---|
-| _(nog niet uitgevoerd)_ | | | | | |
+| 2026-07-28 | 21,7 kB dump, 9 tabellen, geen klantdata | dump 5s + restore 1s + rechten <1s ≈ **10s** | GOEDGEKEURD (na herstel grants én defaults) | Ja, ruim — norm is 1 werkdag | Claude, via `pg_dump`/`pg_restore` in container |
+
+**Toelichting bij de eerste meting.** Dit was een handmatige dump-restore, **niet** de
+dashboard-backup van Supabase. Het bewijst dat er een werkend herstelpad bestaat en levert een
+vertrekpunt voor de reeks, maar het beantwoordt nog niet de vraag uit Issue #19: is Supabase's eigen
+backup herstelbaar? Daarvoor is stap 1a/1b nodig, met dashboardtoegang.
+
+De 10 seconden zeggen bovendien weinig: de database was leeg op drie lookup-tabellen na. Verwacht
+een heel andere orde van grootte zodra er 50 leveranciers, survey-antwoorden en certificaten in
+staan. Dát is precies waarom deze tabel bestaat.
+
+Twee bevindingen uit deze meting zijn als issue vastgelegd: de ontbrekende grants na een restore
+(nu stap 1b-alt, valkuil 3) en de ontbrekende UUID-defaults (Issue #29, valkuil 4).
 
 **Hertest-frequentie** hangt aan de projectfase, zie ADR-011:
 
