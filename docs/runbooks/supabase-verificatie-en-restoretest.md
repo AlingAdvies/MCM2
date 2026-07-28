@@ -361,6 +361,68 @@ Dat laatste is de belangrijkste: drizzle-kit genereert geen RLS (ADR-010), dus e
 opvallen. Beide faalscenario's zijn op 2026-07-28 daadwerkelijk uitgelokt om te bevestigen dat de
 test ook rood wordt wanneer dat hoort.
 
+## Stap 5 — Een andere provider toetsen (optioneel, ~20 minuten)
+
+**Aanleiding:** Supabase Free heeft géén backups en pauzeert projecten na ~7 dagen inactiviteit
+(Issue #30). PITR kost daar **$100/maand bovenop Pro**. Andere aanbieders leveren PITR binnen het
+plan — voor een fractie daarvan. Voordat je $1.500 per jaar vastlegt, is het de moeite waard te
+meten of een overstap realistisch is.
+
+**Waarom dit kán:** MCM2 gebruikt Supabase puur als gehoste PostgreSQL. Geen Supabase Auth, geen
+Storage, geen Edge Functions, geen `supabase-js`. Schema, migraties, rollen en RLS zijn standaard
+PostgreSQL. Dat is geen toeval maar het gevolg van ADR-008 en ADR-009.
+
+### 5a. Gratis project aanmaken bij de kandidaat
+
+Neem het gratis plan — voor deze toets is dat genoeg. Kies een **EU-regio** (bijv. `eu-central-1`,
+Frankfurt) zodat de test representatief is voor waar de data uiteindelijk staat.
+
+Noteer twee connectiestrings:
+
+- één met **beheerrechten** (moet `CREATE ROLE` mogen — het script controleert dat);
+- één voor de **runtime-rol** `clm_api_runtime`. Bestaat die nog niet, verzin dan een wachtwoord:
+  het script maakt de rol aan en zet dat wachtwoord.
+
+> Strip een eventuele `?schema=`-parameter uit beide strings. Dat is een Prisma-conventie die
+> `pg_dump` en sommige drivers weigeren.
+
+### 5b. De toets draaien
+
+```bash
+TARGET_MIGRATION_URL="postgresql://<beheerder>:<pw>@<host>/<db>?sslmode=require" \
+TARGET_RUNTIME_URL="postgresql://clm_api_runtime:<verzonnen-pw>@<host>/<db>?sslmode=require" \
+node scripts/provider-migratietest.js
+```
+
+Het script raakt Supabase niet. Het draait uitsluitend tegen de doelomgeving en doorloopt:
+
+1. verbinding en serverversie (Supabase draait 17.6 — lager kan syntaxverschillen geven);
+2. of de gebruiker rollen en schemas mag aanmaken;
+3. of `gen_random_uuid()` beschikbaar is (nodig voor migratie 0002);
+4. de rollenbootstrap uit `db/roles/bootstrap-roles.sql`;
+5. de volledige migratieketen;
+6. alle 20 e2e-tests: schema-conformiteit, RLS, tenant-isolatie, kolomdefaults.
+
+### 5c. De uitkomst lezen
+
+**`GESCHIKT`** — de provider draait MCM2 zonder aanpassing aan schema, migraties, rollen of RLS.
+Een overstap is dan `pg_dump` → nieuw project → `pg_restore` → grants → connectiestring omzetten;
+zie stap 1b-alt, die route is bewezen.
+
+**`NIET ZONDER MEER GESCHIKT`** — elke bevinding is werk dat een overstap zou kosten. Weeg dat tegen
+het kostenverschil. Twee dingen die het vaakst misgaan bij managed diensten:
+
+- `CREATE ROLE` is voorbehouden aan de provider-beheerder. Dan werkt het vierrollenmodel uit ADR-008
+  niet zonder aanpassing — een reëel bezwaar, want dat model draagt de tenant-isolatie.
+- Connection pooling werkt anders. Meestal configuratiewerk, geen herbouw, maar wel uitzoeken.
+
+### 5d. Uitkomst vastleggen
+
+Noteer het resultaat in Issue #30 en, bij een keuze, in ADR-011 en ADR-002. Een vergelijking die
+alleen in een gesprek bestaat, is bij de volgende kostenafweging weer weg.
+
+---
+
 ## Wat dit runbook niet beantwoordt
 
 Of Supabase de **juiste keuze** blijft voor een platform met NIS2-ambities en betalende klanten.
