@@ -77,9 +77,13 @@ $$;
 ```
 
 De functie draait met de rechten van de eigenaar (`clm_migrator`) en omzeilt dus RLS — maar
-retourneert *alleen* de vier velden die nodig zijn om de context te zetten. Geen antwoorden,
-geen vendorgegevens, geen e-mailadressen. Het aanvalsoppervlak is één rij met vier kolommen,
-alleen bereikbaar met een correcte tokenhash.
+retourneert *alleen* de velden die nodig zijn om de context te zetten en de geldigheid te bepalen.
+Geen antwoorden, geen vendorgegevens, geen e-mailadressen. Het aanvalsoppervlak is één rij met een
+handvol kolommen, alleen bereikbaar met een correcte tokenhash.
+
+> **Let op:** dit is de vereenvoudigde vorm. §5a breidt de functie uit met twee velden
+> (`vendor_active`, `run_closes_at`), omdat een token ook kan doodlopen op gegevens die in de
+> 30 dagen zijn gewijzigd. Die uitgebreide versie is de definitieve.
 
 `SET search_path` is hier geen detail maar een vereiste: zonder dat is een `SECURITY DEFINER`-
 functie kwetsbaar voor search-path-manipulatie. Dit is gedocumenteerd PostgreSQL-gedrag, zie
@@ -180,9 +184,15 @@ Ontwerpkeuzes die de acceptatiecriteria afdwingen op databaseniveau, niet alleen
 | `CHECK (status IN ('pending','submitted','revoked'))` | Geen ongeldige status door een bug |
 | `CHECK (status <> 'submitted' OR submitted_at IS NOT NULL)` | Ingediend zonder tijdstip is onmogelijk |
 | `expires_at NOT NULL` | Een token zonder vervaldatum kan niet bestaan |
+| `vendor_id → clm.vendor ON DELETE RESTRICT` | Een leverancier met responses is niet hard te verwijderen (zie §5a) |
+| `run_id → clm.survey_run ON DELETE RESTRICT` | Een ronde met responses is niet hard te verwijderen |
 
-Die laatste twee zijn bewust: AC11 en AC12 zijn dan niet afhankelijk van de correctheid van
+Die eerste vijf zijn bewust: AC11 en AC12 zijn dan niet afhankelijk van de correctheid van
 applicatiecode. Een fout in de guard leidt tot een databasefout, niet tot een lek.
+
+De twee `RESTRICT`-regels wijken bewust af van het bestaande `vendor_contact`/`vendor_tag`-patroon,
+dat `ON DELETE CASCADE` gebruikt. Een contactpersoon mag met de leverancier meeverdwijnen; een
+ingediende survey-response is bewijsmateriaal en mag dat nooit. Zie §5a.
 
 ### `revoked` als status
 
@@ -244,6 +254,114 @@ antwoorden niet opgeslagen. De database beslist, niet de applicatielogica.
 
 ---
 
+## 5a. Waar het token kan doodlopen — levensduur van de omliggende gegevens
+
+Een token is 30 dagen geldig. In die periode blijft het systeem gewoon in gebruik: de beheerder
+wijzigt leveranciers, sluit rondes, ruimt op. De vorige paragrafen controleerden alleen het token
+zelf (verlopen, ingediend, ingetrokken) en namen stilzwijgend aan dat de gegevens waar het naar
+verwijst intact blijven. Die aanname klopt niet.
+
+Een token kan volledig geldig zijn en toch nergens meer op slaan. Dat is gevaarlijker dan een
+token dat weigert, omdat de fout stil is.
+
+### Wat verandert, en wat dat doet
+
+| Gebeurtenis in de 30 dagen | Effect op het token | Ontwerpbesluit |
+|---|---|---|
+| **Naam van de vendor wijzigt** | Geen. Het token verwijst naar `vendor_id` (een UUID die nooit verandert), niet naar de naam. De rij blijft dezelfde rij. | Geen maatregel nodig — dit is precies waarom naar een ID verwezen wordt en niet naar een naam. |
+| **Vendor zacht verwijderd** (`deleted_at` gevuld) | **Stil falen.** De RLS-policy op `clm.vendor` filtert op `deleted_at IS NULL`, dus de leverancier is onzichtbaar — óók voor het token. De response bestaat nog, de vendor niet meer. | Guard-stap 8b: expliciet controleren, 410 met duidelijke melding. Zie hieronder. |
+| **Vendor hard verwijderd** (`DELETE`) | **Dataverlies.** Bestaande FK's op `vendor_contact`/`vendor_tag` gebruiken `ON DELETE CASCADE`; zonder expliciete keuze zou `survey_response` meegaan — inclusief reeds ingediende antwoorden. | `ON DELETE RESTRICT` op `survey_response.vendor_id`. Een leverancier met responses is niet hard verwijderbaar; zacht verwijderen blijft mogelijk. |
+| **Survey-ronde gesloten** (`closes_at` verstreken) | **Inconsistentie.** Het ontwerp gaf `survey_run` een `closes_at`, maar de guard controleerde die niet. De beheerder sluit de ronde, de tokens werken door. | Guard-stap 8c: `closes_at` meewegen. De striktste van `expires_at` en `closes_at` wint. |
+| **Contactpersoon verwijderd of e-mailadres gewijzigd** | Geen technisch effect — de link is al verstuurd en werkt. Wel operationeel: de link ligt in een mailbox die niemand meer leest. | Geen technische maatregel. Wel een zichtbaarheidseis: zie "openstaande links" hieronder. |
+| **Template gewijzigd of nieuwe versie** | Geen, mits de run naar een vaste templateversie verwijst (§4). | Al afgedekt door `version` op de template. |
+| **Tenant verwijderd** | Niet mogelijk: `vendor_tenant_id_fkey` is al `ON DELETE RESTRICT`. | Bestaand gedrag, geen wijziging. |
+
+### Uitbreiding van de guard
+
+De volgorde uit §5 krijgt drie extra controles, ná stap 8 (`expires_at`) en vóór stap 9
+(tenant-context zetten):
+
+```
+8b. Bestaat de vendor nog en is deleted_at leeg?   → nee: 410 Gone
+8c. Is closes_at van de run verstreken?            → ja:  410 Gone
+8d. Is de run zelf niet ingetrokken/geannuleerd?   → ja:  410 Gone
+```
+
+Deze controles horen in `clm.resolve_survey_token` zelf, niet in losse queries erna. Reden: de
+functie draait `SECURITY DEFINER` en kan daarmee langs de `deleted_at`-filter van de RLS-policy
+kijken — dat is precies wat nodig is om het verschil te zien tussen "bestaat niet" en "is zacht
+verwijderd". Een gewone query ná het zetten van de tenant-context ziet die rij niet en kan de twee
+niet onderscheiden.
+
+De functie uit §2 wordt daarmee:
+
+```sql
+CREATE FUNCTION clm.resolve_survey_token(p_token_hash BYTEA)
+RETURNS TABLE (
+    response_id   UUID,
+    tenant_id     UUID,
+    status        TEXT,
+    expires_at    TIMESTAMPTZ,
+    vendor_active BOOLEAN,     -- vendor bestaat én deleted_at IS NULL
+    run_closes_at TIMESTAMPTZ  -- NULL = geen sluitdatum
+)
+LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = clm, pg_temp
+AS $$
+    SELECT r.response_id,
+           r.tenant_id,
+           r.status,
+           r.expires_at,
+           (v.vendor_id IS NOT NULL AND v.deleted_at IS NULL) AS vendor_active,
+           run.closes_at
+      FROM clm.survey_response r
+      LEFT JOIN clm.vendor     v   ON v.vendor_id = r.vendor_id
+      LEFT JOIN clm.survey_run run ON run.run_id  = r.run_id
+     WHERE r.token_hash = p_token_hash
+$$;
+```
+
+De returnwaarde groeit van vier naar zes velden, alle zes booleans of tijdstippen. Er lekt nog
+steeds geen inhoudelijke gegevens: geen namen, geen e-mailadressen, geen antwoorden. Het
+aanvalsoppervlak blijft "één rij, alleen bereikbaar met een correcte tokenhash".
+
+`LEFT JOIN` en niet `JOIN`: bij een `JOIN` zou een verdwenen vendor de hele rij laten verdwijnen,
+en dan is het onderscheid tussen "token bestaat niet" en "vendor weg" weer weg — precies het stille
+falen dat deze paragraaf wil uitsluiten.
+
+### Foutmeldingen: onderscheid maken waar dat mag
+
+§5 stelde dat onbekend en ingetrokken allebei 404 krijgen, zodat een foutmelding geen informatie
+prijsgeeft. Voor de nieuwe gevallen ligt dat anders — de leverancier hééft een geldige link
+ontvangen, dus er valt niets te verbergen dat hij niet al weet:
+
+| Situatie | Antwoord | Melding aan de leverancier |
+|---|---|---|
+| Token onbekend of ingetrokken | 404 | "Deze link is niet geldig." |
+| Verlopen (`expires_at`) | 410 | "Deze link is verlopen op <datum>. Neem contact op met <tenant>." |
+| Al ingediend | 410 | "Deze vragenlijst is al ingediend op <datum>." |
+| Ronde gesloten | 410 | "Deze vragenlijstronde is gesloten." |
+| Vendor niet meer actief | 410 | "Deze link is niet langer beschikbaar. Neem contact op met <tenant>." |
+
+Bij de laatste bewust geen uitleg over wát er met de leverancier gebeurd is — dat is interne
+informatie van de klant. Wel een duidelijk eindpunt in plaats van een lege pagina of een crash.
+
+### Zichtbaarheid voor de beheerder
+
+Het stille falen is nu een nette foutmelding voor de leverancier, maar de beheerder merkt er niets
+van: die denkt dat er een uitnodiging openstaat. Twee eisen die daaruit volgen:
+
+1. **Zacht verwijderen van een vendor met openstaande responses moet waarschuwen** — "er staan
+   N openstaande uitnodigingen; die worden hiermee ongeldig". Niet blokkeren, wel tonen.
+2. **Het statusoverzicht (journey D) toont een aparte status** voor responses waarvan de
+   onderliggende gegevens weg zijn — niet "openstaand", maar "vervallen". Anders blijft de
+   beheerder wachten op een antwoord dat nooit komt.
+
+Beide raken de beheerderskant, niet de guard. Ze horen in het statusoverzicht en de vendor-CRUD,
+en worden hier vastgelegd zodat ze niet verloren gaan (zie §11).
+
+---
+
 ## 6. Isolatietest (#10) — wat bewezen moet worden
 
 In dezelfde vorm als de bestaande `test/tenant-rls-isolation.e2e-spec.ts`, draaiend in CI tegen
@@ -262,6 +380,20 @@ een wegwerpbare Postgres-container. De test is pas geslaagd als elk van deze pun
 
 Punt 4 verdient een echte gelijktijdigheidstest (twee verbindingen, tegelijk), geen twee
 opeenvolgende aanroepen — anders test je de race niet die je wilt uitsluiten.
+
+Aanvullend, uit §5a — de gevallen waarin het token geldig is maar de omliggende gegevens niet:
+
+| # | Bewijs |
+|---|---|
+| 9 | Naamswijziging van de vendor laat het token ongemoeid werken (het verwijst naar `vendor_id`) |
+| 10 | Zacht verwijderde vendor → 410, geen lege pagina en geen crash |
+| 11 | Harde `DELETE` op een vendor met responses faalt op de FK (`RESTRICT`) |
+| 12 | Token van een gesloten ronde (`closes_at` verstreken) → 410, ook als `expires_at` nog ver weg ligt |
+| 13 | `resolve_survey_token` onderscheidt "onbekend" van "vendor zacht verwijderd" (`LEFT JOIN`-gedrag) |
+
+Punt 9 en 11 zijn de directe aanleiding voor deze uitbreiding: het eerste bevestigt dat een
+alledaagse beheerhandeling geen schade doet, het tweede dat een destructieve handeling geblokkeerd
+wordt in plaats van stilzwijgend data mee te nemen.
 
 ---
 
@@ -352,3 +484,12 @@ faalt, is dat een bevinding over Drizzle die vóór stap 2 bekend moet zijn.
 - **Herverzenden van een link** (leverancier is de e-mail kwijt): het ontwerp maakt dit
   noodzakelijkerwijs "nieuw token genereren, oude intrekken". Dit is een gevolg van het hashen,
   geen apart besluit — maar wel iets wat de beheerder moet kunnen doen. Nog geen issue voor.
+- **Twee eisen aan de beheerderskant uit §5a**, die buiten dit spoor vallen maar er wel uit
+  voortkomen: (a) waarschuwen bij het zacht verwijderen van een vendor met openstaande responses,
+  (b) een aparte "vervallen"-status in het statusoverzicht van journey D. Zonder deze twee lost de
+  guard het stille falen op voor de leverancier, maar blijft de beheerder wachten op een antwoord
+  dat nooit komt. Nog geen issue voor — aanmaken bij goedkeuring van dit ontwerp.
+- **`closes_at` op `survey_run`** stond in het oorspronkelijke schemavoorstel zonder dat enige
+  regel hem gebruikte. Nu meegenomen in de guard (§5a). Of een ronde überhaupt een sluitdatum
+  náást de 30-dagentermijn per token moet hebben, is niet met de klant besproken — aangenomen als
+  nuttig, te bevestigen.
