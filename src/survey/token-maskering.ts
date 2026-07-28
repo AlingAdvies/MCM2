@@ -39,6 +39,20 @@ export function maskeerDiep(waarde: unknown, diepte = 0): unknown {
     return maskeerToken(waarde);
   }
 
+  // Een Error moet vóór de generieke objectbehandeling: `message` en `stack`
+  // zijn niet-opsombare eigenschappen, dus Object.entries() levert een lege
+  // lijst op. Zonder dit geval wordt elke foutmelding een leeg object en zie
+  // je bij een incident niets. Daarom een nieuwe Error met gemaskeerde tekst,
+  // zodat NestJS' eigen foutafhandeling er verder normaal mee omgaat.
+  if (waarde instanceof Error) {
+    const gemaskeerd = new Error(maskeerToken(waarde.message));
+    gemaskeerd.name = waarde.name;
+    if (waarde.stack) {
+      gemaskeerd.stack = maskeerToken(waarde.stack);
+    }
+    return gemaskeerd;
+  }
+
   if (Array.isArray(waarde)) {
     return waarde.map((item) => maskeerDiep(item, diepte + 1));
   }

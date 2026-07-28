@@ -241,6 +241,25 @@ describe('Leverancierroutes (e2e)', () => {
     );
   });
 
+  it('houdt de foutmelding van een Error leesbaar', () => {
+    // Regressietest. De eerste versie liet maskeerDiep over Object.entries()
+    // lopen; bij een Error is die lijst leeg omdat message en stack
+    // niet-opsombaar zijn. Gevolg: elke foutmelding werd `{}` — in CI viel dat
+    // op doordat de container "Object(0) {}" logde in plaats van de
+    // configuratiefout. Bij een incident zou je dan niets zien.
+    const token = genereerToken();
+    const origineel = new Error(
+      `Verzoek mislukt voor /survey/respond?t=${token}`,
+    );
+
+    const gemaskeerd = maskeerDiep(origineel) as Error;
+
+    expect(gemaskeerd).toBeInstanceOf(Error);
+    expect(gemaskeerd.message).toContain('Verzoek mislukt');
+    expect(gemaskeerd.message).toContain('[GEMASKEERD]');
+    expect(gemaskeerd.message).not.toContain(token);
+  });
+
   it('maskeert tokens in geneste logcontext', () => {
     const token = genereerToken();
 
