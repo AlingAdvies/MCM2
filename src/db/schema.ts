@@ -219,8 +219,27 @@ export const surveyRun = clm.table(
     // ontwerp §5a.
     closesAt: timestamp('closes_at', { withTimezone: true }),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    // Op welk contract deze ronde betrekking heeft.
+    //
+    // Nog niet in gebruik en bewust zonder foreign key: er bestaat nog geen
+    // clm.contract-tabel. MCM2 heeft vendor en vendor_contact wél, contracten
+    // niet — dat is een eigen bouwspoor (zie docs/STATUS.md).
+    //
+    // Nu toegevoegd op verzoek van de eigenaar, omdat de kolom later toevoegen
+    // een migratie kost op een tabel die dan gevulde, mogelijk bevroren rondes
+    // bevat. Als lege kolom is dat een ALTER die niets hoeft te backfillen;
+    // straks is het alleen nog de FK erbij leggen.
+    //
+    // Nullable blijft het ook daarna: een ronde hoeft niet aan een contract te
+    // hangen. Een leverancier kan beoordeeld worden vóór er een overeenkomst
+    // is, en de acht Transdev-vragen gaan over de organisatie, niet over één
+    // contract.
+    contractId: uuid('contract_id'),
   },
-  (t) => [index('survey_run_tenant_id_idx').on(t.tenantId)],
+  (t) => [
+    index('survey_run_tenant_id_idx').on(t.tenantId),
+    index('survey_run_contract_id_idx').on(t.contractId),
+  ],
 );
 
 export const surveyResponse = clm.table(

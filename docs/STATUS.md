@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-29, tweede sessie (vragenlijst-tool t/m **stap 4**: import/export én beide seeds; 89 e2e-tests groen — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+2026-07-29, tweede sessie (vragenlijst-tool t/m **stap 4**: import/export én beide seeds; `contract_id` op `survey_run`; alle blokkerende ontwerpvragen beantwoord; 92 e2e-tests groen — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
 
 ## Het project bestaat uit twee repositories
 
@@ -32,7 +32,7 @@ docker run -d --name mcm2test -e POSTGRES_PASSWORD=pw -p 55440:5432 postgres:17.
 docker exec -i mcm2test psql -U postgres -q < db/roles/bootstrap-roles.sql
 docker exec mcm2test psql -U postgres -c "ALTER ROLE clm_migrator WITH PASSWORD 'pw'; ALTER ROLE clm_api_runtime WITH PASSWORD 'pw';"
 MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres" npm run migrate:deploy
-DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" npm run test:e2e   # 89 tests
+DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" npm run test:e2e   # 92 tests
 
 # De twee vragenlijsten inlezen (tenant moet bestaan)
 DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" \
@@ -85,7 +85,13 @@ Uit de vergelijking (ontwerp §1a-bis) kwam dat beide modellen onafhankelijk gro
 - **`frameworkRef` niet** — koppelt een vraag aan een normartikel en loopt vooruit op meerdere compliance-frameworks. Nu bouwen we NIS2. De tool is al framework-agnostisch; een tweede framework is straks een tweede import.
 - **`date` als negende vraagtype niet** — geen van beide use cases gebruikt het.
 
-**Nog open in het ontwerp (voorstellen, niet bevestigd, geen van alle blokkerend):** dat een gestarte ronde de vragenlijst bevriest (§2), dat een toelichting ook verplicht is bij "I do not confirm" (§3), en wat er gebeurt bij een geïmporteerd e-mailadres zonder bekende vendor (§2c — advies: weigeren, niet automatisch aanmaken).
+**De drie laatste openstaande ontwerpvoorstellen zijn op 2026-07-29 bevestigd door de eigenaar,** alle drie conform advies:
+
+- **Een gestarte ronde bevriest de vragenlijst** (§2). Wijzigen mag altijd maar raakt alleen nieuwe rondes; een vragenlijst met een niet-`draft` ronde is uitsluitend te kopiëren naar een nieuwe versie. Zonder die regel krijg je antwoorden op vragen die inmiddels anders luiden. Al gebouwd als trigger in migratie 0005.
+- **Een toelichting is óók verplicht bij "I do not confirm"** (§3). De regel luidt daarmee: *alles behalve een bevestiging vereist uitleg*, minimaal 10 tekens. Al gebouwd als CHECK-constraint in migratie 0005.
+- **Een geïmporteerd e-mailadres zonder bekende vendor wordt geweigerd en teruggemeld** (§2c), met een expliciete "aanmaken"-stap. Automatisch aanmaken zou binnen een jaar dubbele records opleveren. **Nog niet gebouwd** — landt bij stap 10 (deelnemersbeheer).
+
+Daarmee zijn alle blokkerende ontwerpvragen beantwoord. Wat nog openstaat in §11 raakt geen enkele bouwstap: of UC1 en UC2 dezelfde templates delen, hoe meerdere interne scores samengevat worden, en of een toelichting buiten `confirmation` überhaupt moet kunnen.
 
 **Drie dingen raken bestaande, groene code** en verdienen aandacht bij het bouwen: `survey_run` krijgt drie kolommen (`status`, `is_test`, `survey_kind`), `survey_response` krijgt er drie (`subject_vendor_id`, `respondent_user_id`, `respondent_label`) waarbij `vendor_id` **nullable** wordt, en de bestaande guard moet de ronde-status meewegen naast `closes_at`/`revoked_at`. Die nullable-wijziging is een versoepeling op een tabel die vanochtend gemerged is — de UC1-garantie wordt overgenomen door een partiële unieke index plus twee CHECK-constraints, en testpunten 41 t/m 43 horen te bewijzen dat er niets weglekt.
 
@@ -258,7 +264,11 @@ Op 2026-07-29 stelde de eigenaar vast dat de survey **onderdeel is van een contr
 
 **Wat dit kost, expliciet:** een survey die niet weet op welk contract hij slaat is functioneel incompleet — "hoe scoort deze leverancier" zonder "op welke overeenkomst" is een half oordeel. Dat gat blijft bestaan tot het contractspoor er is. Het is wél een *toevoeging* later (`contract_id` op `survey_run`, plus een FK), geen herbouw.
 
-**Nog te beslissen:** of `survey_run` alvast een ongebruikte `contract_id UUID NULL` krijgt. Kosten nu: één regel. Kosten later zonder: één extra migratie op een tabel die dan gevulde rondes bevat. Voorgelegd, nog geen antwoord.
+**Besluit eigenaar 2026-07-29: `survey_run` krijgt nu een `contract_id`** — migratie 0007, nullable en bewust nog zonder foreign key, want `clm.contract` bestaat niet. Als lege kolom hoefde de ALTER niets te backfillen; straks bevat de tabel gevulde rondes en maakt de bevriezingstrigger uit 0005 wijzigen rond lopende rondes bewust lastig. Nullable blijft het ook na invoering van de contracttabel: een leverancier kan beoordeeld worden vóór er een overeenkomst is.
+
+Drie tests in `test/schema-conformiteit.e2e-spec.ts` bewaken de kolom. De middelste is zo geschreven dat hij automatisch omslaat: zolang `clm.contract` niet bestaat eist hij géén foreign key, zodra die tabel er wél is eist hij er één. **Dat is de plek die eraan herinnert wanneer de FK gelegd moet worden.**
+
+**Aandachtspunt voor het contractspoor:** zodra `clm.contract` bestaat, moet die tabel een eigen RLS-policy krijgen vóórdat de foreign key gelegd wordt. Een verwijzing naar een tabel zonder RLS is een lek.
 
 ## Lessen uit deze sessies die tijd besparen
 
@@ -294,10 +304,12 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 | Repo | Branch | Werkboom | Openstaande PR's |
 |---|---|---|---|
-| MCM2 | **`feat/vragenlijst-import-export`** | schoon | nog niet gepusht |
+| MCM2 | **`feat/contract-op-survey-run`** | schoon | nog niet gepusht |
 | MCM2-frontend | `main` | schoon | geen |
 
-**`feat/vragenlijst-import-export` staat open met twee commits** (stap 3 en stap 4 uit de bouwvolgorde) plus deze statusbijwerking. Nog niet naar GitHub gepusht, dus nog geen PR en geen CI-run — de poorten zijn wél lokaal gedraaid: format, lint, typecheck, 89/89 e2e tegen een verse Postgres 17.6, en de Docker-productiebuild die start en `/health` met HTTP 200 beantwoordt.
+**PR #37 (stap 3 en 4) is gemerged naar `main`** (merge-commit `ef62cd6`), CI groen op alle drie de jobs, branch lokaal én op GitHub verwijderd. Na de merge opnieuw geverifieerd tégen `main`: volledige migratieketen op een verse Postgres 17.6, daarna 89/89 e2e groen.
+
+**`feat/contract-op-survey-run` staat open met één commit:** migratie 0007 (`contract_id` op `survey_run`) plus deze statusbijwerking en de drie bevestigde ontwerpbesluiten. Nog niet gepusht. Lokale poorten wél gedraaid: format, lint, typecheck en 92/92 e2e tegen een verse Postgres 17.6.
 
 - **`docs/sessiestand-otap` is op 2026-07-29 via PR #35 gemerged naar `main`** (merge-commit `cbe6c48`) en daarna lokaal én op GitHub verwijderd. Eén commit: uitsluitend deze statusbijwerking.
 - **`feat/issue-7-leveranciertoken` is op 2026-07-29 via PR #32 gemerged naar `main`** (merge-commit `7f0cc01`) en daarna lokaal én op GitHub verwijderd. CI groen op alle drie de jobs vóór de merge, opnieuw geverifieerd met `gh pr checks 32` op de laatste commit. Vijf commits: de tokenlaag, de HTTP-routes met logmaskering en auditregels, de fix op `maskeerDiep`, plus twee documentatiecommits. **Issue #31 is bij die merge gesloten** — migratie `0004` loste hem op. Let op: die migratie is bewezen in CI, **niet toegepast op `clm-enterprise`** — net als #29 en #25 wacht dat op #30.
