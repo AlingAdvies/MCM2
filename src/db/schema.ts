@@ -198,6 +198,18 @@ export const surveyRun = clm.table(
     templateId: uuid('template_id')
       .notNull()
       .references(() => surveyTemplate.templateId, { onDelete: 'restrict' }),
+    // Welke van de twee use cases deze ronde bedient (ontwerp §1c).
+    // 'vendor_compliance': de leverancier vult zelf in over zichzelf.
+    // 'internal_review':   een collega beoordeelt de leverancier.
+    surveyKind: text('survey_kind').notNull().default('vendor_compliance'),
+    // Lifecycle uit ontwerp §2b: draft → active → finished → archived.
+    // Was voorheen impliciet af te leiden uit closes_at/revoked_at; expliciet
+    // maken voorkomt dat de eerste uitzondering die afleiding breekt.
+    status: text('status').notNull().default('draft'),
+    // Test Mode (ontwerp §2b): een echte run met een echt token, alleen
+    // gemarkeerd. Bewust geen sandbox die de guard omzeilt — dan test je een
+    // nabootsing in plaats van het werkelijke pad.
+    isTest: boolean('is_test').notNull().default(false),
     startedAt: timestamp('started_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -223,9 +235,29 @@ export const surveyResponse = clm.table(
       // RESTRICT, niet CASCADE zoals vendor_contact/vendor_tag: een ingediende
       // response is bewijsmateriaal en mag nooit stilzwijgend meeverdwijnen.
       .references(() => surveyRun.runId, { onDelete: 'restrict' }),
-    vendorId: uuid('vendor_id')
+    // De leverancier als DEELNEMER: wie vult in. Leeg bij UC2 — daar vult een
+    // Transdev-collega in, en die is geen leverancier. Was NOT NULL vóór
+    // ontwerp §1c; de UC1-garantie is overgenomen door de partiële unieke
+    // index en de twee CHECK-constraints in migratie 0005.
+    vendorId: uuid('vendor_id').references(() => vendor.vendorId, {
+      onDelete: 'restrict',
+    }),
+    // De leverancier als ONDERWERP: over wie gaat het. Bij beide use cases
+    // gevuld. Bij UC1 dezelfde rij als vendor_id — dat is geen redundantie
+    // maar de vastlegging dat de leverancier daar zelf aan het woord is.
+    // Hierdoor staan de zelfverklaring (UC1) en de praktijkscore (UC2) over
+    // dezelfde partij automatisch naast elkaar.
+    subjectVendorId: uuid('subject_vendor_id')
       .notNull()
       .references(() => vendor.vendorId, { onDelete: 'restrict' }),
+    // Alleen UC2. Optioneel: de tokenroute vraagt geen account, dus een
+    // invuller hoeft geen clm.user-record te hebben. Wordt bruikbaar zodra
+    // spoor 1 (Entra-guard) er is.
+    respondentUserId: uuid('respondent_user_id').references(() => user.userId, {
+      onDelete: 'set null',
+    }),
+    // Naam of rol van de invuller wanneer er geen user-record is.
+    respondentLabel: text('respondent_label'),
     // SHA-256 van het ruwe token, nooit het token zelf. Scheidt databasetoegang
     // van surveytoegang: een databasedump geeft geen toegang tot openstaande
     // surveys. Geen bcrypt/argon2 — de invoer is 256 bits entropie, dus een
@@ -240,8 +272,200 @@ export const surveyResponse = clm.table(
   },
   (t) => [
     uniqueIndex('survey_response_token_hash_key').on(t.tokenHash),
-    uniqueIndex('survey_response_run_vendor_key').on(t.runId, t.vendorId),
+    // Partieel: geldt alleen waar vendor_id gevuld is (UC1). Daarmee blijft
+    // "één leverancier, één respons" volledig gelden, terwijl UC2 meerdere
+    // collega's per leverancier toestaat. Een niet-partiële variant zou bij
+    // het toelaten van UC2 ook de UC1-garantie verzwakken.
+    uniqueIndex('survey_response_run_vendor_key')
+      .on(t.runId, t.vendorId)
+      .where(sql`${t.vendorId} IS NOT NULL`),
     index('survey_response_tenant_id_idx').on(t.tenantId),
+    index('survey_response_subject_vendor_id_idx').on(t.subjectVendorId),
+  ],
+);
+
+// ─── clm schema: vragenlijst-cluster ──────────────────────────────────────
+// Zie docs/superpowers/specs/2026-07-28-vragenlijst-ontwerp.md.
+// Niveau B: de tenant kiest per vraag een antwoordtype uit acht.
+
+// Categorieën zijn optioneel per vragenlijst (ontwerp §2). UC1 (de acht
+// Transdev-vragen) heeft er geen; UC2 heeft er vijf met een score per
+// categorie. MVM_V2 is hierin functioneel leidend.
+export const surveyCategory = clm.table(
+  'survey_category',
+  {
+    categoryId: uuid('category_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    templateId: uuid('template_id')
+      .notNull()
+      .references(() => surveyTemplate.templateId, { onDelete: 'restrict' }),
+    position: integer('position').notNull(),
+    name: text('name').notNull(),
+    // Onder deze drempel is de categoriescore null in plaats van een
+    // gemiddelde over te weinig punten. Bij Transdev staat die op 3: zonder
+    // deze regel zou één ingevulde vraag uit vier een volwaardig ogende score
+    // opleveren. Overgenomen uit MVM_V2's minAnswersPerCategory.
+    minAnswers: smallint('min_answers').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('survey_category_template_position_key').on(
+      t.templateId,
+      t.position,
+    ),
+    uniqueIndex('survey_category_template_name_key').on(t.templateId, t.name),
+    // Doel van deze index is niet snelheid maar de samengestelde foreign key
+    // vanuit survey_question: die dwingt af dat een vraag geen categorie van
+    // een ándere template kan aanwijzen.
+    uniqueIndex('survey_category_id_template_key').on(
+      t.categoryId,
+      t.templateId,
+    ),
+    index('survey_category_tenant_id_idx').on(t.tenantId),
+  ],
+);
+
+export const surveyQuestion = clm.table(
+  'survey_question',
+  {
+    questionId: uuid('question_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    templateId: uuid('template_id')
+      .notNull()
+      .references(() => surveyTemplate.templateId, { onDelete: 'restrict' }),
+    // Nullable: een vragenlijst is óf ingedeeld in categorieën óf een platte
+    // lijst. Verplicht stellen zou UC1 dwingen tot een kunstmatige
+    // "Algemeen"-categorie die nergens getoond wordt. De samengestelde FK naar
+    // (category_id, template_id) staat in migratie 0005.
+    categoryId: uuid('category_id'),
+    position: integer('position').notNull(),
+    // Stabiele tekstsleutel naast de UUID. Bij een nieuwe templateversie
+    // krijgt vraag 4 een nieuwe question_id maar behoudt question_key = 'q4',
+    // zodat antwoorden over versies heen vergelijkbaar blijven. Zonder dat is
+    // een jaar-op-jaar-vergelijking niet te maken — precies het punt van een
+    // jaarlijkse compliance-survey.
+    questionKey: text('question_key').notNull(),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    // Een van de acht typen uit ontwerp §2a. De toegestane waarden staan als
+    // CHECK-constraint in migratie 0005.
+    answerType: text('answer_type').notNull(),
+    // Typespecifieke instellingen: options[], min/max, schaallabels,
+    // comment-plicht. Bewust JSONB en geen twintig kolommen — een kolom per
+    // instelling geeft een tabel die grotendeels NULL is en een migratie per
+    // nieuw vraagtype. Let op: de database bewaakt de inhoud hiervan niet
+    // (ontwerp §2a), dat is servicelaagwerk.
+    config: jsonb('config').notNull().default({}),
+    isRequired: boolean('is_required').notNull().default(true),
+    allowsUpload: boolean('allows_upload').notNull().default(false),
+    maxFiles: smallint('max_files').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('survey_question_template_key_key').on(
+      t.templateId,
+      t.questionKey,
+    ),
+    uniqueIndex('survey_question_template_position_key').on(
+      t.templateId,
+      t.position,
+    ),
+    // Weer geen snelheidsindex: nodig voor de samengestelde FK vanuit
+    // survey_answer, die het antwoordtype aan dat van de vraag koppelt.
+    uniqueIndex('survey_question_id_answer_type_key').on(
+      t.questionId,
+      t.answerType,
+    ),
+    index('survey_question_tenant_id_idx').on(t.tenantId),
+    index('survey_question_category_id_idx').on(t.categoryId),
+  ],
+);
+
+export const surveyAnswer = clm.table(
+  'survey_answer',
+  {
+    answerId: uuid('answer_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    responseId: uuid('response_id')
+      .notNull()
+      .references(() => surveyResponse.responseId, { onDelete: 'restrict' }),
+    questionId: uuid('question_id')
+      .notNull()
+      .references(() => surveyQuestion.questionId, { onDelete: 'restrict' }),
+    // Bewust gedupliceerd vanaf de vraag. Zonder deze kolom zou de
+    // vormconstraint hieronder de vraagtabel moeten raadplegen, en dat kan een
+    // CHECK niet. De samengestelde FK in migratie 0005 zorgt dat de waarde
+    // nooit kan afwijken van die op de vraag.
+    answerType: text('answer_type').notNull(),
+    // Aparte kolommen per waardesoort, geen JSONB. Reden is bruikbaarheid
+    // achteraf: een rating in NUMERIC is te sorteren, middelen en aggregeren.
+    // Dezelfde waarde als tekst in JSONB is dat niet — daar moet elke query
+    // casten en laat één niet-numerieke waarde de hele query klappen.
+    answerCode: text('answer_code'),
+    answerCodes: text('answer_codes').array(),
+    answerText: text('answer_text'),
+    answerNumber: numeric('answer_number'),
+    comment: text('comment'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('survey_answer_response_question_key').on(
+      t.responseId,
+      t.questionId,
+    ),
+    index('survey_answer_tenant_id_idx').on(t.tenantId),
+    index('survey_answer_response_id_idx').on(t.responseId),
+  ],
+);
+
+export const surveyAttachment = clm.table(
+  'survey_attachment',
+  {
+    attachmentId: uuid('attachment_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    responseId: uuid('response_id')
+      .notNull()
+      .references(() => surveyResponse.responseId, { onDelete: 'restrict' }),
+    questionId: uuid('question_id')
+      .notNull()
+      .references(() => surveyQuestion.questionId, { onDelete: 'restrict' }),
+    // Zoals de leverancier hem aanleverde. Nooit als pad gebruiken:
+    // '../../etc/passwd.pdf' is een geldige bestandsnaam.
+    originalName: text('original_name').notNull(),
+    // Servergegenereerd: <tenant_id>/<response_id>/<uuid>. Geen enkel teken
+    // uit de invoer.
+    storageKey: text('storage_key').notNull(),
+    // Wat de server heeft vastgesteld uit de eerste bytes, niet wat de client
+    // beweerde (ontwerp §6).
+    contentType: text('content_type').notNull(),
+    byteSize: integer('byte_size').notNull(),
+    // Bij een compliance-bewijsstuk moet later aantoonbaar zijn dat het
+    // bestand niet gewijzigd is sinds indiening. Zelfde redenering als achter
+    // de append-only audit trail.
+    sha256: text('sha256').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('survey_attachment_storage_key_key').on(t.storageKey),
+    index('survey_attachment_tenant_id_idx').on(t.tenantId),
+    index('survey_attachment_response_id_idx').on(t.responseId),
   ],
 );
 
@@ -304,6 +528,15 @@ export const vendorRelations = relations(vendor, ({ one, many }) => ({
   }),
   contacts: many(vendorContact),
   tags: many(vendorTag),
+  // Twee verwijzingen naar dezelfde tabel: de leverancier is bij UC1 de
+  // deelnemer en bij UC2 het onderwerp. Drizzle vereist expliciete
+  // relationName's om die uit elkaar te houden.
+  responsesAsParticipant: many(surveyResponse, {
+    relationName: 'responseParticipant',
+  }),
+  responsesAsSubject: many(surveyResponse, {
+    relationName: 'responseSubject',
+  }),
 }));
 
 export const vendorContactRelations = relations(vendorContact, ({ one }) => ({
@@ -328,6 +561,75 @@ export const surveyTemplateRelations = relations(
       references: [tenant.tenantId],
     }),
     runs: many(surveyRun),
+    categories: many(surveyCategory),
+    questions: many(surveyQuestion),
+  }),
+);
+
+export const surveyCategoryRelations = relations(
+  surveyCategory,
+  ({ one, many }) => ({
+    tenant: one(tenant, {
+      fields: [surveyCategory.tenantId],
+      references: [tenant.tenantId],
+    }),
+    template: one(surveyTemplate, {
+      fields: [surveyCategory.templateId],
+      references: [surveyTemplate.templateId],
+    }),
+    questions: many(surveyQuestion),
+  }),
+);
+
+export const surveyQuestionRelations = relations(
+  surveyQuestion,
+  ({ one, many }) => ({
+    tenant: one(tenant, {
+      fields: [surveyQuestion.tenantId],
+      references: [tenant.tenantId],
+    }),
+    template: one(surveyTemplate, {
+      fields: [surveyQuestion.templateId],
+      references: [surveyTemplate.templateId],
+    }),
+    category: one(surveyCategory, {
+      fields: [surveyQuestion.categoryId],
+      references: [surveyCategory.categoryId],
+    }),
+    answers: many(surveyAnswer),
+  }),
+);
+
+export const surveyAnswerRelations = relations(surveyAnswer, ({ one }) => ({
+  tenant: one(tenant, {
+    fields: [surveyAnswer.tenantId],
+    references: [tenant.tenantId],
+  }),
+  response: one(surveyResponse, {
+    fields: [surveyAnswer.responseId],
+    references: [surveyResponse.responseId],
+  }),
+  question: one(surveyQuestion, {
+    fields: [surveyAnswer.questionId],
+    references: [surveyQuestion.questionId],
+  }),
+}));
+
+export const surveyAttachmentRelations = relations(
+  surveyAttachment,
+  ({ one }) => ({
+    tenant: one(tenant, {
+      fields: [surveyAttachment.tenantId],
+      references: [tenant.tenantId],
+    }),
+    response: one(surveyResponse, {
+      fields: [surveyAttachment.responseId],
+      references: [surveyResponse.responseId],
+    }),
+    question: one(surveyQuestion, {
+      fields: [surveyAttachment.questionId],
+      references: [surveyQuestion.questionId],
+    }),
   }),
 );
 
@@ -343,20 +645,37 @@ export const surveyRunRelations = relations(surveyRun, ({ one, many }) => ({
   responses: many(surveyResponse),
 }));
 
-export const surveyResponseRelations = relations(surveyResponse, ({ one }) => ({
-  tenant: one(tenant, {
-    fields: [surveyResponse.tenantId],
-    references: [tenant.tenantId],
+export const surveyResponseRelations = relations(
+  surveyResponse,
+  ({ one, many }) => ({
+    tenant: one(tenant, {
+      fields: [surveyResponse.tenantId],
+      references: [tenant.tenantId],
+    }),
+    run: one(surveyRun, {
+      fields: [surveyResponse.runId],
+      references: [surveyRun.runId],
+    }),
+    // De leverancier als deelnemer (UC1); leeg bij UC2.
+    vendor: one(vendor, {
+      fields: [surveyResponse.vendorId],
+      references: [vendor.vendorId],
+      relationName: 'responseParticipant',
+    }),
+    // De leverancier als onderwerp; bij beide use cases gevuld.
+    subjectVendor: one(vendor, {
+      fields: [surveyResponse.subjectVendorId],
+      references: [vendor.vendorId],
+      relationName: 'responseSubject',
+    }),
+    respondent: one(user, {
+      fields: [surveyResponse.respondentUserId],
+      references: [user.userId],
+    }),
+    answers: many(surveyAnswer),
+    attachments: many(surveyAttachment),
   }),
-  run: one(surveyRun, {
-    fields: [surveyResponse.runId],
-    references: [surveyRun.runId],
-  }),
-  vendor: one(vendor, {
-    fields: [surveyResponse.vendorId],
-    references: [vendor.vendorId],
-  }),
-}));
+);
 
 // ─── Tenant-context ────────────────────────────────────────────────────────
 // Iedere tenantgebonden query draait binnen een transactie die begint met

@@ -58,18 +58,23 @@ describe('Leverancierstoken — isolatie en levenscyclus (e2e)', () => {
             RETURNING template_id`,
       );
 
+      // status 'active': survey_run heeft sinds migratie 0005 een expliciete
+      // lifecycle met 'draft' als default (ontwerp §2b).
       const run = await tx.execute<{ run_id: string }>(
-        sql`INSERT INTO clm.survey_run (tenant_id, template_id, closes_at, revoked_at)
-            VALUES (${tenantId}, ${template.rows[0].template_id},
+        sql`INSERT INTO clm.survey_run (tenant_id, template_id, status, closes_at, revoked_at)
+            VALUES (${tenantId}, ${template.rows[0].template_id}, 'active',
                     ${opties.rondeGesloten ? new Date(Date.now() - 1000) : null},
                     ${opties.rondeIngetrokken ? new Date() : null})
             RETURNING run_id`,
       );
 
+      // UC1-respons: deelnemer en onderwerp zijn dezelfde leverancier.
       const response = await tx.execute<{ response_id: string }>(
         sql`INSERT INTO clm.survey_response
-              (tenant_id, run_id, vendor_id, token_hash, status, expires_at, submitted_at)
-            VALUES (${tenantId}, ${run.rows[0].run_id}, ${vendorId}, ${hashToken(token)},
+              (tenant_id, run_id, vendor_id, subject_vendor_id, token_hash,
+               status, expires_at, submitted_at)
+            VALUES (${tenantId}, ${run.rows[0].run_id}, ${vendorId}, ${vendorId},
+                    ${hashToken(token)},
                     ${opties.status ?? 'pending'}, ${verval},
                     ${opties.status === 'submitted' ? new Date() : null})
             RETURNING response_id`,

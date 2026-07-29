@@ -57,14 +57,22 @@ describe('Leverancierroutes (e2e)', () => {
         sql`INSERT INTO clm.survey_template (tenant_id, name) VALUES (${TENANT}, ${`t-${opties.naam}`})
             RETURNING template_id`,
       );
+      // status 'active': sinds migratie 0005 heeft survey_run een expliciete
+      // lifecycle met 'draft' als default (ontwerp §2b). Een draft-ronde is
+      // voor een leverancier niet bereikbaar.
       const run = await tx.execute<{ run_id: string }>(
-        sql`INSERT INTO clm.survey_run (tenant_id, template_id)
-            VALUES (${TENANT}, ${template.rows[0].template_id}) RETURNING run_id`,
+        sql`INSERT INTO clm.survey_run (tenant_id, template_id, status)
+            VALUES (${TENANT}, ${template.rows[0].template_id}, 'active') RETURNING run_id`,
       );
+      // subject_vendor_id is sinds migratie 0005 verplicht. Dit is een
+      // UC1-respons (vendor_compliance), dus deelnemer en onderwerp zijn
+      // dezelfde leverancier — de trigger assert_response_rollen eist dat.
       await tx.execute(
         sql`INSERT INTO clm.survey_response
-              (tenant_id, run_id, vendor_id, token_hash, status, expires_at, submitted_at)
+              (tenant_id, run_id, vendor_id, subject_vendor_id, token_hash,
+               status, expires_at, submitted_at)
             VALUES (${TENANT}, ${run.rows[0].run_id}, ${vendor.rows[0].vendor_id},
+                    ${vendor.rows[0].vendor_id},
                     ${hashToken(token)}, ${opties.status ?? 'pending'}, ${verval},
                     ${opties.status === 'submitted' ? new Date() : null})`,
       );
