@@ -138,6 +138,45 @@ Concept opslaan blijft nodig om een praktische reden die niets met auto-save te 
 vragen met verplichte toelichtingen vul je niet in één keer in, en het token is gehasht en dus niet
 opnieuw te versturen. Zonder opslaan verliest iemand die een tabblad sluit alles, onherstelbaar.
 
+### 1a-bis. Vergelijking met MVM_V2 (2026-07-29)
+
+MVM_V2 heeft al werkende surveyschermen op mock data, en de klant heeft die gezien. Ze zijn op
+2026-07-29 vergeleken met dit ontwerp. **De twee modellen zijn onafhankelijk van elkaar ontworpen
+en komen grotendeels overeen** — dat is een sterker signaal dan wanneer ze op elkaar waren
+afgestemd.
+
+| MVM_V2 (`src/core/models/index.ts`) | Dit ontwerp | Uitkomst |
+|---|---|---|
+| `QuestionType`: `text \| yes_no \| multiple_choice \| date \| upload` | acht typen (§2a) | deelverzameling, sluit aan |
+| `required` | `is_required` | zelfde |
+| `options[]` | `config.options[]` | zelfde |
+| `order` | `position` | zelfde |
+| `requiresEvidence` | `allows_upload` | zelfde, andere naam |
+| `confirmationStyle: boolean` | eigen type `confirmation` | dit ontwerp is expliciever |
+| `date` als type | ontbreekt | **niet bouwen**, zie hieronder |
+| `frameworkRef` ("NIS2 Art. 21.2.b") | ontbreekt | **niet bouwen**, zie hieronder |
+| `categories[]` met score per categorie | platte lijst | zie §1c |
+
+**`frameworkRef` wordt niet gebouwd** (besluit opdrachtgever 2026-07-29). Het koppelt een vraag aan
+een normartikel en dient rapportage over raamwerkdekking. Dat loopt vooruit op meerdere
+compliance-frameworks; **nu bouwen we NIS2**.
+
+Belangrijk onderscheid daarbij, zodat dit besluit later niet verkeerd gelezen wordt: **de tool is
+al framework-agnostisch, alleen de vragen zijn framework-specifiek.** Niets in dit ontwerp neemt
+aan dat er één vragenlijst bestaat — `survey_template` heeft `name` en `version`, en een tweede
+vragenlijst voor een ander framework is straks simpelweg een tweede import (§2d). Wat hier wegvalt
+is uitsluitend de *metadata* die vastlegt bij welk artikel een vraag hoort. Er hoeft dus niets
+gebouwd te worden om die deur open te houden; hij staat al open.
+
+**`date` als negende vraagtype wordt niet gebouwd.** Geen van de acht Transdev-vragen gebruikt het
+en UC2 is een rating. Acht typen volstaan voor beide use cases. Toevoegen is later één waarde in de
+`CHECK`-lijst plus een validatieregel en een kolom die er al is (`answer_text` of een aparte
+`answer_date`) — geen verbouwing.
+
+**Wat wél uit MVM_V2 wordt overgenomen:** de designtaal (`src/shared/design-tokens.ts`), het
+layout, en de schermen als functionele specificatie. Zie het frontendspoor; dat staat los van dit
+ontwerp.
+
 ### 1c. Twee use cases — de scopegrens van de MVP
 
 De MVP ondersteunt precies twee soorten surveys. **Functionaliteit die daarbuiten valt, wordt niet
@@ -1118,6 +1157,8 @@ een voorstel is de toets: *dient dit UC1 of UC2?* Zo niet, dan hoort het in deze
 | Voorwaardelijke logica (logic jumps), secties | Niveau C. Uitgesteld op 2026-07-29 (§1a). Eigen bouwstap ná een werkende B. |
 | AI-beoordeling (Gemini) | Uitgesteld op 2026-07-29 (§1a). Externe dienst plus een openstaande verwerkersvraag. |
 | EFQM KPI-sync | Uitgesteld op 2026-07-29 (§1a) |
+| `frameworkRef` — vraag koppelen aan een normartikel | Uitgesteld op 2026-07-29 (§1a-bis). Loopt vooruit op meerdere frameworks; nu bouwen we NIS2. De tool zelf is al framework-agnostisch. |
+| `date` als negende vraagtype | Uitgesteld op 2026-07-29 (§1a-bis). Geen van beide use cases gebruikt het. |
 | Marketing Mode (publieke anonieme surveys) | Uitgesteld op 2026-07-29 (§1a). Botst met één-link-per-vendor. |
 | Radar/spider charts, rapportage | Uitgesteld op 2026-07-29 (§1a). Volgt op werkende data. |
 | Auto-save tijdens typen | Uitgesteld op 2026-07-29 (§1b). Expliciet opslaan blijft wel. |
@@ -1175,6 +1216,20 @@ database. De leverancierskant werkt dan volledig.
 - ~~Meerdere collega's per leverancier~~ → **ja** (§1c). `UNIQUE (run_id, vendor_id)` wordt
   partieel.
 - ~~Ziet de leverancier de interne score~~ → **nee, volledig intern** (§1c)
+
+**BLOKKEREND voor stap 1 van de bouwvolgorde — één vraag:**
+
+- **Heeft de interne beoordeling (UC2) categorieën met een score per categorie?** MVM_V2 heeft ze
+  (`InternalSurveyTemplate.categories[]`, met `minAnswersPerCategory` en een berekende score per
+  categorie), en het portaalscherm toont de vragenlijst daar als stappen per categorie.
+  VendorComply noemde hetzelfde onder "topic sections". Bij de acht Transdev-vragen (UC1) zijn er
+  géén categorieën.
+
+  Dit staat als enige punt vóór de migratie, want het is een tabel erbij (`survey_category`) plus
+  een verwijzing op `survey_question`. **Achteraf toevoegen raakt elke query, elk scherm en de
+  scoreberekening** — dat is de reden dat dit blokkerend is en `date` niet.
+
+  Als het antwoord "één lijst, één totaalscore" is, blijft het ontwerp zoals het nu staat.
 
 **Nog open — voorstellen van mij, niet bevestigd:**
 
