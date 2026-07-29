@@ -445,9 +445,10 @@ Dit is de regel die de tool inhoudelijk lastig maakt, en die vastgelegd moet wor
 
 Een tenant wijzigt vraag 4 terwijl twaalf leveranciers midden in het invullen zitten. Wat dan?
 
-**Voorstel: wijzigen mag altijd, maar raakt alleen nieuwe rondes.** Op het moment dat een
-`survey_run` start, ligt de templateversie vast. De run verwijst al naar `template_id`, en een
-template met een lopende run is niet meer te wijzigen — alleen te kopiëren naar een nieuwe versie.
+**Besluit opdrachtgever 2026-07-29: wijzigen mag altijd, maar raakt alleen nieuwe rondes.** Op het
+moment dat een `survey_run` start, ligt de templateversie vast. De run verwijst al naar
+`template_id`, en een template met een lopende run is niet meer te wijzigen — alleen te kopiëren
+naar een nieuwe versie.
 
 Zonder die bevriezing krijg je antwoorden op vragen die inmiddels anders luiden. Bij een
 compliance-instrument dat contractueel bewijsmateriaal oplevert, is dat onbruikbaar: je kunt
@@ -567,9 +568,11 @@ dezelfde rij, en een geplakt e-mailadres moet dus aan een vendor gekoppeld worde
 2. **Weigeren en terugmelden** welke adressen geen bekende vendor hebben, met een expliciete
    "aanmaken"-stap. Meer handelingen, schoner bestand.
 
-Advies: **optie 2.** Het vendorbestand is bij een compliance-instrument geen bijzaak — het is de
-lijst waar de rapportage op leunt. Automatisch aanmaken levert binnen een jaar dubbele vendors op
-(`transdev.nl` en `Transdev Nederland` als twee records), en dat is achteraf duur op te ruimen.
+**Besluit opdrachtgever 2026-07-29: optie 2 — weigeren en terugmelden.** Het vendorbestand is bij
+een compliance-instrument geen bijzaak; het is de lijst waar de rapportage op leunt. Automatisch
+aanmaken levert binnen een jaar dubbele vendors op (`transdev.nl` en `Transdev Nederland` als twee
+records), en dat is achteraf duur op te ruimen. Landt bij stap 10 (deelnemersbeheer); nog niet
+gebouwd.
 
 **Bij UC2 speelt dat niet.** De deelnemer is een Transdev-collega; die hoeft aan geen enkel
 vendorrecord gekoppeld te worden en `vendor_id` blijft leeg. De leverancier komt hier niet voor als
@@ -708,9 +711,9 @@ niet binnen 48 uur gemeld zijn". Zonder verplichte toelichting krijgt de opdrach
 vinkje zonder context en moet er alsnog achteraan gebeld worden — precies het handwerk dat dit
 systeem moet wegnemen.
 
-> **Aanname, niet bevestigd.** De opdrachtgever bevestigde de verplichte toelichting bij
-> `not_applicable` en `cannot_upload`. Voor `not_confirmed` is dit mijn afleiding. Het is één regel
-> in de validatietabel; als het anders moet, kost het geen herontwerp.
+> **Bevestigd op 2026-07-29.** De opdrachtgever bevestigde eerder de verplichte toelichting bij
+> `not_applicable` en `cannot_upload`; `not_confirmed` was mijn afleiding daaruit en is nu expliciet
+> bekrachtigd. De regel geldt daarmee voor alle drie de niet-bevestigingen.
 
 ### Grenzen aan de toelichting
 
@@ -1290,14 +1293,27 @@ database. De leverancierskant werkt dan volledig.
   vragenlijst; de interne beoordeling daar heeft vijf categorieën met 29 vragen. `category_id` is
   nullable, want UC1 heeft er geen.
 
+**Beslist op 2026-07-29 (tweede sessie) — de drie laatste openstaande voorstellen:**
+
+- ~~Bevriezing van een lopende ronde~~ → **ja, aangehouden** (§2). Wijzigen mag altijd maar raakt
+  alleen nieuwe rondes; een vragenlijst met een niet-`draft` ronde is uitsluitend te kopiëren naar
+  een nieuwe versie. Doorslaggevend: zonder bevriezing krijg je antwoorden op vragen die inmiddels
+  anders luiden, en dan is achteraf niet vast te stellen waar iemand mee heeft ingestemd. Al
+  gebouwd als trigger in migratie 0005.
+- ~~Verplichte toelichting bij `not_confirmed`~~ → **ja, verplicht** (§3). De regel luidt daarmee:
+  *alles behalve een bevestiging vereist uitleg*, minimaal 10 tekens. Doorslaggevend: het is
+  inhoudelijk het zwaarste antwoord dat een leverancier kan geven — bij Transdev-vraag 4 betekent
+  het "er zijn incidenten niet binnen 48 uur gemeld". Zonder toelichting levert dat een rood vinkje
+  zonder context op, en moet er alsnog achteraan gebeld worden. Al gebouwd als CHECK-constraint in
+  migratie 0005.
+- ~~Onbekend e-mailadres bij import: weigeren of vendor aanmaken~~ → **weigeren en terugmelden**
+  (§2c), met een expliciete "aanmaken"-stap. Doorslaggevend: het vendorbestand is de lijst waar de
+  rapportage op leunt; automatisch aanmaken levert binnen een jaar dubbele records op
+  (`transdev.nl` naast `Transdev Nederland`). Speelt alleen bij UC1. **Nog niet gebouwd** — dit
+  landt bij stap 10 (deelnemersbeheer).
+
 **Nog open — voorstellen van mij, niet bevestigd:**
 
-- **Bevriezing van een lopende ronde** (§2). Het is de regel die bepaalt of antwoorden achteraf nog
-  interpreteerbaar zijn. Ik zou hem aanhouden, maar hij is niet expliciet bevestigd.
-- **Verplichte toelichting bij `not_confirmed`** (§3). Mijn afleiding uit de bevestigde regels voor
-  `not_applicable` en `cannot_upload`.
-- **Onbekend e-mailadres bij import: weigeren of vendor aanmaken** (§2c). Advies: weigeren. Speelt
-  alleen bij UC1. Dit moet vóór stap 10 beslist zijn, niet eerder.
 - **Of UC1 en UC2 dezelfde vragenlijst-templates delen** (§1c). Het model staat het toe — een
   template is niet aan een `survey_kind` gebonden. Ik zou dat zo laten: een tenant die een
   interne vragenlijst per ongeluk aan een leverancier stuurt, maakt een beheerfout, geen
