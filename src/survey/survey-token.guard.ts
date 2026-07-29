@@ -55,6 +55,11 @@ function melding(reden: WeigerReden, datum?: Date): string {
         : 'Deze link is verlopen. Neem contact op met de opdrachtgever voor een nieuwe link.';
     case 'ronde-gesloten':
       return 'Deze vragenlijstronde is gesloten.';
+    case 'ronde-niet-open':
+      // De ronde staat nog in 'draft': wel aangemaakt, nog niet opengesteld.
+      // Anders geformuleerd dan 'gesloten', want hier valt nog wél iets te
+      // verwachten — dit is een tijdelijke toestand, geen eindpunt.
+      return 'Deze vragenlijst is nog niet opengesteld. Neem contact op met de opdrachtgever.';
     case 'vendor-inactief':
       return 'Deze link is niet langer beschikbaar. Neem contact op met de opdrachtgever.';
     default:

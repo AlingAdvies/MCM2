@@ -37,6 +37,8 @@ describe('Leverancierroutes (e2e)', () => {
     naam: string;
     verlooptOver?: number;
     status?: string;
+    /** Lifecycle van de ronde (migratie 0005/0006). Default 'active'. */
+    rondeStatus?: 'draft' | 'active' | 'finished' | 'archived';
   }): Promise<string> {
     const token = genereerToken();
     const verval =
@@ -57,12 +59,13 @@ describe('Leverancierroutes (e2e)', () => {
         sql`INSERT INTO clm.survey_template (tenant_id, name) VALUES (${TENANT}, ${`t-${opties.naam}`})
             RETURNING template_id`,
       );
-      // status 'active': sinds migratie 0005 heeft survey_run een expliciete
-      // lifecycle met 'draft' als default (ontwerp §2b). Een draft-ronde is
-      // voor een leverancier niet bereikbaar.
+      // Sinds migratie 0005 heeft survey_run een expliciete lifecycle met
+      // 'draft' als default (ontwerp §2b). Standaard 'active': dat is de
+      // toestand waarin een leverancier de link daadwerkelijk gebruikt.
       const run = await tx.execute<{ run_id: string }>(
         sql`INSERT INTO clm.survey_run (tenant_id, template_id, status)
-            VALUES (${TENANT}, ${template.rows[0].template_id}, 'active') RETURNING run_id`,
+            VALUES (${TENANT}, ${template.rows[0].template_id},
+                    ${opties.rondeStatus ?? 'active'}) RETURNING run_id`,
       );
       // subject_vendor_id is sinds migratie 0005 verplicht. Dit is een
       // UC1-respons (vendor_compliance), dus deelnemer en onderwerp zijn
@@ -154,6 +157,31 @@ describe('Leverancierroutes (e2e)', () => {
       .expect(410);
 
     expect(body(res).message).toContain('verlopen');
+  });
+
+  // Testpunt 30 op HTTP-niveau: de service weigert de draft-ronde al (zie
+  // survey-token-isolatie), hier gaat het erom dat de guard er ook echt een
+  // 410 van maakt met een melding die een leverancier verder helpt.
+  it('weigert een link naar een nog niet opengestelde ronde met 410', async () => {
+    const token = await maakLink({ naam: 'draftronde', rondeStatus: 'draft' });
+
+    const res = await request(server)
+      .get(`/survey/respond?t=${token}`)
+      .expect(410);
+
+    expect(body(res).message).toContain('nog niet opengesteld');
+  });
+
+  it('weigert indienen op een nog niet opengestelde ronde', async () => {
+    const token = await maakLink({
+      naam: 'draftindienen',
+      rondeStatus: 'draft',
+    });
+
+    // De guard hangt op controllerniveau, dus POST hoort dezelfde weigering
+    // te geven als GET. Zonder deze test zou een guard die alleen op GET
+    // controleert onopgemerkt blijven.
+    await request(server).post(`/survey/respond?t=${token}`).expect(410);
   });
 
   // ── Indienen ──────────────────────────────────────────────────────────────
