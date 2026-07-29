@@ -179,7 +179,14 @@ export class SurveyTokenService {
   }
 
   /**
-   * Dient een response definitief in.
+   * Dient een response definitief in, zónder antwoorden.
+   *
+   * Sinds stap 6 loopt de HTTP-route via AntwoordIndienService, die valideert
+   * en de antwoorden wegschrijft vóórdat hij afsluit. Deze methode blijft
+   * bestaan als de kale afsluitoperatie en is de plek waar de éénmaligheid en
+   * het gelijktijdigheidsgedrag getoetst worden (survey-token-isolatie.e2e).
+   * Beide gebruiken hetzelfde atomaire statement, dus die tests bewaken ook
+   * het gedrag van de indienroute.
    *
    * De volgorde is niet vrijblijvend. Dit zou fout zijn:
    *

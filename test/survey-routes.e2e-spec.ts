@@ -59,6 +59,18 @@ describe('Leverancierroutes (e2e)', () => {
         sql`INSERT INTO clm.survey_template (tenant_id, name) VALUES (${TENANT}, ${`t-${opties.naam}`})
             RETURNING template_id`,
       );
+      // Sinds stap 6 valideert POST /survey/respond de antwoorden tegen de
+      // vragen van de ronde. Een template zonder vragen levert daardoor niets
+      // op om in te dienen; deze suite gaat over toegang en éénmaligheid, dus
+      // één minimale vraag volstaat. De inhoudelijke validatieregels worden
+      // getoetst in antwoord-indienen.e2e-spec.ts.
+      await tx.execute(
+        sql`INSERT INTO clm.survey_question
+                (tenant_id, template_id, position, question_key, title, body,
+                 answer_type, is_required)
+            VALUES (${TENANT}, ${template.rows[0].template_id}, 1, 'q1',
+                    'Bevestiging', 'Bevestigt u dit?', 'yes_no', true)`,
+      );
       // Sinds migratie 0005 heeft survey_run een expliciete lifecycle met
       // 'draft' als default (ontwerp §2b). Standaard 'active': dat is de
       // toestand waarin een leverancier de link daadwerkelijk gebruikt.
@@ -101,8 +113,13 @@ describe('Leverancierroutes (e2e)', () => {
       // daar alleen INSERT en SELECT (MCM2-CLAUDE.md §7.7, migratie 0001).
       // Append-only is het punt — een test die dat omzeilt zou de garantie
       // ondermijnen die hij hoort te bewaken.
+      // Volgorde is niet vrij: alle survey-tabellen hebben ON DELETE RESTRICT,
+      // want een ingediende response is bewijsmateriaal en mag nooit
+      // stilzwijgend meeverdwijnen. Antwoorden en vragen dus vóór de template.
+      await tx.execute(sql`DELETE FROM clm.survey_answer`);
       await tx.execute(sql`DELETE FROM clm.survey_response`);
       await tx.execute(sql`DELETE FROM clm.survey_run`);
+      await tx.execute(sql`DELETE FROM clm.survey_question`);
       await tx.execute(sql`DELETE FROM clm.survey_template`);
       await tx.execute(sql`DELETE FROM clm.vendor`);
       await tx.execute(sql`DELETE FROM clm.tenant`);
@@ -191,6 +208,7 @@ describe('Leverancierroutes (e2e)', () => {
 
     const eerste = await request(server)
       .post(`/survey/respond?t=${token}`)
+      .send({ answers: [{ questionKey: 'q1', answerCode: 'yes' }] })
       .expect(200);
     expect(body(eerste).status).toBe('ingediend');
 
@@ -207,7 +225,10 @@ describe('Leverancierroutes (e2e)', () => {
   it('legt het indienen vast in de audit trail, zonder het ruwe token', async () => {
     const token = await maakLink({ naam: 'audit' });
 
-    await request(server).post(`/survey/respond?t=${token}`).expect(200);
+    await request(server)
+      .post(`/survey/respond?t=${token}`)
+      .send({ answers: [{ questionKey: 'q1', answerCode: 'yes' }] })
+      .expect(200);
 
     const regels = await db.withTenant(TENANT, async (tx) => {
       const r = await tx.execute<{ action_type: string; new_values: unknown }>(
