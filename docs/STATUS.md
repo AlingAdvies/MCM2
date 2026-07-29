@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-29, tweede sessie (vragenlijst-tool t/m **stap 4**: import/export én beide seeds; `contract_id` op `survey_run`; alle blokkerende ontwerpvragen beantwoord; 92 e2e-tests groen — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+2026-07-29, tweede sessie (vragenlijst-tool t/m **stap 5**: import/export, beide seeds én `GET /survey/respond/questions`; `contract_id` op `survey_run`; **guardbug gevonden waardoor UC2 in het geheel niet werkte**; 112 e2e-tests groen — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
 
 ## Het project bestaat uit twee repositories
 
@@ -32,7 +32,7 @@ docker run -d --name mcm2test -e POSTGRES_PASSWORD=pw -p 55440:5432 postgres:17.
 docker exec -i mcm2test psql -U postgres -q < db/roles/bootstrap-roles.sql
 docker exec mcm2test psql -U postgres -c "ALTER ROLE clm_migrator WITH PASSWORD 'pw'; ALTER ROLE clm_api_runtime WITH PASSWORD 'pw';"
 MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres" npm run migrate:deploy
-DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" npm run test:e2e   # 92 tests
+DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" npm run test:e2e   # 112 tests
 
 # De twee vragenlijsten inlezen (tenant moet bestaan)
 DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" \
@@ -175,6 +175,22 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Aantoonbaar werkend
 
+- **`GET /survey/respond/questions` (2026-07-29, stap 5).** `src/survey/vragenlijst-lezen.service.ts` plus de route op de bestaande `SurveyResponseController`, dus automatisch achter dezelfde guard. **112 van 112 e2e-tests groen** in tien suites, tegen een verse Postgres 17.6 met de volledige keten 0000 t/m 0008.
+
+  De vorm sluit aan op het model dat het portaal al gebruikt (`MCM2-frontend/src/core/models/survey.ts`): categorieën en losse vragen gescheiden. De `config`-jsonb wordt in de **backend** naar camelCase vertaald — een frontend die dat zelf doet gaat afwijken zodra er een veld bijkomt. Alleen bekende sleutels gaan mee: `config` is een vrij veld dat de database niet bewaakt, en alles doorgeven zou betekenen dat wat daar ooit in belandt automatisch bij de leverancier terechtkomt.
+
+  **Deze route legde een bug bloot waardoor UC2 in het geheel niet werkte** — zie het blok hieronder.
+
+- **Guardbug: elke interne beoordeling gaf 410 (2026-07-29, migratie 0008).** `resolve_survey_token()` bepaalde `vendor_active` via een join op `survey_response.vendor_id`. Bij UC2 is die kolom bewust `NULL` — de invuller is een Transdev-collega, geen leverancier — waardoor de join niets opleverde, `vendor_active` op `false` kwam en de guard **élke** interne beoordeling afwees met "vendor-inactief".
+
+  **Aangetoond tegen de database, niet beredeneerd:** alle drie de UC2-responses in de testset gaven `vendor_active = false`.
+
+  Migratie 0006 is geschreven vóórdat UC2 bestond; 0005 maakte `vendor_id` nullable zonder deze functie mee te nemen. **Geen enkele test merkte het,** omdat geen enkele test een UC2-link over HTTP ophaalde — stap 5 is de eerste die dat doet.
+
+  De fix joint op `subject_vendor_id`, die bij beide use cases gevuld en `NOT NULL` is. Voor UC1 verandert er niets, en dat is geen aanname: een CHECK uit 0005 dwingt daar `vendor_id = subject_vendor_id` af. Twee tests leggen beide kanten vast — een UC2-link wérkt, en hij werkt niet meer zodra de beoordeelde leverancier zacht verwijderd is.
+
+  **`CREATE OR REPLACE` mocht hier wél**, anders dan bij 0006: de `RETURNS TABLE` blijft ongewijzigd, dus de rechten blijven staan.
+
 - **Import/export van vragenlijsten en beide seeds (2026-07-29, stap 3 en 4).** `src/survey/vragenlijst-schema.ts` (vorm en validatie, zonder database), `src/survey/vragenlijst-import.service.ts` (importeer/exporteer via `withTenant`), `scripts/seed-vragenlijsten.js` en twee seedbestanden in `db/seeds/`. **89 van 89 e2e-tests groen**, in negen suites.
 
   **De harde regel is getest, niet alleen geschreven:** `tenant_id` komt uit de sessiecontext en nooit uit het bestand (Issue #7, testpunt 31). Een bestand dat er zelf een meebrengt wordt expliciet geweigerd in plaats van stil genegeerd. Hetzelfde geldt voor UUID's — die worden bij import nieuw gegenereerd, en de vraag→categorie-koppeling loopt via `category_key` (testpunt 48). Export bevat geen enkele UUID en geen `tenant_id`, waardoor klonen en een nieuwe versie afsplitsen dezelfde operatie zijn als exporteren-en-importeren.
@@ -290,6 +306,10 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 **Docker 29 weigert een containernaam van één teken.** Het oude `--name t` uit dit document faalde met "Invalid container name"; de opstartcommando's hierboven zijn gecorrigeerd naar `mcm2test`.
 
+**Een tegenproef kan zélf onvoldoende zijn — controleer of de testopzet het lek kán zien.** Bij stap 5 is het lek uit ontwerp §1c daadwerkelijk ingebouwd (filteren op `subject_vendor_id` in plaats van `response_id`) en **bleef alles groen**. Oorzaak: elke leverancier in de test had een eigen vendor, dus de verkeerde filter selecteerde toevallig dezelfde rij. Pas met **twee responses over dezelfde leverancier** — het echte UC1/UC2-scenario — viel testpunt 39 om. Een tegenproef die niet faalt betekent dus niet automatisch dat de code goed is; het kan ook zijn dat de opzet het probleem niet kan aantonen.
+
+**Een nullable kolom maken raakt méér dan de tabel.** Migratie 0005 maakte `survey_response.vendor_id` nullable voor UC2, maar `resolve_survey_token()` joinde daar nog op — waardoor elke interne beoordeling 410 gaf. Bij het versoepelen van een kolom hoort een zoektocht naar elke plek die hem gebruikt: functies, views, policies. `grep -rn "vendor_id" drizzle/` had dit gevonden.
+
 ## Niet als bewezen beschouwen
 
 - RLS-tenant-isolatie was tot 2026-07-27 niet bewezen zolang de runtime-role nog `BYPASSRLS` had — een eerdere "RLS werkt"-verificatie in deze projectgeschiedenis was vals-positief (lege tabel, geen bewijs van daadwerkelijke blokkade). **Nu aantoonbaar bewezen én geautomatiseerd** (zie hierboven en ADR-009) — niet langer een handmatige, ad-hoc verificatie.
@@ -304,12 +324,12 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 | Repo | Branch | Werkboom | Openstaande PR's |
 |---|---|---|---|
-| MCM2 | **`feat/contract-op-survey-run`** | schoon | nog niet gepusht |
+| MCM2 | **`feat/vragenlijst-ophalen`** | schoon | nog niet gepusht |
 | MCM2-frontend | `main` | schoon | geen |
 
-**PR #37 (stap 3 en 4) is gemerged naar `main`** (merge-commit `ef62cd6`), CI groen op alle drie de jobs, branch lokaal én op GitHub verwijderd. Na de merge opnieuw geverifieerd tégen `main`: volledige migratieketen op een verse Postgres 17.6, daarna 89/89 e2e groen.
+**Twee PR's gemerged naar `main`:** #37 (stap 3 en 4, merge-commit `ef62cd6`) en #38 (migratie 0007 plus de drie bevestigde ontwerpbesluiten, merge-commit `4b09026`). Beide met CI groen op alle drie de jobs, beide branches lokaal én op GitHub verwijderd. Na elke merge opnieuw geverifieerd tégen `main` zelf.
 
-**`feat/contract-op-survey-run` staat open met één commit:** migratie 0007 (`contract_id` op `survey_run`) plus deze statusbijwerking en de drie bevestigde ontwerpbesluiten. Nog niet gepusht. Lokale poorten wél gedraaid: format, lint, typecheck en 92/92 e2e tegen een verse Postgres 17.6.
+**`feat/vragenlijst-ophalen` staat open met één commit:** stap 5 (`GET /survey/respond/questions`) plus migratie 0008 die de UC2-guardbug repareert, en deze statusbijwerking. Nog niet gepusht. Lokale poorten wél gedraaid: format, lint, typecheck, 112/112 e2e tegen een verse Postgres 17.6, en de Docker-productiebuild die start, de route mapt en `/health` met 200 beantwoordt.
 
 - **`docs/sessiestand-otap` is op 2026-07-29 via PR #35 gemerged naar `main`** (merge-commit `cbe6c48`) en daarna lokaal én op GitHub verwijderd. Eén commit: uitsluitend deze statusbijwerking.
 - **`feat/issue-7-leveranciertoken` is op 2026-07-29 via PR #32 gemerged naar `main`** (merge-commit `7f0cc01`) en daarna lokaal én op GitHub verwijderd. CI groen op alle drie de jobs vóór de merge, opnieuw geverifieerd met `gh pr checks 32` op de laatste commit. Vijf commits: de tokenlaag, de HTTP-routes met logmaskering en auditregels, de fix op `maskeerDiep`, plus twee documentatiecommits. **Issue #31 is bij die merge gesloten** — migratie `0004` loste hem op. Let op: die migratie is bewezen in CI, **niet toegepast op `clm-enterprise`** — net als #29 en #25 wacht dat op #30.
@@ -333,22 +353,24 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 De databaselaag is omgezet (ADR-010), spoor 2 van Issue #7 zit in `main`, en de vragenlijst-tool staat t/m stap 4: het datamodel, de guard, import/export en beide gevulde vragenlijsten.
 
-**De eerstvolgende inhoudelijke stap is stap 5: `GET /survey/respond/questions`** (ontwerp §10). Dat is nu de kortste weg naar iets zichtbaars — de vragen staan in de database en het portaal toont ze al op mock data, dus deze route hoeft alleen te lezen. Het raakt de productiedatabase niet; de hele e2e-keten draait tegen wegwerpcontainers, dus #30 blokkeert dit spoor niet.
+**De eerstvolgende inhoudelijke stap is stap 6: validatie- en indienlogica** (ontwerp §5, §10). `POST /survey/respond` accepteert nu een lege body; daar komen de antwoorden bij, met de tienstappenvalidatie uit §5. Dat raakt de productiedatabase niet; de hele e2e-keten draait tegen wegwerpcontainers, dus #30 blokkeert dit spoor niet.
+
+**Daarnaast, en dat kost geen code:** het portaal tegen de echte backend zetten via een OTAP-doorloop. De vragen staan in de database en de route bestaat, dus dit is de eerste keer dat de klant de echte vragenlijst in de browser kan zien in plaats van mock data.
 
 ~~1. Migratie met de vier nieuwe tabellen en de kolommen op `survey_run`/`survey_response`~~ — **afgerond 2026-07-29** (migratie 0005).
 ~~2. De bestaande guard uitbreiden met de ronde-statuscontrole~~ — **afgerond 2026-07-29** (migratie 0006).
 ~~3. Import/export van het JSON-schema~~ — **afgerond 2026-07-29**, zie "Aantoonbaar werkend".
 ~~4. Seed: beide vragenlijsten via het importpad~~ — **afgerond 2026-07-29**, idem.
 
-**Nu aan de beurt — stap 5 t/m 9 uit ontwerp §10:**
+~~5. `GET /survey/respond/questions`~~ — **afgerond 2026-07-29**, zie "Aantoonbaar werkend". Legde en passant de UC2-guardbug bloot.
 
-5. `GET /survey/respond/questions` — vragen ophalen inclusief `config` per type. **Dit is de snelste zichtbare winst:** de vragen staan nu in de database en het portaal toont ze al op mock data; zodra deze route bestaat, toont hetzelfde scherm de echte vragenlijst.
+**Nu aan de beurt — stap 6 t/m 9 uit ontwerp §10:**
 6. Validatie- en indienlogica; `POST /survey/respond` uitbreiden met de antwoordbody (ontwerp §5).
 7. `PUT /survey/respond/answers` — concept opslaan, expliciet (geen auto-save).
 8. Bestandsupload met inhoudscontrole (ontwerp §6, Issue #9).
 9. Tests 14 t/m 48.
 
-**Stap 5 is de snelste zichtbare winst.** Het leverancierportaal staat en toont de acht vragen al op mock data; zodra `/survey/respond/questions` bestaat, toont hetzelfde scherm de echte vragenlijst uit de database. Op dit moment krijgt het portaal daar een 404 — dat is geen bug maar de nog-niet-gebouwde route (bevestigd in de OTAP-doorloop). **De vragen staan er sinds stap 4 wél**, dus deze route hoeft alleen nog te lezen.
+**De 404 die de OTAP-doorloop signaleerde is weg:** `/survey/respond/questions` bestaat en levert de vragenlijst uit de database. **Nog niet in de browser bekeken** — het portaal draait nog op mock data tot iemand het met `NEXT_PUBLIC_API_URL` tegen de backend zet. Dat is de eerstvolgende zichtbare stap en kost geen code, alleen een OTAP-doorloop.
 
 **Aandachtspunt bij stap 6:** de bestaande `POST /survey/respond` accepteert nu een lege body. Zodra daar antwoorden bij komen, moet `test/survey-routes.e2e-spec.ts` mee — dat is geen ontwerpkwestie maar werk dat vergeten wordt als het niet ergens staat.
 

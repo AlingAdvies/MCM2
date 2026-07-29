@@ -5,6 +5,7 @@ import { SurveyResponseController } from './survey-response.controller';
 import { SurveyTokenGuard } from './survey-token.guard';
 import { SurveyTokenService } from './survey-token.service';
 import { VragenlijstImportService } from './vragenlijst-import.service';
+import { VragenlijstLeesService } from './vragenlijst-lezen.service';
 
 @Module({
   controllers: [SurveyResponseController],
@@ -13,12 +14,14 @@ import { VragenlijstImportService } from './vragenlijst-import.service';
     SurveyTokenService,
     SurveyTokenGuard,
     VragenlijstImportService,
+    VragenlijstLeesService,
   ],
   exports: [
     SurveyAuditService,
     SurveyTokenService,
     SurveyTokenGuard,
     VragenlijstImportService,
+    VragenlijstLeesService,
   ],
 })
 export class SurveyModule {}

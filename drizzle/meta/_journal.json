@@ -57,6 +57,13 @@
       "when": 1785336038093,
       "tag": "0007_contract_op_survey_run",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1785336038094,
+      "tag": "0008_guard_kent_uc2",
+      "breakpoints": true
     }
   ]
 }
