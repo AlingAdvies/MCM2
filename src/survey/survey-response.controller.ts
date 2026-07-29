@@ -1,14 +1,17 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
   NotFoundException,
   Post,
   Req,
+  UnprocessableEntityException,
   UseGuards,
   GoneException,
 } from '@nestjs/common';
 
+import { AntwoordIndienService } from './antwoord-indienen.service';
 import { SurveyTokenGuard, type RequestMetToken } from './survey-token.guard';
 import { SurveyTokenService } from './survey-token.service';
 import { VragenlijstLeesService } from './vragenlijst-lezen.service';
@@ -30,6 +33,7 @@ export class SurveyResponseController {
   constructor(
     private readonly tokens: SurveyTokenService,
     private readonly vragenlijst: VragenlijstLeesService,
+    private readonly indienen: AntwoordIndienService,
   ) {}
 
   /**
@@ -94,27 +98,50 @@ export class SurveyResponseController {
   }
 
   /**
-   * Dient de response definitief in.
+   * Dient de response definitief in, met de antwoorden.
    *
    * Eenmalig en onomkeerbaar (OV-3, AC12). De atomaire update in de service
    * bepaalt wie wint bij gelijktijdige verzoeken; hier wordt alleen het
    * resultaat vertaald naar een HTTP-status.
    *
-   * 200 bij succes, 410 Gone bij een tweede poging — dezelfde status die de
-   * guard geeft voor een al ingediende link, zodat het gedrag consistent is
-   * ongeacht welke laag het opmerkt.
+   * Drie uitkomsten:
+   *
+   *   200  ingediend
+   *   422  de antwoorden voldoen niet — met per vraag de reden
+   *   410  al ingediend, verlopen of ronde gesloten
+   *
+   * 410 is dezelfde status die de guard geeft voor een al ingediende link,
+   * zodat het gedrag consistent is ongeacht welke laag het opmerkt.
+   *
+   * Bij een 422 is er niets weggeschreven en blijft de link bruikbaar
+   * (testpunt 25). Dat is essentieel: het token is gehasht en dus niet opnieuw
+   * te versturen, dus een half verbruikte link zou onherstelbaar zijn.
    */
   @Post()
   @HttpCode(200)
-  async dienIn(@Req() request: RequestMetToken) {
+  async dienIn(
+    @Req() request: RequestMetToken,
+    @Body() body: { answers?: unknown } | undefined,
+  ) {
     const context = request.surveyToken!;
 
-    const gelukt = await this.tokens.dienIn(
+    const uitkomst = await this.indienen.dienIn(
       context.tenantId,
       context.responseId,
+      body?.answers ?? [],
     );
 
-    if (!gelukt) {
+    if (uitkomst.status === 'ongeldig') {
+      // De vorm uit ontwerp §5: question_key en een machineleesbare reden.
+      // Een 422 die alleen "validation failed" zegt, is voor een leverancier
+      // onbruikbaar.
+      throw new UnprocessableEntityException({
+        status: 'invalid',
+        errors: uitkomst.fouten,
+      });
+    }
+
+    if (uitkomst.status === 'niet-meer-open') {
       throw new GoneException('Deze vragenlijst is al ingediend.');
     }
 
