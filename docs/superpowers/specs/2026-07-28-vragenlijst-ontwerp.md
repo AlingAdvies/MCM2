@@ -42,6 +42,23 @@ ingrijpend veranderd — één `answer TEXT`-kolom volstaat niet meer voor acht 
 (de typen), §2b (lifecycle), §2c (deelnemers) en §2d (import/export). Wie de vorige versie kent,
 moet in elk geval §2a en §4 opnieuw lezen.
 
+**Wijziging 3 (2026-07-29) — er zijn twee use cases, niet één.**
+
+Dit document ging tot nu toe uit van één soort respondent: een externe leverancier met een token.
+De opdrachtgever heeft verduidelijkt dat de MVP **twee** soorten surveys moet ondersteunen, en dat
+er niets gebouwd hoeft te worden dat daarbuiten valt:
+
+| | Use case | Wie vult in | Over wie gaat het |
+|---|---|---|---|
+| **UC1** | Vendor compliance (bv. IT) | externe leverancier | zichzelf |
+| **UC2** | Interne beoordeling van een dienstverlener | Transdev-collega | een andere partij |
+
+**Dat raakte het datamodel, niet alleen de tekst.** Bij UC1 vallen "wie vult in" en "over wie gaat
+het" samen; bij UC2 niet. `survey_response.vendor_id` was `NOT NULL` met een foreign key naar
+`vendor` — een interne collega is geen leverancier en paste daar niet in. Zie §1c.
+
+Dit is de scopegrens van de MVP: **UC1 en UC2, niets daarbuiten.**
+
 ---
 
 ## 1. Niveau B — vastgesteld op 2026-07-29
@@ -80,8 +97,9 @@ het een goede keuze is — niet om ergens op aan te sluiten.
 | Import/export als JSON-schema | §2d |
 
 Import/export verdient een aparte opmerking: het lijkt een gemaksfunctie, maar het levert
-"template klonen" en "template delen tussen tenants" er vrijwel gratis bij, en het geeft een
-leesbaar exportformaat voor de vragenlijststructuur. Dat is meer waarde dan de omvang doet vermoeden.
+"template klonen" en "nieuwe versie afsplitsen" er vrijwel gratis bij, en het is tevens de manier
+waarop beide vragenlijsten (UC1 en UC2) de database in komen — geen apart seed-script dat later uit
+de pas loopt met het echte importpad.
 
 **Uitgesteld — bewust niet in dit ontwerp:**
 
@@ -90,7 +108,7 @@ leesbaar exportformaat voor de vragenlijststructuur. Dat is meer waarde dan de o
 | Logic jumps (voorwaardelijke logica) | Niveau C. Verandert "welke vragen zie je" van een lijst in een berekening, en raakt daarmee validatie, voortgang, export en verplichtstelling tegelijk. Eigen bouwstap ná een werkende B. |
 | AI-beoordeling (Gemini) | Externe dienst. Brengt bovendien een verwerkersvraag mee: leverancierscertificaten en compliance-antwoorden naar een externe AI-dienst sturen is een AVG/NIS2-besluit, geen technische keuze. |
 | EFQM KPI-sync | Externe koppeling, niet nodig voor de pilot. |
-| Marketing Mode (publieke anonieme surveys) | Tweede product. Botst met het hele tokenontwerp, dat uitgaat van één link per vendor per ronde. |
+| Marketing Mode (publieke anonieme surveys) | Valt buiten UC1 en UC2 (§1c). Een open link zonder bekende respondent botst bovendien met het tokenontwerp, dat elke respons aan een geadresseerde koppelt. |
 | Radar/spider charts | Rapportage, volgt op werkende data. |
 
 ### 1b. Draft/auto-save en "request revisions" — bewust niet
@@ -119,6 +137,110 @@ net groen is geworden, niet een uitbreiding erop.
 Concept opslaan blijft nodig om een praktische reden die niets met auto-save te maken heeft: acht
 vragen met verplichte toelichtingen vul je niet in één keer in, en het token is gehasht en dus niet
 opnieuw te versturen. Zonder opslaan verliest iemand die een tabblad sluit alles, onherstelbaar.
+
+### 1c. Twee use cases — de scopegrens van de MVP
+
+De MVP ondersteunt precies twee soorten surveys. **Functionaliteit die daarbuiten valt, wordt niet
+gebouwd** — dat is een expliciete instructie van de opdrachtgever en het is de maatstaf waartegen
+elk voorstel in dit document getoetst hoort te worden.
+
+#### UC1 — Vendor compliance (extern)
+
+De bestaande casus. Een externe leverancier beantwoordt vragen over de eigen organisatie. De acht
+Transdev-vragen zijn hiervan de eerste vulling. Toegang via token, want de leverancier heeft geen
+account.
+
+#### UC2 — Interne beoordeling van een dienstverlener
+
+Nieuw. Een Transdev-collega geeft aan hoe een dienstverlener in de praktijk scoort. Kort en
+eenvoudig — in de praktijk een `rating` met eventueel een `open_text` erbij.
+
+**Drie besluiten van de opdrachtgever op 2026-07-29 bepalen hoe dit werkt:**
+
+| Vraag | Besluit | Gevolg |
+|---|---|---|
+| Hoe krijgt een collega toegang? | **Ook via een token-link** | De bestaande tokenlaag blijft ongewijzigd en werkt meteen. De MVP wacht niet op de Entra-guard. |
+| Meerdere collega's per dienstverlener? | **Ja** | `UNIQUE (run_id, vendor_id)` moet eraf — die staat er nu wel. |
+| Ziet de leverancier de interne score? | **Nee, volledig intern** | Vraagt een harde scheiding, afgedwongen in de database. |
+
+Dat de interne route ook via een token loopt, is de belangrijkste van de drie: het betekent dat
+UC2 **geen enkele wijziging in de toegangslaag vraagt**. Dezelfde guard, dezelfde
+`resolve_survey_token()`, dezelfde éénmaligheid. Alleen het datamodel eronder verbreedt.
+
+#### Wat dit in het model verandert
+
+`survey_response` gaat uit van één partij die zowel invult als beoordeeld wordt. Bij UC2 vallen die
+uit elkaar. Drie wijzigingen, alle drie op een tabel die vanochtend gemerged is:
+
+```
+survey_run.survey_kind      TEXT NOT NULL DEFAULT 'vendor_compliance'
+                            → 'vendor_compliance' (UC1) | 'internal_review' (UC2)
+
+survey_response.vendor_id   UUID NULL          → was NOT NULL; leeg bij UC2
+survey_response.subject_vendor_id  UUID NOT NULL  → over wie de survey gaat
+survey_response.respondent_user_id UUID NULL   → welke collega invult (alleen UC2)
+survey_response.respondent_label   TEXT NULL   → naam/rol, als er geen user-record is
+```
+
+| Kolom | UC1 | UC2 |
+|---|---|---|
+| `vendor_id` (wie vult in) | de leverancier | **leeg** |
+| `subject_vendor_id` (over wie) | dezelfde leverancier | de beoordeelde dienstverlener |
+| `respondent_user_id` | leeg | de collega, indien bekend |
+| `respondent_label` | leeg | naam of rol van de collega |
+
+**`subject_vendor_id` is bij beide gevuld.** Dat is bewust: de vraag "welke leverancier betreft
+dit?" heeft bij elke survey een antwoord, en zo is rapportage per leverancier één query in plaats
+van twee met een `UNION`.
+
+Bij UC1 wijzen `vendor_id` en `subject_vendor_id` naar dezelfde rij. Dat is geen redundantie maar
+de expliciete vastlegging dat invuller en onderwerp samenvallen — bij UC2 doen ze dat niet.
+
+**Waarom `respondent_label` naast `respondent_user_id`.** Een collega die een token krijgt, hoeft
+geen `clm.user`-record te hebben; de tokenroute vraagt geen account. Zonder tekstveld zou je voor
+elke invuller eerst een gebruiker moeten aanmaken, en dat is precies het soort werk dat de
+tokenroute wil vermijden. Zodra spoor 1 er is, kan `respondent_user_id` gevuld worden.
+
+#### De constraints die hierbij horen
+
+| Constraint | Dwingt af |
+|---|---|
+| `CHECK (survey_kind IN ('vendor_compliance','internal_review'))` | Alleen de twee use cases |
+| `CHECK (survey_kind <> 'vendor_compliance' OR vendor_id = subject_vendor_id)` | Bij UC1 vallen invuller en onderwerp samen |
+| `CHECK (survey_kind <> 'internal_review' OR vendor_id IS NULL)` | Bij UC2 is de invuller geen leverancier |
+| `UNIQUE (run_id, vendor_id)` **vervalt** | Meerdere collega's per dienstverlener |
+| *vervangen door:* `UNIQUE (run_id, vendor_id) WHERE vendor_id IS NOT NULL` | Bij UC1 nog steeds één respons per leverancier |
+
+Die laatste is een **partiële unieke index**, en hij is nauwkeuriger dan wat er nu staat: bij UC1
+blijft de garantie "één leverancier, één respons" volledig overeind, terwijl UC2 er niet door
+geraakt wordt omdat `vendor_id` daar leeg is. Zonder die partiële vorm zou het weghalen van de
+constraint ook UC1 verzwakken — en dat is precies wat je niet wilt.
+
+#### De scheiding tussen intern en extern
+
+Een leverancier mag de interne beoordelingen over zichzelf nooit zien. **De bestaande architectuur
+regelt dit al**, en het is nuttig om precies te benoemen waarom — anders wordt er beveiliging
+bijgebouwd die er al is.
+
+Een leverancier heeft **geen toegang tot de Transdev-tenant**. Er is geen account, geen sessie en
+geen tenantcontext die hem toebehoort. Wat hij heeft is één token, dat via
+`resolve_survey_token()` precies één `response_id` oplevert — die van hemzelf. Er bestaat geen
+route van "ik ken deze leverancier" naar "toon alle responses over deze leverancier": de lookup
+gaat van tokenhash naar één respons, nooit van vendor naar een verzameling.
+
+Een interne beoordeling is een aparte respons met een eigen token. Dat token krijgt de leverancier
+niet. Daarmee is de scheiding een gevolg van het toegangsmodel, niet van een extra filter dat
+iemand kan vergeten.
+
+**Wat wél nodig is, is één regel discipline bij het bouwen:** leesroutes op de leverancierskant
+filteren op `response_id`, nooit op `subject_vendor_id`. Zodra iemand een route bouwt die "alle
+responses van deze vendor" ophaalt, ontstaat het lek dat er nu niet is. Dat is testpunt 39 — geen
+nieuwe maatregel, maar het vastleggen dat de bestaande garantie ook onder de nieuwe kolommen blijft
+gelden.
+
+**Let op — dit raakt de bestaande auditregels.** Een interne beoordeling is bewijsmateriaal in
+dezelfde zin als een compliance-antwoord: hij hoort in `audit.audit_event`, met dezelfde
+transactiegarantie. De bestaande implementatie doet dat al per respons en vraagt geen wijziging.
 
 ---
 
@@ -326,9 +448,10 @@ Overgenomen uit VendorComply §2.2 fase 2. Alle drie leiden tot hetzelfde eindpu
 | Quick paste | Plaktekst met e-mailadressen, komma of regeleinde gescheiden | Moet vendors aanmaken of matchen |
 | CSV-import | `.csv` met contactgegevens | Idem, plus foutrapportage per regel |
 
-**Het knelpunt zit niet in het inlezen maar in de koppeling.** `survey_response.vendor_id` is
-`NOT NULL` met een foreign key. Een geplakt e-mailadres heeft geen vendor. Er zijn twee opties, en
-dit is een besluit dat vóór het bouwen van §2c genomen moet worden:
+**Het knelpunt verschilt per use case, en dat is wezenlijk.**
+
+**Bij UC1** is de deelnemer de leverancier zelf. `vendor_id` en `subject_vendor_id` wijzen naar
+dezelfde rij, en een geplakt e-mailadres moet dus aan een vendor gekoppeld worden. Twee opties:
 
 1. **Automatisch een vendor aanmaken** bij een onbekend e-mailadres, met het domein als naam.
    Snel, maar vervuilt het vendorbestand met halve records.
@@ -339,9 +462,27 @@ Advies: **optie 2.** Het vendorbestand is bij een compliance-instrument geen bij
 lijst waar de rapportage op leunt. Automatisch aanmaken levert binnen een jaar dubbele vendors op
 (`transdev.nl` en `Transdev Nederland` als twee records), en dat is achteraf duur op te ruimen.
 
-De uniciteitsregel die er al ligt, helpt hierbij: `UNIQUE (run_id, vendor_id)` op `survey_response`
-betekent dat dezelfde vendor niet twee keer in dezelfde ronde kan zitten. Een import die een vendor
-dubbel bevat, moet dus sowieso een nette fout geven in plaats van een databaseconflict.
+**Bij UC2 speelt dat niet.** De deelnemer is een Transdev-collega, geen leverancier; `vendor_id`
+blijft leeg. Wat de beheerder hier kiest, is een andere combinatie:
+
+| Wat de beheerder aangeeft | Landt in |
+|---|---|
+| Over welke dienstverlener deze ronde gaat | `subject_vendor_id` (verplicht, één per respons) |
+| Welke collega's die beoordelen | `respondent_label`, met een e-mailadres voor de tokenlink |
+
+Dat is een wezenlijk andere schermflow: bij UC1 kies je leveranciers en krijgt ieder een eigen
+vragenlijst over zichzelf; bij UC2 kies je één dienstverlener en vervolgens de collega's die hem
+beoordelen. **Twee schermen, geen gedeelde variant met een schakelaar** — dat laatste levert een
+scherm op dat beide dingen half doet.
+
+Quick paste en CSV-import werken bij UC2 op de collega-adressen. Die hoeven aan geen enkel
+vendorrecord gekoppeld te worden, wat het inlezen daar juist simpeler maakt dan bij UC1.
+
+De uniciteitsregel is aangepast aan dit onderscheid (§1c): `UNIQUE (run_id, vendor_id)` wordt
+partieel en geldt alleen waar `vendor_id` gevuld is. Bij UC1 blijft "één leverancier, één respons"
+dus volledig gelden; bij UC2 kunnen meerdere collega's dezelfde dienstverlener beoordelen. Een
+UC1-import die een vendor dubbel bevat, moet nog steeds een nette fout geven in plaats van een
+databaseconflict.
 
 ---
 
@@ -373,10 +514,10 @@ beschrijft: de vragen, hun volgorde, typen en `config`.
 
 Dit levert vier dingen op waarvan er maar één expliciet gevraagd is:
 
-- **Template klonen** — exporteren en weer importeren
+- **Template klonen** — exporteren en weer importeren, bijvoorbeeld om naast de UC1-vragenlijst een
+  UC2-variant op te zetten
 - **Nieuwe versie afsplitsen** van een bevroren template (§2) is dezelfde operatie
-- **Delen tussen tenants** — met `tenant_id` die bij import opnieuw wordt gezet, nooit uit het bestand
-- **De seed van de acht Transdev-vragen** is gewoon zo'n bestand, geen apart migratiescript
+- **De seed van beide vragenlijsten** is gewoon zo'n bestand, geen apart migratiescript
 
 Die laatste is de reden om dit vroeg te bouwen in plaats van laat: het vervangt werk dat anders
 tweemaal gedaan wordt.
@@ -905,6 +1046,17 @@ Aanvullend uit niveau B (§1) en de VendorComply-overname (§1a):
 | 37 | Een `rating`-waarde in `answer_text` faalt op de vormconstraint (§4) |
 | 38 | Een testrun (`is_test = true`) doorloopt exact hetzelfde guardpad als een echte run |
 
+Aanvullend uit de twee use cases (§1c):
+
+| # | Bewijs |
+|---|---|
+| 39 | Een leverancierstoken geeft uitsluitend de eigen respons — een interne beoordeling over dezelfde `subject_vendor_id` is er niet mee bereikbaar |
+| 40 | Twee collega's kunnen dezelfde dienstverlener beoordelen in één ronde (UC2) |
+| 41 | Dezelfde leverancier twee keer in één ronde faalt op de partiële unieke index (UC1) |
+| 42 | Bij `survey_kind = 'vendor_compliance'` faalt een respons waar `vendor_id <> subject_vendor_id` |
+| 43 | Bij `survey_kind = 'internal_review'` faalt een respons met een gevulde `vendor_id` |
+| 44 | Een UC2-respons is in te dienen zonder enig `clm.user`-record voor de invuller |
+
 Punt 15, 23, 27, 36 en 37 zijn de belangrijkste: die toetsen dat de garantie in de database zit en
 niet alleen in de applicatiecode. Alle vijf moeten getest worden met directe SQL die de
 applicatielaag overslaat — anders test je je eigen validatiecode en niet de garantie.
@@ -921,9 +1073,19 @@ er een gebruikt — niet bij de acht Transdev-vragen, want die hebben er geen.
 Punt 31 is de zwaarste in beveiligingstermen: een importbestand is client-invoer, en `tenant_id`
 daaruit overnemen is exact het patroon dat Issue #7 verbiedt.
 
+Punt 39 legt vast dat de scheiding tussen interne en externe beoordelingen ook onder de nieuwe
+kolommen blijft gelden. De garantie volgt uit het toegangsmodel — een leverancier heeft geen
+tenanttoegang, alleen één token voor één respons — maar juist daarom moet er een test op staan: het
+is het soort garantie dat stilzwijgend sneuvelt zodra iemand een route bouwt die op
+`subject_vendor_id` filtert in plaats van op `response_id`.
+
 ---
 
 ## 9. Bewust niet opgelost
+
+**De scopegrens is UC1 en UC2 (§1c).** Alles wat daarbuiten valt, wordt niet gebouwd — dat is een
+expliciete instructie van de opdrachtgever en niet alleen een prioriteitskeuze. Bij twijfel over
+een voorstel is de toets: *dient dit UC1 of UC2?* Zo niet, dan hoort het in deze tabel.
 
 | Onderwerp | Reden |
 |---|---|
@@ -951,10 +1113,10 @@ grootst.
 
 | # | Stap | Levert op |
 |---|---|---|
-| 1 | Migratie: `survey_question`, `survey_answer`, `survey_attachment`, plus `status` en `is_test` op `survey_run` — met RLS, policies, CHECK-constraints, de samengestelde FK uit §4 en de bevriezingstrigger uit §2 | Het datamodel staat |
+| 1 | Migratie: `survey_question`, `survey_answer`, `survey_attachment`, plus `status`, `is_test` en `survey_kind` op `survey_run` en de vier respondentkolommen op `survey_response` (§1c) — met RLS, policies, CHECK-constraints, de partiële unieke index, de samengestelde FK uit §4 en de bevriezingstrigger uit §2 | Het datamodel staat, beide use cases |
 | 2 | Guard uitbreiden met de statuscontrole (§2b, stap 1b) | Bestaande laag blijft groen — testpunt 30 |
 | 3 | Import/export van het JSON-schema (§2d) | Nodig voor stap 4; levert klonen en versioneren mee |
-| 4 | Seed: de acht Transdev-vragen als template `transdev-annual-vendor-it-risk` v1, via stap 3 | De PoC-vulling |
+| 4 | Seed: de acht Transdev-vragen als template `transdev-annual-vendor-it-risk` v1 (UC1) plus een korte interne beoordelingsvragenlijst (UC2), beide via stap 3 | Beide use cases gevuld |
 | 5 | `GET /survey/respond/questions` — vragen ophalen incl. `config` per type | Leverancier ziet de vragenlijst |
 | 6 | Validatie- en indienlogica (§5); `POST /survey/respond` uitbreiden met de antwoordbody | De kern |
 | 7 | `PUT /survey/respond/answers` (concept, expliciet opslaan) | Bruikbaar bij acht vragen |
@@ -982,6 +1144,11 @@ database. De leverancierskant werkt dan volledig.
 - ~~Niveau A, B of C~~ → **B** (§1)
 - ~~Auto-save en "request revisions"~~ → **beide niet** (§1b)
 - ~~Welke VendorComply-features overnemen~~ → zie de twee tabellen in §1a
+- ~~Toegang voor interne invullers (UC2)~~ → **ook via token-link** (§1c). De toegangslaag blijft
+  daarmee ongewijzigd en de MVP wacht niet op de Entra-guard.
+- ~~Meerdere collega's per dienstverlener~~ → **ja** (§1c). `UNIQUE (run_id, vendor_id)` wordt
+  partieel.
+- ~~Ziet de leverancier de interne score~~ → **nee, volledig intern** (§1c)
 
 **Nog open — voorstellen van mij, niet bevestigd:**
 
@@ -989,8 +1156,15 @@ database. De leverancierskant werkt dan volledig.
   interpreteerbaar zijn. Ik zou hem aanhouden, maar hij is niet expliciet bevestigd.
 - **Verplichte toelichting bij `not_confirmed`** (§3). Mijn afleiding uit de bevestigde regels voor
   `not_applicable` en `cannot_upload`.
-- **Onbekend e-mailadres bij import: weigeren of vendor aanmaken** (§2c). Advies: weigeren. Dit moet
-  vóór stap 10 beslist zijn, niet eerder.
+- **Onbekend e-mailadres bij import: weigeren of vendor aanmaken** (§2c). Advies: weigeren. Speelt
+  alleen bij UC1. Dit moet vóór stap 10 beslist zijn, niet eerder.
+- **Of UC1 en UC2 dezelfde vragenlijst-templates delen** (§1c). Het model staat het toe — een
+  template is niet aan een `survey_kind` gebonden. Ik zou dat zo laten: een tenant die een
+  interne vragenlijst per ongeluk aan een leverancier stuurt, maakt een beheerfout, geen
+  systeemfout. Als daar wel een grens hoort, is het één kolom op `survey_template`.
+- **Hoe meerdere interne scores over dezelfde dienstverlener samengevat worden** (§1c). Nu worden
+  ze alleen opgeslagen. Middelen, spreiding tonen of los laten staan is een rapportagevraag, en
+  rapportage is uitgesteld (§1a). Het datamodel belet geen van de varianten.
 - **Toelichting bij de andere zeven typen is per vraag instelbaar en staat standaard op optioneel**
   (§3a). Alternatief zou zijn: nooit een toelichting buiten `confirmation`.
 
@@ -1013,6 +1187,14 @@ database. De leverancierskant werkt dan volledig.
 - **De bestaande `POST /survey/respond`-test** verwacht een lege body en moet aangepast worden.
 - **De bestaande guard krijgt een statuscontrole** (§2b). Dat is een wijziging in code die nu groen
   is; testpunt 30 hoort daarbij geschreven te worden vóór de wijziging.
-- **`survey_run` krijgt twee kolommen** (`status`, `is_test`) die er nu niet zijn.
+- **`survey_run` krijgt drie kolommen** (`status`, `is_test`, `survey_kind`) die er nu niet zijn.
+- **`survey_response` krijgt drie kolommen** (`subject_vendor_id`, `respondent_user_id`,
+  `respondent_label`) en `vendor_id` wordt **nullable**. Dat laatste is een versoepeling op een
+  tabel die vanochtend gemerged is; de bestaande UC1-garantie wordt overgenomen door de partiële
+  unieke index en de twee CHECK-constraints uit §1c. **Bij het bouwen eerst controleren dat de
+  bestaande tests 39 t/m 43 dekken** — een `NOT NULL` weghalen zonder vervanging is precies hoe
+  garanties stilletjes verdwijnen.
 - **`survey_question` krijgt `UNIQUE (question_id, answer_type)`** — nodig voor de samengestelde
   foreign key uit §4, en niet vanzelfsprekend op een kolom die al primary key is.
+- **Twee beheerschermen, niet één** (§2c). UC1 kiest leveranciers; UC2 kiest één dienstverlener en
+  daarna de collega's. Een gedeeld scherm met een schakelaar doet beide half.

@@ -19,6 +19,19 @@ Op 2026-07-29 is het openstaande niveau-besluit genomen: **niveau B**. Aanleidin
 
 **Wat niveau B betekent:** de tenant kiest per vraag een antwoordtype uit acht — `instruction` (leesblok), `confirmation`, `open_text`, `yes_no`, `single_choice`, `multi_choice`, `rating`, `number`, `file_upload`.
 
+**Scopegrens van de MVP, verduidelijkt op 2026-07-29: twee use cases, niets daarbuiten.**
+
+| | Use case | Wie vult in | Over wie gaat het |
+|---|---|---|---|
+| **UC1** | Vendor compliance (bv. IT) | externe leverancier | zichzelf |
+| **UC2** | Interne beoordeling van een dienstverlener | Transdev-collega | een andere partij |
+
+UC2 ontbrak volledig in het ontwerp en raakte het datamodel, niet alleen de tekst: `survey_response.vendor_id` was `NOT NULL` met een foreign key naar `vendor`, en een interne collega is geen leverancier. Drie besluiten van de eigenaar bepalen hoe UC2 werkt:
+
+- **Toegang ook via token-link** — daarmee blijft de toegangslaag ongewijzigd en wacht de MVP niet op de Entra-guard.
+- **Meerdere collega's mogen dezelfde dienstverlener beoordelen** — `UNIQUE (run_id, vendor_id)` wordt partieel, zodat UC1's garantie "één leverancier, één respons" wél overeind blijft.
+- **De interne score is niet zichtbaar voor de leverancier.** Dat volgt al uit de architectuur: een leverancier heeft geen toegang tot de Transdev-tenant, alleen één token voor één respons. Vastgelegd als testpunt 39, omdat het de garantie is die sneuvelt zodra iemand een route bouwt die op `subject_vendor_id` filtert in plaats van op `response_id`.
+
 **Overgenomen uit VendorComply:** de acht vraagtypen, de lifecycle Draft → Active → Finished/Archived, Test Mode vóór publicatie, drie manieren om deelnemers toe te voegen, deadline met overdue-markering, en import/export als JSON-schema.
 
 **Bewust uitgesteld:** logic jumps (voorwaardelijke logica — dat is niveau C), AI-beoordeling via Gemini, EFQM KPI-sync, Marketing Mode (publieke anonieme surveys) en radar/spider charts.
@@ -29,7 +42,7 @@ Volledig ontwerp: `docs/superpowers/specs/2026-07-28-vragenlijst-ontwerp.md` —
 
 **Nog open in het ontwerp (voorstellen, niet bevestigd, geen van alle blokkerend):** dat een gestarte ronde de vragenlijst bevriest (§2), dat een toelichting ook verplicht is bij "I do not confirm" (§3), en wat er gebeurt bij een geïmporteerd e-mailadres zonder bekende vendor (§2c — advies: weigeren, niet automatisch aanmaken).
 
-**Twee dingen raken bestaande, groene code** en verdienen aandacht bij het bouwen: `survey_run` krijgt twee kolommen (`status`, `is_test`), en de bestaande guard moet de ronde-status meewegen naast `closes_at`/`revoked_at`.
+**Drie dingen raken bestaande, groene code** en verdienen aandacht bij het bouwen: `survey_run` krijgt drie kolommen (`status`, `is_test`, `survey_kind`), `survey_response` krijgt er drie (`subject_vendor_id`, `respondent_user_id`, `respondent_label`) waarbij `vendor_id` **nullable** wordt, en de bestaande guard moet de ronde-status meewegen naast `closes_at`/`revoked_at`. Die nullable-wijziging is een versoepeling op een tabel die vanochtend gemerged is — de UC1-garantie wordt overgenomen door een partiële unieke index plus twee CHECK-constraints, en testpunten 41 t/m 43 horen te bewijzen dat er niets weglekt.
 
 ## Doel
 Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
