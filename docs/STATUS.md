@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-29, tweede sessie (vragenlijst-tool t/m **stap 6**: import/export, beide seeds, `GET /survey/respond/questions` én de volledige indienlogica; `contract_id` op `survey_run`; **guardbug gevonden waardoor UC2 in het geheel niet werkte**; 137 e2e-tests groen — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+2026-07-29, tweede sessie (vragenlijst-tool t/m **stap 8**: import/export, beide seeds, vragen ophalen, indienlogica én bestandsupload; `contract_id` op `survey_run`; **guardbug gevonden waardoor UC2 in het geheel niet werkte**; 155 e2e-tests groen — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
 
 ## Het project bestaat uit twee repositories
 
@@ -32,7 +32,7 @@ docker run -d --name mcm2test -e POSTGRES_PASSWORD=pw -p 55440:5432 postgres:17.
 docker exec -i mcm2test psql -U postgres -q < db/roles/bootstrap-roles.sql
 docker exec mcm2test psql -U postgres -c "ALTER ROLE clm_migrator WITH PASSWORD 'pw'; ALTER ROLE clm_api_runtime WITH PASSWORD 'pw';"
 MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres" npm run migrate:deploy
-DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" npm run test:e2e   # 137 tests
+DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" npm run test:e2e   # 155 tests
 
 # De twee vragenlijsten inlezen (tenant moet bestaan)
 DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" \
@@ -174,6 +174,22 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
   Ook nieuw vastgelegd: de vragenlijst is **alleen Engels**. Geen vertaallaag.
 
 ## Aantoonbaar werkend
+
+- **Bestandsupload met inhoudscontrole (2026-07-29, stap 8, Issue #9).** `src/survey/bestand-validatie.ts`, `bestand-opslag.service.ts` en `bijlage.service.ts`, plus `POST /survey/respond/attachment`. **155 van 155 e2e-tests groen** in twaalf suites.
+
+  Hiermee is de leverancierskant compleet: de validatie uit stap 6 eist een bestand bij `confirmed` op een uploadvraag, en de acht Transdev-vragen hebben er één. Zonder deze route was q1 niet bevestigend te beantwoorden.
+
+  **De inhoud telt, niet de naam.** Extensie en de meegestuurde `Content-Type` komen allebei van de client; de server stelt het type vast uit de eerste bytes (`%PDF-`, de acht PNG-bytes) en slaat díé waarde op. Een `.pdf` met PNG-inhoud wordt geweigerd in plaats van stilzwijgend als PNG opgeslagen — anders verbergt het systeem dat de leverancier iets anders aanleverde dan hij dacht (testpunt 20).
+
+  **De groottegrens ligt in de ontvangstlaag**, niet erna (testpunt 21). `storage_key` is servergegenereerd en bevat geen enkel teken uit de invoer, dus `../../etc/passwd.pdf` kan geen pad worden (testpunt 22).
+
+  **Eerst naar schijf, dan de databaserij.** Andersom zou een rij zonder bestand kunnen bestaan — een dode verwijzing die pas bij downloaden opvalt. De faalvorm is nu een bestand zonder rij, en dat wordt opgeruimd in een `finally`.
+
+  **Eerlijk over wat níét bewezen is:** de `FOR UPDATE`-vergrendeling zou twee gelijktijdige uploads serialiseren. Met die vergrendeling verwijderd bleven **alle tests groen** — gemeten, niet aangenomen. Twee transacties via dezelfde pg-`Pool` komen in de praktijk achter elkaar aan de beurt, dus de race was niet uit te lokken zonder een wachtpunt in productiecode te bouwen. `FOR UPDATE` blijft staan als bescherming voor het geval de transacties wél overlappen; de tests claimen nu alleen wat ze aantonen (het maximum houdt stand), en het commentaar zegt dat expliciet.
+
+  **`multer` is directe dependency geworden** (exact gepind, 2.2.0). Zat er al transitief via `@nestjs/platform-express`; zelfde patroon als `pg` bij Issue #2.
+
+  **Raakt Issue #30:** de database gaat mee in `npm run backup:dump`, bestanden op schijf niet. De certificaten zijn daarmee het enige onderdeel zonder backup — en juist het onderdeel met bewijsmateriaal.
 
 - **Validatie- en indienlogica (2026-07-29, stap 6).** `src/survey/antwoord-validatie.ts` (de regelset, zonder database en zonder NestJS) plus `src/survey/antwoord-indienen.service.ts` (valideren, schrijven, afsluiten, auditeren — alles in één transactie). **137 van 137 e2e-tests groen** in elf suites.
 
@@ -322,6 +338,8 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 **Een tegenproef kan zélf onvoldoende zijn — controleer of de testopzet het lek kán zien.** Bij stap 5 is het lek uit ontwerp §1c daadwerkelijk ingebouwd (filteren op `subject_vendor_id` in plaats van `response_id`) en **bleef alles groen**. Oorzaak: elke leverancier in de test had een eigen vendor, dus de verkeerde filter selecteerde toevallig dezelfde rij. Pas met **twee responses over dezelfde leverancier** — het echte UC1/UC2-scenario — viel testpunt 39 om. Een tegenproef die niet faalt betekent dus niet automatisch dat de code goed is; het kan ook zijn dat de opzet het probleem niet kan aantonen.
 
+**Een race is niet uit te lokken met twee gewone requests of twee service-aanroepen.** Bij stap 8 zijn drie testopzetten geprobeerd om te bewijzen dat een `FOR UPDATE` nodig was: supertest via `Promise.all`, de service rechtstreeks, en een handmatig vastgehouden transactie. **Alle drie bleven groen mét de vergrendeling verwijderd.** Twee transacties via dezelfde pg-`Pool` komen achter elkaar aan de beurt zodra de eerste zijn connectie teruggeeft. Wie een vergrendeling echt wil toetsen heeft twee losse verbindingen én een wachtpunt binnen de transactie nodig — en dat kost een haak in productiecode. De les: **stel de claim bij naar wat de test aantoont**, in plaats van de test te laten suggereren dat een mechanisme bewezen is.
+
 **Drizzle geeft een JS-array door als `record`, niet als `text[]`.** Een `INSERT` in een array-kolom faalt met "column X is of type text[] but expression is of type record". Werkende vorm: `ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(waarden)}::jsonb))`. Zelf een array-literal opbouwen kan ook, maar vraagt quoting van komma's, aanhalingstekens en accolades die in de waarden kunnen voorkomen — precies waar een injectiefout in sluipt.
 
 **Een nullable kolom maken raakt méér dan de tabel.** Migratie 0005 maakte `survey_response.vendor_id` nullable voor UC2, maar `resolve_survey_token()` joinde daar nog op — waardoor elke interne beoordeling 410 gaf. Bij het versoepelen van een kolom hoort een zoektocht naar elke plek die hem gebruikt: functies, views, policies. `grep -rn "vendor_id" drizzle/` had dit gevonden.
@@ -340,12 +358,14 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 | Repo | Branch | Werkboom | Openstaande PR's |
 |---|---|---|---|
-| MCM2 | **`feat/antwoorden-indienen`** | schoon | nog niet gepusht |
+| MCM2 | **`feat/bijlage-upload`** | schoon | nog niet gepusht |
 | MCM2-frontend | `main` | schoon | geen |
 
 **Drie PR'''s gemerged naar `main`:** #37 (stap 3 en 4, `ef62cd6`), #38 (migratie 0007 plus de drie bevestigde ontwerpbesluiten, `4b09026`) en #39 (stap 5 plus de UC2-guardfix, `52f41b0`). Alle drie met CI groen op alle drie de jobs, alle branches lokaal én op GitHub verwijderd. Na elke merge opnieuw geverifieerd tégen `main` zelf.
 
-**`feat/antwoorden-indienen` staat open met één commit:** stap 6 (validatie- en indienlogica) plus deze statusbijwerking. Nog niet gepusht. Lokale poorten wél gedraaid: format, lint, typecheck, 137/137 e2e tegen een verse Postgres 17.6 (twee keer), en de Docker-productiebuild die start en `/health` met 200 beantwoordt.
+**Vier PR's gemerged naar `main`:** #37, #38, #39 en #40 (stap 6, `7756b25`). Alle vier met CI groen op alle drie de jobs, alle branches lokaal én op GitHub verwijderd.
+
+**`feat/bijlage-upload` staat open met één commit:** stap 8 plus deze statusbijwerking. Nog niet gepusht. Lokale poorten wél gedraaid: format, lint, typecheck, 155/155 e2e tegen een verse Postgres 17.6 (twee keer), en de Docker-productiebuild die start, de uploadroute mapt en `/health` met 200 beantwoordt.
 
 - **`docs/sessiestand-otap` is op 2026-07-29 via PR #35 gemerged naar `main`** (merge-commit `cbe6c48`) en daarna lokaal én op GitHub verwijderd. Eén commit: uitsluitend deze statusbijwerking.
 - **`feat/issue-7-leveranciertoken` is op 2026-07-29 via PR #32 gemerged naar `main`** (merge-commit `7f0cc01`) en daarna lokaal én op GitHub verwijderd. CI groen op alle drie de jobs vóór de merge, opnieuw geverifieerd met `gh pr checks 32` op de laatste commit. Vijf commits: de tokenlaag, de HTTP-routes met logmaskering en auditregels, de fix op `maskeerDiep`, plus twee documentatiecommits. **Issue #31 is bij die merge gesloten** — migratie `0004` loste hem op. Let op: die migratie is bewezen in CI, **niet toegepast op `clm-enterprise`** — net als #29 en #25 wacht dat op #30.
@@ -369,7 +389,9 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 De databaselaag is omgezet (ADR-010), spoor 2 van Issue #7 zit in `main`, en de vragenlijst-tool staat t/m stap 4: het datamodel, de guard, import/export en beide gevulde vragenlijsten.
 
-**De eerstvolgende inhoudelijke stap is stap 8: bestandsupload met inhoudscontrole** (ontwerp §6, Issue #9). Stap 7 (concept opslaan) is bruikbaar maar niet blokkerend; stap 8 wél — de acht Transdev-vragen hebben een uploadvraag, en zonder upload is die niet bevestigend te beantwoorden. Dat raakt de productiedatabase niet; de hele e2e-keten draait tegen wegwerpcontainers, dus #30 blokkeert dit spoor niet.
+**De leverancierskant is functioneel compleet.** Een leverancier kan de link openen, de vragen zien, bestanden uploaden en indienen — met alle validatie en garanties eromheen.
+
+**De eerstvolgende stap is geen code maar een OTAP-doorloop:** het portaal met `NEXT_PUBLIC_API_URL` tegen de echte backend zetten. Dat is de eerste keer dat de klant de volledige keten in de browser ziet in plaats van mock data, en het is nu voor het eerst mogelijk. Daarna is stap 7 (concept opslaan) de volgende inhoudelijke uitbreiding, en stap 10 (beheerroutes) wacht op spoor 1.
 
 **Daarnaast, en dat kost geen code:** het portaal tegen de echte backend zetten via een OTAP-doorloop. De vragen staan in de database en de route bestaat, dus dit is de eerste keer dat de klant de echte vragenlijst in de browser kan zien in plaats van mock data.
 
@@ -381,11 +403,12 @@ De databaselaag is omgezet (ADR-010), spoor 2 van Issue #7 zit in `main`, en de 
 ~~5. `GET /survey/respond/questions`~~ — **afgerond 2026-07-29**, zie "Aantoonbaar werkend". Legde en passant de UC2-guardbug bloot.
 
 ~~6. Validatie- en indienlogica~~ — **afgerond 2026-07-29**, zie "Aantoonbaar werkend".
+~~8. Bestandsupload met inhoudscontrole~~ — **afgerond 2026-07-29**, idem.
 
-**Nu aan de beurt — stap 7 t/m 9 uit ontwerp §10:**
-7. `PUT /survey/respond/answers` — concept opslaan, expliciet (geen auto-save).
-8. Bestandsupload met inhoudscontrole (ontwerp §6, Issue #9).
-9. Tests 14 t/m 48.
+**Nu aan de beurt:**
+7. `PUT /survey/respond/answers` — concept opslaan, expliciet (geen auto-save). Bruikbaar bij acht vragen met verplichte toelichtingen, maar blokkeert niets.
+9. De resterende testpunten uit ontwerp §8.
+10. Beheerroutes — wacht op spoor 1 (Entra-guard).
 
 **De 404 die de OTAP-doorloop signaleerde is weg:** `/survey/respond/questions` bestaat en levert de vragenlijst uit de database. **Nog niet in de browser bekeken** — het portaal draait nog op mock data tot iemand het met `NEXT_PUBLIC_API_URL` tegen de backend zet. Dat is de eerstvolgende zichtbare stap en kost geen code, alleen een OTAP-doorloop.
 
