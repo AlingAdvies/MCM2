@@ -12,22 +12,27 @@
 Dit document beschrijft de architectuur van MCM2, de OTAP-straat en de teststrategie, plus een
 eerlijke lijst van wat ik zelf zwak vind. Ik zoek een **tweede mening**, geen bevestiging.
 
-**De vier vragen waar het om draait:**
+**De thema's waar het om draait:**
 
 1. **Portabiliteit.** Wat hier gebouwd wordt moet eenvoudig maar robuust te verplaatsen zijn naar
-   AWS (of een andere provider). Is dat aannemelijk gemaakt, of zit er ergens een afhankelijkheid
-   die dat straks duur maakt? Zie §7 — dit is de belangrijkste vraag.
+   AWS (of een andere provider). Dit is de belangrijkste — zie §7.
 2. **Zijn de garanties echt garanties?** Er wordt veel in de database afgedwongen (RLS,
-   CHECK-constraints, triggers). Klopt die verdeling, of zitten er dingen in de servicelaag die
-   erin horen — of andersom?
+   CHECK-constraints, triggers), maar vijf regels zitten in de servicelaag. Zie §2.
 3. **Is de teststrategie evenredig?** 155 e2e-tests op de backend, **nul** op de frontend. Zie §6.
-4. **Wat mis ik?** Vooral op het snijvlak van beveiliging en operatie.
+4. **Wat ontbreekt — en wat is te veel?** Op het snijvlak van beveiliging en operatie.
+
+**Lees §10 en §11 vóór je begint.** Daar staan negen concrete vragen, elk met wat ik met het antwoord
+ga doen, plus het antwoordsjabloon. Dat sjabloon is geen formaliteit: proza is lastig omzetten in
+werk zonder dat mijn interpretatie er weer in sluipt.
 
 **Wat ik níét vraag:** een oordeel over de functionele scope. Die ligt vast in een apart
 ontwerpdocument en is met de opdrachtgever doorgenomen.
 
 **Waar je op mag afgaan:** alle cijfers en bestandsnamen in dit document zijn geverifieerd tegen de
 code op het moment van schrijven. Waar iets *niet* geverifieerd is, staat dat er expliciet bij.
+
+**Waar ik tegenspraak zoek:** §8 is mijn eigen lijst van zwakke plekken. Als je het daar ergens niet
+mee eens bent — te zwaar, te licht, verkeerd geplaatst — is dat waardevoller dan instemming.
 
 ---
 
@@ -454,21 +459,143 @@ Voor de balans — en omdat een reviewer moet weten wat volgens mij niet aangera
 
 ## 10. Concrete vragen
 
-1. **§7** — Is de portabiliteitsclaim geloofwaardig? Met name: bestanden op schijf, het rollenmodel,
-   en `NEXT_PUBLIC_API_URL` dat per omgeving een eigen image afdwingt.
-2. **§2** — Klopt de verdeling database versus servicelaag? Horen de vijf servicelaag-regels in een
-   trigger?
-3. **§6** — Is 155 e2e-tests met één unittest een verdedigbare verhouding? En waar begin je met de
-   frontend?
-4. **§3** — Is `vendor_id` naast `subject_vendor_id` een heldere modellering of een valkuil?
-5. **§5** — Is een handmatige doorloop verdedigbaar, of moet die eerst geautomatiseerd worden?
-6. **§8.4** — Hoe toets je een vergrendeling waarvan de race niet uit te lokken is zonder een haak
-   in productiecode?
-7. **Wat mis ik**, vooral op het snijvlak van beveiliging en operatie?
+Negen vragen. Bij elke staat **wat ik met het antwoord ga doen** — dat is geen beleefdheid maar een
+eis aan de vorm: een antwoord waarmee ik geen beslissing kan nemen, is geen bruikbaar antwoord.
 
-> **Bijlage A bevat de kernfragmenten letterlijk uit de code** — de RLS-policy, de tenantfunctie, de
-> `SECURITY DEFINER`-lookup, de guard, de CHECK-constraints, de trigger, de bestandscontrole, de
-> OTAP-stack en een voorbeeldtest. Beoordeel op wat daar staat, niet op mijn samenvatting erboven.
+> **Beoordeel op Bijlage A, niet op mijn samenvatting.** Daar staan de kernfragmenten letterlijk uit
+> de code: de RLS-policy, de tenantfunctie, de `SECURITY DEFINER`-lookup, de guard, de
+> CHECK-constraints, de trigger, de bestandscontrole, de OTAP-stack en een voorbeeldtest.
+
+---
+
+**1. Portabiliteit — welke breekt het eerst?** (§7)
+
+Bij een verhuizing naar AWS App Runner: zet deze vier op volgorde van *wat als eerste breekt*, en
+geef per stuk aan wat het kost om het nú te voorkomen versus straks te repareren.
+
+- (a) bestanden op containerschijf zonder persistente opslag
+- (b) het rollenmodel dat `CREATE ROLE` en zes rollen vereist
+- (c) `NEXT_PUBLIC_API_URL` dat per omgeving een eigen image afdwingt
+- (d) de `SECURITY DEFINER`-functie
+
+→ *Ik gebruik dit als volgorde voor de migratievoorbereiding. Een rangorde met kosten kan ik direct
+omzetten in issues; "let hierop" niet.*
+
+**2. De vijf servicelaag-regels — per regel een besluit.** (§2)
+
+Zet achter elk van deze vijf: **trigger** / **laten staan** / **anders**. Bij "trigger" graag een
+schets van hoe, bij "anders" wat.
+
+| Regel | Nu afgedwongen in |
+|---|---|
+| Gekozen optie bestaat in `config.options[]` | servicelaag |
+| Rating binnen `min…max` | servicelaag |
+| `multi_choice`-aantallen en duplicaten | servicelaag |
+| Aantal bestanden per vraag ≤ `max_files` | servicelaag |
+| Inhoud van de `config`-JSONB | servicelaag |
+
+→ *Vijf beslissingen die ik één voor één kan uitvoeren. Een algemeen oordeel over "de verdeling"
+levert geen commit op.*
+
+**3. Waar begin ik met frontendtests?** (§6)
+
+De frontend heeft géén testframework. Noem **één** startpunt — componenttests, één end-to-end
+browsertest van de hele flow, of iets anders — en zeg waarom dat het eerst rendeert. Niet een
+volledige teststrategie; het eerste dat ik maandag zou bouwen.
+
+→ *Wordt direct een issue. Ik heb een startpunt nodig, geen piramide.*
+
+**4. Is de backendverhouding scheef?** (§6)
+
+155 e2e-tests tegen echte Postgres, één unittest. Ik verdedig dat met "de garanties zitten in de
+database, een mock bewijst daar niets over". **Waar kost dit me nu al tijd of dekking** — en zou je
+ergens een unittestlaag toevoegen? Zo ja: welke laag concreet?
+
+→ *Bevestiging betekent: niets doen. Een concreet gat betekent: tests toevoegen op die plek.*
+
+**5. `vendor_id` naast `subject_vendor_id` — valkuil of niet?** (§3, A6)
+
+Twee kolommen die bij UC1 naar dezelfde rij wijzen en bij UC2 uiteenlopen. **Noem het scenario waarin
+dit misgaat**, of stel vast dat het houdbaar is. Als er een beter model is: welk, en wat kost de
+migratie nu er al gevulde rondes zijn?
+
+→ *Dit is de duurste om later te wijzigen. Ik wil weten of ik nu moet ingrijpen of dit kan laten
+staan.*
+
+**6. Een handmatige doorloop — houdbaar?** (§5)
+
+De OTAP-doorloop (21 controles) draait handmatig, want automatiseren vraagt beide repositories in één
+workflow. **Wat is het realistische faalscenario** — dat hij verwaarloosd wordt, of iets anders? En
+zo ja: is er een tussenvorm goedkoper dan volledige automatisering?
+
+→ *Bepaalt of ik dit als issue inplan of bewust laat zoals het is.*
+
+**7. Hoe toets je die vergrendeling?** (§8.4)
+
+De `FOR UPDATE` op de uploadtelling: met de vergrendeling verwijderd bleven **alle tests groen**.
+Drie opzetten geprobeerd, alle drie waardeloos, omdat transacties via dezelfde connectiepool achter
+elkaar aan de beurt komen. **Geef de techniek** waarmee je dit wél toetst zonder een haak in
+productiecode — of stel vast dat het de moeite niet waard is en de vergrendeling weg kan.
+
+→ *Concreet genoeg om te implementeren, of een besluit om code te verwijderen.*
+
+**8. Wat is te veel?**
+
+Ik vraag hierboven alleen wat er ontbreekt. **Noem wat overbodig is**: te vroeg gebouwd, te complex
+voor het probleem, of onderhoud dat niets oplevert. Kandidaten waar ik zelf aan twijfel: de
+vormconstraint van 38 regels SQL, zeven survey-tabellen voor twee use cases, twaalf ADR's.
+
+→ *Weggooien is goedkoper dan bouwen. Deze vraag stelt niemand uit zichzelf.*
+
+**9. Maximaal drie dingen die vóór de pilot af moeten.**
+
+Niet een checklist van best practices — **precies drie**, met de reden waarom juist die drie en niet
+andere. Mag overlappen met mijn eigen lijst in §8, maar zeg dan expliciet dat je het eens bent en
+waarom het bovenaan hoort.
+
+→ *Dit wordt de werkvolgorde. Meer dan drie is geen prioritering.*
+
+---
+
+### Waar ik het níét mee eens hoef te zijn
+
+Eén verzoek dat de rest overstijgt: **§8 bevat mijn eigen lijst van zwakke plekken. Zeg expliciet
+waar je het daar niet mee eens bent** — of ik iets overschat, onderschat, of verkeerd heb geplaatst.
+
+Een review die vooral bevestigt wat ik al opschreef, is precies de valkuil van een document waarin de
+auteur zijn eigen zwakke plekken benoemt. Tegenspraak is waardevoller dan instemming.
+
+---
+
+## 11. Hoe ik het antwoord wil ontvangen
+
+**Per bevinding één blok.** Proza is lastig omzetten in werk zonder dat mijn eigen interpretatie er
+weer in sluipt.
+
+```
+### [korte titel]
+
+Vraag:        nummer uit §10, of "extra" als het buiten de vragen valt
+Bevinding:    één zin
+Ernst:        blokkerend-voor-pilot | voor-productie | later | cosmetisch
+Onderbouwing: verwijzing naar een fragment in Bijlage A, of een concreet
+              faalscenario ("bij X gebeurt Y")
+Aanbeveling:  wat te doen, als één handeling geformuleerd
+Niets doen:   wat er misgaat, en wanneer
+Zekerheid:    zeker | waarschijnlijk | vermoeden
+```
+
+**Waarom die laatste regel er staat.** Ik ken dit systeem beter dan jij, dus ik kan een vermoeden
+narekenen — maar alleen als ik weet dat het er één is. Een reviewer die alles met gelijke stelligheid
+brengt, kost me meer tijd dan een die "vermoeden" durft te schrijven. **Gok gerust, label het.**
+
+**Verder:**
+
+- **Antwoord op alle negen**, ook waar het antwoord "hier is niets mis mee" is. Dat is bruikbare
+  informatie: het betekent dat ik er geen tijd meer in steek.
+- **Bij twijfel over feiten:** zeg wat je zou willen zien in plaats van aan te nemen. Ik kan elk
+  bestand uit de repository nasturen.
+- **Volgorde:** begin met de drie uit vraag 9. Als je halverwege stopt, heb ik dan het belangrijkste.
 
 ---
 
