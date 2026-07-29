@@ -1,15 +1,44 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-29 (PR #32, #33 en #34 gemerged; vragenlijst niveau B t/m stap 2, leverancierportaal in de browser, OTAP-doorloop bewezen voor O en T — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+2026-07-29, einde sessie (PR #32 t/m #35 gemerged; vragenlijst niveau B t/m stap 2, leverancierportaal in de browser, OTAP-doorloop bewezen voor O en T — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+
+## Het project bestaat uit twee repositories
+
+Sinds 2026-07-29. Wie alleen deze repo kent, mist de helft:
+
+| Repo | Pad | Inhoud |
+|---|---|---|
+| **MCM2** | `C:\dev\Work\MCM2` | NestJS-backend, database, migraties, ontwerpen, ADR's |
+| **MCM2-frontend** | `C:\dev\Work\MCM2-frontend` | Next.js-frontend, leverancierportaal |
+
+Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in een scherm niet wacht op een databasemigratie (ADR-012). De OTAP-stack verwacht ze als zustermappen.
 
 ## Voor een nieuwe sessie: lees dit eerst
 
 1. Lees `MCM2-CLAUDE.md` volledig (sessiestartprotocol, §14).
 2. Lees dit document (`docs/STATUS.md`) volledig — het is de enige actuele waarheid over fase en blockers.
-3. Verifieer git-status zelf (`git status`, `git branch -a`) tegen wat hieronder staat — vertrouw niet blind op deze snapshot.
+3. Verifieer git-status zelf (`git status`, `git branch -a`) tegen wat hieronder staat — vertrouw niet blind op deze snapshot. **Doe dat in beide repositories.**
 4. Check de open GitHub Issues (`gh issue list --repo AlingAdvies/MCM2 --state open`) voor de actuele backlog — dit document verwijst naar issue-nummers, maar de Issues zelf zijn de bron van waarheid over wat daadwerkelijk nog open staat.
 5. **Eerste concrete vervolgstap: stap 3 uit de bouwvolgorde** (import/export van het JSON-schema, ontwerp §10). Stap 1 (migratie) en stap 2 (guard weegt de ronde-status mee) zijn op 2026-07-29 gebouwd en gemerged. Issue #30 (geen backups) blijft de zwaarste openstaande blokkade voor alles wat de productiedatabase raakt (#19, #25, #29), maar vraagt nu alleen nog uitvoering door de eigenaar, geen besluit — en de vragenlijst-tool loopt daar niet op vast, want die bouwt tegen wegwerpcontainers.
+
+### Snel weer op gang komen
+
+```bash
+# Backend: tests tegen een wegwerpcontainer
+docker run -d --name t -e POSTGRES_PASSWORD=pw -p 55440:5432 postgres:17.6
+docker exec -i t psql -U postgres -q < db/roles/bootstrap-roles.sql
+docker exec t psql -U postgres -c "ALTER ROLE clm_migrator WITH PASSWORD 'pw'; ALTER ROLE clm_api_runtime WITH PASSWORD 'pw';"
+MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres" npm run migrate:deploy
+DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" npm run test:e2e   # 53 tests
+
+# Frontend: het portaal bekijken zonder backend
+cd ../MCM2-frontend && npm run dev
+# → http://localhost:3000/portal/survey/demo-geldig
+#   andere demo-tokens: demo-nietopen, demo-verlopen, demo-ingediend
+
+# De volledige keten (beide productie-images): docs/runbooks/otap-doorloop.md
+```
 
 ## Vragenlijst-tool — scope vastgesteld op 2026-07-29, ontwerp is bouwbaar
 
@@ -196,6 +225,18 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 - **Issue #4 (EntraID-haalbaarheidscheck) afgerond op 2026-07-27:** `kees@alingadvies.nl` heeft Global Administrator in de Entra ID-tenant `alingadvies.nl`, ruim voldoende voor app-registraties; geen Azure-subscription gekoppeld maar dat blokkeert Entra-app-registraties niet. Rechtencheck is tegen `alingadvies.nl` gedaan, niet tegen een Transdev-tenant (geen toegang tot Transdev's Entra-omgeving) — `alingadvies.nl` dient als voorbeeld-/testtenant. De destijds gekozen uitvoeringsvorm (Cognito) is nadien herzien, zie hieronder.
 - **ADR-006 herzien op 2026-07-27 (Cognito → Entra External ID):** vóór er een Cognito User Pool werd aangemaakt bleek de tweede cloudlaag (los AWS-account, cross-cloud federatie) onnodige complexiteit t.o.v. Microsoft Entra External ID, dat dezelfde multi-IdP-flexibiliteit biedt binnen het Microsoft-ecosysteem — geen los AWS-account, gratis tot 50.000 MAU. Reden om niet simpelweg "kaal" Entra ID te gebruiken (zoals een ouder platformdocument uit 2026-03-30 voorstelde): MCM2's multi-tenant-toekomst qua identity-providers is onzeker (niet aantoonbaar Microsoft-only), dus een CIAM-laag blijft gewenst. Zie `docs/adr/ADR-006-ciam-laag-entra-external-id.md` (bestandsnaam gewijzigd op 2026-07-27; heette eerder `ADR-006-cognito-als-federatielaag.md`).
 
+## Vier lessen uit deze sessie die tijd besparen
+
+Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan hier omdat ze anders opnieuw ontdekt worden.
+
+**`drizzle-kit` genereert migraties die op een gevulde database falen.** Bij `subject_vendor_id` produceerde het `ADD COLUMN ... NOT NULL`, wat alleen op een lege tabel slaagt. Elke nieuwe verplichte kolom vraagt handmatig de drie-stappenvorm: kolom toevoegen → backfillen → `SET NOT NULL`. Controleer dit bij **elke** gegenereerde migratie.
+
+**PostgreSQL weigert `CREATE OR REPLACE FUNCTION` als de `RETURNS TABLE` wijzigt.** Dan is `DROP` + `CREATE` nodig — en **na een `DROP` zijn de rechten weg**, want die hangen aan het functie-object en niet aan de naam. Zonder een herhaalde `GRANT` werkt er niets meer. Zie migratie 0006.
+
+**Groene tests bewijzen niets tot je ze hebt zien falen.** Bij stap 2 zijn de zes nieuwe tests gecontroleerd door de controle tijdelijk te verwijderen: vijf vielen om, één niet. De eerste poging daartoe mislukte bovendien stil (een regex die niet matchte), waardoor de "proef" niets toetste. Doe die tegenproef expliciet.
+
+**`NEXT_PUBLIC_*` wordt tijdens de build ingebakken, niet bij het starten gelezen.** Een frontend-image dat de echte backend moet gebruiken heeft die waarde nodig als **build-argument**. Zet je hem als `environment`, dan draait de app stilzwijgend op mock data terwijl je denkt dat hij live is. De OTAP-doorloop controleert hierop.
+
 ## Niet als bewezen beschouwen
 
 - RLS-tenant-isolatie was tot 2026-07-27 niet bewezen zolang de runtime-role nog `BYPASSRLS` had — een eerdere "RLS werkt"-verificatie in deze projectgeschiedenis was vals-positief (lege tabel, geen bewijs van daadwerkelijke blokkade). **Nu aantoonbaar bewezen én geautomatiseerd** (zie hierboven en ADR-009) — niet langer een handmatige, ad-hoc verificatie.
@@ -206,6 +247,16 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Huidige branch en Git-status
 
+**Stand bij het afsluiten van de sessie op 2026-07-29:**
+
+| Repo | Branch | Werkboom | Openstaande PR's |
+|---|---|---|---|
+| MCM2 | `main` (`cbe6c48`) | schoon | geen |
+| MCM2-frontend | `main` | schoon | geen |
+
+**Geen openstaande branches in beide repositories.** Alles van vandaag is gemerged en opgeruimd.
+
+- **`docs/sessiestand-otap` is op 2026-07-29 via PR #35 gemerged naar `main`** (merge-commit `cbe6c48`) en daarna lokaal én op GitHub verwijderd. Eén commit: uitsluitend deze statusbijwerking.
 - **`feat/issue-7-leveranciertoken` is op 2026-07-29 via PR #32 gemerged naar `main`** (merge-commit `7f0cc01`) en daarna lokaal én op GitHub verwijderd. CI groen op alle drie de jobs vóór de merge, opnieuw geverifieerd met `gh pr checks 32` op de laatste commit. Vijf commits: de tokenlaag, de HTTP-routes met logmaskering en auditregels, de fix op `maskeerDiep`, plus twee documentatiecommits. **Issue #31 is bij die merge gesloten** — migratie `0004` loste hem op. Let op: die migratie is bewezen in CI, **niet toegepast op `clm-enterprise`** — net als #29 en #25 wacht dat op #30.
 - **`feat/issue-9-vragenlijst-ontwerp` is op 2026-07-29 via PR #33 gemerged naar `main`** en daarna lokaal én op GitHub verwijderd. Negen commits: het vragenlijst-ontwerp (niveau B, twee use cases, categorieën), ADR-012, de migratie 0005, de guard-uitbreiding 0006 en deze statusbijwerking. CI groen op alle drie de jobs vóór de merge.
 - **`chore/otap-doorloop` is op 2026-07-29 via PR #34 gemerged naar `main`** (merge-commit `8467ef8`) en daarna lokaal én op GitHub verwijderd. Eén commit: de OTAP-stack, het verificatiescript en het runbook. Geen applicatiecode.
@@ -242,7 +293,9 @@ De databaselaag is omgezet (ADR-010), spoor 2 van Issue #7 zit in `main`, en het
 8. Bestandsupload met inhoudscontrole (ontwerp §6, Issue #9).
 9. Tests 14 t/m 48.
 
-**Parallel spoor, blokkeert het bovenstaande niet:** het leverancierportaal in `MCM2-frontend` op mock data. Dat kan vooruit omdat de mock/live-schakelaar niet op werkende endpoints wacht.
+**Stap 5 is de snelste zichtbare winst.** Het leverancierportaal staat en toont de acht vragen al op mock data; zodra `/survey/respond/questions` bestaat, toont hetzelfde scherm de echte vragenlijst uit de database. Op dit moment krijgt het portaal daar een 404 — dat is geen bug maar de nog-niet-gebouwde route (bevestigd in de OTAP-doorloop).
+
+**Aandachtspunt bij stap 6:** de bestaande `POST /survey/respond` accepteert nu een lege body. Zodra daar antwoorden bij komen, moet `test/survey-routes.e2e-spec.ts` mee — dat is geen ontwerpkwestie maar werk dat vergeten wordt als het niet ergens staat.
 
 Daarna, in volgorde van afhankelijkheid:
 
