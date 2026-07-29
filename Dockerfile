@@ -63,6 +63,25 @@ COPY package.json ./
 COPY drizzle ./drizzle
 COPY scripts ./scripts
 
+# Map voor geüploade bijlagen (vragenlijst-ontwerp §6).
+#
+# Moet vóór `USER node` aangemaakt worden én van die gebruiker zijn: /app is
+# eigendom van root, dus een non-root proces kan er geen submap in maken. Zonder
+# deze twee regels faalt élke upload met "EACCES: permission denied, mkdir
+# '/app/var'" — gevonden tijdens de OTAP-doorloop van 2026-07-29, niet door de
+# e2e-tests, want die draaien met UPLOAD_DIR naar een tijdelijke map.
+#
+# UPLOAD_DIR staat expliciet in het image in plaats van te leunen op de default
+# in BestandOpslagService: het pad hoort bij het uitrolbare artefact, niet bij
+# de code.
+RUN mkdir -p /app/var/uploads && chown -R node:node /app/var
+ENV UPLOAD_DIR=/app/var/uploads
+
+# LET OP BIJ UITROL: dit is een map ín de container. Zonder volume zijn de
+# certificaten weg zodra het image vervangen wordt — en het zijn
+# compliance-bewijsstukken. Zie ADR-012 en Issue #30.
+VOLUME ["/app/var/uploads"]
+
 # Non-root: de node-image levert een 'node'-gebruiker (uid 1000) mee.
 USER node
 
