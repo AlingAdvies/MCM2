@@ -466,9 +466,425 @@ Voor de balans — en omdat een reviewer moet weten wat volgens mij niet aangera
    in productiecode?
 7. **Wat mis ik**, vooral op het snijvlak van beveiliging en operatie?
 
+> **Bijlage A bevat de kernfragmenten letterlijk uit de code** — de RLS-policy, de tenantfunctie, de
+> `SECURITY DEFINER`-lookup, de guard, de CHECK-constraints, de trigger, de bestandscontrole, de
+> OTAP-stack en een voorbeeldtest. Beoordeel op wat daar staat, niet op mijn samenvatting erboven.
+
 ---
 
-## Bijlage — waar je kunt kijken
+## Bijlage A — de kernfragmenten
+
+Letterlijk uit de code gekopieerd, zodat je kunt oordelen op wat er staat in plaats van op mijn
+samenvatting. Commentaar is ingekort waar het alleen achtergrond gaf.
+
+### A1. De tenantgrens: sessievariabele + RLS
+
+De hele isolatie hangt aan één functie en het feit dat de runtime-rol geen `BYPASSRLS` heeft.
+
+```sql
+-- drizzle/0000_baseline_bestaand_schema.sql
+CREATE OR REPLACE FUNCTION clm.current_tenant_id()
+RETURNS UUID LANGUAGE sql STABLE AS $$
+    SELECT NULLIF(current_setting('app.current_tenant_id', TRUE), '')::UUID
+$$;
+```
+
+Elke tenantgebonden tabel heeft een policy met **zowel `USING` als `WITH CHECK`**. Zonder
+`WITH CHECK` kan een rij met een vreemde `tenant_id` weggeschreven worden die daarna onzichtbaar is
+— een lek dat pas bij een audit opvalt.
+
+Het voorbeeld hieronder doet meer: het dwingt óók af dat er alleen geschreven mag worden zolang de
+respons openstaat. Dat is de databasekant van de éénmaligheid; een bug in de applicatie kan die niet
+omzeilen.
+
+```sql
+-- drizzle/0005_vragenlijst_niveau_b.sql
+CREATE POLICY survey_answer_isolation ON clm.survey_answer
+    USING (tenant_id = clm.current_tenant_id())
+    WITH CHECK (
+        tenant_id = clm.current_tenant_id()
+        AND EXISTS (
+            SELECT 1
+              FROM clm.survey_response r
+             WHERE r.response_id = survey_answer.response_id
+               AND r.tenant_id   = clm.current_tenant_id()
+               AND r.status      = 'pending'
+        )
+    );
+```
+
+Let op de asymmetrie: **lezen mag altijd binnen de eigen tenant** — een ingediende respons moet
+leesbaar blijven, anders is het bewijsmateriaal onbereikbaar. Schrijven mag alleen bij `pending`.
+
+### A2. De enige plek waar een verbinding wordt geopend
+
+Domeincode opent nooit zelf een client. Alles loopt via `withTenant()`, dat de tenantcontext als
+eerste statement in de transactie zet — op dezelfde connectie, want een sessievariabele geldt per
+connectie.
+
+```ts
+// src/db/database.service.ts
+async withTenant<T>(
+  tenantId: string,
+  fn: (tx: TenantTransaction) => Promise<T>,
+): Promise<T> {
+  if (!UUID_REGEX.test(tenantId)) {
+    throw new Error(`Ongeldige tenant-id: '${tenantId}'`);
+  }
+
+  return this.db.transaction(async (tx) => {
+    await tx.execute(setTenantContext(tenantId));
+    return fn(tx);
+  });
+}
+```
+
+Waarbij `setTenantContext` een geparametriseerde `set_config` is — geen stringinterpolatie:
+
+```ts
+// src/db/schema.ts
+export const setTenantContext = (tenantId: string) =>
+  sql`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
+```
+
+Buiten deze methode is er geen tenantcontext, dus levert elke tenantgebonden query nul rijen op.
+
+**Startcontrole:** de applicatie weigert te starten als de databaserol `BYPASSRLS` heeft. Zonder die
+controle zou RLS betekenisloos zijn als isolatiegrens terwijl alles er goed uitziet.
+
+### A3. De tokenlookup — `SECURITY DEFINER`
+
+Dit is de kip-en-ei: de tenant is niet bekend vóór de lookup, dus deze ene functie moet buiten RLS
+om kunnen kijken. Ze geeft **uitsluitend geldigheidsvelden** terug — geen namen, e-mailadressen of
+antwoorden.
+
+```sql
+-- drizzle/0008_guard_kent_uc2.sql
+CREATE OR REPLACE FUNCTION clm.resolve_survey_token(p_token_hash TEXT)
+RETURNS TABLE (
+    response_id   UUID,
+    tenant_id     UUID,
+    status        TEXT,
+    expires_at    TIMESTAMPTZ,
+    submitted_at  TIMESTAMPTZ,
+    vendor_active BOOLEAN,
+    run_closed    BOOLEAN,
+    run_status    TEXT
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = clm, pg_temp
+AS $$
+    SELECT r.response_id,
+           r.tenant_id,
+           r.status,
+           r.expires_at,
+           r.submitted_at,
+           -- subject_vendor_id, niet vendor_id: de leverancier waar de survey
+           -- OVER gaat, niet degene die invult.
+           (v.vendor_id IS NOT NULL AND v.deleted_at IS NULL) AS vendor_active,
+           (run.revoked_at IS NOT NULL
+            OR (run.closes_at IS NOT NULL AND run.closes_at < now())) AS run_closed,
+           run.status AS run_status
+      FROM clm.survey_response r
+      LEFT JOIN clm.vendor     v   ON v.vendor_id = r.subject_vendor_id
+      LEFT JOIN clm.survey_run run ON run.run_id  = r.run_id
+     WHERE r.token_hash = p_token_hash
+$$;
+
+REVOKE ALL ON FUNCTION clm.resolve_survey_token(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION clm.resolve_survey_token(TEXT) TO clm_api, clm_admin;
+```
+
+> Die `LEFT JOIN` op `subject_vendor_id` was tot 2026-07-29 een join op `vendor_id`. Bij UC2 is die
+> kolom leeg, dus `vendor_active` werd `false` en **élke interne beoordeling kreeg 410**. Gevonden
+> door de OTAP-doorloop, niet door een test — geen enkele test haalde een UC2-link over HTTP op.
+
+### A4. De guard: waar de tenantcontext vandaan komt
+
+De guard staat op **controllerniveau**, dus elke route die erbij komt is automatisch beschermd. Een
+nieuwe route vergeten te beveiligen is geen mogelijkheid.
+
+```ts
+// src/survey/survey-token.guard.ts
+async canActivate(context: ExecutionContext): Promise<boolean> {
+  const request = context.switchToHttp().getRequest<RequestMetToken>();
+
+  const uitkomst = await this.tokens.controleer(request.query?.t);
+
+  if (!uitkomst.geldig) {
+    // 404 voor onbekend/ingetrokken: geen informatie prijsgeven.
+    // 410 Gone voor de rest: de link heeft bestaan en is nu definitief weg.
+    if (uitkomst.reden === 'onbekend' || uitkomst.reden === 'ingetrokken') {
+      throw new NotFoundException(melding(uitkomst.reden));
+    }
+    throw new GoneException(melding(uitkomst.reden, uitkomst.datum));
+  }
+
+  request.surveyToken = {
+    responseId: uitkomst.responseId,
+    tenantId: uitkomst.tenantId,
+    expiresAt: uitkomst.expiresAt,
+  };
+  // …
+}
+```
+
+**Het punt: `tenantId` komt uit `uitkomst`, dus uit de databaselookup.** Er is geen pad waarlangs een
+client hem kan beïnvloeden.
+
+### A5. De vormconstraint — één waardekolom per antwoordtype
+
+Ingekort tot vier van de acht takken; de rest volgt hetzelfde patroon. Zonder dit kan een bug een
+rating als tekst wegschrijven of een keuzecode in `answer_number` proppen — en dat merk je pas
+maanden later bij de eerste rapportage, wanneer niemand meer weet wat er bedoeld was.
+
+```sql
+-- drizzle/0005_vragenlijst_niveau_b.sql
+ALTER TABLE clm.survey_answer
+    ADD CONSTRAINT survey_answer_shape_check
+    CHECK (
+        CASE answer_type
+            WHEN 'confirmation' THEN
+                answer_code IN ('confirmed', 'not_confirmed',
+                                'not_applicable', 'cannot_upload')
+                AND answer_codes IS NULL
+                AND answer_text IS NULL AND answer_number IS NULL
+            WHEN 'multi_choice' THEN
+                answer_codes IS NOT NULL
+                AND array_length(answer_codes, 1) >= 1
+                AND answer_code IS NULL AND answer_text IS NULL
+                AND answer_number IS NULL
+            WHEN 'rating' THEN
+                answer_number IS NOT NULL
+                AND answer_number = trunc(answer_number)
+                AND answer_code IS NULL AND answer_codes IS NULL
+                AND answer_text IS NULL
+            -- … open_text, yes_no, single_choice, number, file_upload
+            ELSE false
+        END
+    );
+```
+
+De toelichtingsplicht is een aparte constraint — één regel die de kern van het compliance-instrument
+afdwingt:
+
+```sql
+ALTER TABLE clm.survey_answer
+    ADD CONSTRAINT survey_answer_comment_required_check
+    CHECK (
+        answer_type <> 'confirmation'
+        OR answer_code = 'confirmed'
+        OR length(btrim(coalesce(comment, ''))) >= 10
+    );
+```
+
+De `coalesce` is niet cosmetisch: zonder die functie zou `length(btrim(NULL))` zelf `NULL` opleveren,
+en een CHECK die `NULL` teruggeeft **slaagt** in PostgreSQL. Een ontbrekende toelichting zou er dan
+gewoon doorheen komen.
+
+*Alles behalve een bevestiging vereist uitleg van minstens tien tekens.* De ondergrens houdt "n/a" en
+"-" tegen: die maken het veld formeel gevuld en inhoudelijk leeg, en zijn daarmee erger dan een leeg
+veld — in een overzicht zien ze eruit als een antwoord.
+
+### A6. De partiële unieke index — hoe UC1 en UC2 naast elkaar bestaan
+
+```sql
+CREATE UNIQUE INDEX survey_response_run_vendor_key
+    ON clm.survey_response (run_id, vendor_id)
+ WHERE vendor_id IS NOT NULL;
+```
+
+Bij UC1 is `vendor_id` gevuld en geldt "één leverancier, één respons". Bij UC2 is hij leeg, dus
+mogen meerdere collega's dezelfde leverancier beoordelen. Een niet-partiële index zou bij het
+toelaten van UC2 óók de UC1-garantie hebben verzwakt.
+
+### A7. De bevriezingstrigger
+
+De regel die bepaalt of antwoorden achteraf nog interpreteerbaar zijn: zodra er aan een vragenlijst
+een ronde hangt die niet meer in `draft` staat, is die vragenlijst bevroren.
+
+```sql
+CREATE OR REPLACE FUNCTION clm.assert_template_niet_bevroren()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY INVOKER
+SET search_path = clm, pg_temp
+AS $fn$
+DECLARE
+    doel_template UUID;
+BEGIN
+    doel_template := COALESCE(NEW.template_id, OLD.template_id);
+
+    IF EXISTS (
+        SELECT 1 FROM clm.survey_run r
+         WHERE r.template_id = doel_template AND r.status <> 'draft'
+    ) THEN
+        RAISE EXCEPTION
+            'Vragenlijst % is bevroren: er loopt of liep een ronde. '
+            'Kopieer naar een nieuwe versie.', doel_template
+            USING ERRCODE = 'raise_exception';
+    END IF;
+
+    RETURN COALESCE(NEW, OLD);
+END;
+$fn$;
+
+CREATE TRIGGER survey_question_bevriezing
+    BEFORE INSERT OR UPDATE OR DELETE ON clm.survey_question
+    FOR EACH ROW EXECUTE FUNCTION clm.assert_template_niet_bevroren();
+```
+
+Afgedwongen met een trigger en niet met een `if` in de servicelaag: anders is de garantie zo sterk
+als de code die hem toevallig niet omzeilt, en hier hangt bewijskracht aan.
+
+### A8. Bestandscontrole op de inhoud
+
+Extensie en de meegestuurde `Content-Type` komen allebei van de client. Wat de server uit de eerste
+bytes vaststelt is het enige dat telt — en dát is wat er opgeslagen wordt.
+
+```ts
+// src/survey/bestand-validatie.ts
+const HANDTEKENINGEN = [
+  { contentType: 'application/pdf', bytes: [0x25, 0x50, 0x44, 0x46, 0x2d] },      // %PDF-
+  { contentType: 'image/png',
+    bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },
+] as const;
+
+export function valideerBestand(inhoud: Buffer, beweerdType?: string): BestandUitkomst {
+  if (inhoud.length === 0)                     return { geldig: false, reden: 'leeg' };
+  if (inhoud.length > MAX_BESTANDSGROOTTE)     return { geldig: false, reden: 'te-groot' };
+
+  const vastgesteld = bepaalContentType(inhoud);
+  if (vastgesteld === null)                    return { geldig: false, reden: 'onbekend-type' };
+
+  // Alleen om een mismatch te MELDEN — de opgeslagen waarde komt uit de bytes.
+  if (beweerdType !== undefined && beweerdType !== vastgesteld) {
+    return { geldig: false, reden: 'type-komt-niet-overeen' };
+  }
+
+  return {
+    geldig: true,
+    contentType: vastgesteld,
+    sha256: createHash('sha256').update(inhoud).digest('hex'),
+  };
+}
+```
+
+De opslagsleutel bevat **geen enkel teken uit de invoer** — `../../etc/passwd.pdf` kan dus geen pad
+worden:
+
+```ts
+export function maakOpslagsleutel(tenantId: string, responseId: string): string {
+  return `${tenantId}/${responseId}/${randomUUID()}`;
+}
+```
+
+De groottegrens ligt in de ontvangstlaag, niet erna — anders is een upload van 500 MB een
+geheugenprobleem in plaats van een validatieregel:
+
+```ts
+// src/survey/survey-response.controller.ts
+@UseInterceptors(
+  FileInterceptor('file', {
+    limits: { fileSize: MAX_BESTANDSGROOTTE, files: 1 },
+  }),
+)
+```
+
+### A9. De OTAP-stack
+
+```yaml
+# docker-compose.otap.yml (ingekort)
+services:
+  db:
+    image: postgres:17.6
+    ports: ["55500:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+
+  api:
+    build:
+      context: .
+      # Geen target: de laatste stage is de productie-image. Bewust niet de
+      # development-stage — die bewijst niets over wat er uitgerold wordt.
+    environment:
+      DATABASE_URL: postgresql://clm_api_runtime:otap_pw@db:5432/postgres
+      PORT: "5001"
+
+  frontend:
+    build:
+      context: ../MCM2-frontend
+      args:
+        # NEXT_PUBLIC_* wordt tijdens de BUILD ingebakken, niet bij het starten
+        # gelezen. Daarom een build-arg en geen environment-regel; dat laatste
+        # zou stilzwijgend niets doen en de frontend op mock data laten draaien
+        # terwijl je denkt dat hij live is.
+        NEXT_PUBLIC_API_URL: http://localhost:5001
+```
+
+Die laatste opmerking is precies het portabiliteitsprobleem uit §7, punt 4: **één image kan niet van
+acceptatie naar productie gepromoveerd worden zonder opnieuw te bouwen.**
+
+En de Dockerfile-regels die de OTAP-doorloop afdwong:
+
+```dockerfile
+# Moet vóór `USER node` én van die gebruiker zijn: /app is eigendom van root,
+# dus een non-root proces kan er geen submap in maken. Zonder deze regels faalt
+# élke upload met "EACCES: permission denied, mkdir '/app/var'".
+RUN mkdir -p /app/var/uploads && chown -R node:node /app/var
+ENV UPLOAD_DIR=/app/var/uploads
+
+# LET OP BIJ UITROL: dit is een map ín de container. Zonder volume zijn de
+# certificaten weg zodra het image vervangen wordt.
+VOLUME ["/app/var/uploads"]
+
+USER node
+```
+
+### A10. Een test die de garantie toetst, niet de eigen code
+
+Illustratief voor de gewoonte uit §6: de belangrijke garanties worden getoetst met **directe SQL die
+de servicelaag overslaat**. Anders test je je eigen validatiecode en niet de garantie.
+
+```ts
+// test/antwoord-indienen.e2e-spec.ts
+it('blokkeert schrijven na indienen op de RLS-policy zelf (testpunt 23)', async () => {
+  const { token, responseId } = await maakRonde([{ key: 'q1', type: 'yes_no' }]);
+  await dienIn(token, [{ questionKey: 'q1', answerCode: 'yes' }]).expect(200);
+
+  const questionId = await db.withTenant(TENANT, async (tx) => {
+    const r = await tx.execute<{ question_id: string }>(
+      sql`SELECT a.question_id FROM clm.survey_answer a
+           WHERE a.response_id = ${responseId}`,
+    );
+    return r.rows[0].question_id;
+  });
+
+  // De respons staat nu op 'submitted'. Deze INSERT hoort te falen op de
+  // WITH CHECK-policy uit A1 — niet op applicatiecode.
+  const geweigerd = await db
+    .withTenant(TENANT, async (tx) => {
+      await tx.execute(
+        sql`INSERT INTO clm.survey_answer
+                (tenant_id, response_id, question_id, answer_type, answer_code)
+            VALUES (${TENANT}, ${responseId}, ${questionId}, 'yes_no', 'no')`,
+      );
+      return null;
+    })
+    .catch((fout: Error) => fout);
+
+  expect(geweigerd).toBeInstanceOf(Error);
+  // Drizzle verpakt de databasefout: de echte melding staat in `cause`. Een
+  // test die alleen op `message` matcht wordt óók groen bij een tikfout in de
+  // SQL — en test dan niets.
+  const oorzaak = (geweigerd as Error & { cause?: Error }).cause;
+  expect(oorzaak?.message).toMatch(/row-level security/i);
+});
+```
+
+---
+
+## Bijlage B — waar je kunt kijken
 
 | Onderwerp | Bestand |
 |---|---|
