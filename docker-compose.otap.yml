@@ -1,0 +1,63 @@
+# OTAP-doorloop: de volledige keten in productievorm (Issue #18).
+#
+# Verschil met docker-compose.yml: dáár draait de backend in ontwikkelmodus met
+# hot reload, hier draaien beide onderdelen als PRODUCTIE-image — precies het
+# artefact dat straks naar AWS gaat (ADR-012). Dat is het verschil tussen "het
+# werkt op mijn machine" en "het uitrolbare artefact werkt".
+#
+# Wat dit bewijst:
+#   - de database komt vanaf niets tot een volledig migratieschema
+#   - het backend-image start en bedient de leverancierroutes
+#   - het frontend-image start en praat met die backend
+#   - de keten browser → frontend → backend → database werkt end-to-end
+#
+# Gebruik:
+#   docker compose -f docker-compose.otap.yml up --build -d
+#   scripts/otap-doorloop.js
+#   docker compose -f docker-compose.otap.yml down -v
+#
+# De frontend verwacht MCM2-frontend als zustermap naast deze repository. Dat
+# is de enige aanname die dit bestand doet over de omgeving.
+
+services:
+  db:
+    image: postgres:17.6
+    environment:
+      POSTGRES_PASSWORD: otap_pw
+      POSTGRES_DB: postgres
+    ports:
+      - "55500:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    build:
+      context: .
+      # Geen target: de laatste stage is de productie-image. Bewust niet de
+      # development-stage — die bewijst niets over wat er uitgerold wordt.
+    environment:
+      # De runtime-rol, nooit postgres en nooit clm_migrator (ADR-009).
+      DATABASE_URL: postgresql://clm_api_runtime:otap_pw@db:5432/postgres
+      PORT: "5001"
+    ports:
+      - "5001:5001"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../MCM2-frontend
+      args:
+        # NEXT_PUBLIC_* wordt tijdens de BUILD in de bundel gebakken, niet bij
+        # het starten gelezen. Daarom een build-arg en geen environment-regel;
+        # dat laatste zou stilzwijgend niets doen en de frontend op mock data
+        # laten draaien terwijl je denkt dat hij live is.
+        NEXT_PUBLIC_API_URL: http://localhost:5001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
