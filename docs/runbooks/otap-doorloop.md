@@ -2,7 +2,7 @@
 
 **Type:** D (routineoperatie)
 **Eigenaar:** projecteigenaar
-**Laatste update:** 2026-07-29
+**Laatste update:** 2026-07-29 (tweede doorloop: uitgebreid t/m indienen en upload)
 **Vereiste toegang:** Docker Desktop, beide repositories lokaal
 **Raakt:** Issue #18 (volledige OTAP-doorloop minimaal één keer bewezen)
 
@@ -89,6 +89,29 @@ docker compose -f docker-compose.otap.yml restart api
 
 ---
 
+## Stap 3b — Tenant en vragenlijsten inladen
+
+Zonder deze stap staat er geen vragenlijst en faalt stap 7 van de doorloop.
+
+**De tenant moet er vóór de seed zijn.** `seed-vragenlijsten.js` schrijft binnen
+een tenantcontext; zonder bestaande tenantrij weigert de foreign key. Dat is bij
+de doorloop van 2026-07-29 tegengekomen op een verse database.
+
+```bash
+docker compose -f docker-compose.otap.yml exec -T db psql -U postgres -q -c \
+  "INSERT INTO clm.tenant (tenant_id, name)
+   VALUES ('11111111-1111-1111-1111-111111111111','OTAP')
+   ON CONFLICT DO NOTHING;"
+
+DATABASE_URL="postgresql://clm_api_runtime:otap_pw@localhost:55500/postgres" \
+  node scripts/seed-vragenlijsten.js 11111111-1111-1111-1111-111111111111
+```
+
+**Verwacht resultaat:** negen vragen voor `transdev-annual-vendor-it-risk`, en
+29 vragen met zes categorieën voor `transdev-leveranciersbeoordeling`.
+
+---
+
 ## Stap 4 — De doorloop draaien
 
 ```bash
@@ -97,7 +120,7 @@ node scripts/otap-doorloop.js
 
 **Verwacht resultaat:** `OTAP-doorloop GESLAAGD — de volledige keten werkt.`
 
-Acht stappen, elk met eigen controles:
+Negen stappen, 21 controles:
 
 | # | Wat |
 |---|---|
@@ -107,10 +130,13 @@ Acht stappen, elk met eigen controles:
 | 4 | Onbekend token → 404 |
 | 5 | Geldig token → 200, en de respons lekt geen tenant-ID |
 | 6 | Draft-ronde → 410, met een melding die "nog niet open" onderscheidt van "gesloten" |
-| 7 | Frontend-image draait en serveert het portaal |
-| 8 | Frontend praat met de echte backend, niet met mock data |
+| 7 | De vragenlijst komt uit de database: negen vragen, leesblok als `instruction`, uploadvraag met max 2 |
+| 8 | Bevestigen zonder certificaat → 422; nep-PDF geweigerd op de bytes; upload → 201; indienen → 200; tweede poging → 410; alles vastgelegd inclusief auditregel |
+| 9 | Frontend-image draait, serveert het portaal en praat met de echte backend |
 
-Het script is idempotent: het ruimt zijn eigen testdata op vóór elke run.
+Het script is idempotent: het ruimt zijn eigen testdata op vóór elke run —
+antwoorden en bijlagen eerst, want alle survey-tabellen hebben
+`ON DELETE RESTRICT`.
 
 ---
 
@@ -145,12 +171,61 @@ zichtbaar in unit- of e2e-tests.
 
 ---
 
+## Wat de tweede doorloop opleverde (2026-07-29, na bouwvolgorde stap 5–8)
+
+De doorloop is uitgebreid van 8 naar 21 controles, zodat hij ook de vragenlijst,
+de validatie, de upload en het indienen dekt. Dat leverde **drie bevindingen** op
+die geen enkele unit- of e2e-test zag.
+
+**1. Élke upload faalde in het productie-image.** `EACCES: permission denied,
+mkdir '/app/var'`. Het image draait als non-root (`USER node`), maar `/app` is
+eigendom van root, dus het proces kon er geen uploadmap in aanmaken. De e2e-tests
+misten dit omdat die met `UPLOAD_DIR` naar een tijdelijke map draaien —
+**precies het soort verschil tussen "werkt op mijn machine" en "het artefact
+werkt" waar deze doorloop voor bestaat.**
+
+Gerepareerd in de `Dockerfile`: de map wordt vóór `USER node` aangemaakt en
+overgedragen, met `UPLOAD_DIR` expliciet in het image en een `VOLUME`-declaratie.
+Dat laatste is een waarschuwing bij uitrol: zonder volume zijn de certificaten
+weg zodra het image vervangen wordt.
+
+**2. Het opruimblok van het script was niet meer idempotent.** Zodra de doorloop
+ook echt ging indienen, viel de tweede run om op
+`survey_answer_response_id_..._fk`. Alle survey-tabellen hebben
+`ON DELETE RESTRICT` omdat een ingediende response bewijsmateriaal is; antwoorden
+en bijlagen moeten dus vóór de response weg. **Dat de constraint hier in de weg
+zat, is het bewijs dat hij werkt.**
+
+**3. De seed vraagt een bestaande tenant.** Op een verse database faalt
+`seed-vragenlijsten.js` op de foreign key naar `clm.tenant`. Opgelost door stap
+3b aan dit runbook toe te voegen.
+
+### Twee frontend-bevindingen — nog niet gerepareerd
+
+Deze zitten in `MCM2-frontend` en zijn met de browser vastgesteld, niet
+beredeneerd:
+
+- **Het portaal kan nog niet uploaden.** Het toont letterlijk "Bestandsupload
+  volgt in een volgende versie", terwijl de backend het sinds stap 8 wél kan.
+  Gevolg: bevestigen op de ISO-vraag levert een 422 `file_required` op, die het
+  portaal toont als "Er ging iets mis bij het versturen". **Een leverancier kan
+  de vragenlijst daardoor nog niet via de browser afronden.**
+- **Het leesblok krijgt keuzerondjes.** De backend levert het correct als
+  `answerType: 'instruction'` en de voortgangsteller telt het terecht niet mee
+  ("0 van 8" bij negen vragen), maar het renderen behandelt het als een gewone
+  `confirmation`-vraag.
+
+De backend-kant van de keten is wél volledig bewezen: vragen ophalen, valideren,
+uploaden en indienen werken end-to-end vanuit de browser (gemeten via
+`fetch` op de portaalpagina).
+
+---
+
 ## Bekende beperkingen
 
 - **Acceptatie en Productie ontbreken** — die omgevingen bestaan nog niet
   (Issue #12). Deze doorloop dekt O en T.
-- **`/survey/respond/questions` bestaat nog niet**, dus het portaal kan de
-  vragenlijst nog niet echt tonen tegen de live backend. Dat is stap 5 uit de
-  bouwvolgorde; de mockmodus toont het scherm wél volledig.
+- **De frontend kan de keten nog niet volledig afronden** — zie de twee
+  frontend-bevindingen hierboven.
 - **De doorloop draait handmatig.** Automatiseren in CI vraagt beide
   repositories in één workflow; nu de moeite niet waard.

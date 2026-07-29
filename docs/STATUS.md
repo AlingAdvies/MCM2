@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-29, tweede sessie (vragenlijst-tool t/m **stap 8**: import/export, beide seeds, vragen ophalen, indienlogica én bestandsupload; `contract_id` op `survey_run`; **guardbug gevonden waardoor UC2 in het geheel niet werkte**; 155 e2e-tests groen — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+2026-07-29, tweede sessie (vragenlijst-tool t/m **stap 8**: import/export, beide seeds, vragen ophalen, indienlogica én bestandsupload; `contract_id` op `survey_run`; **guardbug gevonden waardoor UC2 in het geheel niet werkte**; 155 e2e-tests groen; **OTAP-doorloop uitgebreid naar 21 controles en geslaagd** — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
 
 ## Het project bestaat uit twee repositories
 
@@ -174,6 +174,18 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
   Ook nieuw vastgelegd: de vragenlijst is **alleen Engels**. Geen vertaallaag.
 
 ## Aantoonbaar werkend
+
+- **OTAP-doorloop t/m indienen en upload (2026-07-29, tweede doorloop).** Uitgebreid van 8 naar **21 controles** in negen stappen; `scripts/otap-doorloop.js` dekt nu ook de vragenlijst, de validatie, de bestandsupload en het indienen. **Vier keer gedraaid, vier keer geslaagd** — waarvan één keer volledig vanaf niets na `down -v`.
+
+  **De volledige keten is in de browser bewezen:** het portaal toont de echte negen Transdev-vragen uit de database met de MVM_V2-huisstijl, en vanuit diezelfde pagina levert upload → 201 en indienen → 200. De 404 die de vorige doorloop signaleerde is weg.
+
+  **Drie bevindingen die geen enkele test zag:**
+
+  1. **Élke upload faalde in het productie-image** — `EACCES: permission denied, mkdir '/app/var'`. Het image draait als non-root, maar `/app` is eigendom van root. De e2e-tests misten dit omdat die met `UPLOAD_DIR` naar een tijdelijke map draaien. Gerepareerd in de `Dockerfile`: map aanmaken en overdragen vóór `USER node`, `UPLOAD_DIR` expliciet in het image, plus een `VOLUME`-declaratie als waarschuwing bij uitrol.
+  2. **Het opruimblok van het doorloopscript was niet meer idempotent** zodra er echt ingediend werd — `ON DELETE RESTRICT` blokkeerde het verwijderen van een respons met antwoorden. Dat de constraint in de weg zat, is het bewijs dat hij werkt.
+  3. **De seed vraagt een bestaande tenant** op een verse database. Toegevoegd als stap 3b in het runbook.
+
+  **Twee frontend-bevindingen, vastgelegd als Issue #42 en #43:** het portaal kan nog geen bestanden uploaden (waardoor een leverancier UC1 niet via de browser kan afronden — de backend kan het wél), en het rendert het `instruction`-leesblok als een vraag met keuzerondjes. Beide met de browser vastgesteld, niet beredeneerd.
 
 - **Bestandsupload met inhoudscontrole (2026-07-29, stap 8, Issue #9).** `src/survey/bestand-validatie.ts`, `bestand-opslag.service.ts` en `bijlage.service.ts`, plus `POST /survey/respond/attachment`. **155 van 155 e2e-tests groen** in twaalf suites.
 
@@ -358,14 +370,14 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 | Repo | Branch | Werkboom | Openstaande PR's |
 |---|---|---|---|
-| MCM2 | **`feat/bijlage-upload`** | schoon | nog niet gepusht |
+| MCM2 | **`chore/otap-doorloop-stap8`** | schoon | nog niet gepusht |
 | MCM2-frontend | `main` | schoon | geen |
 
 **Drie PR'''s gemerged naar `main`:** #37 (stap 3 en 4, `ef62cd6`), #38 (migratie 0007 plus de drie bevestigde ontwerpbesluiten, `4b09026`) en #39 (stap 5 plus de UC2-guardfix, `52f41b0`). Alle drie met CI groen op alle drie de jobs, alle branches lokaal én op GitHub verwijderd. Na elke merge opnieuw geverifieerd tégen `main` zelf.
 
-**Vier PR's gemerged naar `main`:** #37, #38, #39 en #40 (stap 6, `7756b25`). Alle vier met CI groen op alle drie de jobs, alle branches lokaal én op GitHub verwijderd.
+**Vijf PR's gemerged naar `main`:** #37, #38, #39, #40 en #41 (stap 8, `7c0be9b`). Alle vijf met CI groen op alle drie de jobs, alle branches lokaal én op GitHub verwijderd.
 
-**`feat/bijlage-upload` staat open met één commit:** stap 8 plus deze statusbijwerking. Nog niet gepusht. Lokale poorten wél gedraaid: format, lint, typecheck, 155/155 e2e tegen een verse Postgres 17.6 (twee keer), en de Docker-productiebuild die start, de uploadroute mapt en `/health` met 200 beantwoordt.
+**`chore/otap-doorloop-stap8` staat open:** de uitgebreide doorloop, de Dockerfile-fix voor de uploadmap en deze statusbijwerking. Nog niet gepusht. Lokale poorten wél gedraaid: format, lint, typecheck, 155/155 e2e tegen een verse Postgres 17.6 (twee keer), en de Docker-productiebuild die start, de uploadroute mapt en `/health` met 200 beantwoordt.
 
 - **`docs/sessiestand-otap` is op 2026-07-29 via PR #35 gemerged naar `main`** (merge-commit `cbe6c48`) en daarna lokaal én op GitHub verwijderd. Eén commit: uitsluitend deze statusbijwerking.
 - **`feat/issue-7-leveranciertoken` is op 2026-07-29 via PR #32 gemerged naar `main`** (merge-commit `7f0cc01`) en daarna lokaal én op GitHub verwijderd. CI groen op alle drie de jobs vóór de merge, opnieuw geverifieerd met `gh pr checks 32` op de laatste commit. Vijf commits: de tokenlaag, de HTTP-routes met logmaskering en auditregels, de fix op `maskeerDiep`, plus twee documentatiecommits. **Issue #31 is bij die merge gesloten** — migratie `0004` loste hem op. Let op: die migratie is bewezen in CI, **niet toegepast op `clm-enterprise`** — net als #29 en #25 wacht dat op #30.
@@ -389,9 +401,11 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 De databaselaag is omgezet (ADR-010), spoor 2 van Issue #7 zit in `main`, en de vragenlijst-tool staat t/m stap 4: het datamodel, de guard, import/export en beide gevulde vragenlijsten.
 
-**De leverancierskant is functioneel compleet.** Een leverancier kan de link openen, de vragen zien, bestanden uploaden en indienen — met alle validatie en garanties eromheen.
+**De backendkant van de leveranciersflow is compleet en in de keten bewezen.** De OTAP-doorloop van 2026-07-29 toont dat vragen ophalen, valideren, uploaden en indienen end-to-end werken vanuit de browser.
 
-**De eerstvolgende stap is geen code maar een OTAP-doorloop:** het portaal met `NEXT_PUBLIC_API_URL` tegen de echte backend zetten. Dat is de eerste keer dat de klant de volledige keten in de browser ziet in plaats van mock data, en het is nu voor het eerst mogelijk. Daarna is stap 7 (concept opslaan) de volgende inhoudelijke uitbreiding, en stap 10 (beheerroutes) wacht op spoor 1.
+**De eerstvolgende stap zit in de frontend, niet in de backend: Issue #42.** Het portaal kan nog geen bestanden uploaden, waardoor een leverancier de Transdev-vragenlijst niet via de browser kan afronden — bevestigen op de ISO-vraag levert een 422 op die als "Er ging iets mis" wordt getoond. Dat is nu de enige blokkade voor een werkende demonstratie aan de klant. Issue #43 (het leesblok met keuzerondjes) is cosmetisch maar verwarrend.
+
+Daarna is stap 7 (concept opslaan) de volgende inhoudelijke uitbreiding, en stap 10 (beheerroutes) wacht op spoor 1.
 
 **Daarnaast, en dat kost geen code:** het portaal tegen de echte backend zetten via een OTAP-doorloop. De vragen staan in de database en de route bestaat, dus dit is de eerste keer dat de klant de echte vragenlijst in de browser kan zien in plaats van mock data.
 
