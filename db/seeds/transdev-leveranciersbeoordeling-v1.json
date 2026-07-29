@@ -1,0 +1,564 @@
+{
+  "schema_version": 1,
+  "name": "transdev-leveranciersbeoordeling",
+  "version": 1,
+  "categories": [
+    {
+      "key": "duidelijkheid",
+      "position": 1,
+      "name": "Duidelijkheid",
+      "min_answers": 3
+    },
+    {
+      "key": "behoefte",
+      "position": 2,
+      "name": "Behoefte",
+      "min_answers": 3
+    },
+    {
+      "key": "kwaliteit",
+      "position": 3,
+      "name": "Kwaliteit",
+      "min_answers": 3
+    },
+    {
+      "key": "kosten",
+      "position": 4,
+      "name": "Kosten",
+      "min_answers": 3
+    },
+    {
+      "key": "risico-s",
+      "position": 5,
+      "name": "Risico's",
+      "min_answers": 3
+    },
+    {
+      "key": "besturing",
+      "position": 6,
+      "name": "Besturing",
+      "min_answers": 3
+    }
+  ],
+  "questions": [
+    {
+      "question_key": "d1",
+      "category_key": "duidelijkheid",
+      "position": 1,
+      "title": "Duidelijkheid 1",
+      "body": "Het contract is volledig en correct geadministreerd in Coupa en/of andere relevante systemen.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "d2",
+      "category_key": "duidelijkheid",
+      "position": 2,
+      "title": "Duidelijkheid 2",
+      "body": "Verantwoordelijkheden en taken m.b.t. eigenaarschap, management en beheer van het contract zijn vastgelegd en toegewezen.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "d3",
+      "category_key": "duidelijkheid",
+      "position": 3,
+      "title": "Duidelijkheid 3",
+      "body": "De wijze waarop het contract wordt beheerd, is afgestemd met de contracteigenaar.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "d4",
+      "category_key": "duidelijkheid",
+      "position": 4,
+      "title": "Duidelijkheid 4",
+      "body": "Direct betrokken (operationele) medewerkers weten wat ze van de leverancier mogen verwachten.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "b1",
+      "category_key": "behoefte",
+      "position": 5,
+      "title": "Behoefte 1",
+      "body": "De met de leverancier afgesproken kwaliteitsnormen sluiten aan op de behoeften van de contracteigenaar.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "b2",
+      "category_key": "behoefte",
+      "position": 6,
+      "title": "Behoefte 2",
+      "body": "De prijsafspraken met de leverancier zijn transparant en voldoen aan de behoeften van de contracteigenaar.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "b3",
+      "category_key": "behoefte",
+      "position": 7,
+      "title": "Behoefte 3",
+      "body": "De leverancier maakt gebruik van producten, diensten en werkwijzen die voldoen aan de actuele behoeften van de contracteigenaar.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "b4",
+      "category_key": "behoefte",
+      "position": 8,
+      "title": "Behoefte 4",
+      "body": "De leverancier biedt nieuwe producten, diensten of werkwijzen die een waardevolle aanvulling vormen maar die nog niet in het contract staan.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "k1",
+      "category_key": "kwaliteit",
+      "position": 9,
+      "title": "Kwaliteit 1",
+      "body": "Met de leverancier is een aantal relevante en goed gedefinieerde normen afgesproken over de kwaliteit van de dienstverlening.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "k2",
+      "category_key": "kwaliteit",
+      "position": 10,
+      "title": "Kwaliteit 2",
+      "body": "De leverancier rapporteert tijdig, volledig en correct over de kwaliteit van de dienstverlening.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "k3",
+      "category_key": "kwaliteit",
+      "position": 11,
+      "title": "Kwaliteit 3",
+      "body": "De leverancier voldoet aan de in het contract vastgelegde service levels.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "k4",
+      "category_key": "kwaliteit",
+      "position": 12,
+      "title": "Kwaliteit 4",
+      "body": "De leverancier voldoet aan de in het contract vastgelegde inkoopvoorwaarden en andere eventueel aanvullende voorwaarden.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "k5",
+      "category_key": "kwaliteit",
+      "position": 13,
+      "title": "Kwaliteit 5",
+      "body": "De leverancier voldoet aan de in het contract vastgelegde privacy en informatiebeveiligingsmaatregelen.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "ko1",
+      "category_key": "kosten",
+      "position": 14,
+      "title": "Kosten 1",
+      "body": "In het contract is de relatie tussen de geleverde diensten en kosten duidelijk beschreven.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "ko2",
+      "category_key": "kosten",
+      "position": 15,
+      "title": "Kosten 2",
+      "body": "De leverancier rapporteert op afgesproken tijden over de kosten van de dienstverlening.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "ko3",
+      "category_key": "kosten",
+      "position": 16,
+      "title": "Kosten 3",
+      "body": "De leverancier hanteert prijzen en prijsmodellen zoals overeengekomen in het contract.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "ko4",
+      "category_key": "kosten",
+      "position": 17,
+      "title": "Kosten 4",
+      "body": "De leverancier factureert volgens de overeengekomen procedures.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "ko5",
+      "category_key": "kosten",
+      "position": 18,
+      "title": "Kosten 5",
+      "body": "De kosten van de dienstverlening voldoen aan de verwachtingen van de contracteigenaar.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "r1",
+      "category_key": "risico-s",
+      "position": 19,
+      "title": "Risico's 1",
+      "body": "Eventuele risico's welke negatieve invloed kunnen hebben op de dienstverlening zijn geïdentificeerd en vastgelegd.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "r2",
+      "category_key": "risico-s",
+      "position": 20,
+      "title": "Risico's 2",
+      "body": "Alle betrokkenen zijn zich bewust van de mogelijke negatieve gevolgen van de risico's.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "r3",
+      "category_key": "risico-s",
+      "position": 21,
+      "title": "Risico's 3",
+      "body": "De leverancier draagt actief bij aan het reduceren van de risico's, incl. informatiebeveiligingsrisico's conform de minimum security requirements.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "r4",
+      "category_key": "risico-s",
+      "position": 22,
+      "title": "Risico's 4",
+      "body": "De contracteigenaar is bekend met de risico's en is tevreden over de mitigerende maatregelen.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "r5",
+      "category_key": "risico-s",
+      "position": 23,
+      "title": "Risico's 5",
+      "body": "De risico's en maatregelen worden periodiek geëvalueerd.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "bs1",
+      "category_key": "besturing",
+      "position": 24,
+      "title": "Besturing 1",
+      "body": "De structuur en frequentie van het overleg met de leverancier zijn duidelijk afgesproken, vastgelegd en afgestemd op de behoeften van Transdev.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "bs2",
+      "category_key": "besturing",
+      "position": 25,
+      "title": "Besturing 2",
+      "body": "De juiste en gemandateerde personen zijn betrokken bij het leveranciersoverleg.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "bs3",
+      "category_key": "besturing",
+      "position": 26,
+      "title": "Besturing 3",
+      "body": "Het overleg met de leverancier is structureel en productief.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "bs4",
+      "category_key": "besturing",
+      "position": 27,
+      "title": "Besturing 4",
+      "body": "Van het overleg met de leverancier wordt een verslag met acties en besluiten gemaakt.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "bs5",
+      "category_key": "besturing",
+      "position": 28,
+      "title": "Besturing 5",
+      "body": "Afspraken uit het overleg met de leveranciers worden voortvarend opgepakt door de deelnemers.",
+      "answer_type": "rating",
+      "is_required": true,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min": 1,
+        "max": 5,
+        "min_label": "Zeer ondermaats",
+        "max_label": "Uitstekend",
+        "comment": "optional"
+      }
+    },
+    {
+      "question_key": "toelichting",
+      "category_key": null,
+      "position": 29,
+      "title": "Toelichting",
+      "body": "Heeft u aanvullende opmerkingen over deze leverancier?",
+      "answer_type": "open_text",
+      "is_required": false,
+      "allows_upload": false,
+      "max_files": 0,
+      "config": {
+        "min_length": 1,
+        "max_length": 2000
+      }
+    }
+  ]
+}

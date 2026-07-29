@@ -20,6 +20,7 @@
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "migrate:deploy": "node scripts/migrate.js",
+    "seed:vragenlijsten": "node scripts/seed-vragenlijsten.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

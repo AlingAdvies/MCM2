@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-29, einde sessie (PR #32 t/m #35 gemerged; vragenlijst niveau B t/m stap 2, leverancierportaal in de browser, OTAP-doorloop bewezen voor O en T — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+2026-07-29, tweede sessie (vragenlijst-tool t/m **stap 4**: import/export én beide seeds; 89 e2e-tests groen — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
 
 ## Het project bestaat uit twee repositories
 
@@ -20,17 +20,23 @@ Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in
 2. Lees dit document (`docs/STATUS.md`) volledig — het is de enige actuele waarheid over fase en blockers.
 3. Verifieer git-status zelf (`git status`, `git branch -a`) tegen wat hieronder staat — vertrouw niet blind op deze snapshot. **Doe dat in beide repositories.**
 4. Check de open GitHub Issues (`gh issue list --repo AlingAdvies/MCM2 --state open`) voor de actuele backlog — dit document verwijst naar issue-nummers, maar de Issues zelf zijn de bron van waarheid over wat daadwerkelijk nog open staat.
-5. **Eerste concrete vervolgstap: stap 3 uit de bouwvolgorde** (import/export van het JSON-schema, ontwerp §10). Stap 1 (migratie) en stap 2 (guard weegt de ronde-status mee) zijn op 2026-07-29 gebouwd en gemerged. Issue #30 (geen backups) blijft de zwaarste openstaande blokkade voor alles wat de productiedatabase raakt (#19, #25, #29), maar vraagt nu alleen nog uitvoering door de eigenaar, geen besluit — en de vragenlijst-tool loopt daar niet op vast, want die bouwt tegen wegwerpcontainers.
+5. **Eerste concrete vervolgstap: stap 5 uit de bouwvolgorde** (`GET /survey/respond/questions`, ontwerp §10). Stap 1 t/m 4 zijn af: migratie, guard met ronde-status, import/export en beide seeds. Issue #30 (geen backups) blijft de zwaarste openstaande blokkade voor alles wat de productiedatabase raakt (#19, #25, #29), maar vraagt nu alleen nog uitvoering door de eigenaar, geen besluit — en de vragenlijst-tool loopt daar niet op vast, want die bouwt tegen wegwerpcontainers.
 
 ### Snel weer op gang komen
 
 ```bash
 # Backend: tests tegen een wegwerpcontainer
-docker run -d --name t -e POSTGRES_PASSWORD=pw -p 55440:5432 postgres:17.6
-docker exec -i t psql -U postgres -q < db/roles/bootstrap-roles.sql
-docker exec t psql -U postgres -c "ALTER ROLE clm_migrator WITH PASSWORD 'pw'; ALTER ROLE clm_api_runtime WITH PASSWORD 'pw';"
+# Let op: de containernaam moet minstens twee tekens hebben. Docker 29 weigert
+# een naam van één teken ("Invalid container name"); oudere versies deden dat niet.
+docker run -d --name mcm2test -e POSTGRES_PASSWORD=pw -p 55440:5432 postgres:17.6
+docker exec -i mcm2test psql -U postgres -q < db/roles/bootstrap-roles.sql
+docker exec mcm2test psql -U postgres -c "ALTER ROLE clm_migrator WITH PASSWORD 'pw'; ALTER ROLE clm_api_runtime WITH PASSWORD 'pw';"
 MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres" npm run migrate:deploy
-DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" npm run test:e2e   # 53 tests
+DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" npm run test:e2e   # 89 tests
+
+# De twee vragenlijsten inlezen (tenant moet bestaan)
+DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" \
+  npm run seed:vragenlijsten -- <tenant-uuid>
 
 # Frontend: het portaal bekijken zonder backend
 cd ../MCM2-frontend && npm run dev
@@ -163,6 +169,18 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Aantoonbaar werkend
 
+- **Import/export van vragenlijsten en beide seeds (2026-07-29, stap 3 en 4).** `src/survey/vragenlijst-schema.ts` (vorm en validatie, zonder database), `src/survey/vragenlijst-import.service.ts` (importeer/exporteer via `withTenant`), `scripts/seed-vragenlijsten.js` en twee seedbestanden in `db/seeds/`. **89 van 89 e2e-tests groen**, in negen suites.
+
+  **De harde regel is getest, niet alleen geschreven:** `tenant_id` komt uit de sessiecontext en nooit uit het bestand (Issue #7, testpunt 31). Een bestand dat er zelf een meebrengt wordt expliciet geweigerd in plaats van stil genegeerd. Hetzelfde geldt voor UUID's — die worden bij import nieuw gegenereerd, en de vraag→categorie-koppeling loopt via `category_key` (testpunt 48). Export bevat geen enkele UUID en geen `tenant_id`, waardoor klonen en een nieuwe versie afsplitsen dezelfde operatie zijn als exporteren-en-importeren.
+
+  **Tegenproef gedaan, twee keer.** Met de `tenant_id`-controle uitgeschakeld viel precies testpunt 31 om. Op de seed-suite: met een verplicht gemaakt leesblok en een upload op de verkeerde vraag vielen 6 van de 15 tests om. Zonder die proef bewijzen groene tests niets.
+
+  **Herhaalbaar:** drie opeenvolgende runs tegen dezelfde, niet-leeggemaakte database, alle drie 89/89. Het seed-script is idempotent — een tweede run slaat bestaande templates over.
+
+  **Wat er in de database komt:** UC1 negen vragen (acht `confirmation` + één `instruction`), geen categorieën, alleen vraag 1 met upload (max 2 bestanden). UC2 29 vragen (28 `rating` op schaal 1–5 + één `open_text`) over zes categorieën met `min_answers = 3`.
+
+  **Correctie op het ontwerp:** §2 spreekt van vijf categorieën met 29 vragen. De bron in MVM_V2 (`src/data/internal-survey-data.ts`) heeft er **zes met 28** — "Risico's" ontbreekt in het ontwerpdocument. De seed volgt de bron, want dat is wat de klant gezien heeft; een test legt het verschil vast zodat het niet stilzwijgend terugdraait.
+
 - **OTAP-doorloop voor de volledige keten (2026-07-29, PR #34, Issue #18).** `docker-compose.otap.yml` + `scripts/otap-doorloop.js` + runbook `docs/runbooks/otap-doorloop.md`. **Beide onderdelen draaien als productie-image**, niet in ontwikkelmodus — dat onderscheid is het punt: `docker-compose.yml` draait de backend met hot reload en bewijst daarmee niets over het artefact dat uitgerold wordt.
 
   Acht controles: rollen en het ontbreken van BYPASSRLS, de volledige migratieketen met RLS op elke tenantgebonden tabel en beide clausules op elke policy, het draaien van beide images, het guard-gedrag bij onbekend/geldig/draft-token, en of de frontend écht met de backend praat in plaats van stil op mock data. **Vier keer gedraaid, vier keer geslaagd** — de laatste keer tegen `main` ná de merge.
@@ -225,7 +243,24 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 - **Issue #4 (EntraID-haalbaarheidscheck) afgerond op 2026-07-27:** `kees@alingadvies.nl` heeft Global Administrator in de Entra ID-tenant `alingadvies.nl`, ruim voldoende voor app-registraties; geen Azure-subscription gekoppeld maar dat blokkeert Entra-app-registraties niet. Rechtencheck is tegen `alingadvies.nl` gedaan, niet tegen een Transdev-tenant (geen toegang tot Transdev's Entra-omgeving) — `alingadvies.nl` dient als voorbeeld-/testtenant. De destijds gekozen uitvoeringsvorm (Cognito) is nadien herzien, zie hieronder.
 - **ADR-006 herzien op 2026-07-27 (Cognito → Entra External ID):** vóór er een Cognito User Pool werd aangemaakt bleek de tweede cloudlaag (los AWS-account, cross-cloud federatie) onnodige complexiteit t.o.v. Microsoft Entra External ID, dat dezelfde multi-IdP-flexibiliteit biedt binnen het Microsoft-ecosysteem — geen los AWS-account, gratis tot 50.000 MAU. Reden om niet simpelweg "kaal" Entra ID te gebruiken (zoals een ouder platformdocument uit 2026-03-30 voorstelde): MCM2's multi-tenant-toekomst qua identity-providers is onzeker (niet aantoonbaar Microsoft-only), dus een CIAM-laag blijft gewenst. Zie `docs/adr/ADR-006-ciam-laag-entra-external-id.md` (bestandsnaam gewijzigd op 2026-07-27; heette eerder `ADR-006-cognito-als-federatielaag.md`).
 
-## Vier lessen uit deze sessie die tijd besparen
+## Contractmanagement als basis — openstaande vraag, bewust geparkeerd
+
+Op 2026-07-29 stelde de eigenaar vast dat de survey **onderdeel is van een contractmanagement-app**: de vragenlijst hoort gekoppeld te zijn aan de leveranciersgegevens, aan **de contracten waarop de survey betrekking heeft**, en aan de contactpersoon met diens e-mailadres.
+
+**Wat er feitelijk staat** (geverifieerd in `src/db/schema.ts`, niet aangenomen):
+
+| Bestaat al | Ontbreekt volledig |
+|---|---|
+| `vendor` — KvK, vestigingsnummer, statutaire naam, handelsnamen, rechtsvorm, SBI, categorie, business-criticality, compliance-status, spend, risicoscore, eigenaar, reviewdatums | **`contract` — er is géén tabel** |
+| `vendor_contact` — naam, **e-mail**, telefoon, functie, rol, `is_primary` | `contract_document`, en elke koppeling survey ↔ contract |
+
+**Besluit: eerst de survey afmaken, dan contracten.** Drie redenen. (1) De survey heeft geen contract nodig om te werken — nergens in de acht Transdev-vragen, het datamodel of de validatie komt een contract voor; wat hij nodig heeft (vendor + contactpersoon met e-mail) staat er al. (2) De survey is bijna af en contracten beginnen bij nul: MVM_V2's `Contract` heeft 24 velden inclusief CATS CM v4-levenscyclus, managementregime en raam-/deelovereenkomst — dat is een eigen bouwspoor met eigen intake. (3) Een afgeronde survey is demonstreerbaar aan de klant, een half contractmodel niet.
+
+**Wat dit kost, expliciet:** een survey die niet weet op welk contract hij slaat is functioneel incompleet — "hoe scoort deze leverancier" zonder "op welke overeenkomst" is een half oordeel. Dat gat blijft bestaan tot het contractspoor er is. Het is wél een *toevoeging* later (`contract_id` op `survey_run`, plus een FK), geen herbouw.
+
+**Nog te beslissen:** of `survey_run` alvast een ongebruikte `contract_id UUID NULL` krijgt. Kosten nu: één regel. Kosten later zonder: één extra migratie op een tabel die dan gevulde rondes bevat. Voorgelegd, nog geen antwoord.
+
+## Lessen uit deze sessies die tijd besparen
 
 Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan hier omdat ze anders opnieuw ontdekt worden.
 
@@ -237,6 +272,14 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 **`NEXT_PUBLIC_*` wordt tijdens de build ingebakken, niet bij het starten gelezen.** Een frontend-image dat de echte backend moet gebruiken heeft die waarde nodig als **build-argument**. Zet je hem als `environment`, dan draait de app stilzwijgend op mock data terwijl je denkt dat hij live is. De OTAP-doorloop controleert hierop.
 
+**De tenantcontext heet `app.current_tenant_id`, niet `app.tenant_id`.** Het seed-script gebruikte de verkeerde naam. Dat geeft **geen foutmelding** — `set_config` accepteert elke sleutel — maar een lege context, waarna RLS elke INSERT weigert met "new row violates row-level security policy". Gebruik altijd `setTenantContext()` uit `src/db/schema.ts` als bron; scripts die hun eigen `set_config` schrijven, moeten die naam letterlijk overnemen.
+
+**Drizzle verpakt databasefouten: een triggermelding staat in `cause`, niet in `message`.** Een test die met `rejects.toThrow(/bevroren/)` op `message` matcht, wordt daardoor óók groen bij een tikfout in de SQL — dan test hij niets. Lees `(fout as Error & { cause?: Error }).cause?.message`.
+
+**Testsuites die dezelfde tenant-id gebruiken botsen bij de tweede run.** Templates zijn uniek op `(tenant_id, name, version)` en de lokale testdatabase blijft staan. In gebruik: `…e1` (survey-routes), `…f1`/`…f2` (token-isolatie), `…d1`/`…d2`/`…d3` (vragenlijst). Kies een eigen paar, en geef testtemplates een unieke versie in plaats van een vast nummer.
+
+**Docker 29 weigert een containernaam van één teken.** Het oude `--name t` uit dit document faalde met "Invalid container name"; de opstartcommando's hierboven zijn gecorrigeerd naar `mcm2test`.
+
 ## Niet als bewezen beschouwen
 
 - RLS-tenant-isolatie was tot 2026-07-27 niet bewezen zolang de runtime-role nog `BYPASSRLS` had — een eerdere "RLS werkt"-verificatie in deze projectgeschiedenis was vals-positief (lege tabel, geen bewijs van daadwerkelijke blokkade). **Nu aantoonbaar bewezen én geautomatiseerd** (zie hierboven en ADR-009) — niet langer een handmatige, ad-hoc verificatie.
@@ -247,14 +290,14 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 ## Huidige branch en Git-status
 
-**Stand bij het afsluiten van de sessie op 2026-07-29:**
+**Stand op 2026-07-29, tweede sessie:**
 
 | Repo | Branch | Werkboom | Openstaande PR's |
 |---|---|---|---|
-| MCM2 | `main` (`cbe6c48`) | schoon | geen |
+| MCM2 | **`feat/vragenlijst-import-export`** | schoon | nog niet gepusht |
 | MCM2-frontend | `main` | schoon | geen |
 
-**Geen openstaande branches in beide repositories.** Alles van vandaag is gemerged en opgeruimd.
+**`feat/vragenlijst-import-export` staat open met twee commits** (stap 3 en stap 4 uit de bouwvolgorde) plus deze statusbijwerking. Nog niet naar GitHub gepusht, dus nog geen PR en geen CI-run — de poorten zijn wél lokaal gedraaid: format, lint, typecheck, 89/89 e2e tegen een verse Postgres 17.6, en de Docker-productiebuild die start en `/health` met HTTP 200 beantwoordt.
 
 - **`docs/sessiestand-otap` is op 2026-07-29 via PR #35 gemerged naar `main`** (merge-commit `cbe6c48`) en daarna lokaal én op GitHub verwijderd. Eén commit: uitsluitend deze statusbijwerking.
 - **`feat/issue-7-leveranciertoken` is op 2026-07-29 via PR #32 gemerged naar `main`** (merge-commit `7f0cc01`) en daarna lokaal én op GitHub verwijderd. CI groen op alle drie de jobs vóór de merge, opnieuw geverifieerd met `gh pr checks 32` op de laatste commit. Vijf commits: de tokenlaag, de HTTP-routes met logmaskering en auditregels, de fix op `maskeerDiep`, plus twee documentatiecommits. **Issue #31 is bij die merge gesloten** — migratie `0004` loste hem op. Let op: die migratie is bewezen in CI, **niet toegepast op `clm-enterprise`** — net als #29 en #25 wacht dat op #30.
@@ -276,24 +319,24 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 ## Eerstvolgende goedgekeurde stap
 
-De databaselaag is omgezet (ADR-010), spoor 2 van Issue #7 zit in `main`, en het vragenlijst-ontwerp is bouwbaar.
+De databaselaag is omgezet (ADR-010), spoor 2 van Issue #7 zit in `main`, en de vragenlijst-tool staat t/m stap 4: het datamodel, de guard, import/export en beide gevulde vragenlijsten.
 
-**De eerstvolgende inhoudelijke stap is het bouwen van de vragenlijst-tool** (ontwerp §10). Dat is nu de kortste weg naar een werkende pilot: de toegangslaag eronder staat en is bewezen, en het bouwen ervan raakt de productiedatabase niet — de hele e2e-keten draait tegen wegwerpcontainers, dus #30 blokkeert dit spoor niet.
+**De eerstvolgende inhoudelijke stap is stap 5: `GET /survey/respond/questions`** (ontwerp §10). Dat is nu de kortste weg naar iets zichtbaars — de vragen staan in de database en het portaal toont ze al op mock data, dus deze route hoeft alleen te lezen. Het raakt de productiedatabase niet; de hele e2e-keten draait tegen wegwerpcontainers, dus #30 blokkeert dit spoor niet.
 
 ~~1. Migratie met de vier nieuwe tabellen en de kolommen op `survey_run`/`survey_response`~~ — **afgerond 2026-07-29** (migratie 0005).
 ~~2. De bestaande guard uitbreiden met de ronde-statuscontrole~~ — **afgerond 2026-07-29** (migratie 0006).
+~~3. Import/export van het JSON-schema~~ — **afgerond 2026-07-29**, zie "Aantoonbaar werkend".
+~~4. Seed: beide vragenlijsten via het importpad~~ — **afgerond 2026-07-29**, idem.
 
-**Nu aan de beurt — stap 3 t/m 9 uit ontwerp §10:**
+**Nu aan de beurt — stap 5 t/m 9 uit ontwerp §10:**
 
-3. **Import/export van het JSON-schema** (ontwerp §2d). Bewust vóór de seed: die is gewoon zo'n bestand, dus als import eerst werkt bestaat er geen apart seed-script dat later uit de pas loopt met het echte importpad.
-4. **Seed:** de acht Transdev-vragen (UC1) plus een korte interne beoordelingsvragenlijst (UC2), beide via stap 3.
-5. `GET /survey/respond/questions` — vragen ophalen inclusief `config` per type.
+5. `GET /survey/respond/questions` — vragen ophalen inclusief `config` per type. **Dit is de snelste zichtbare winst:** de vragen staan nu in de database en het portaal toont ze al op mock data; zodra deze route bestaat, toont hetzelfde scherm de echte vragenlijst.
 6. Validatie- en indienlogica; `POST /survey/respond` uitbreiden met de antwoordbody (ontwerp §5).
 7. `PUT /survey/respond/answers` — concept opslaan, expliciet (geen auto-save).
 8. Bestandsupload met inhoudscontrole (ontwerp §6, Issue #9).
 9. Tests 14 t/m 48.
 
-**Stap 5 is de snelste zichtbare winst.** Het leverancierportaal staat en toont de acht vragen al op mock data; zodra `/survey/respond/questions` bestaat, toont hetzelfde scherm de echte vragenlijst uit de database. Op dit moment krijgt het portaal daar een 404 — dat is geen bug maar de nog-niet-gebouwde route (bevestigd in de OTAP-doorloop).
+**Stap 5 is de snelste zichtbare winst.** Het leverancierportaal staat en toont de acht vragen al op mock data; zodra `/survey/respond/questions` bestaat, toont hetzelfde scherm de echte vragenlijst uit de database. Op dit moment krijgt het portaal daar een 404 — dat is geen bug maar de nog-niet-gebouwde route (bevestigd in de OTAP-doorloop). **De vragen staan er sinds stap 4 wél**, dus deze route hoeft alleen nog te lezen.
 
 **Aandachtspunt bij stap 6:** de bestaande `POST /survey/respond` accepteert nu een lege body. Zodra daar antwoorden bij komen, moet `test/survey-routes.e2e-spec.ts` mee — dat is geen ontwerpkwestie maar werk dat vergeten wordt als het niet ergens staat.
 
