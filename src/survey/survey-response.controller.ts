@@ -1,17 +1,25 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
   HttpCode,
   NotFoundException,
+  PayloadTooLargeException,
   Post,
+  Query,
   Req,
   UnprocessableEntityException,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
   GoneException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 import { AntwoordIndienService } from './antwoord-indienen.service';
+import { BijlageService } from './bijlage.service';
+import { MAX_BESTANDSGROOTTE } from './bestand-validatie';
 import { SurveyTokenGuard, type RequestMetToken } from './survey-token.guard';
 import { SurveyTokenService } from './survey-token.service';
 import { VragenlijstLeesService } from './vragenlijst-lezen.service';
@@ -34,6 +42,7 @@ export class SurveyResponseController {
     private readonly tokens: SurveyTokenService,
     private readonly vragenlijst: VragenlijstLeesService,
     private readonly indienen: AntwoordIndienService,
+    private readonly bijlagen: BijlageService,
   ) {}
 
   /**
@@ -146,5 +155,96 @@ export class SurveyResponseController {
     }
 
     return { status: 'ingediend' as const };
+  }
+
+  /**
+   * Neemt één bijlage aan bij een vraag, vóór het indienen.
+   *
+   * Per bestand en niet als onderdeel van de indien-POST: acht certificaten in
+   * één request zou betekenen dat één mislukte upload de hele indiening ongedaan
+   * maakt, en dat de groottegrens per request in plaats van per bestand geldt.
+   *
+   * **De grens ligt in de ontvangstlaag, niet erna** (§6). `limits.fileSize`
+   * breekt de upload af zodra 5 MB gepasseerd is; zonder dat zou een upload van
+   * 500 MB eerst volledig in het geheugen komen en daarna pas geweigerd worden
+   * — een geheugenprobleem in plaats van een validatieregel.
+   *
+   * Bewust in het geheugen en niet naar een tijdelijke map: bij 5 MB is dat
+   * goedkoop, en het scheelt een tweede plek waar een bestand kan achterblijven
+   * als er iets misgaat.
+   */
+  @Post('attachment')
+  @HttpCode(201)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_BESTANDSGROOTTE, files: 1 },
+    }),
+  )
+  async voegBijlageToe(
+    @Req() request: RequestMetToken,
+    @Query('question') questionKey: string | undefined,
+    @UploadedFile()
+    bestand:
+      { originalname: string; mimetype?: string; buffer: Buffer } | undefined,
+  ) {
+    const context = request.surveyToken!;
+
+    if (!questionKey) {
+      throw new BadRequestException(
+        'Geef met de parameter `question` aan bij welke vraag dit bestand hoort.',
+      );
+    }
+
+    if (!bestand) {
+      throw new BadRequestException('Er is geen bestand meegestuurd.');
+    }
+
+    const uitkomst = await this.bijlagen.voegToe(
+      context.tenantId,
+      context.responseId,
+      questionKey,
+      bestand,
+    );
+
+    switch (uitkomst.status) {
+      case 'opgeslagen':
+        return {
+          status: 'opgeslagen' as const,
+          attachmentId: uitkomst.attachmentId,
+          // Wat de server heeft vastgesteld uit de bytes, niet wat de client
+          // beweerde. Teruggeven maakt zichtbaar dat er gecontroleerd is.
+          contentType: uitkomst.contentType,
+        };
+
+      case 'afgekeurd':
+        if (uitkomst.reden === 'te-groot') {
+          throw new PayloadTooLargeException('Dit bestand is groter dan 5 MB.');
+        }
+        throw new UnprocessableEntityException({
+          status: 'invalid_file',
+          reason: uitkomst.reden,
+        });
+
+      case 'onbekende-vraag':
+        throw new NotFoundException(
+          'Deze vraag hoort niet bij deze vragenlijst.',
+        );
+
+      case 'geen-upload-vraag':
+        throw new UnprocessableEntityException({
+          status: 'invalid_file',
+          reason: 'question_accepts_no_files',
+        });
+
+      case 'te-veel-bestanden':
+        throw new UnprocessableEntityException({
+          status: 'invalid_file',
+          reason: 'too_many_files',
+          maximum: uitkomst.maximum,
+        });
+
+      case 'niet-meer-open':
+        throw new GoneException('Deze vragenlijst is al ingediend.');
+    }
   }
 }
