@@ -36,6 +36,20 @@
       "when": 1785247913495,
       "tag": "0004_rls_zonder_deleted_at_filter",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785321175009,
+      "tag": "0005_vragenlijst_niveau_b",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1785321175010,
+      "tag": "0006_ronde_status_in_guard",
+      "breakpoints": true
     }
   ]
 }

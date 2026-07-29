@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-28, einde sessie (Issue #7 spoor 2 gebouwd en groen in CI; koerswijziging op de vragenlijst — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+2026-07-29 (PR #32 en #33 gemerged; vragenlijst niveau B gebouwd t/m stap 2, frontend-repository aangemaakt — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
 
 ## Voor een nieuwe sessie: lees dit eerst
 
@@ -9,29 +9,83 @@
 2. Lees dit document (`docs/STATUS.md`) volledig — het is de enige actuele waarheid over fase en blockers.
 3. Verifieer git-status zelf (`git status`, `git branch -a`) tegen wat hieronder staat — vertrouw niet blind op deze snapshot.
 4. Check de open GitHub Issues (`gh issue list --repo AlingAdvies/MCM2 --state open`) voor de actuele backlog — dit document verwijst naar issue-nummers, maar de Issues zelf zijn de bron van waarheid over wat daadwerkelijk nog open staat.
-5. **Eerste concrete vervolgstap: PR #32 mergen** (CI groen op alle drie de jobs, commit `b29e2ad`, geverifieerd met `gh pr checks 32` op 2026-07-28). Daarna is de eerstvolgende inhoudelijke stap **het beantwoorden van één ontwerpvraag over de vragenlijst-tool** — zie "Openstaand besluit" hieronder. Issue #30 (geen backups) blijft de zwaarste openstaande blokkade voor alles wat de productiedatabase raakt (#19, #25, #29), maar vraagt nu alleen nog uitvoering door de eigenaar, geen besluit.
+5. **Eerste concrete vervolgstap: stap 3 uit de bouwvolgorde** (import/export van het JSON-schema, ontwerp §10). Stap 1 (migratie) en stap 2 (guard weegt de ronde-status mee) zijn op 2026-07-29 gebouwd en gemerged. Issue #30 (geen backups) blijft de zwaarste openstaande blokkade voor alles wat de productiedatabase raakt (#19, #25, #29), maar vraagt nu alleen nog uitvoering door de eigenaar, geen besluit — en de vragenlijst-tool loopt daar niet op vast, want die bouwt tegen wegwerpcontainers.
 
-## Openstaand besluit — blokkeert het bouwen van de vragenlijst-tool
+## Vragenlijst-tool — scope vastgesteld op 2026-07-29, ontwerp is bouwbaar
 
-Op 2026-07-28 is de scope van de vragenlijst **gecorrigeerd door de opdrachtgever**. Dit is de belangrijkste inhoudelijke wijziging van deze sessie en een nieuwe sessie moet hem kennen vóór er iets gebouwd wordt.
+Op 2026-07-28 is de scope **gecorrigeerd door de opdrachtgever**: wat er gebouwd moet worden is **een tool waarmee een tenant zélf vragen opstelt**. De acht Transdev-vragen (`Transdev Annual Vendor IT Risk SurveyV1_0.md`) zijn de **eerste vulling en de PoC-casus** — niet de scope.
 
-Wat er gebouwd moet worden is **een tool waarmee een tenant zélf vragen opstelt**. De acht Transdev-vragen (`Transdev Annual Vendor IT Risk SurveyV1_0.md`, aangeleverd op 2026-07-28) zijn de **eerste vulling en de PoC-casus** — niet de scope.
+Op 2026-07-29 is het openstaande niveau-besluit genomen: **niveau B**. Aanleiding was `VendorComply Help en Manual.md` (in OneDrive, `Bizaline/Producten/VendorComply/`) — de handleiding van een bestaand, werkend product. Dat leverde geen wensenlijst maar keuzes die de praktijk al hebben overleefd. Het eerdere advies (niveau A) rustte op het argument dat er nog geen tweede vraagvorm was om tegen te ontwerpen; dat verviel zodra er acht bewezen vraagtypen op tafel lagen.
 
-Een eerdere ontwerpversie ging ervan uit dat die acht vragen *de* vragenlijst waren en legde ze vast in code. Dat was een verkeerde lezing en is herschreven; de vragen horen in de database, met beheer eromheen.
+**Wat niveau B betekent:** de tenant kiest per vraag een antwoordtype uit acht — `instruction` (leesblok), `confirmation`, `open_text`, `yes_no`, `single_choice`, `multi_choice`, `rating`, `number`, `file_upload`.
 
-**De vraag die openstaat, en die de omvang bepaalt:** hoeveel vrijheid krijgt de tenant?
+**Scopegrens van de MVP, verduidelijkt op 2026-07-29: twee use cases, niets daarbuiten.**
 
-| | Niveau | Wat de tenant kan |
-|---|---|---|
-| **A** | Vaste vraagvorm, vrije tekst | Vraagteksten schrijven, volgorde bepalen, per vraag een upload aan/uit. Eén antwoordtype. |
-| **B** | Meerdere antwoordtypen | Als A, plus per vraag kiezen: bevestiging, meerkeuze, vrije tekst, ja/nee, datum. |
-| **C** | Volledige formulierbouwer | Als B, plus voorwaardelijke logica, secties, herhaalbare blokken. |
+| | Use case | Wie vult in | Over welke leverancier |
+|---|---|---|---|
+| **UC1** | Vendor compliance (bv. IT) | de leverancier zelf | zichzelf |
+| **UC2** | Interne beoordeling | een Transdev-collega | dezelfde leverancier |
 
-Advies aan de eigenaar was **A voor de PoC**, met een datamodel dat B mogelijk maakt zonder verbouwing. Onderbouwing in het ontwerp, §1.
+"Leverancier" en "dienstverlener" zijn hetzelfde: dezelfde partij, dezelfde `clm.vendor`-rij, alleen bekeken vanuit een andere kant. Bij UC1 is de leverancier de **deelnemer**, bij UC2 het **onderwerp** — hij vult daar niets in, er wordt over hem ingevuld. Omdat `subject_vendor_id` bij beide gevuld is, staan de zelfverklaring en de praktijkscore over dezelfde partij automatisch naast elkaar.
 
-Twee voorstellen in datzelfde ontwerp zijn eveneens nog niet bevestigd: dat een gestarte ronde de vragenlijst **bevriest** (§2) en dat een toelichting ook verplicht is bij "I do not confirm" (§3).
+UC2 ontbrak volledig in het ontwerp en raakte het datamodel, niet alleen de tekst: `survey_response.vendor_id` was `NOT NULL` met een foreign key naar `vendor`, en de invuller is bij UC2 een collega, geen leverancier. Drie besluiten van de eigenaar bepalen hoe UC2 werkt:
 
-Volledig ontwerp: `docs/superpowers/specs/2026-07-28-vragenlijst-ontwerp.md` — status **ONVOLLEDIG, niet bouwen** tot niveau A/B/C gekozen is.
+- **Toegang ook via token-link** — daarmee blijft de toegangslaag ongewijzigd en wacht de MVP niet op de Entra-guard.
+- **Meerdere collega's mogen dezelfde leverancier beoordelen** — `UNIQUE (run_id, vendor_id)` wordt partieel, zodat UC1's garantie "één leverancier, één respons" wél overeind blijft.
+- **De interne score is niet zichtbaar voor de leverancier.** Dat volgt al uit de architectuur: een leverancier heeft geen toegang tot de Transdev-tenant, alleen één token voor één respons. Vastgelegd als testpunt 39, omdat het de garantie is die sneuvelt zodra iemand een route bouwt die op `subject_vendor_id` filtert in plaats van op `response_id`.
+
+**Overgenomen uit VendorComply:** de acht vraagtypen, de lifecycle Draft → Active → Finished/Archived, Test Mode vóór publicatie, drie manieren om deelnemers toe te voegen, deadline met overdue-markering, en import/export als JSON-schema.
+
+**Bewust uitgesteld:** logic jumps (voorwaardelijke logica — dat is niveau C), AI-beoordeling via Gemini, EFQM KPI-sync, Marketing Mode (publieke anonieme surveys) en radar/spider charts.
+
+**Bewust níét gebouwd — en dit is de belangrijkste:** auto-save en "request revisions". Beide zouden vragen dat indienen terugdraaibaar wordt, en dat is precies de garantie die de zojuist gemergde tokenlaag levert. **De tokenlaag blijft daarmee ongewijzigd.** Expliciet concept opslaan blijft wél bestaan — dat is nodig omdat acht vragen met verplichte toelichtingen niet in één keer ingevuld worden en het token gehasht is, dus niet opnieuw te versturen.
+
+Volledig ontwerp: `docs/superpowers/specs/2026-07-28-vragenlijst-ontwerp.md` — status **BOUWBAAR**, bouwvolgorde in §10.
+
+**MVM_V2 is functioneel leidend voor de vragenlijst** (besluit 2026-07-29). Dat betekent: MVM_V2 bepaalt wát de gebruiker ziet en kan — schermen, vraagtypen, categorieën, naamgeving, workflow. MCM2 bepaalt hóé het onder water werkt — tokens, RLS, constraints, audit. Op dat tweede punt is MVM_V2 juist achterlopend: daar staan tokens onversleuteld in een `Map` in het geheugen, terwijl MCM2 ze SHA-256-hasht.
+
+Uit de vergelijking (ontwerp §1a-bis) kwam dat beide modellen onafhankelijk grotendeels overeenkomen. Drie besluiten:
+
+- **Categorieën gaan erin** — MVM_V2's interne beoordeling heeft er vijf met 29 vragen (Duidelijkheid, Behoefte, Kwaliteit, Kosten, Besturing). Nieuwe tabel `survey_category`; `category_id` op `survey_question` is **nullable**, want UC1 heeft geen categorieën. Inclusief `min_answers`: onder die drempel is de categoriescore `null` in plaats van een gemiddelde over te weinig punten.
+- **`frameworkRef` niet** — koppelt een vraag aan een normartikel en loopt vooruit op meerdere compliance-frameworks. Nu bouwen we NIS2. De tool is al framework-agnostisch; een tweede framework is straks een tweede import.
+- **`date` als negende vraagtype niet** — geen van beide use cases gebruikt het.
+
+**Nog open in het ontwerp (voorstellen, niet bevestigd, geen van alle blokkerend):** dat een gestarte ronde de vragenlijst bevriest (§2), dat een toelichting ook verplicht is bij "I do not confirm" (§3), en wat er gebeurt bij een geïmporteerd e-mailadres zonder bekende vendor (§2c — advies: weigeren, niet automatisch aanmaken).
+
+**Drie dingen raken bestaande, groene code** en verdienen aandacht bij het bouwen: `survey_run` krijgt drie kolommen (`status`, `is_test`, `survey_kind`), `survey_response` krijgt er drie (`subject_vendor_id`, `respondent_user_id`, `respondent_label`) waarbij `vendor_id` **nullable** wordt, en de bestaande guard moet de ronde-status meewegen naast `closes_at`/`revoked_at`. Die nullable-wijziging is een versoepeling op een tabel die vanochtend gemerged is — de UC1-garantie wordt overgenomen door een partiële unieke index plus twee CHECK-constraints, en testpunten 41 t/m 43 horen te bewijzen dat er niets weglekt.
+
+## Frontend — repository aangemaakt op 2026-07-29 (ADR-012), nog geen schermen
+
+**`https://github.com/AlingAdvies/MCM2-frontend`** (privé, onder AlingAdvies). Fundament staat, CI groen op beide jobs. **Nog geen schermen** — het leverancierportaal is de volgende stap.
+
+Wat er staat: Next.js 15 + Tailwind 3 (**bewust dezelfde majors als MVM_V2**, niet de nieuwste — Next 16/Tailwind 4 zouden het overnemen van MVM_V2-componenten juist duurder maken), versies exact gepind conform MCM2-CLAUDE.md §11, TypeScript meteen op `strict` (in de backend is dat nog Issue #3; achteraf strict maken kost meer).
+
+De **design tokens** zijn gekopieerd met bronvermelding; Tailwind leest zijn thema eruit, zodat `bg-brand-primary` en `tokens.brandPrimary` niet uit elkaar kunnen lopen. De **mock/live-schakelaar** werkt: zonder `NEXT_PUBLIC_API_URL` draait alles op mock data, en de startpagina toont welke bron actief is.
+
+**Twee CI-poorten dwingen af wat anders alleen op papier staat:** geen leveranciersspecifieke imports (de draagbaarheidsregel), en nooit een tenant in een URL. Beide zijn geverifieerd door een overtreding uit te lokken — waarbij bleek dat de tweede poort afging op een codevoorbeeld in het commentaar van `client.ts` zelf. Dat voorbeeld is herschreven naar een beschrijving.
+
+**Geverifieerd:** image bouwt, container serveert HTTP 200, draait als non-root. De Docker-poort controleert niet alleen dát het image start maar dat het een pagina *serveert* — een Next.js-server met een kapotte build start namelijk wel en geeft een 500.
+
+**Let op bij het uitrollen:** `NEXT_PUBLIC_*`-variabelen worden **tijdens de build** in de bundel gebakken, niet bij het starten gelezen. Een image dat de echte backend moet gebruiken heeft die waarde nodig als build-argument. Dat is een eigenschap van Next.js, geen keuze.
+
+### Het uitrolbesluit zelf
+
+**Besluit: Next.js in een eigen repository, uitgerold als containerimage — de enige uitrolweg.** Tot de golive draait dat lokaal via `docker compose` naast de bestaande backend-stack. **Kosten: nul.** Bij golive is AWS de beoogde doelplek, met **App Runner** als voorkeursdienst (indicatie $25–40/mnd, *niet op de bron geverifieerd*).
+
+Doorslaggevend criterium van de eigenaar: **robuust en eenvoudig deployen** — één manier van uitrollen die overal hetzelfde werkt, niet de snelste weg naar een deelbare link.
+
+**Vercel is overwogen en afgewezen.** Het geeft gratis een preview-URL per PR (de acceptatiestap uit OTAP), maar introduceert een tweede uitrolweg naast de containeraanpak van de backend — die zou bij de overstap naar AWS weer afgeleerd moeten worden.
+
+**Wat dit kost, expliciet:** iets laten zien aan de klant wordt een handeling in plaats van een link. Dat raakt precies de vraag die tot deze ADR leidde (schermen zien om het backend-ontwerp te toetsen). Het blijft mogelijk, maar lokaal.
+
+**MVM_V2 levert drie dingen** (`C:\dev\Work\MVM_V2`, Next.js 15 / React 19):
+- `src/shared/design-tokens.ts` — de huisstijl die de klant kent. **Kopiëren, niet koppelen**: een gedeeld npm-pakket is afgewezen als overhead voor twee producten met één onderhouder.
+- `src/app/portal/survey/[token]/` — een leverancierportaal op token; precies MCM2's route.
+- De **mock/live-schakelaar**: staat `NEXT_PUBLIC_API_URL` leeg, dan mock data; gezet, dan de echte API. Daarmee zijn schermen te beoordelen vóórdat de backend af is.
+
+**Eén ding gaat er expliciet uit bij overname:** MVM_V2 stuurt de tenant mee in het webadres (`?tenant=demo`). Dat is exact het patroon dat MCM2-CLAUDE.md §6 verbiedt en waarom `feat/fase0-skeleton-vendors` is weggegooid. In MCM2 komt de tenant uit het token; **de API accepteert geen `tenant`-parameter.**
+
+Raakt **#12** (acceptatieomgeving — wordt zwaarder: twee containers), **#18** (OTAP-doorloop moet front- én backend omvatten) en **#20** (base-image pinnen geldt ook voor de frontend).
 
 ## Doel
 Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
@@ -44,7 +98,7 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
   Issue #7 vraagt om **twee gescheiden mechanismen**, met verschillende voortgang:
   - **Interne beheerder (spoor 1)** — identity-infrastructuur staat en werkt. Besluit: Microsoft Entra External ID als CIAM-laag (ADR-006, herzien op 2026-07-27; AWS Cognito losgelaten vóór er resources waren aangemaakt, dus geen opruimwerk). De federatie-PoC is geslaagd: tenant `mcm2ciam.onmicrosoft.com`, federatie met `alingadvies.nl`, end-to-end doorlopen tot een geldige authorization code (`?code=...`, geen error). Volledige configuratie — tenant-ID's, client-ID's, endpoints — plus een gedocumenteerde tijdelijke blokkade die zonder configuratiewijziging verdween: `docs/architecture-review/2026-07-27/01-entra-external-id-poc-bevindingen.md`. **Nog te bouwen:** authorization code server-to-server inwisselen, claims inspecteren, NestJS-guard die de tenantcontext uit het geverifieerde ID-token afleidt. **Niet gestart.**
-  - **Externe leverancier (spoor 2)** — tokengebaseerde, accountloze survey-linktoegang. **Gebouwd op 2026-07-28, CI groen, wacht op merge in PR #32.** Zie het blok "Aantoonbaar werkend" hieronder voor wat precies bewezen is.
+  - **Externe leverancier (spoor 2)** — tokengebaseerde, accountloze survey-linktoegang. **Gebouwd op 2026-07-28, CI groen, gemerged op 2026-07-29 (PR #32).** Zie het blok "Aantoonbaar werkend" hieronder voor wat precies bewezen is.
 
   Het tijdelijke AWS-account `727732213368` is niet langer nodig voor identity.
 - **ZWAARSTE BLOKKADE (Issue #30): er zijn géén backups van de productiedatabase.** Op 2026-07-28 in het dashboard vastgesteld: `clm-enterprise` draait op het **Supabase Free Plan**, dat letterlijk meldt *"Free Plan does not include project backups"*. Niet "beperkte backups" — **geen**. Bij verlies van het project is alles weg. Free-projecten worden bovendien na circa **7 dagen inactiviteit gepauzeerd**, met verwijdering na langere inactiviteit; voor een surveylink die 30 dagen geldig moet zijn is dat op zichzelf al onwerkbaar.
@@ -79,6 +133,26 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
   Ook nieuw vastgelegd: de vragenlijst is **alleen Engels**. Geen vertaallaag.
 
 ## Aantoonbaar werkend
+
+- **Vragenlijst-datamodel niveau B (2026-07-29, PR #33, migratie `0005_vragenlijst_niveau_b.sql`).** Vier nieuwe tabellen (`survey_category`, `survey_question`, `survey_answer`, `survey_attachment`) plus `survey_kind`/`status`/`is_test` op `survey_run` en drie respondentkolommen op `survey_response`. 459 regels, waarvan ongeveer een derde gegenereerd — de rest handwerk, precies zoals ADR-010 voorspelt.
+
+  **Geverifieerd tegen een verse Postgres 17.6-container, niet beredeneerd.** Volledige keten 0000 t/m 0006 via `clm_migrator`. Daarna is elke garantie uitgelokt; alle acht werden geweigerd door de database: categorie van een andere template, verplicht leesblok, afwijkend `answer_type`, rating in het tekstveld, toelichting van drie spaties, dezelfde leverancier twee keer in een UC1-ronde, wijzigen van een bevroren template, bestand boven 5 MB. De tegenproef slaagt wél: **twee collega's die dezelfde leverancier beoordelen in een UC2-ronde**, wat bewijst dat de partiële unieke index UC1 beschermt zonder UC2 te blokkeren.
+
+  **Twee dingen die drizzle-kit niet kon en die handmatig zijn opgelost:**
+  - Het gegenereerde `ADD COLUMN subject_vendor_id uuid NOT NULL` slaagt alleen op een lege tabel en **zou op `clm-enterprise` falen**. Vervangen door kolom toevoegen → backfillen vanuit `vendor_id` → dan pas `NOT NULL`.
+  - De rolverdeling per use case kon niet als CHECK: `survey_kind` staat op `survey_run` en een CHECK mag geen subquery bevatten. Opgelost met een trigger in plaats van `survey_kind` te dupliceren — dupliceren zou een derde plek opleveren waar de waarde kan afwijken.
+
+  Alle zeven survey-tabellen hebben RLS met zowel `USING` als `WITH CHECK`.
+
+- **De guard weegt de lifecycle van de ronde mee (2026-07-29, migratie `0006_ronde_status_in_guard.sql`).** Vóór deze stap was een ronde in `draft` — aangemaakt maar niet opengesteld — via een token gewoon bereikbaar; `revoked_at` en `closes_at` zeggen niets over een ronde die nog niet begonnen is. `draft` krijgt een eigen melding ("nog niet opengesteld"), want dat is voor een leverancier iets anders dan "gesloten".
+
+  De controle staat **ook in het `UPDATE`-statement van `dienIn()`**, niet alleen in de guard: die beschermt het HTTP-pad, de voorwaarde beschermt de methode zelf.
+
+  **Bevinding om te onthouden:** PostgreSQL weigert een `CREATE OR REPLACE` die de `RETURNS TABLE` wijzigt — geverifieerd, niet aangenomen. Daarom `DROP` + `CREATE`. Gevolg: **na een `DROP` zijn de rechten weg**, want die hangen aan het functie-object en niet aan de naam. Zonder de herhaalde `GRANT` zou geen enkele leverancierslink meer werken.
+
+  **De testwaarde is geverifieerd door de controle tijdelijk te verwijderen:** vijf van de zes nieuwe tests vielen om. Zonder die proef bewijzen groene tests niets — de eerste poging mislukte overigens stil (een regex die niet matchte), waardoor de "proef" niets toetste.
+
+  53 van 53 e2e-tests groen.
 
 - **Leverancierstoegang via token, spoor 2 van Issue #7 (2026-07-28, PR #32, commit `b29e2ad`).** CI groen op alle drie de jobs, geverifieerd met `gh pr checks 32`. 46 tests groen. Wat er staat:
   - `clm.resolve_survey_token()` — `SECURITY DEFINER` met `SET search_path = clm, pg_temp`. De enige route naar een responserij zonder tenantcontext, met een minimale returnwaarde (geen namen, geen e-mailadressen, geen antwoorden). Lost de kip-en-ei op: de tenant is niet bekend vóór de lookup.
@@ -120,8 +194,9 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Huidige branch en Git-status
 
-- **Actieve branch: `feat/issue-7-leveranciertoken`, met openstaande PR #32.** Laatste commit `b29e2ad`. CI groen op alle drie de jobs; `mergeable=MERGEABLE`, `mergeStateStatus=CLEAN` — geverifieerd op 2026-07-28 met `gh pr checks 32` en `gh pr view 32`. **Klaar om te mergen; wacht alleen op akkoord van de eigenaar.** Drie commits: de tokenlaag, de HTTP-routes met logmaskering en auditregels, en de fix op `maskeerDiep`.
-- **Niet-gecommitteerde bestanden in de working tree** (bewust, aan het eind van de sessie): `Transdev Annual Vendor IT Risk SurveyV1_0.md` in de repo-root (klantaanlevering) en `docs/superpowers/specs/2026-07-28-vragenlijst-ontwerp.md` (het herschreven, nog onvolledige ontwerp). Beide horen bij de vragenlijst-tool, niet bij PR #32 — daarom niet meegecommit.
+- **`feat/issue-7-leveranciertoken` is op 2026-07-29 via PR #32 gemerged naar `main`** (merge-commit `7f0cc01`) en daarna lokaal én op GitHub verwijderd. CI groen op alle drie de jobs vóór de merge, opnieuw geverifieerd met `gh pr checks 32` op de laatste commit. Vijf commits: de tokenlaag, de HTTP-routes met logmaskering en auditregels, de fix op `maskeerDiep`, plus twee documentatiecommits. **Issue #31 is bij die merge gesloten** — migratie `0004` loste hem op. Let op: die migratie is bewezen in CI, **niet toegepast op `clm-enterprise`** — net als #29 en #25 wacht dat op #30.
+- **`feat/issue-9-vragenlijst-ontwerp` is op 2026-07-29 via PR #33 gemerged naar `main`** en daarna lokaal én op GitHub verwijderd. Negen commits: het vragenlijst-ontwerp (niveau B, twee use cases, categorieën), ADR-012, de migratie 0005, de guard-uitbreiding 0006 en deze statusbijwerking. CI groen op alle drie de jobs vóór de merge.
+- **Tweede repository sinds 2026-07-29: `AlingAdvies/MCM2-frontend`** (privé). Eigen CI, eigen releasecyclus — bewust geen map in deze repo, zodat een tekstwijziging in een scherm niet wacht op een databasemigratie. Zie ADR-012.
 - `chore/supabase-verificatie` is op 2026-07-28 via PR #28 gemerged naar `main` en daarna lokaal én op GitHub verwijderd. Zes commits: Supabase read-only verificatie, schemacontrole die uit het schema meegroeit, ADR-011 (backupeisen per fase), de #29-fix, en het runbook met beproefde commando's en opruimprocedure. CI groen op alle drie de jobs vóór de merge.
 - `feat/issue-5-drizzle-omzetting` is op 2026-07-28 via PR #26 gemerged naar `main` (merge-commit `f0806f8`) en daarna lokaal én op GitHub verwijderd. Bevatte de volledige Drizzle-omzetting; CI groen op alle drie de jobs vóór de merge.
 - `docs/issue-7-leveranciertoken-ontwerp` is op 2026-07-28 via PR #27 gemerged naar `main` (merge-commit `c8f896a`) en daarna lokaal én op GitHub verwijderd. Bevatte uitsluitend het ontwerpdocument voor het leverancierstokenspoor.
@@ -137,10 +212,24 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Eerstvolgende goedgekeurde stap
 
-De databaselaag is omgezet (ADR-010), en spoor 2 van Issue #7 is gebouwd en groen. **Bij de start van een nieuwe sessie:**
+De databaselaag is omgezet (ADR-010), spoor 2 van Issue #7 zit in `main`, en het vragenlijst-ontwerp is bouwbaar.
 
-0. **PR #32 mergen** — CI groen, geen conflicten, wacht alleen op akkoord. Daarna de branch lokaal én op GitHub verwijderen (git-ritueel).
-0b. **Het openstaande besluit over de vragenlijst-tool voorleggen** — niveau A, B of C (zie het blok bovenaan dit document). Zonder dat antwoord is het ontwerp niet af en kan er niet gebouwd worden. Dit is nu de kortste weg naar een werkende pilot, want de tokenlaag eronder staat.
+**De eerstvolgende inhoudelijke stap is het bouwen van de vragenlijst-tool** (ontwerp §10). Dat is nu de kortste weg naar een werkende pilot: de toegangslaag eronder staat en is bewezen, en het bouwen ervan raakt de productiedatabase niet — de hele e2e-keten draait tegen wegwerpcontainers, dus #30 blokkeert dit spoor niet.
+
+~~1. Migratie met de vier nieuwe tabellen en de kolommen op `survey_run`/`survey_response`~~ — **afgerond 2026-07-29** (migratie 0005).
+~~2. De bestaande guard uitbreiden met de ronde-statuscontrole~~ — **afgerond 2026-07-29** (migratie 0006).
+
+**Nu aan de beurt — stap 3 t/m 9 uit ontwerp §10:**
+
+3. **Import/export van het JSON-schema** (ontwerp §2d). Bewust vóór de seed: die is gewoon zo'n bestand, dus als import eerst werkt bestaat er geen apart seed-script dat later uit de pas loopt met het echte importpad.
+4. **Seed:** de acht Transdev-vragen (UC1) plus een korte interne beoordelingsvragenlijst (UC2), beide via stap 3.
+5. `GET /survey/respond/questions` — vragen ophalen inclusief `config` per type.
+6. Validatie- en indienlogica; `POST /survey/respond` uitbreiden met de antwoordbody (ontwerp §5).
+7. `PUT /survey/respond/answers` — concept opslaan, expliciet (geen auto-save).
+8. Bestandsupload met inhoudscontrole (ontwerp §6, Issue #9).
+9. Tests 14 t/m 48.
+
+**Parallel spoor, blokkeert het bovenstaande niet:** het leverancierportaal in `MCM2-frontend` op mock data. Dat kan vooruit omdat de mock/live-schakelaar niet op werkende endpoints wacht.
 
 Daarna, in volgorde van afhankelijkheid:
 
@@ -148,8 +237,8 @@ Daarna, in volgorde van afhankelijkheid:
 2. **Issue #19** — restore-test van de dashboard-backup. Kan pas ná #30: zonder plan zijn er geen backups om te herstellen. Runbook stap 1, vereist dashboardtoegang.
 3. **Issue #29** — de vijf ontbrekende UUID-defaults toepassen op de productiedatabase. Migratie ligt klaar en is bewezen tegen een productiekopie; wacht op een vangnet uit #30/#19.
 4. **Issue #25** — Drizzle-migratiestand initialiseren op de bestaande Supabase-database. Idem: raakt productie, wacht op #30/#19. Schema-afdrijving is al uitgesloten.
-5. **Issue #7** — spoor 2 (leverancierstoken) is **gebouwd en groen**, wacht op merge van PR #32. Spoor 1 (Entra-guard) vraagt nog om het inwisselen van de authorization code en het bouwen van de JWKS-guard; **niet gestart**. Beide sporen kunnen zonder de productiedatabase — de e2e-keten draait tegen wegwerpcontainers.
-5b. **Vragenlijst-tool** — ontwerp ligt er, wacht op het besluit uit §1 (niveau A/B/C). Bouwvolgorde staat in het ontwerp, §10. Dit is wat de leverancierskant van een werkende toegangslaag naar een werkende pilot brengt.
+5. **Issue #7** — spoor 2 (leverancierstoken) is **gebouwd, groen en gemerged** (PR #32). Spoor 1 (Entra-guard) vraagt nog om het inwisselen van de authorization code en het bouwen van de JWKS-guard; **niet gestart**. Spoor 1 blokkeert de leverancierskant niet, maar wél de beheer-UI van de vragenlijst-tool (ontwerp §10, stap 10). Beide sporen kunnen zonder de productiedatabase — de e2e-keten draait tegen wegwerpcontainers.
+5b. **Vragenlijst-tool** — ontwerp is **bouwbaar** (niveau B, vastgesteld 2026-07-29). Bouwvolgorde in het ontwerp, §10. Dit is wat de leverancierskant van een werkende toegangslaag naar een werkende pilot brengt, en het is nu het actieve spoor.
 5c. **Issue #9 (certificaat-upload)** — meegenomen in datzelfde ontwerp, §4/§6. Twee punten die daaruit voortkomen en nog geen issue hebben: **een virusscan** (OV-7 onbeantwoord, ontwerp bouwt er geen) en **backup van geüploade bestanden** (die vallen buiten `npm run backup:dump` en zijn daarmee het enige onderdeel zonder vangnet — raakt #30).
 6. **Issue #1** — wachtwoordrotatie van de `postgres`-beheerrol (P0, niet aangeraakt door de databaserol-fix van 2026-07-27).
 7. **Issue #3** — `tsconfig.json` naar strict-mode, module-systeem-inconsistentie oplossen (P0, klein). De eerdere kanttekening hierbij ("kan typefouten blootleggen die per ORM verschillen") is vervallen nu de databaselaag vastligt.
@@ -169,10 +258,11 @@ Volledige backlog (alle 24 items, incl. Before production en Later): `gh issue l
 - **Backlog/roadmap: GitHub Issues** (`https://github.com/AlingAdvies/MCM2/issues`), gelabeld met type (`bug`/`enhancement`/`chore`) en prioriteit (`priority:p0`/`priority:before-pilot`/`priority:before-production`/`priority:later`). Vervangt de losse Markdown-roadmap sinds 2026-07-27 (zie `docs/archive/06-prioritized-roadmap-2026-07-24-pre-issues.md` voor de migratieverantwoording en issue-nummer-mapping).
 - **Ontwerpen (`docs/superpowers/specs/`):**
   - `2026-07-28-leveranciertoken-ontwerp.md` — toegangslaag voor leveranciers. **Uitgevoerd**, zie PR #32. Blijft de referentie voor waarom de guard doet wat hij doet.
-  - `2026-07-28-vragenlijst-ontwerp.md` — vragenlijst-tool, antwoorden en certificaat-upload. **Status: onvolledig, niet bouwen** tot het besluit over niveau A/B/C er is. §0 legt uit waarom dit document herschreven is.
+  - `2026-07-28-vragenlijst-ontwerp.md` — vragenlijst-tool, antwoorden en certificaat-upload. **Status: bouwbaar** (niveau B, vastgesteld 2026-07-29). §0 legt de twee scopewijzigingen uit; §10 bevat de bouwvolgorde.
+- **Externe referentie:** `VendorComply Help en Manual.md` (OneDrive, `Bizaline/Producten/VendorComply/`) — handleiding van een bestaand, werkend product. Bron van de acht vraagtypen en de lifecycle. **Referentie, geen compatibiliteitseis:** geen gedeelde database, geen migratiepad. Wat is overgenomen en wat niet, staat in het ontwerp §1a.
 - **Klantaanlevering:** `Transdev Annual Vendor IT Risk SurveyV1_0.md` (repo-root) — de acht vragen die de eerste vulling van de tool vormen.
 - Architectuurreview: `docs/architecture-review/2026-07-24/` (00, 02-05, 07-09 — 06 is verplaatst naar `docs/archive/`, zie hierboven)
-- Actieve ADR's: `docs/adr/`, inclusief ADR-006 (CIAM-laag: Microsoft Entra External ID — herzien op 2026-07-27, AWS Cognito verworpen; bestand heette eerder `ADR-006-cognito-als-federatielaag.md`), ADR-007 (CI-platform: GitHub Actions; eerste CI-scope: format/lint/typecheck, test/build bewust uitgesteld tot na de ORM-spike), ADR-008 (P0-databaserolherstel: clm_api_runtime, ontbrekende schema-grants, tijdelijke clm_admin=clm_api-gelijkstelling), ADR-009 (migration-rol clm_migrator, rollenbootstrap, geautomatiseerde RLS-test in CI via ephemere testdatabase) ADR-010 (databaselaag Drizzle, Prisma verwijderd; inclusief de toetsing van de zeven §5-criteria) en ADR-011 (backup- en hersteleisen per fase: hoeveel dataverlies en hersteltijd acceptabel zijn tijdens ontwikkeling, pilot en productie). ADR-002 is op 2026-07-28 bijgewerkt met de werkelijke stand van de vier openstaande controls.
+- Actieve ADR's: `docs/adr/`, inclusief ADR-012 (frontend-uitrol: Docker als enige weg, AWS App Runner beoogd, Vercel afgewezen), ADR-006 (CIAM-laag: Microsoft Entra External ID — herzien op 2026-07-27, AWS Cognito verworpen; bestand heette eerder `ADR-006-cognito-als-federatielaag.md`), ADR-007 (CI-platform: GitHub Actions; eerste CI-scope: format/lint/typecheck, test/build bewust uitgesteld tot na de ORM-spike), ADR-008 (P0-databaserolherstel: clm_api_runtime, ontbrekende schema-grants, tijdelijke clm_admin=clm_api-gelijkstelling), ADR-009 (migration-rol clm_migrator, rollenbootstrap, geautomatiseerde RLS-test in CI via ephemere testdatabase) ADR-010 (databaselaag Drizzle, Prisma verwijderd; inclusief de toetsing van de zeven §5-criteria) en ADR-011 (backup- en hersteleisen per fase: hoeveel dataverlies en hersteltijd acceptabel zijn tijdens ontwikkeling, pilot en productie). ADR-002 is op 2026-07-28 bijgewerkt met de werkelijke stand van de vier openstaande controls.
 - Runbooks: `docs/runbooks/` — bevat sinds 2026-07-28 `supabase-verificatie-en-restoretest.md`: vijf stappen (backupinventarisatie, restore-test, tier/garanties, Drizzle-migratiestand, provider-toets), met beproefde `pg_dump`/`pg_restore`-commando's, zes gedocumenteerde valkuilen en een meetregister voor hersteltijden.
 - Historisch projectcontextdocument: `docs/context/PROJECT-HISTORY-2026-07-24.md`
 - Volledig gearchiveerd, vervangen instructiebestand: `docs/archive/MCM2-CLAUDE-2026-07-24-pre-restructure.md`

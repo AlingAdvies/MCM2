@@ -33,6 +33,8 @@ describe('Leverancierstoken — isolatie en levenscyclus (e2e)', () => {
       status?: string;
       rondeGesloten?: boolean;
       rondeIngetrokken?: boolean;
+      /** Lifecycle van de ronde (migratie 0005/0006). Default 'active'. */
+      rondeStatus?: 'draft' | 'active' | 'finished' | 'archived';
     },
   ): Promise<{ token: string; responseId: string; vendorId: string }> {
     const token = genereerToken();
@@ -58,18 +60,25 @@ describe('Leverancierstoken — isolatie en levenscyclus (e2e)', () => {
             RETURNING template_id`,
       );
 
+      // survey_run heeft sinds migratie 0005 een expliciete lifecycle met
+      // 'draft' als default (ontwerp §2b). De helper zet standaard 'active',
+      // want dat is de toestand waarin een leverancier de link gebruikt.
       const run = await tx.execute<{ run_id: string }>(
-        sql`INSERT INTO clm.survey_run (tenant_id, template_id, closes_at, revoked_at)
+        sql`INSERT INTO clm.survey_run (tenant_id, template_id, status, closes_at, revoked_at)
             VALUES (${tenantId}, ${template.rows[0].template_id},
+                    ${opties.rondeStatus ?? 'active'},
                     ${opties.rondeGesloten ? new Date(Date.now() - 1000) : null},
                     ${opties.rondeIngetrokken ? new Date() : null})
             RETURNING run_id`,
       );
 
+      // UC1-respons: deelnemer en onderwerp zijn dezelfde leverancier.
       const response = await tx.execute<{ response_id: string }>(
         sql`INSERT INTO clm.survey_response
-              (tenant_id, run_id, vendor_id, token_hash, status, expires_at, submitted_at)
-            VALUES (${tenantId}, ${run.rows[0].run_id}, ${vendorId}, ${hashToken(token)},
+              (tenant_id, run_id, vendor_id, subject_vendor_id, token_hash,
+               status, expires_at, submitted_at)
+            VALUES (${tenantId}, ${run.rows[0].run_id}, ${vendorId}, ${vendorId},
+                    ${hashToken(token)},
                     ${opties.status ?? 'pending'}, ${verval},
                     ${opties.status === 'submitted' ? new Date() : null})
             RETURNING response_id`,
@@ -305,6 +314,80 @@ describe('Leverancierstoken — isolatie en levenscyclus (e2e)', () => {
     const uitkomst = await tokens.controleer(token);
     expect(uitkomst.geldig).toBe(false);
     if (!uitkomst.geldig) expect(uitkomst.reden).toBe('ronde-gesloten');
+  });
+
+  // ── Lifecycle van de ronde (testpunt 30, ontwerp §2b) ─────────────────────
+  // Vóór migratie 0006 kende de guard alleen revoked_at en closes_at. Een
+  // ronde in 'draft' — aangemaakt maar nog niet opengesteld — was daarmee
+  // gewoon bereikbaar. Deze vier tests dekken elke lifecycle-toestand af,
+  // inclusief de enige die wél toegang geeft.
+
+  it('weigert een token als de ronde nog in draft staat, ook binnen de vervaltermijn', async () => {
+    const { token } = await maakResponse(TENANT_A, {
+      naam: 'nogdraft',
+      rondeStatus: 'draft',
+    });
+
+    const uitkomst = await tokens.controleer(token);
+    expect(uitkomst.geldig).toBe(false);
+    // Bewust een eigen reden: 'nog niet opengesteld' is voor een leverancier
+    // iets anders dan 'gesloten'. De eerste is tijdelijk, de tweede definitief.
+    if (!uitkomst.geldig) expect(uitkomst.reden).toBe('ronde-niet-open');
+  });
+
+  it('weigert een token als de ronde is afgerond', async () => {
+    const { token } = await maakResponse(TENANT_A, {
+      naam: 'afgerond',
+      rondeStatus: 'finished',
+    });
+
+    const uitkomst = await tokens.controleer(token);
+    expect(uitkomst.geldig).toBe(false);
+    if (!uitkomst.geldig) expect(uitkomst.reden).toBe('ronde-gesloten');
+  });
+
+  it('weigert een token als de ronde gearchiveerd is', async () => {
+    const { token } = await maakResponse(TENANT_A, {
+      naam: 'archief',
+      rondeStatus: 'archived',
+    });
+
+    const uitkomst = await tokens.controleer(token);
+    expect(uitkomst.geldig).toBe(false);
+    if (!uitkomst.geldig) expect(uitkomst.reden).toBe('ronde-gesloten');
+  });
+
+  it('laat een token toe zodra de ronde actief is', async () => {
+    const { token } = await maakResponse(TENANT_A, {
+      naam: 'actief',
+      rondeStatus: 'active',
+    });
+
+    // De tegenproef bij de drie tests hierboven: zonder deze zou een guard die
+    // álles weigert ook groen zijn.
+    const uitkomst = await tokens.controleer(token);
+    expect(uitkomst.geldig).toBe(true);
+  });
+
+  it('weigert indienen op een niet-actieve ronde, ook buiten de guard om', async () => {
+    const { responseId } = await maakResponse(TENANT_A, {
+      naam: 'draftdirect',
+      rondeStatus: 'draft',
+    });
+
+    // dienIn() rechtstreeks aanroepen slaat de guard over. De voorwaarde zit
+    // daarom óók in het UPDATE-statement zelf: een toekomstige aanroeper die
+    // de guard niet passeert mag geen indiening kunnen forceren.
+    const gelukt = await tokens.dienIn(TENANT_A, responseId);
+    expect(gelukt).toBe(false);
+
+    // En de response moet onaangeroerd zijn gebleven.
+    const na = await db.withTenant(TENANT_A, (tx) =>
+      tx.execute<{ status: string }>(
+        sql`SELECT status FROM clm.survey_response WHERE response_id = ${responseId}`,
+      ),
+    );
+    expect(na.rows[0].status).toBe('pending');
   });
 
   // ── Opslag ────────────────────────────────────────────────────────────────

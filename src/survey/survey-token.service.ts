@@ -12,6 +12,7 @@ export type WeigerReden =
   | 'al-ingediend'
   | 'verlopen'
   | 'ronde-gesloten'
+  | 'ronde-niet-open'
   | 'vendor-inactief';
 
 export interface TokenGeldig {
@@ -44,6 +45,15 @@ interface LookupRij extends Record<string, unknown> {
   submitted_at: Date | string | null;
   vendor_active: boolean;
   run_closed: boolean;
+  /**
+   * Lifecycle van de ronde (migratie 0006). Alleen 'active' geeft toegang.
+   *
+   * Staat los van run_closed, dat blijft betekenen "ingetrokken of voorbij
+   * closes_at". Voor een leverancier is 'draft' (nog niet begonnen) iets
+   * anders dan 'finished' (voorbij), en dat verschil hoort in de melding
+   * terug te komen.
+   */
+  run_status: string | null;
 }
 
 function alsDatum(waarde: Date | string | null): Date | null {
@@ -134,6 +144,28 @@ export class SurveyTokenService {
       return { geldig: false, reden: 'ronde-gesloten' };
     }
 
+    // Stap 1b uit ontwerp §5: de lifecycle van de ronde (§2b). Alleen 'active'
+    // geeft toegang.
+    //
+    // Vóór migratie 0006 bestond deze controle niet en was een ronde in
+    // 'draft' — nog niet gepubliceerd — via een token gewoon bereikbaar. De
+    // twee bestaande controles dekken dat niet af: revoked_at en closes_at
+    // zeggen niets over een ronde die nog niet begonnen is.
+    //
+    // Onderscheid tussen 'draft' en de rest is bewust: een ronde die nog moet
+    // beginnen vraagt om geduld, een afgesloten ronde is voorbij. Dezelfde
+    // melding voor beide maakt van dat verschil een raadsel.
+    //
+    // run_status is NULL wanneer de ronde niet gevonden wordt (LEFT JOIN).
+    // Dat behandelen we als gesloten: geen ronde betekent geen toegang.
+    if (rij.run_status !== 'active') {
+      return {
+        geldig: false,
+        reden:
+          rij.run_status === 'draft' ? 'ronde-niet-open' : 'ronde-gesloten',
+      };
+    }
+
     if (!rij.vendor_active) {
       return { geldig: false, reden: 'vendor-inactief' };
     }
@@ -163,12 +195,21 @@ export class SurveyTokenService {
   async dienIn(tenantId: string, responseId: string): Promise<boolean> {
     return this.db.withTenant(tenantId, async (tx) => {
       const resultaat = await tx.execute<{ response_id: string }>(
-        sql`UPDATE clm.survey_response
+        // De ronde-status staat óók in dit statement, niet alleen in de guard.
+        // De guard beschermt het HTTP-pad; deze voorwaarde beschermt de
+        // methode zelf, zodat een toekomstige aanroeper die de guard niet
+        // passeert geen indiening kan forceren op een ronde die dicht staat.
+        sql`UPDATE clm.survey_response AS r
                SET status = 'submitted', submitted_at = now()
-             WHERE response_id = ${responseId}
-               AND status = 'pending'
-               AND expires_at > now()
-         RETURNING response_id`,
+             WHERE r.response_id = ${responseId}
+               AND r.status = 'pending'
+               AND r.expires_at > now()
+               AND EXISTS (
+                     SELECT 1 FROM clm.survey_run run
+                      WHERE run.run_id = r.run_id
+                        AND run.status = 'active'
+                   )
+         RETURNING r.response_id`,
       );
 
       const gelukt = resultaat.rows.length === 1;
