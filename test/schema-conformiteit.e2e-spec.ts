@@ -189,4 +189,71 @@ describe('Schema-conformiteit (e2e)', () => {
 
     expect(rows[0].rolbypassrls).toBe(false);
   });
+
+  describe('survey_run.contract_id (migratie 0007)', () => {
+    it('bestaat als nullable uuid', async () => {
+      // Nullable is een ontwerpkeuze, geen tussenstand: een ronde hoeft niet
+      // aan een contract te hangen. Een leverancier kan beoordeeld worden vóór
+      // er een overeenkomst is, en de acht Transdev-vragen gaan over de
+      // organisatie als geheel. Verplicht stellen zou UC1 breken.
+      const { rows } = await client.query<{
+        data_type: string;
+        is_nullable: string;
+      }>(
+        `SELECT data_type, is_nullable
+           FROM information_schema.columns
+          WHERE table_schema = 'clm'
+            AND table_name = 'survey_run'
+            AND column_name = 'contract_id'`,
+      );
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0].data_type).toBe('uuid');
+      expect(rows[0].is_nullable).toBe('YES');
+    });
+
+    it('heeft nog géén foreign key — clm.contract bestaat niet', async () => {
+      // Legt de huidige situatie expliciet vast. Deze test hoort te FALEN op
+      // het moment dat clm.contract wordt ingevoerd: dan moet hier een FK
+      // liggen, en dan is dit de plek die eraan herinnert. Een ontbrekende FK
+      // die niemand opmerkt is precies hoe een verwijzing naar een
+      // niet-bestaande rij binnensluipt.
+      const { rows: tabel } = await client.query(
+        `SELECT 1 FROM information_schema.tables
+          WHERE table_schema = 'clm' AND table_name = 'contract'`,
+      );
+
+      const { rows: fks } = await client.query(
+        `SELECT 1
+           FROM information_schema.table_constraints tc
+           JOIN information_schema.key_column_usage kcu
+             ON kcu.constraint_name = tc.constraint_name
+          WHERE tc.table_schema = 'clm'
+            AND tc.table_name = 'survey_run'
+            AND tc.constraint_type = 'FOREIGN KEY'
+            AND kcu.column_name = 'contract_id'`,
+      );
+
+      if (tabel.length > 0) {
+        // clm.contract is er inmiddels: dan hóórt de FK er ook te zijn.
+        expect(fks.length).toBe(1);
+      } else {
+        expect(fks.length).toBe(0);
+      }
+    });
+
+    it('is doorzoekbaar via een index', async () => {
+      // Rapportage vraagt straks "alle rondes over contract X". Zonder index
+      // is dat een volledige scan over een tabel die per tenant per jaar
+      // aangroeit.
+      const { rows } = await client.query(
+        `SELECT 1 FROM pg_indexes
+          WHERE schemaname = 'clm'
+            AND tablename = 'survey_run'
+            AND indexname = 'survey_run_contract_id_idx'`,
+      );
+
+      expect(rows).toHaveLength(1);
+    });
+  });
 });
