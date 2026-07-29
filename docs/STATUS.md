@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-28 (drie PR's gemerged, Supabase blijkt géén backups te hebben — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+2026-07-28, einde sessie (Issue #7 spoor 2 gebouwd en groen in CI; koerswijziging op de vragenlijst — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
 
 ## Voor een nieuwe sessie: lees dit eerst
 
@@ -9,7 +9,29 @@
 2. Lees dit document (`docs/STATUS.md`) volledig — het is de enige actuele waarheid over fase en blockers.
 3. Verifieer git-status zelf (`git status`, `git branch -a`) tegen wat hieronder staat — vertrouw niet blind op deze snapshot.
 4. Check de open GitHub Issues (`gh issue list --repo AlingAdvies/MCM2 --state open`) voor de actuele backlog — dit document verwijst naar issue-nummers, maar de Issues zelf zijn de bron van waarheid over wat daadwerkelijk nog open staat.
-5. **Eerste concrete vervolgstap: Issue #30** (er zijn géén backups van de productiedatabase) — dit vraagt een **beslissing van de eigenaar over het databaseplan**, geen bouwwerk, en blokkeert drie andere issues die de productiedatabase wijzigen (#19, #25, #29). Zie het eerste blok onder "Actieve blokkades" voor de gemeten opties en kosten. Issue #7 (leverancierstoken) kan hier parallel aan lopen zolang er niet tegen de productiedatabase geschreven wordt.
+5. **Eerste concrete vervolgstap: PR #32 mergen** (CI groen op alle drie de jobs, commit `b29e2ad`, geverifieerd met `gh pr checks 32` op 2026-07-28). Daarna is de eerstvolgende inhoudelijke stap **het beantwoorden van één ontwerpvraag over de vragenlijst-tool** — zie "Openstaand besluit" hieronder. Issue #30 (geen backups) blijft de zwaarste openstaande blokkade voor alles wat de productiedatabase raakt (#19, #25, #29), maar vraagt nu alleen nog uitvoering door de eigenaar, geen besluit.
+
+## Openstaand besluit — blokkeert het bouwen van de vragenlijst-tool
+
+Op 2026-07-28 is de scope van de vragenlijst **gecorrigeerd door de opdrachtgever**. Dit is de belangrijkste inhoudelijke wijziging van deze sessie en een nieuwe sessie moet hem kennen vóór er iets gebouwd wordt.
+
+Wat er gebouwd moet worden is **een tool waarmee een tenant zélf vragen opstelt**. De acht Transdev-vragen (`Transdev Annual Vendor IT Risk SurveyV1_0.md`, aangeleverd op 2026-07-28) zijn de **eerste vulling en de PoC-casus** — niet de scope.
+
+Een eerdere ontwerpversie ging ervan uit dat die acht vragen *de* vragenlijst waren en legde ze vast in code. Dat was een verkeerde lezing en is herschreven; de vragen horen in de database, met beheer eromheen.
+
+**De vraag die openstaat, en die de omvang bepaalt:** hoeveel vrijheid krijgt de tenant?
+
+| | Niveau | Wat de tenant kan |
+|---|---|---|
+| **A** | Vaste vraagvorm, vrije tekst | Vraagteksten schrijven, volgorde bepalen, per vraag een upload aan/uit. Eén antwoordtype. |
+| **B** | Meerdere antwoordtypen | Als A, plus per vraag kiezen: bevestiging, meerkeuze, vrije tekst, ja/nee, datum. |
+| **C** | Volledige formulierbouwer | Als B, plus voorwaardelijke logica, secties, herhaalbare blokken. |
+
+Advies aan de eigenaar was **A voor de PoC**, met een datamodel dat B mogelijk maakt zonder verbouwing. Onderbouwing in het ontwerp, §1.
+
+Twee voorstellen in datzelfde ontwerp zijn eveneens nog niet bevestigd: dat een gestarte ronde de vragenlijst **bevriest** (§2) en dat een toelichting ook verplicht is bij "I do not confirm" (§3).
+
+Volledig ontwerp: `docs/superpowers/specs/2026-07-28-vragenlijst-ontwerp.md` — status **ONVOLLEDIG, niet bouwen** tot niveau A/B/C gekozen is.
 
 ## Doel
 Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
@@ -18,11 +40,11 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 - **P0 — databaserol/RLS-bereikbaarheid, opgelost op 2026-07-27:** de runtime database-connectie gebruikte de Supabase-rol `postgres` (`rolbypassrls: true`). Nieuwe login-rol `clm_api_runtime` aangemaakt (`LOGIN`, erft van `clm_api`, `rolbypassrls: false`), `DATABASE_URL` in `.env` bijgewerkt. Tussentijdse extra bevinding: geen van de vier `clm_*`-rollen had ooit `USAGE`-rechten op de schemas `clm`/`ref`/`audit` — hersteld via migratie `20260727053702_grant_schema_and_table_privileges`. Zie ADR-008.
 - **P0 — migration-rol en geautomatiseerde RLS-test, opgelost op 2026-07-27:** aparte login-rol `clm_migrator` toegevoegd (los van zowel `postgres` als `clm_api_runtime`), rollen-bootstrap vastgelegd in `prisma/roles/bootstrap-roles.sql` (niet in de Prisma-migratiehistorie, want rollen zijn cluster-breed). De handmatige, ad-hoc RLS-verificatie is vervangen door een geautomatiseerde test (`test/tenant-rls-isolation.e2e-spec.ts`), die nu ook in CI draait tegen een ephemere, wegwerpbare Postgres-container (`.github/workflows/ci.yml`, job `rls-isolation`) — bewust niet tegen de echte Supabase-database, om geen productiegeheim als GitHub Secret te hoeven gebruiken. Zie ADR-009 voor de volledige achtergrond, inclusief waarom dit geen Prisma-probleem was (de rolrechten-kwesties tijdens het bouwen hiervan waren PostgreSQL/Supabase-specifiek, los van de ORM-keuze).
-- **P0 — nog open (Issue #7), de zwaarste resterende P0-blocker:** tenantcontext komt nog blind uit client-input (`X-Tenant-Id`-header of query-parameter), zonder koppeling aan geverifieerde identiteit. Acceptabel als tijdelijke, expliciet erkende uitzondering zolang er geen externe/tweede tenant is — niet acceptabel zodra de Transdev-pilot echte externe leveranciers krijgt.
+- **P0 — deels opgelost (Issue #7):** tenantcontext kwam blind uit client-input (`X-Tenant-Id`-header of query-parameter), zonder koppeling aan geverifieerde identiteit.
 
   Issue #7 vraagt om **twee gescheiden mechanismen**, met verschillende voortgang:
-  - **Interne beheerder** — identity-infrastructuur staat en werkt. Besluit: Microsoft Entra External ID als CIAM-laag (ADR-006, herzien op 2026-07-27; AWS Cognito losgelaten vóór er resources waren aangemaakt, dus geen opruimwerk). De federatie-PoC is geslaagd: tenant `mcm2ciam.onmicrosoft.com`, federatie met `alingadvies.nl`, end-to-end doorlopen tot een geldige authorization code (`?code=...`, geen error). Volledige configuratie — tenant-ID's, client-ID's, endpoints — plus een gedocumenteerde tijdelijke blokkade die zonder configuratiewijziging verdween: `docs/architecture-review/2026-07-27/01-entra-external-id-poc-bevindingen.md`. **Nog te bouwen:** authorization code server-to-server inwisselen, claims inspecteren, NestJS-guard die de tenantcontext uit het geverifieerde ID-token afleidt.
-  - **Externe leverancier** — tokengebaseerde, accountloze survey-linktoegang. Staat volledig los van de CIAM-laag (leveranciers hebben geen Entra-account bij de klant). **Nog niet gestart.**
+  - **Interne beheerder (spoor 1)** — identity-infrastructuur staat en werkt. Besluit: Microsoft Entra External ID als CIAM-laag (ADR-006, herzien op 2026-07-27; AWS Cognito losgelaten vóór er resources waren aangemaakt, dus geen opruimwerk). De federatie-PoC is geslaagd: tenant `mcm2ciam.onmicrosoft.com`, federatie met `alingadvies.nl`, end-to-end doorlopen tot een geldige authorization code (`?code=...`, geen error). Volledige configuratie — tenant-ID's, client-ID's, endpoints — plus een gedocumenteerde tijdelijke blokkade die zonder configuratiewijziging verdween: `docs/architecture-review/2026-07-27/01-entra-external-id-poc-bevindingen.md`. **Nog te bouwen:** authorization code server-to-server inwisselen, claims inspecteren, NestJS-guard die de tenantcontext uit het geverifieerde ID-token afleidt. **Niet gestart.**
+  - **Externe leverancier (spoor 2)** — tokengebaseerde, accountloze survey-linktoegang. **Gebouwd op 2026-07-28, CI groen, wacht op merge in PR #32.** Zie het blok "Aantoonbaar werkend" hieronder voor wat precies bewezen is.
 
   Het tijdelijke AWS-account `727732213368` is niet langer nodig voor identity.
 - **ZWAARSTE BLOKKADE (Issue #30): er zijn géén backups van de productiedatabase.** Op 2026-07-28 in het dashboard vastgesteld: `clm-enterprise` draait op het **Supabase Free Plan**, dat letterlijk meldt *"Free Plan does not include project backups"*. Niet "beperkte backups" — **geen**. Bij verlies van het project is alles weg. Free-projecten worden bovendien na circa **7 dagen inactiviteit gepauzeerd**, met verwijdering na langere inactiviteit; voor een surveylink die 30 dagen geldig moet zijn is dat op zichzelf al onwerkbaar.
@@ -47,10 +69,28 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 - ~~**P1:** ORM-keuze Prisma 6 versus Drizzle~~ — **besloten en uitgevoerd op 2026-07-28: Drizzle** (ADR-010, commit `e9df0dc`). De vergelijkende spike uit Issue #5 is niet uitgevoerd; in plaats daarvan zijn de zeven criteria uit MCM2-CLAUDE.md §5 getoetst op de daadwerkelijke omzetting. Prisma is volledig verwijderd. Bevinding die de omvang bepaalde: geen enkele regel applicatiecode gebruikte Prisma, dus het oorspronkelijke Prisma 7-conflict was op dat moment niet reproduceerbaar — er was geen code die het kon uitlokken.
 - CI dekt nu format/lint/typecheck, unit tests, een Docker-productiebuild die de image ook daadwerkelijk start, én beide tenant-isolatietests (zie hieronder). De eerdere beperking "geen `docker build` in CI, uitgesteld tot na de ORM-spike" (ADR-007) is daarmee vervallen.
 - Geen branch-protection op `main`: technisch geblokkeerd, niet vergeten. GitHub Branch Protection op een privérepository vereist een betaald plan (Pro/Team) voor de organisatie `AlingAdvies`; dat is nu niet actief (bevestigd via de GitHub API op 2026-07-27: `403 Upgrade to GitHub Pro or make this repository public`). Tot een upgrade is geregeld, is "nooit rechtstreeks op main werken" (MCM2-CLAUDE.md §10) uitsluitend een werkregel, geen technische afdwinging — een falende CI-check of een directe push naar `main` wordt nu niet door GitHub tegengehouden.
-- Vijf Transdev-klantvragen nog open: exportformaat, of toelichting bij bepaalde survey-antwoordopties verplicht is, upload-validatie-eisen voor het certificaat, welke van de vijf vragen welk vraagtype heeft, en de SMTP-verbindingsdetails voor `contractmanagement@transdev.nl` (expliciet nog "volgt").
+- **Transdev-klantvragen: drie van de vijf beantwoord op 2026-07-28** met de aanlevering van `Transdev Annual Vendor IT Risk SurveyV1_0.md` plus mondelinge aanvullingen.
+  - ~~OV-6 (toelichting verplicht?)~~ — **beantwoord, deels.** Verplicht bij "Not applicable" en bij de vierde optie op een uploadvraag ("I cannot upload our Certificate or SoA because…"). Of het óók verplicht is bij "I do not confirm" is **niet bevestigd**; het ontwerp neemt aan van wel en markeert dat als aanname.
+  - ~~OV-7 (upload-validatie-eisen)~~ — **beantwoord, behalve de scanvereiste.** Maximaal 2 bestanden, PDF of PNG, elk maximaal 5 MB (zo gelezen: per bestand, niet totaal). **Over een virusscan is niets gezegd** — het ontwerp bouwt er geen en benoemt dat als expliciet risico.
+  - ~~OV-8 (welke vraag welk vraagtype)~~ — **achterhaald door de scopewijziging.** Alle acht vragen hebben hetzelfde antwoordtype; de vraag welk type waar hoort, wordt straks door de tenant zelf beantwoord in de tool.
+  - **OV-4 (exportformaat)** — nog open.
+  - **OV-9 (SMTP-details voor `contractmanagement@transdev.nl`)** — nog open, was al "volgt". Blokkeert het daadwerkelijk versturen van uitnodigingen.
+
+  Ook nieuw vastgelegd: de vragenlijst is **alleen Engels**. Geen vertaallaag.
 
 ## Aantoonbaar werkend
 
+- **Leverancierstoegang via token, spoor 2 van Issue #7 (2026-07-28, PR #32, commit `b29e2ad`).** CI groen op alle drie de jobs, geverifieerd met `gh pr checks 32`. 46 tests groen. Wat er staat:
+  - `clm.resolve_survey_token()` — `SECURITY DEFINER` met `SET search_path = clm, pg_temp`. De enige route naar een responserij zonder tenantcontext, met een minimale returnwaarde (geen namen, geen e-mailadressen, geen antwoorden). Lost de kip-en-ei op: de tenant is niet bekend vóór de lookup.
+  - **De tenantcontext komt uitsluitend uit die lookup**, nooit uit een header, query-parameter of body. Er bestáát geen veld waarin een leverancier een andere tenant kan benoemen. Dit is precies het patroon dat de verwijderde branch `feat/fase0-skeleton-vendors` fout deed.
+  - Token: 32 bytes uit `crypto.randomBytes`, base64url, 43 tekens. Opgeslagen als SHA-256; het ruwe token staat nergens in de database. **Gevolg: een verloren link is niet herstelbaar, alleen opnieuw te genereren.**
+  - Guard met onderscheid dat bewust asymmetrisch is: 404 voor onbekend én ingetrokken (ononderscheidbaar), 410 voor verlopen, al ingediend, gesloten ronde en inactieve vendor.
+  - Éénmaligheid via één atomair `UPDATE … WHERE status = 'pending'`, niet via lezen-dan-schrijven. Een dubbelklik kan geen twee indieningen opleveren.
+  - Auditregel binnen dezelfde transactie als de indiening. Rolt de indiening terug, dan verdwijnt de auditregel mee.
+  - `MaskerendeLogger` maskeert tokens in logregels vóór het wegschrijven. Dat het ruwe token in een log even gevoelig is als een wachtwoord in platte tekst, is de reden dat dit er is.
+  - Migratie `0004_rls_zonder_deleted_at_filter.sql` loste Issue #31 op: `deleted_at IS NULL` in de `USING`-clausule maakte soft delete onmogelijk — het vullen van `deleted_at` duwde de rij uit de policy, waarna de UPDATE geweigerd werd. Journey A werkte daardoor niet.
+
+  **Bevinding die genoemd moet worden:** de logmaskering had zelf een fout die pas door de Docker-productiebuild in CI aan het licht kwam. `maskeerDiep` liep over `Object.entries()`; bij een `Error` is die lijst leeg omdat `message` en `stack` niet-opsombaar zijn. Elke foutmelding werd daardoor `{}` — bij een incident zou je in de logs niets zien. Gerepareerd in `b29e2ad` met een regressietest die beide kanten toetst: leesbaarheid én maskering. Dit is precies waarvoor de CI-poort "image moet ook daadwerkelijk starten" is toegevoegd.
 - **Handmatig herstelpad bewezen (2026-07-28).** `pg_dump` van `clm-enterprise` → `pg_restore` in een verse Postgres 17.6-container → grants → verificatie GOEDGEKEURD. Duur: dump 5s, restore 1s. De Postgres-clienttools staan niet op de ontwikkelmachine maar zitten in de container `postgres:17.6`, exact de versie die Supabase draait. Vier valkuilen gedocumenteerd in het runbook (stap 1b-alt): de `?schema=`-parameter die `pg_dump` weigert, padvertaling in Git Bash, ontbrekende grants na een restore, en de UUID-defaults uit #29.
 - **MCM2 draait aantoonbaar op een andere provider (2026-07-28).** Gemeten met `scripts/provider-migratietest.js` tegen Neon (`eu-central-1`, PostgreSQL 17.10): 20 van 20 e2e-tests groen zonder één regel codewijziging. Zie het blokkadeblok hierboven.
 - **Schemacontrole die meegroeit met de applicatie (2026-07-28).** `src/db/schema-inventory.ts` leidt de verwachting af uit `src/db/schema.ts` via Drizzle's `getTableConfig` — geen hardgecodeerde lijst die veroudert bij de eerste nieuwe tabel. `test/schema-conformiteit.e2e-spec.ts` draait als CI-poort en faalt bij een ontbrekende tabel, een tabel buiten het schema, **een tenantgebonden tabel zonder RLS**, een policy zonder `USING`/`WITH CHECK`, en een ontbrekende kolomdefault. Alle faalscenario's zijn daadwerkelijk uitgelokt om te bevestigen dat de test ook rood wordt wanneer dat hoort. Noodzakelijk omdat `drizzle-kit generate` afwijkingen buiten de migratieketen **niet** detecteert: het vergelijkt met zijn eigen momentopnames in `drizzle/meta/`, niet met de database (geverifieerd).
@@ -80,7 +120,8 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Huidige branch en Git-status
 
-- Branch: `main`, up to date met `origin/main`. Working tree schoon. **Geen openstaande feature branches meer** — zelf geverifieerd met `git status` en `git branch -a` op 2026-07-28.
+- **Actieve branch: `feat/issue-7-leveranciertoken`, met openstaande PR #32.** Laatste commit `b29e2ad`. CI groen op alle drie de jobs; `mergeable=MERGEABLE`, `mergeStateStatus=CLEAN` — geverifieerd op 2026-07-28 met `gh pr checks 32` en `gh pr view 32`. **Klaar om te mergen; wacht alleen op akkoord van de eigenaar.** Drie commits: de tokenlaag, de HTTP-routes met logmaskering en auditregels, en de fix op `maskeerDiep`.
+- **Niet-gecommitteerde bestanden in de working tree** (bewust, aan het eind van de sessie): `Transdev Annual Vendor IT Risk SurveyV1_0.md` in de repo-root (klantaanlevering) en `docs/superpowers/specs/2026-07-28-vragenlijst-ontwerp.md` (het herschreven, nog onvolledige ontwerp). Beide horen bij de vragenlijst-tool, niet bij PR #32 — daarom niet meegecommit.
 - `chore/supabase-verificatie` is op 2026-07-28 via PR #28 gemerged naar `main` en daarna lokaal én op GitHub verwijderd. Zes commits: Supabase read-only verificatie, schemacontrole die uit het schema meegroeit, ADR-011 (backupeisen per fase), de #29-fix, en het runbook met beproefde commando's en opruimprocedure. CI groen op alle drie de jobs vóór de merge.
 - `feat/issue-5-drizzle-omzetting` is op 2026-07-28 via PR #26 gemerged naar `main` (merge-commit `f0806f8`) en daarna lokaal én op GitHub verwijderd. Bevatte de volledige Drizzle-omzetting; CI groen op alle drie de jobs vóór de merge.
 - `docs/issue-7-leveranciertoken-ontwerp` is op 2026-07-28 via PR #27 gemerged naar `main` (merge-commit `c8f896a`) en daarna lokaal én op GitHub verwijderd. Bevatte uitsluitend het ontwerpdocument voor het leverancierstokenspoor.
@@ -96,27 +137,40 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Eerstvolgende goedgekeurde stap
 
-De databaselaag is besloten en omgezet (ADR-010, gemerged), en het ontwerp voor het leverancierstoken staat op `main`. **De volgorde is op 2026-07-28 wezenlijk gewijzigd:** Issue #30 (geen backups) is nu de zwaarste blokkade en gaat vóór al het andere, omdat drie openstaande issues de productiedatabase wijzigen.
+De databaselaag is omgezet (ADR-010), en spoor 2 van Issue #7 is gebouwd en groen. **Bij de start van een nieuwe sessie:**
 
-0. ~~Beoordelen en mergen van de openstaande branches~~ — **afgerond 2026-07-28**: PR #26, #27 en #28 gemerged, alle branches opgeruimd.
+0. **PR #32 mergen** — CI groen, geen conflicten, wacht alleen op akkoord. Daarna de branch lokaal én op GitHub verwijderen (git-ritueel).
+0b. **Het openstaande besluit over de vragenlijst-tool voorleggen** — niveau A, B of C (zie het blok bovenaan dit document). Zonder dat antwoord is het ontwerp niet af en kan er niet gebouwd worden. Dit is nu de kortste weg naar een werkende pilot, want de tokenlaag eronder staat.
+
+Daarna, in volgorde van afhankelijkheid:
 
 1. ~~**Issue #30 — beslissing over het databaseplan**~~ — **besloten 2026-07-28: Supabase Free voor de pilot**, met expliciete risico-acceptatie in ADR-011 en een gebouwde, geteste dagelijkse dump als enige vangnet. Overwogen en afgewezen als pilotdatabase: de eigen MacBook-thuisserver (thuisinternet is geen SLA, en Tailscale maakt hem niet bereikbaar voor een leverancier) — die wordt wél ingezet als ontwikkeldatabase en backupbestemming. **Resterende actie voor de eigenaar:** de dagelijkse taak inplannen en `BACKUP_DIR` naar een tweede locatie zetten. Zie runbook stap 0.
 2. **Issue #19** — restore-test van de dashboard-backup. Kan pas ná #30: zonder plan zijn er geen backups om te herstellen. Runbook stap 1, vereist dashboardtoegang.
 3. **Issue #29** — de vijf ontbrekende UUID-defaults toepassen op de productiedatabase. Migratie ligt klaar en is bewezen tegen een productiekopie; wacht op een vangnet uit #30/#19.
 4. **Issue #25** — Drizzle-migratiestand initialiseren op de bestaande Supabase-database. Idem: raakt productie, wacht op #30/#19. Schema-afdrijving is al uitgesloten.
-5. **Issue #7** — tenantcontext-verificatie. Het ontwerp voor spoor 2 (leverancierstoken) staat op `main` en is klaar voor implementatie; spoor 1 (Entra-guard) vraagt nog om het inwisselen van de authorization code en het bouwen van de JWKS-guard. **Kan parallel aan #30** zolang er niet tegen de productiedatabase geschreven wordt — de e2e-keten draait tegen wegwerpcontainers.
+5. **Issue #7** — spoor 2 (leverancierstoken) is **gebouwd en groen**, wacht op merge van PR #32. Spoor 1 (Entra-guard) vraagt nog om het inwisselen van de authorization code en het bouwen van de JWKS-guard; **niet gestart**. Beide sporen kunnen zonder de productiedatabase — de e2e-keten draait tegen wegwerpcontainers.
+5b. **Vragenlijst-tool** — ontwerp ligt er, wacht op het besluit uit §1 (niveau A/B/C). Bouwvolgorde staat in het ontwerp, §10. Dit is wat de leverancierskant van een werkende toegangslaag naar een werkende pilot brengt.
+5c. **Issue #9 (certificaat-upload)** — meegenomen in datzelfde ontwerp, §4/§6. Twee punten die daaruit voortkomen en nog geen issue hebben: **een virusscan** (OV-7 onbeantwoord, ontwerp bouwt er geen) en **backup van geüploade bestanden** (die vallen buiten `npm run backup:dump` en zijn daarmee het enige onderdeel zonder vangnet — raakt #30).
 6. **Issue #1** — wachtwoordrotatie van de `postgres`-beheerrol (P0, niet aangeraakt door de databaserol-fix van 2026-07-27).
 7. **Issue #3** — `tsconfig.json` naar strict-mode, module-systeem-inconsistentie oplossen (P0, klein). De eerdere kanttekening hierbij ("kan typefouten blootleggen die per ORM verschillen") is vervallen nu de databaselaag vastligt.
 8. ~~**Issue #2** — `pg` en `@types/pg` als directe dependency~~ — **afgerond 2026-07-28**, bijvangst van ADR-010.
 9. ~~**Issue #4** — EntraID-federatie haalbaarheidscheck~~ — **afgerond 2026-07-27**, zie hierboven en ADR-006.
 10. ~~**Issue #5** — ORM-spike Prisma 6 vs. Drizzle~~ — **besloten 2026-07-28: Drizzle** (ADR-010). De spike zelf is niet uitgevoerd; de zeven criteria zijn op de daadwerkelijke omzetting getoetst. Issue #6 (definitieve ORM-implementatie) is hiermee inhoudelijk afgehandeld.
-11. **Issue #15** — beantwoorden van de vijf resterende Transdev-klantvragen (kan parallel, is geen technische afhankelijkheid).
+11. **Issue #15** — nog twee resterende Transdev-klantvragen: OV-4 (exportformaat) en OV-9 (SMTP-details). OV-6, OV-7 en OV-8 zijn op 2026-07-28 afgehandeld, zie het blok hierboven. OV-9 blokkeert het daadwerkelijk versturen van uitnodigingen.
+12. **Nog aan te maken issues** (voortgekomen uit deze sessie, bestonden op 2026-07-28 nog niet in GitHub):
+    - Virusscan op geüploade bestanden — OV-7 liet dit onbeantwoord; het ontwerp bouwt er geen en benoemt het haakpunt (tussen ontvangen en opslaan).
+    - Backup van geüploade bestanden — vallen buiten `npm run backup:dump`; hoort in de dagelijkse taak uit #30.
+    - Twee eisen aan de beheerderskant uit het tokenontwerp §5a: waarschuwen bij het zacht verwijderen van een vendor met openstaande responses, en een aparte "vervallen"-status in het statusoverzicht. Zonder die twee lost de guard het stille falen op voor de leverancier, maar blijft de beheerder wachten op een antwoord dat nooit komt.
 
 Volledige backlog (alle 24 items, incl. Before production en Later): `gh issue list --repo AlingAdvies/MCM2` of `https://github.com/AlingAdvies/MCM2/issues`.
 
 ## Belangrijke verwijzingen
 
 - **Backlog/roadmap: GitHub Issues** (`https://github.com/AlingAdvies/MCM2/issues`), gelabeld met type (`bug`/`enhancement`/`chore`) en prioriteit (`priority:p0`/`priority:before-pilot`/`priority:before-production`/`priority:later`). Vervangt de losse Markdown-roadmap sinds 2026-07-27 (zie `docs/archive/06-prioritized-roadmap-2026-07-24-pre-issues.md` voor de migratieverantwoording en issue-nummer-mapping).
+- **Ontwerpen (`docs/superpowers/specs/`):**
+  - `2026-07-28-leveranciertoken-ontwerp.md` — toegangslaag voor leveranciers. **Uitgevoerd**, zie PR #32. Blijft de referentie voor waarom de guard doet wat hij doet.
+  - `2026-07-28-vragenlijst-ontwerp.md` — vragenlijst-tool, antwoorden en certificaat-upload. **Status: onvolledig, niet bouwen** tot het besluit over niveau A/B/C er is. §0 legt uit waarom dit document herschreven is.
+- **Klantaanlevering:** `Transdev Annual Vendor IT Risk SurveyV1_0.md` (repo-root) — de acht vragen die de eerste vulling van de tool vormen.
 - Architectuurreview: `docs/architecture-review/2026-07-24/` (00, 02-05, 07-09 — 06 is verplaatst naar `docs/archive/`, zie hierboven)
 - Actieve ADR's: `docs/adr/`, inclusief ADR-006 (CIAM-laag: Microsoft Entra External ID — herzien op 2026-07-27, AWS Cognito verworpen; bestand heette eerder `ADR-006-cognito-als-federatielaag.md`), ADR-007 (CI-platform: GitHub Actions; eerste CI-scope: format/lint/typecheck, test/build bewust uitgesteld tot na de ORM-spike), ADR-008 (P0-databaserolherstel: clm_api_runtime, ontbrekende schema-grants, tijdelijke clm_admin=clm_api-gelijkstelling), ADR-009 (migration-rol clm_migrator, rollenbootstrap, geautomatiseerde RLS-test in CI via ephemere testdatabase) ADR-010 (databaselaag Drizzle, Prisma verwijderd; inclusief de toetsing van de zeven §5-criteria) en ADR-011 (backup- en hersteleisen per fase: hoeveel dataverlies en hersteltijd acceptabel zijn tijdens ontwikkeling, pilot en productie). ADR-002 is op 2026-07-28 bijgewerkt met de werkelijke stand van de vier openstaande controls.
 - Runbooks: `docs/runbooks/` — bevat sinds 2026-07-28 `supabase-verificatie-en-restoretest.md`: vijf stappen (backupinventarisatie, restore-test, tier/garanties, Drizzle-migratiestand, provider-toets), met beproefde `pg_dump`/`pg_restore`-commando's, zes gedocumenteerde valkuilen en een meetregister voor hersteltijden.
