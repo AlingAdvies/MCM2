@@ -21,15 +21,17 @@ Op 2026-07-29 is het openstaande niveau-besluit genomen: **niveau B**. Aanleidin
 
 **Scopegrens van de MVP, verduidelijkt op 2026-07-29: twee use cases, niets daarbuiten.**
 
-| | Use case | Wie vult in | Over wie gaat het |
+| | Use case | Wie vult in | Over welke leverancier |
 |---|---|---|---|
-| **UC1** | Vendor compliance (bv. IT) | externe leverancier | zichzelf |
-| **UC2** | Interne beoordeling van een dienstverlener | Transdev-collega | een andere partij |
+| **UC1** | Vendor compliance (bv. IT) | de leverancier zelf | zichzelf |
+| **UC2** | Interne beoordeling | een Transdev-collega | dezelfde leverancier |
 
-UC2 ontbrak volledig in het ontwerp en raakte het datamodel, niet alleen de tekst: `survey_response.vendor_id` was `NOT NULL` met een foreign key naar `vendor`, en een interne collega is geen leverancier. Drie besluiten van de eigenaar bepalen hoe UC2 werkt:
+"Leverancier" en "dienstverlener" zijn hetzelfde: dezelfde partij, dezelfde `clm.vendor`-rij, alleen bekeken vanuit een andere kant. Bij UC1 is de leverancier de **deelnemer**, bij UC2 het **onderwerp** — hij vult daar niets in, er wordt over hem ingevuld. Omdat `subject_vendor_id` bij beide gevuld is, staan de zelfverklaring en de praktijkscore over dezelfde partij automatisch naast elkaar.
+
+UC2 ontbrak volledig in het ontwerp en raakte het datamodel, niet alleen de tekst: `survey_response.vendor_id` was `NOT NULL` met een foreign key naar `vendor`, en de invuller is bij UC2 een collega, geen leverancier. Drie besluiten van de eigenaar bepalen hoe UC2 werkt:
 
 - **Toegang ook via token-link** — daarmee blijft de toegangslaag ongewijzigd en wacht de MVP niet op de Entra-guard.
-- **Meerdere collega's mogen dezelfde dienstverlener beoordelen** — `UNIQUE (run_id, vendor_id)` wordt partieel, zodat UC1's garantie "één leverancier, één respons" wél overeind blijft.
+- **Meerdere collega's mogen dezelfde leverancier beoordelen** — `UNIQUE (run_id, vendor_id)` wordt partieel, zodat UC1's garantie "één leverancier, één respons" wél overeind blijft.
 - **De interne score is niet zichtbaar voor de leverancier.** Dat volgt al uit de architectuur: een leverancier heeft geen toegang tot de Transdev-tenant, alleen één token voor één respons. Vastgelegd als testpunt 39, omdat het de garantie is die sneuvelt zodra iemand een route bouwt die op `subject_vendor_id` filtert in plaats van op `response_id`.
 
 **Overgenomen uit VendorComply:** de acht vraagtypen, de lifecycle Draft → Active → Finished/Archived, Test Mode vóór publicatie, drie manieren om deelnemers toe te voegen, deadline met overdue-markering, en import/export als JSON-schema.

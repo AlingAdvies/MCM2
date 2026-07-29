@@ -48,14 +48,14 @@ Dit document ging tot nu toe uit van één soort respondent: een externe leveran
 De opdrachtgever heeft verduidelijkt dat de MVP **twee** soorten surveys moet ondersteunen, en dat
 er niets gebouwd hoeft te worden dat daarbuiten valt:
 
-| | Use case | Wie vult in | Over wie gaat het |
+| | Use case | Wie vult in | Over welke leverancier |
 |---|---|---|---|
-| **UC1** | Vendor compliance (bv. IT) | externe leverancier | zichzelf |
-| **UC2** | Interne beoordeling van een dienstverlener | Transdev-collega | een andere partij |
+| **UC1** | Vendor compliance (bv. IT) | de leverancier zelf | zichzelf |
+| **UC2** | Interne beoordeling | een Transdev-collega | dezelfde leverancier |
 
 **Dat raakte het datamodel, niet alleen de tekst.** Bij UC1 vallen "wie vult in" en "over wie gaat
 het" samen; bij UC2 niet. `survey_response.vendor_id` was `NOT NULL` met een foreign key naar
-`vendor` — een interne collega is geen leverancier en paste daar niet in. Zie §1c.
+`vendor`, en bij UC2 is de invuller een collega die daar niet in past. Zie §1c.
 
 Dit is de scopegrens van de MVP: **UC1 en UC2, niets daarbuiten.**
 
@@ -150,17 +150,27 @@ De bestaande casus. Een externe leverancier beantwoordt vragen over de eigen org
 Transdev-vragen zijn hiervan de eerste vulling. Toegang via token, want de leverancier heeft geen
 account.
 
-#### UC2 — Interne beoordeling van een dienstverlener
+#### UC2 — Interne beoordeling
 
-Nieuw. Een Transdev-collega geeft aan hoe een dienstverlener in de praktijk scoort. Kort en
-eenvoudig — in de praktijk een `rating` met eventueel een `open_text` erbij.
+Nieuw. Een Transdev-collega geeft aan hoe een leverancier in de praktijk scoort. Kort en eenvoudig —
+in de praktijk een `rating` met eventueel een `open_text` erbij.
+
+**"Leverancier" en "dienstverlener" zijn hier hetzelfde.** Het gaat om dezelfde partij en dezelfde
+`clm.vendor`-rij; alleen de kant van waaruit ernaar gekeken wordt verschilt. Dit document gebruikt
+daarom consequent **leverancier**.
+
+Dat is geen woordkeuze maar de kern van het model: **dezelfde leverancier kan in beide surveys
+zitten.** Wat hij zelf verklaart (UC1) en hoe hij in de praktijk scoort (UC2) zijn twee beelden van
+één partij, en `subject_vendor_id` is de kolom die ze aan elkaar knoopt. Zonder dat zou je twee
+losse datasets hebben die niet te koppelen zijn — en juist de vergelijking tussen die twee is
+waarschijnlijk wat UC2 waardevol maakt.
 
 **Drie besluiten van de opdrachtgever op 2026-07-29 bepalen hoe dit werkt:**
 
 | Vraag | Besluit | Gevolg |
 |---|---|---|
 | Hoe krijgt een collega toegang? | **Ook via een token-link** | De bestaande tokenlaag blijft ongewijzigd en werkt meteen. De MVP wacht niet op de Entra-guard. |
-| Meerdere collega's per dienstverlener? | **Ja** | `UNIQUE (run_id, vendor_id)` moet eraf — die staat er nu wel. |
+| Meerdere collega's per leverancier? | **Ja** | `UNIQUE (run_id, vendor_id)` moet eraf — die staat er nu wel. |
 | Ziet de leverancier de interne score? | **Nee, volledig intern** | Vraagt een harde scheiding, afgedwongen in de database. |
 
 Dat de interne route ook via een token loopt, is de belangrijkste van de drie: het betekent dat
@@ -184,17 +194,22 @@ survey_response.respondent_label   TEXT NULL   → naam/rol, als er geen user-re
 
 | Kolom | UC1 | UC2 |
 |---|---|---|
-| `vendor_id` (wie vult in) | de leverancier | **leeg** |
-| `subject_vendor_id` (over wie) | dezelfde leverancier | de beoordeelde dienstverlener |
+| `vendor_id` — de leverancier als **deelnemer** | de leverancier | **leeg** |
+| `subject_vendor_id` — de leverancier als **onderwerp** | de leverancier (dezelfde rij) | de beoordeelde leverancier |
 | `respondent_user_id` | leeg | de collega, indien bekend |
 | `respondent_label` | leeg | naam of rol van de collega |
 
-**`subject_vendor_id` is bij beide gevuld.** Dat is bewust: de vraag "welke leverancier betreft
-dit?" heeft bij elke survey een antwoord, en zo is rapportage per leverancier één query in plaats
-van twee met een `UNION`.
+De twee kolommen leggen twee **rollen** vast, niet twee partijen. Bij UC1 vervult de leverancier
+beide rollen tegelijk — hij is deelnemer én onderwerp — en wijzen de kolommen naar dezelfde rij.
+Bij UC2 vervult hij alleen de tweede: hij vult niets in, er wordt over hem ingevuld.
 
-Bij UC1 wijzen `vendor_id` en `subject_vendor_id` naar dezelfde rij. Dat is geen redundantie maar
-de expliciete vastlegging dat invuller en onderwerp samenvallen — bij UC2 doen ze dat niet.
+**`subject_vendor_id` is bij beide gevuld, en dat is het punt.** De vraag "welke leverancier betreft
+dit?" heeft bij elke survey een antwoord. Daardoor is rapportage per leverancier één query in plaats
+van twee met een `UNION`, en — belangrijker — staan de zelfverklaring uit UC1 en de praktijkscore
+uit UC2 over dezelfde partij automatisch naast elkaar.
+
+Dat `vendor_id` bij UC1 dezelfde rij aanwijst is dus geen redundantie: het is de expliciete
+vastlegging dat de leverancier daar zelf aan het woord is.
 
 **Waarom `respondent_label` naast `respondent_user_id`.** Een collega die een token krijgt, hoeft
 geen `clm.user`-record te hebben; de tokenroute vraagt geen account. Zonder tekstveld zou je voor
@@ -208,7 +223,7 @@ tokenroute wil vermijden. Zodra spoor 1 er is, kan `respondent_user_id` gevuld w
 | `CHECK (survey_kind IN ('vendor_compliance','internal_review'))` | Alleen de twee use cases |
 | `CHECK (survey_kind <> 'vendor_compliance' OR vendor_id = subject_vendor_id)` | Bij UC1 vallen invuller en onderwerp samen |
 | `CHECK (survey_kind <> 'internal_review' OR vendor_id IS NULL)` | Bij UC2 is de invuller geen leverancier |
-| `UNIQUE (run_id, vendor_id)` **vervalt** | Meerdere collega's per dienstverlener |
+| `UNIQUE (run_id, vendor_id)` **vervalt** | Meerdere collega's per leverancier |
 | *vervangen door:* `UNIQUE (run_id, vendor_id) WHERE vendor_id IS NOT NULL` | Bij UC1 nog steeds één respons per leverancier |
 
 Die laatste is een **partiële unieke index**, en hij is nauwkeuriger dan wat er nu staat: bij UC1
@@ -462,25 +477,36 @@ Advies: **optie 2.** Het vendorbestand is bij een compliance-instrument geen bij
 lijst waar de rapportage op leunt. Automatisch aanmaken levert binnen een jaar dubbele vendors op
 (`transdev.nl` en `Transdev Nederland` als twee records), en dat is achteraf duur op te ruimen.
 
-**Bij UC2 speelt dat niet.** De deelnemer is een Transdev-collega, geen leverancier; `vendor_id`
-blijft leeg. Wat de beheerder hier kiest, is een andere combinatie:
+**Bij UC2 speelt dat niet.** De deelnemer is een Transdev-collega; die hoeft aan geen enkel
+vendorrecord gekoppeld te worden en `vendor_id` blijft leeg. De leverancier komt hier niet voor als
+deelnemer maar als **onderwerp** — hij vult niets in, er wordt over hem ingevuld.
+
+Wat de beheerder aangeeft:
 
 | Wat de beheerder aangeeft | Landt in |
 |---|---|
-| Over welke dienstverlener deze ronde gaat | `subject_vendor_id` (verplicht, één per respons) |
+| Over welke leverancier deze ronde gaat | `subject_vendor_id` (verplicht) |
 | Welke collega's die beoordelen | `respondent_label`, met een e-mailadres voor de tokenlink |
 
-Dat is een wezenlijk andere schermflow: bij UC1 kies je leveranciers en krijgt ieder een eigen
-vragenlijst over zichzelf; bij UC2 kies je één dienstverlener en vervolgens de collega's die hem
-beoordelen. **Twee schermen, geen gedeelde variant met een schakelaar** — dat laatste levert een
-scherm op dat beide dingen half doet.
+Dat is een wezenlijk andere schermflow, en het verschil zit in wat je selecteert:
 
-Quick paste en CSV-import werken bij UC2 op de collega-adressen. Die hoeven aan geen enkel
-vendorrecord gekoppeld te worden, wat het inlezen daar juist simpeler maakt dan bij UC1.
+| | UC1 | UC2 |
+|---|---|---|
+| Je kiest | een lijst leveranciers | **één** leverancier |
+| Ieder krijgt | een eigen vragenlijst over zichzelf | — |
+| Daarna kies je | — | de collega's die hem beoordelen |
+| Aantal responses | één per leverancier | één per collega |
+
+**Twee schermen, geen gedeelde variant met een schakelaar** — dat laatste levert een scherm op dat
+beide dingen half doet. Bij UC1 is de leverancier de deelnemer, bij UC2 het onderwerp; dat is een
+te wezenlijk verschil om achter een keuzerondje te verbergen.
+
+Quick paste en CSV-import werken bij UC2 op de collega-adressen. Het inlezen is daar juist eenvoudiger
+dan bij UC1, omdat de koppelingsvraag uit de vorige alinea niet speelt.
 
 De uniciteitsregel is aangepast aan dit onderscheid (§1c): `UNIQUE (run_id, vendor_id)` wordt
 partieel en geldt alleen waar `vendor_id` gevuld is. Bij UC1 blijft "één leverancier, één respons"
-dus volledig gelden; bij UC2 kunnen meerdere collega's dezelfde dienstverlener beoordelen. Een
+dus volledig gelden; bij UC2 kunnen meerdere collega's dezelfde leverancier beoordelen. Een
 UC1-import die een vendor dubbel bevat, moet nog steeds een nette fout geven in plaats van een
 databaseconflict.
 
@@ -1051,7 +1077,7 @@ Aanvullend uit de twee use cases (§1c):
 | # | Bewijs |
 |---|---|
 | 39 | Een leverancierstoken geeft uitsluitend de eigen respons — een interne beoordeling over dezelfde `subject_vendor_id` is er niet mee bereikbaar |
-| 40 | Twee collega's kunnen dezelfde dienstverlener beoordelen in één ronde (UC2) |
+| 40 | Twee collega's kunnen dezelfde leverancier beoordelen in één ronde (UC2) |
 | 41 | Dezelfde leverancier twee keer in één ronde faalt op de partiële unieke index (UC1) |
 | 42 | Bij `survey_kind = 'vendor_compliance'` faalt een respons waar `vendor_id <> subject_vendor_id` |
 | 43 | Bij `survey_kind = 'internal_review'` faalt een respons met een gevulde `vendor_id` |
@@ -1146,7 +1172,7 @@ database. De leverancierskant werkt dan volledig.
 - ~~Welke VendorComply-features overnemen~~ → zie de twee tabellen in §1a
 - ~~Toegang voor interne invullers (UC2)~~ → **ook via token-link** (§1c). De toegangslaag blijft
   daarmee ongewijzigd en de MVP wacht niet op de Entra-guard.
-- ~~Meerdere collega's per dienstverlener~~ → **ja** (§1c). `UNIQUE (run_id, vendor_id)` wordt
+- ~~Meerdere collega's per leverancier~~ → **ja** (§1c). `UNIQUE (run_id, vendor_id)` wordt
   partieel.
 - ~~Ziet de leverancier de interne score~~ → **nee, volledig intern** (§1c)
 
@@ -1162,7 +1188,7 @@ database. De leverancierskant werkt dan volledig.
   template is niet aan een `survey_kind` gebonden. Ik zou dat zo laten: een tenant die een
   interne vragenlijst per ongeluk aan een leverancier stuurt, maakt een beheerfout, geen
   systeemfout. Als daar wel een grens hoort, is het één kolom op `survey_template`.
-- **Hoe meerdere interne scores over dezelfde dienstverlener samengevat worden** (§1c). Nu worden
+- **Hoe meerdere interne scores over dezelfde leverancier samengevat worden** (§1c). Nu worden
   ze alleen opgeslagen. Middelen, spreiding tonen of los laten staan is een rapportagevraag, en
   rapportage is uitgesteld (§1a). Het datamodel belet geen van de varianten.
 - **Toelichting bij de andere zeven typen is per vraag instelbaar en staat standaard op optioneel**
@@ -1196,5 +1222,5 @@ database. De leverancierskant werkt dan volledig.
   garanties stilletjes verdwijnen.
 - **`survey_question` krijgt `UNIQUE (question_id, answer_type)`** — nodig voor de samengestelde
   foreign key uit §4, en niet vanzelfsprekend op een kolom die al primary key is.
-- **Twee beheerschermen, niet één** (§2c). UC1 kiest leveranciers; UC2 kiest één dienstverlener en
-  daarna de collega's. Een gedeeld scherm met een schakelaar doet beide half.
+- **Twee beheerschermen, niet één** (§2c). Bij UC1 is de leverancier de deelnemer, bij UC2 het
+  onderwerp. Een gedeeld scherm met een schakelaar doet beide half.
