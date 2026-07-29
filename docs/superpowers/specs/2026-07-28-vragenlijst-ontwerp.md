@@ -308,6 +308,7 @@ De template bestaat al (`clm.survey_template`, met `name` en `version`); die kri
 question_id     UUID PK
 tenant_id       UUID NOT NULL              → RLS-kolom
 template_id     UUID NOT NULL              → clm.survey_template, ON DELETE RESTRICT
+category_id     UUID NULL                  → clm.survey_category; leeg = platte lijst
 position        INTEGER NOT NULL           → volgorde, 1-based
 question_key    TEXT NOT NULL              → 'q1' … 'q8', stabiel over versies heen
 title           TEXT NOT NULL              → korte kop ("ISO 27001 Certification Evidence")
@@ -329,6 +330,13 @@ created_at      TIMESTAMPTZ NOT NULL
 | `CHECK (allows_upload = true OR max_files = 0)` | Een maximum zonder upload evenmin |
 | `CHECK (answer_type <> 'instruction' OR is_required = false)` | Een leesblok kan niet verplicht zijn |
 | `template_id → survey_template ON DELETE RESTRICT` | Vragen verdwijnen niet stilzwijgend |
+| `category_id → survey_category ON DELETE RESTRICT` | Een categorie met vragen is niet te verwijderen |
+
+**De categorie moet bij dezelfde template horen als de vraag.** Een `category_id` van een andere
+template mag niet meeliften — hetzelfde risico als §5 stap 4 bij `question_id`. Dat vraagt een
+samengestelde foreign key: `survey_category` krijgt `UNIQUE (category_id, template_id)`, waarna
+`survey_question` verwijst met `FOREIGN KEY (category_id, template_id)`. Zo bewaakt de database het
+in plaats van de servicelaag. Testpunt 45.
 
 `question_key` is bewust een stabiele tekstsleutel naast de UUID. Bij een nieuwe templateversie
 krijgt vraag 4 een nieuwe `question_id`, maar behoudt `question_key = 'q4'` — zo blijven antwoorden
@@ -336,6 +344,53 @@ over versies heen vergelijkbaar. Zonder dat is een jaar-op-jaar-vergelijking nie
 is bij een jaarlijkse compliance-survey precies het punt.
 
 Voor Transdev vraag 1: `answer_type = 'confirmation'`, `allows_upload = true`, `max_files = 2`.
+
+### `clm.survey_category`
+
+Toegevoegd op 2026-07-29, nadat MVM_V2 functioneel leidend werd verklaard voor de vragenlijst. De
+interne beoordeling daar (`transdevSurveyTemplate`) heeft **vijf categorieën met 29 vragen**:
+Duidelijkheid, Behoefte, Kwaliteit, Kosten en Besturing. Dat is geen placeholder maar een
+uitgewerkte vragenlijst die de klant gezien heeft.
+
+```
+category_id     UUID PK
+tenant_id       UUID NOT NULL              → RLS-kolom
+template_id     UUID NOT NULL              → clm.survey_template, ON DELETE RESTRICT
+position        INTEGER NOT NULL           → volgorde van de categorieën
+name            TEXT NOT NULL              → 'Duidelijkheid', 'Kwaliteit', …
+min_answers     SMALLINT NOT NULL DEFAULT 0 → minimaal ingevuld voor een geldige score
+created_at      TIMESTAMPTZ NOT NULL
+```
+
+| Constraint | Dwingt af |
+|---|---|
+| `UNIQUE (template_id, position)` | Geen twee categorieën op dezelfde plek |
+| `UNIQUE (template_id, name)` | Geen twee categorieën met dezelfde naam |
+| `CHECK (min_answers >= 0)` | Geen negatieve drempel |
+| `template_id → survey_template ON DELETE RESTRICT` | Categorieën verdwijnen niet stilzwijgend |
+
+`survey_question` krijgt daarbij:
+
+```
+category_id     UUID NULL                  → clm.survey_category, ON DELETE RESTRICT
+```
+
+**Nullable, en dat is bewust.** UC1 (de acht Transdev-vragen) heeft géén categorieën; UC2 heeft er
+vijf. Een verplichte categorie zou UC1 dwingen tot een kunstmatige "Algemeen"-categorie die nergens
+getoond wordt. Een vragenlijst is dus óf ingedeeld óf een platte lijst — beide zijn geldig.
+
+**`min_answers` komt uit MVM_V2's `minAnswersPerCategory`** en heeft daar een concrete functie: is
+een categorie met minder dan dit aantal ingevulde vragen beantwoord, dan is de categoriescore
+`null` in plaats van een gemiddelde over te weinig punten. Bij de Transdev-beoordeling staat die op
+3. Zonder die drempel zou één ingevulde vraag uit vier een "score" opleveren die als volwaardig
+oogt.
+
+**Wat dit betekent voor scoreberekening.** MVM_V2 berekent het gemiddelde per categorie en daarna
+het gemiddelde over de categorieën — niet het gemiddelde over alle vragen. Dat is een wezenlijk
+verschil: een categorie met vier vragen weegt daardoor even zwaar als een met acht. Die berekening
+hoort **niet** in de database maar in de servicelaag (in MVM_V2 zit hij in
+`internalSurveyService`), en de uitkomst wordt bewust niet opgeslagen — hij is altijd af te leiden
+uit de antwoorden. Rapportage is uitgesteld (§1a), maar het datamodel belet deze berekening niet.
 
 ### 2a. De acht antwoordtypen
 
@@ -561,9 +616,13 @@ beschrijft: de vragen, hun volgorde, typen en `config`.
   "schema_version": 1,
   "name": "transdev-annual-vendor-it-risk",
   "version": 1,
+  "categories": [
+    { "key": "duidelijkheid", "position": 1, "name": "Duidelijkheid", "min_answers": 3 }
+  ],
   "questions": [
     {
       "question_key": "q1",
+      "category_key": "duidelijkheid",
       "position": 1,
       "title": "ISO 27001 Certification Evidence",
       "body": "…",
@@ -593,6 +652,7 @@ tweemaal gedaan wordt.
 |---|---|
 | `tenant_id` komt **nooit** uit het bestand, altijd uit de sessiecontext | Een importbestand mag geen tenantgrens kunnen oversteken |
 | `question_id` staat **niet** in het export en wordt bij import nieuw gegenereerd | Anders importeer je een verwijzing naar andermans rij |
+| Categorieën worden aangeduid met `category_key`, niet met een UUID | Zelfde reden; de koppeling wordt bij import gelegd. `category_key` leeg of afwezig = vraag zonder categorie |
 | `schema_version` wordt gecontroleerd | Een later formaat moet herkenbaar weigeren in plaats van half inlezen |
 
 De eerste is de belangrijkste en is precies het patroon waar Issue #7 over gaat: een veld uit
@@ -1122,6 +1182,15 @@ Aanvullend uit de twee use cases (§1c):
 | 43 | Bij `survey_kind = 'internal_review'` faalt een respons met een gevulde `vendor_id` |
 | 44 | Een UC2-respons is in te dienen zonder enig `clm.user`-record voor de invuller |
 
+Aanvullend uit de categorieën (§2):
+
+| # | Bewijs |
+|---|---|
+| 45 | Een vraag met een `category_id` van een andere template faalt — op de samengestelde FK, niet op code |
+| 46 | Een vragenlijst zonder categorieën (UC1) is volledig in te dienen — `category_id` mag leeg blijven |
+| 47 | Een categorie met vragen eraan is niet te verwijderen (`ON DELETE RESTRICT`) |
+| 48 | Import legt de categoriekoppeling via `category_key`, en genereert nieuwe UUID's |
+
 Punt 15, 23, 27, 36 en 37 zijn de belangrijkste: die toetsen dat de garantie in de database zit en
 niet alleen in de applicatiecode. Alle vijf moeten getest worden met directe SQL die de
 applicatielaag overslaat — anders test je je eigen validatiecode en niet de garantie.
@@ -1180,7 +1249,7 @@ grootst.
 
 | # | Stap | Levert op |
 |---|---|---|
-| 1 | Migratie: `survey_question`, `survey_answer`, `survey_attachment`, plus `status`, `is_test` en `survey_kind` op `survey_run` en de vier respondentkolommen op `survey_response` (§1c) — met RLS, policies, CHECK-constraints, de partiële unieke index, de samengestelde FK uit §4 en de bevriezingstrigger uit §2 | Het datamodel staat, beide use cases |
+| 1 | Migratie: `survey_category`, `survey_question`, `survey_answer`, `survey_attachment`, plus `status`, `is_test` en `survey_kind` op `survey_run` en de vier respondentkolommen op `survey_response` (§1c) — met RLS, policies, CHECK-constraints, de partiële unieke index, beide samengestelde FK's (§2 en §4) en de bevriezingstrigger uit §2 | Het datamodel staat, beide use cases |
 | 2 | Guard uitbreiden met de statuscontrole (§2b, stap 1b) | Bestaande laag blijft groen — testpunt 30 |
 | 3 | Import/export van het JSON-schema (§2d) | Nodig voor stap 4; levert klonen en versioneren mee |
 | 4 | Seed: de acht Transdev-vragen als template `transdev-annual-vendor-it-risk` v1 (UC1) plus een korte interne beoordelingsvragenlijst (UC2), beide via stap 3 | Beide use cases gevuld |
@@ -1216,20 +1285,10 @@ database. De leverancierskant werkt dan volledig.
 - ~~Meerdere collega's per leverancier~~ → **ja** (§1c). `UNIQUE (run_id, vendor_id)` wordt
   partieel.
 - ~~Ziet de leverancier de interne score~~ → **nee, volledig intern** (§1c)
-
-**BLOKKEREND voor stap 1 van de bouwvolgorde — één vraag:**
-
-- **Heeft de interne beoordeling (UC2) categorieën met een score per categorie?** MVM_V2 heeft ze
-  (`InternalSurveyTemplate.categories[]`, met `minAnswersPerCategory` en een berekende score per
-  categorie), en het portaalscherm toont de vragenlijst daar als stappen per categorie.
-  VendorComply noemde hetzelfde onder "topic sections". Bij de acht Transdev-vragen (UC1) zijn er
-  géén categorieën.
-
-  Dit staat als enige punt vóór de migratie, want het is een tabel erbij (`survey_category`) plus
-  een verwijzing op `survey_question`. **Achteraf toevoegen raakt elke query, elk scherm en de
-  scoreberekening** — dat is de reden dat dit blokkerend is en `date` niet.
-
-  Als het antwoord "één lijst, één totaalscore" is, blijft het ontwerp zoals het nu staat.
+- ~~`frameworkRef` en `date` overnemen uit MVM_V2~~ → **geen van beide** (§1a-bis)
+- ~~Categorieën met score per categorie~~ → **ja** (§2). MVM_V2 is functioneel leidend voor de
+  vragenlijst; de interne beoordeling daar heeft vijf categorieën met 29 vragen. `category_id` is
+  nullable, want UC1 heeft er geen.
 
 **Nog open — voorstellen van mij, niet bevestigd:**
 
@@ -1276,6 +1335,10 @@ database. De leverancierskant werkt dan volledig.
   bestaande tests 39 t/m 43 dekken** — een `NOT NULL` weghalen zonder vervanging is precies hoe
   garanties stilletjes verdwijnen.
 - **`survey_question` krijgt `UNIQUE (question_id, answer_type)`** — nodig voor de samengestelde
-  foreign key uit §4, en niet vanzelfsprekend op een kolom die al primary key is.
+  foreign key uit §4, en niet vanzelfsprekend op een kolom die al primary key is. Hetzelfde geldt
+  voor `survey_category` met `UNIQUE (category_id, template_id)` (§2).
+- **De scoreberekening per categorie hoort in de servicelaag, niet in de database** (§2). MVM_V2
+  middelt per categorie en daarna over de categorieën — niet over alle vragen. Dat verschil is
+  merkbaar zodra categorieën ongelijke aantallen vragen hebben.
 - **Twee beheerschermen, niet één** (§2c). Bij UC1 is de leverancier de deelnemer, bij UC2 het
   onderwerp. Een gedeeld scherm met een schakelaar doet beide half.
