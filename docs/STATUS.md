@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-29 (PR #32 gemerged, Issue #31 gesloten; vragenlijst-scope vastgesteld op niveau B — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+2026-07-29 (PR #32 en #33 gemerged; vragenlijst niveau B gebouwd t/m stap 2, frontend-repository aangemaakt — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
 
 ## Voor een nieuwe sessie: lees dit eerst
 
@@ -9,7 +9,7 @@
 2. Lees dit document (`docs/STATUS.md`) volledig — het is de enige actuele waarheid over fase en blockers.
 3. Verifieer git-status zelf (`git status`, `git branch -a`) tegen wat hieronder staat — vertrouw niet blind op deze snapshot.
 4. Check de open GitHub Issues (`gh issue list --repo AlingAdvies/MCM2 --state open`) voor de actuele backlog — dit document verwijst naar issue-nummers, maar de Issues zelf zijn de bron van waarheid over wat daadwerkelijk nog open staat.
-5. **Eerste concrete vervolgstap: het bouwen van de vragenlijst-tool kan beginnen.** Het ontwerp is op 2026-07-29 bouwbaar geworden (niveau B vastgesteld); de bouwvolgorde staat in §10 van het ontwerp. Issue #30 (geen backups) blijft de zwaarste openstaande blokkade voor alles wat de productiedatabase raakt (#19, #25, #29), maar vraagt nu alleen nog uitvoering door de eigenaar, geen besluit — en de vragenlijst-tool loopt daar niet op vast, want die bouwt tegen wegwerpcontainers.
+5. **Eerste concrete vervolgstap: stap 3 uit de bouwvolgorde** (import/export van het JSON-schema, ontwerp §10). Stap 1 (migratie) en stap 2 (guard weegt de ronde-status mee) zijn op 2026-07-29 gebouwd en gemerged. Issue #30 (geen backups) blijft de zwaarste openstaande blokkade voor alles wat de productiedatabase raakt (#19, #25, #29), maar vraagt nu alleen nog uitvoering door de eigenaar, geen besluit — en de vragenlijst-tool loopt daar niet op vast, want die bouwt tegen wegwerpcontainers.
 
 ## Vragenlijst-tool — scope vastgesteld op 2026-07-29, ontwerp is bouwbaar
 
@@ -54,9 +54,21 @@ Uit de vergelijking (ontwerp §1a-bis) kwam dat beide modellen onafhankelijk gro
 
 **Drie dingen raken bestaande, groene code** en verdienen aandacht bij het bouwen: `survey_run` krijgt drie kolommen (`status`, `is_test`, `survey_kind`), `survey_response` krijgt er drie (`subject_vendor_id`, `respondent_user_id`, `respondent_label`) waarbij `vendor_id` **nullable** wordt, en de bestaande guard moet de ronde-status meewegen naast `closes_at`/`revoked_at`. Die nullable-wijziging is een versoepeling op een tabel die vanochtend gemerged is — de UC1-garantie wordt overgenomen door een partiële unieke index plus twee CHECK-constraints, en testpunten 41 t/m 43 horen te bewijzen dat er niets weglekt.
 
-## Frontend — besloten op 2026-07-29 (ADR-012), nog niet gebouwd
+## Frontend — repository aangemaakt op 2026-07-29 (ADR-012), nog geen schermen
 
-MCM2 heeft **geen frontend**. Op 2026-07-29 is besloten hoe die eruit gaat zien en hoe hij wordt uitgerold.
+**`https://github.com/AlingAdvies/MCM2-frontend`** (privé, onder AlingAdvies). Fundament staat, CI groen op beide jobs. **Nog geen schermen** — het leverancierportaal is de volgende stap.
+
+Wat er staat: Next.js 15 + Tailwind 3 (**bewust dezelfde majors als MVM_V2**, niet de nieuwste — Next 16/Tailwind 4 zouden het overnemen van MVM_V2-componenten juist duurder maken), versies exact gepind conform MCM2-CLAUDE.md §11, TypeScript meteen op `strict` (in de backend is dat nog Issue #3; achteraf strict maken kost meer).
+
+De **design tokens** zijn gekopieerd met bronvermelding; Tailwind leest zijn thema eruit, zodat `bg-brand-primary` en `tokens.brandPrimary` niet uit elkaar kunnen lopen. De **mock/live-schakelaar** werkt: zonder `NEXT_PUBLIC_API_URL` draait alles op mock data, en de startpagina toont welke bron actief is.
+
+**Twee CI-poorten dwingen af wat anders alleen op papier staat:** geen leveranciersspecifieke imports (de draagbaarheidsregel), en nooit een tenant in een URL. Beide zijn geverifieerd door een overtreding uit te lokken — waarbij bleek dat de tweede poort afging op een codevoorbeeld in het commentaar van `client.ts` zelf. Dat voorbeeld is herschreven naar een beschrijving.
+
+**Geverifieerd:** image bouwt, container serveert HTTP 200, draait als non-root. De Docker-poort controleert niet alleen dát het image start maar dat het een pagina *serveert* — een Next.js-server met een kapotte build start namelijk wel en geeft een 500.
+
+**Let op bij het uitrollen:** `NEXT_PUBLIC_*`-variabelen worden **tijdens de build** in de bundel gebakken, niet bij het starten gelezen. Een image dat de echte backend moet gebruiken heeft die waarde nodig als build-argument. Dat is een eigenschap van Next.js, geen keuze.
+
+### Het uitrolbesluit zelf
 
 **Besluit: Next.js in een eigen repository, uitgerold als containerimage — de enige uitrolweg.** Tot de golive draait dat lokaal via `docker compose` naast de bestaande backend-stack. **Kosten: nul.** Bij golive is AWS de beoogde doelplek, met **App Runner** als voorkeursdienst (indicatie $25–40/mnd, *niet op de bron geverifieerd*).
 
@@ -122,6 +134,26 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Aantoonbaar werkend
 
+- **Vragenlijst-datamodel niveau B (2026-07-29, PR #33, migratie `0005_vragenlijst_niveau_b.sql`).** Vier nieuwe tabellen (`survey_category`, `survey_question`, `survey_answer`, `survey_attachment`) plus `survey_kind`/`status`/`is_test` op `survey_run` en drie respondentkolommen op `survey_response`. 459 regels, waarvan ongeveer een derde gegenereerd — de rest handwerk, precies zoals ADR-010 voorspelt.
+
+  **Geverifieerd tegen een verse Postgres 17.6-container, niet beredeneerd.** Volledige keten 0000 t/m 0006 via `clm_migrator`. Daarna is elke garantie uitgelokt; alle acht werden geweigerd door de database: categorie van een andere template, verplicht leesblok, afwijkend `answer_type`, rating in het tekstveld, toelichting van drie spaties, dezelfde leverancier twee keer in een UC1-ronde, wijzigen van een bevroren template, bestand boven 5 MB. De tegenproef slaagt wél: **twee collega's die dezelfde leverancier beoordelen in een UC2-ronde**, wat bewijst dat de partiële unieke index UC1 beschermt zonder UC2 te blokkeren.
+
+  **Twee dingen die drizzle-kit niet kon en die handmatig zijn opgelost:**
+  - Het gegenereerde `ADD COLUMN subject_vendor_id uuid NOT NULL` slaagt alleen op een lege tabel en **zou op `clm-enterprise` falen**. Vervangen door kolom toevoegen → backfillen vanuit `vendor_id` → dan pas `NOT NULL`.
+  - De rolverdeling per use case kon niet als CHECK: `survey_kind` staat op `survey_run` en een CHECK mag geen subquery bevatten. Opgelost met een trigger in plaats van `survey_kind` te dupliceren — dupliceren zou een derde plek opleveren waar de waarde kan afwijken.
+
+  Alle zeven survey-tabellen hebben RLS met zowel `USING` als `WITH CHECK`.
+
+- **De guard weegt de lifecycle van de ronde mee (2026-07-29, migratie `0006_ronde_status_in_guard.sql`).** Vóór deze stap was een ronde in `draft` — aangemaakt maar niet opengesteld — via een token gewoon bereikbaar; `revoked_at` en `closes_at` zeggen niets over een ronde die nog niet begonnen is. `draft` krijgt een eigen melding ("nog niet opengesteld"), want dat is voor een leverancier iets anders dan "gesloten".
+
+  De controle staat **ook in het `UPDATE`-statement van `dienIn()`**, niet alleen in de guard: die beschermt het HTTP-pad, de voorwaarde beschermt de methode zelf.
+
+  **Bevinding om te onthouden:** PostgreSQL weigert een `CREATE OR REPLACE` die de `RETURNS TABLE` wijzigt — geverifieerd, niet aangenomen. Daarom `DROP` + `CREATE`. Gevolg: **na een `DROP` zijn de rechten weg**, want die hangen aan het functie-object en niet aan de naam. Zonder de herhaalde `GRANT` zou geen enkele leverancierslink meer werken.
+
+  **De testwaarde is geverifieerd door de controle tijdelijk te verwijderen:** vijf van de zes nieuwe tests vielen om. Zonder die proef bewijzen groene tests niets — de eerste poging mislukte overigens stil (een regex die niet matchte), waardoor de "proef" niets toetste.
+
+  53 van 53 e2e-tests groen.
+
 - **Leverancierstoegang via token, spoor 2 van Issue #7 (2026-07-28, PR #32, commit `b29e2ad`).** CI groen op alle drie de jobs, geverifieerd met `gh pr checks 32`. 46 tests groen. Wat er staat:
   - `clm.resolve_survey_token()` — `SECURITY DEFINER` met `SET search_path = clm, pg_temp`. De enige route naar een responserij zonder tenantcontext, met een minimale returnwaarde (geen namen, geen e-mailadressen, geen antwoorden). Lost de kip-en-ei op: de tenant is niet bekend vóór de lookup.
   - **De tenantcontext komt uitsluitend uit die lookup**, nooit uit een header, query-parameter of body. Er bestáát geen veld waarin een leverancier een andere tenant kan benoemen. Dit is precies het patroon dat de verwijderde branch `feat/fase0-skeleton-vendors` fout deed.
@@ -163,7 +195,8 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 ## Huidige branch en Git-status
 
 - **`feat/issue-7-leveranciertoken` is op 2026-07-29 via PR #32 gemerged naar `main`** (merge-commit `7f0cc01`) en daarna lokaal én op GitHub verwijderd. CI groen op alle drie de jobs vóór de merge, opnieuw geverifieerd met `gh pr checks 32` op de laatste commit. Vijf commits: de tokenlaag, de HTTP-routes met logmaskering en auditregels, de fix op `maskeerDiep`, plus twee documentatiecommits. **Issue #31 is bij die merge gesloten** — migratie `0004` loste hem op. Let op: die migratie is bewezen in CI, **niet toegepast op `clm-enterprise`** — net als #29 en #25 wacht dat op #30.
-- **Actieve branch: `feat/issue-9-vragenlijst-ontwerp`** — bevat uitsluitend documentatie: het bijgewerkte vragenlijst-ontwerp (niveau B) en deze statusbijwerking. Geen code.
+- **`feat/issue-9-vragenlijst-ontwerp` is op 2026-07-29 via PR #33 gemerged naar `main`** en daarna lokaal én op GitHub verwijderd. Negen commits: het vragenlijst-ontwerp (niveau B, twee use cases, categorieën), ADR-012, de migratie 0005, de guard-uitbreiding 0006 en deze statusbijwerking. CI groen op alle drie de jobs vóór de merge.
+- **Tweede repository sinds 2026-07-29: `AlingAdvies/MCM2-frontend`** (privé). Eigen CI, eigen releasecyclus — bewust geen map in deze repo, zodat een tekstwijziging in een scherm niet wacht op een databasemigratie. Zie ADR-012.
 - `chore/supabase-verificatie` is op 2026-07-28 via PR #28 gemerged naar `main` en daarna lokaal én op GitHub verwijderd. Zes commits: Supabase read-only verificatie, schemacontrole die uit het schema meegroeit, ADR-011 (backupeisen per fase), de #29-fix, en het runbook met beproefde commando's en opruimprocedure. CI groen op alle drie de jobs vóór de merge.
 - `feat/issue-5-drizzle-omzetting` is op 2026-07-28 via PR #26 gemerged naar `main` (merge-commit `f0806f8`) en daarna lokaal én op GitHub verwijderd. Bevatte de volledige Drizzle-omzetting; CI groen op alle drie de jobs vóór de merge.
 - `docs/issue-7-leveranciertoken-ontwerp` is op 2026-07-28 via PR #27 gemerged naar `main` (merge-commit `c8f896a`) en daarna lokaal én op GitHub verwijderd. Bevatte uitsluitend het ontwerpdocument voor het leverancierstokenspoor.
@@ -183,9 +216,20 @@ De databaselaag is omgezet (ADR-010), spoor 2 van Issue #7 zit in `main`, en het
 
 **De eerstvolgende inhoudelijke stap is het bouwen van de vragenlijst-tool** (ontwerp §10). Dat is nu de kortste weg naar een werkende pilot: de toegangslaag eronder staat en is bewezen, en het bouwen ervan raakt de productiedatabase niet — de hele e2e-keten draait tegen wegwerpcontainers, dus #30 blokkeert dit spoor niet.
 
-Eerste twee stappen uit die volgorde, omdat ze bestaande groene code raken en dus de meeste aandacht vragen:
-1. Migratie met `survey_question`, `survey_answer`, `survey_attachment`, plus `status` en `is_test` op `survey_run` — inclusief RLS, policies, CHECK-constraints en de samengestelde foreign key. Handwerk: drizzle-kit genereert hiervan niets.
-2. De bestaande guard uitbreiden met de ronde-statuscontrole.
+~~1. Migratie met de vier nieuwe tabellen en de kolommen op `survey_run`/`survey_response`~~ — **afgerond 2026-07-29** (migratie 0005).
+~~2. De bestaande guard uitbreiden met de ronde-statuscontrole~~ — **afgerond 2026-07-29** (migratie 0006).
+
+**Nu aan de beurt — stap 3 t/m 9 uit ontwerp §10:**
+
+3. **Import/export van het JSON-schema** (ontwerp §2d). Bewust vóór de seed: die is gewoon zo'n bestand, dus als import eerst werkt bestaat er geen apart seed-script dat later uit de pas loopt met het echte importpad.
+4. **Seed:** de acht Transdev-vragen (UC1) plus een korte interne beoordelingsvragenlijst (UC2), beide via stap 3.
+5. `GET /survey/respond/questions` — vragen ophalen inclusief `config` per type.
+6. Validatie- en indienlogica; `POST /survey/respond` uitbreiden met de antwoordbody (ontwerp §5).
+7. `PUT /survey/respond/answers` — concept opslaan, expliciet (geen auto-save).
+8. Bestandsupload met inhoudscontrole (ontwerp §6, Issue #9).
+9. Tests 14 t/m 48.
+
+**Parallel spoor, blokkeert het bovenstaande niet:** het leverancierportaal in `MCM2-frontend` op mock data. Dat kan vooruit omdat de mock/live-schakelaar niet op werkende endpoints wacht.
 
 Daarna, in volgorde van afhankelijkheid:
 
