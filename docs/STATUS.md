@@ -22,11 +22,27 @@ Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in
 2. Lees dit document (`docs/STATUS.md`) volledig — het is de enige actuele waarheid over fase en blockers.
 3. Verifieer git-status zelf (`git status`, `git branch -a`) tegen wat hieronder staat — vertrouw niet blind op deze snapshot. **Doe dat in beide repositories.**
 4. Check de open GitHub Issues (`gh issue list --repo AlingAdvies/MCM2 --state open`) voor de actuele backlog — dit document verwijst naar issue-nummers, maar de Issues zelf zijn de bron van waarheid over wat daadwerkelijk nog open staat.
-5. **Eerste concrete vervolgstap: Issue #7, spoor 1 — de Entra-guard.** Dat is nu de flessenhals: de leverancierskant is compleet en in de browser bewezen, maar álles aan de beheerkant (leveranciers wegschrijven, schermen, rollen) vraagt een geverifieerde tenantcontext. Vandaag leidt de backend de tenant af uit een ongeverifieerde header — het P0-restpunt. De PoC van 2026-07-27 is end-to-end geslaagd; wat rest zijn de drie stappen onderaan `docs/architecture-review/2026-07-27/01-entra-external-id-poc-bevindingen.md`.
+5. **Werk verder volgens het plan** (`docs/superpowers/plans/2026-07-30-beheerkant-en-demo-tenant.md`), niet volgens losse ingevingen. Het plan heeft bovenaan een voortgangstabel. Uitdrukkelijke wens van de eigenaar op 2026-07-30: **de vier fases in volgorde afwerken.** De eerstvolgende concrete stap staat hieronder onder punt 6.
 
-   Issue #30 (geen backups) blijft de zwaarste openstaande blokkade voor alles wat de productiedatabase raakt (#19, #25, #29), maar vraagt nu alleen nog uitvoering door de eigenaar, geen besluit — en er wordt tegen wegwerpcontainers gebouwd.
+   Twee dingen die daarbij horen en makkelijk wegzakken:
+   - **Issue #59 — `npm audit` meldt 29 kwetsbaarheden.** Niet vergeten, maar ook niet nu oplossen: `npm audit --omit=dev` geeft **0**, dus er zit niets van in het productie-image. De voorgestelde automatische fix zet eslint jaren terug en breekt de lint-configuratie. Hoort bij de eerste major-onderhoudsronde op devDependencies, samen met Dependabot (#22). **Controleer wel bij elke sessie dat `npm audit --omit=dev` nul blijft** — wordt dat meer dan nul, dan is het geen onderhoudspunt meer maar een blocker.
+   - **Issue #58 — de backup hangt af van deze laptop.** Draait dagelijks, maar niet als de machine uitstaat. Vóór de pilotstart (rond 1 september) naar iets onafhankelijks.
 
-   **Nieuw sinds 2026-07-30: #46 heeft een harde datum.** De pilot start rond 1 september en geüploade certificaten staan op een containerschijf die bij de eerstvolgende image-vervanging leeg is.
+6. **Eerste concrete vervolgstap: de `TenantContextGuard` afbouwen** (fase 1 van het plan, Issue #7 spoor 1). Het fundament staat al op branch `feat/identiteit-en-membership` — dit is geen nieuw spoor maar het afmaken van wat er ligt:
+
+   ```
+   sessiecookie lezen  →  clm.sessie_oplossen(hash)  →  tenantId in withTenant()
+   ```
+
+   Alle bouwstenen bestaan: `sessie_oplossen()` geeft `user_id`, `tenant_id` en `role` terug (migratie 0010), `IdTokenVerificateur` verifieert het token (`src/auth/`), en `withTenant()` neemt de tenantId aan. Wat ontbreekt is de laag ertussen.
+
+   Daarna in deze volgorde: de drie auth-routes (`/auth/login`, `/auth/callback`, `/auth/logout` — vraagt `cookie-parser` als directe dependency en omgevingsafhankelijke cookie-instellingen), en dan pas **`X-Tenant-Id` verwijderen**. Die laatste stap sluit P0. Zolang beide paden bestaan is de tenantgrens niet dicht.
+
+   **Bevestig bij de eerste echte login welke claims Entra werkelijk levert.** De code koppelt op `oid` op basis van documentatie, niet op meting.
+
+   **Issue #30 is niet langer de zwaarste blokkade** — de dagelijkse backup draait sinds 2026-07-30 naar OneDrive. Wat rest is het restrisico in #58 (hangt af van de laptop). De drie issues die op backups wachtten (#19, #25, #29) raken de productiedatabase en kunnen nu heroverwogen worden; er wordt intussen tegen wegwerpcontainers gebouwd.
+
+   **#46 heeft een harde datum.** De pilot start rond 1 september en geüploade certificaten staan op een containerschijf die bij de eerstvolgende image-vervanging leeg is.
 
 ### Snel weer op gang komen
 

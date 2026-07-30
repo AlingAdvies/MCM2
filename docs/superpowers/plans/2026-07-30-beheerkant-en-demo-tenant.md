@@ -30,6 +30,16 @@ Branch `feat/identiteit-en-membership`, vijf commits, nog niet gepusht.
 
 **Buiten het plan om afgerond:** de dagelijkse backup is ingericht en werkend bewezen (#30 grotendeels weg, restrisico in **#58**). Dat stond in §7 als "raakt dit plan maar lost het niet op".
 
+### Twee dingen die bij elke fase meegaan
+
+Uitdrukkelijke wens van de eigenaar op 2026-07-30: dit plan in volgorde afwerken, en deze twee punten niet laten wegzakken.
+
+1. **`npm audit --omit=dev` moet 0 blijven.** Stand op 2026-07-30: `npm audit` meldt 29 kwetsbaarheden, `npm audit --omit=dev` meldt er **0** — alles zit in bouw- en testgereedschap, niets in het productie-image. Dat is de reden dat het geen blocker is (**Issue #59**). Controleer het bij elke fase; wordt het meer dan nul, dan raakt het wél het uitgerolde artefact en verandert de prioriteit.
+
+   Niet oplossen met `npm audit fix --force`: dat zet eslint jaren terug en breekt de lint-configuratie. Hoort bij een major-onderhoudsronde, samen met Dependabot (#22).
+
+2. **Elke fase eindigt met een werkende, geverifieerde stand** — niet met "bijna af". Dat betekent: format, lint, typecheck, unittests, e2e-tests en de Docker-build groen, plus een tegenproef op wat er aan beveiliging is toegevoegd. Groene tests zonder tegenproef bewijzen niets; dat is deze sessie drie keer gebleken.
+
 ---
 
 ## 1. Wat de eigenaar wil bereiken
