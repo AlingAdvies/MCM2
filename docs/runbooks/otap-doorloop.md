@@ -2,7 +2,7 @@
 
 **Type:** D (routineoperatie)
 **Eigenaar:** projecteigenaar
-**Laatste update:** 2026-07-29 (tweede doorloop: uitgebreid t/m indienen en upload)
+**Laatste update:** 2026-07-30 (frontend-bevindingen gerepareerd; browsertest toegevoegd)
 **Vereiste toegang:** Docker Desktop, beide repositories lokaal
 **Raakt:** Issue #18 (volledige OTAP-doorloop minimaal één keer bewezen)
 
@@ -200,24 +200,42 @@ zat, is het bewijs dat hij werkt.**
 `seed-vragenlijsten.js` op de foreign key naar `clm.tenant`. Opgelost door stap
 3b aan dit runbook toe te voegen.
 
-### Twee frontend-bevindingen — nog niet gerepareerd
+### Twee frontend-bevindingen — gerepareerd op 2026-07-30
 
-Deze zitten in `MCM2-frontend` en zijn met de browser vastgesteld, niet
-beredeneerd:
+Deze zaten in `MCM2-frontend` en zijn met de browser vastgesteld, niet
+beredeneerd. Beide zijn opgelost in `MCM2-frontend` PR #1 (Issue #42 en #43):
 
-- **Het portaal kan nog niet uploaden.** Het toont letterlijk "Bestandsupload
-  volgt in een volgende versie", terwijl de backend het sinds stap 8 wél kan.
-  Gevolg: bevestigen op de ISO-vraag levert een 422 `file_required` op, die het
-  portaal toont als "Er ging iets mis bij het versturen". **Een leverancier kan
-  de vragenlijst daardoor nog niet via de browser afronden.**
-- **Het leesblok krijgt keuzerondjes.** De backend levert het correct als
-  `answerType: 'instruction'` en de voortgangsteller telt het terecht niet mee
-  ("0 van 8" bij negen vragen), maar het renderen behandelt het als een gewone
-  `confirmation`-vraag.
+- **Het portaal kon niet uploaden.** Het toonde letterlijk "Bestandsupload
+  volgt in een volgende versie", terwijl de backend het sinds stap 8 wél kon.
+  Gevolg: bevestigen op de ISO-vraag leverde een 422 `file_required` op, die het
+  portaal toonde als "Er ging iets mis bij het versturen". Nu een uploadveld
+  begrensd op `maxFiles`, en de 422 wordt **per vraag** getoond — een 422 is
+  herstelbaar, dus die hoort niet naar het geblokkeerde scherm te leiden.
+- **Het leesblok kreeg keuzerondjes.** Nu een apart `Leesblok`-component, en de
+  nummering slaat leesblokken over zodat "vraag 8" klopt met de teller.
 
-De backend-kant van de keten is wél volledig bewezen: vragen ophalen, valideren,
-uploaden en indienen werken end-to-end vanuit de browser (gemeten via
-`fetch` op de portaalpagina).
+**De volledige keten is nu in de browser bewezen**, van tokenlink tot
+bevestiging: `/questions` 200 → `/attachment` 201 → `/respond` 200 → tweede
+poging 410.
+
+### Wat hieruit is geleerd over deze doorloop
+
+**Geen van beide bugs is door een test gevonden** — de 155 backend-e2e-tests
+roepen de HTTP-laag aan, niet de gerenderde pagina. Dat was de aanleiding voor
+Issue #47: `MCM2-frontend/e2e/portaal-uc1.spec.ts`, een Playwright-test die de
+volledige UC1-flow tegen déze OTAP-stack doorloopt.
+
+Die test draait **niet in CI** en vraagt een verse tokenlink per run, want
+indienen is eenmalig:
+
+```bash
+cd ../MCM2-frontend
+SURVEY_TOKEN=<verse UC1-link> npm run e2e
+```
+
+Zonder `SURVEY_TOKEN` slaat hij zichzelf over in plaats van te falen.
+Automatiseren vraagt beide repositories in één workflow (#53) plus een script
+dat vooraf een tokenlink aanmaakt — dat laatste bestaat nog niet.
 
 ---
 
@@ -225,7 +243,18 @@ uploaden en indienen werken end-to-end vanuit de browser (gemeten via
 
 - **Acceptatie en Productie ontbreken** — die omgevingen bestaan nog niet
   (Issue #12). Deze doorloop dekt O en T.
-- **De frontend kan de keten nog niet volledig afronden** — zie de twee
-  frontend-bevindingen hierboven.
-- **De doorloop draait handmatig.** Automatiseren in CI vraagt beide
-  repositories in één workflow; nu de moeite niet waard.
+- **De doorloop draait handmatig.** De externe architectuurreview van
+  2026-07-29 noemt dit een reëel risico: niet dat de doorloop vergeten wordt,
+  maar dat hij **inconsistent** wordt uitgevoerd — wel bij een grote release,
+  niet bij een kleine wijziging die net de OTAP-laag raakt (permissies,
+  build-args, health-check). Een werkafspraak zonder afdwinging vervalt
+  geleidelijk onder deadlinedruk.
+
+  Opgevolgd in **#53**: een losstaande periodieke workflow die dit script
+  draait, zónder de cross-repo koppeling waarop volledige automatisering eerder
+  is afgeschreven.
+- **Uploads staan op een containerschijf.** De `VOLUME`-declaratie in de
+  `Dockerfile` is een map ín de container, geen persistente opslag. Bij
+  image-vervanging zijn de certificaten weg — en dat zijn
+  compliance-bewijsstukken. Zie **#46**; dat heeft een harde datum, want de
+  pilot start rond 1 september.

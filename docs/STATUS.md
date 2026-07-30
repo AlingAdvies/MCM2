@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-29, tweede sessie (vragenlijst-tool t/m **stap 8**: import/export, beide seeds, vragen ophalen, indienlogica én bestandsupload; `contract_id` op `survey_run`; **guardbug gevonden waardoor UC2 in het geheel niet werkte**; 155 e2e-tests groen; **OTAP-doorloop uitgebreid naar 21 controles en geslaagd** — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+2026-07-30 (**UC1 is nu volledig afrondbaar in de browser** — Issue #42 en #43 gerepareerd; eerste Playwright-browsertest; **externe architectuurreview ontvangen en omgezet in negen issues**; **CSV-parser voor leveranciersimport** met de eerste unittestlaag in dit project — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
 
 ## Het project bestaat uit twee repositories
 
@@ -20,7 +20,11 @@ Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in
 2. Lees dit document (`docs/STATUS.md`) volledig — het is de enige actuele waarheid over fase en blockers.
 3. Verifieer git-status zelf (`git status`, `git branch -a`) tegen wat hieronder staat — vertrouw niet blind op deze snapshot. **Doe dat in beide repositories.**
 4. Check de open GitHub Issues (`gh issue list --repo AlingAdvies/MCM2 --state open`) voor de actuele backlog — dit document verwijst naar issue-nummers, maar de Issues zelf zijn de bron van waarheid over wat daadwerkelijk nog open staat.
-5. **Eerste concrete vervolgstap: stap 5 uit de bouwvolgorde** (`GET /survey/respond/questions`, ontwerp §10). Stap 1 t/m 4 zijn af: migratie, guard met ronde-status, import/export en beide seeds. Issue #30 (geen backups) blijft de zwaarste openstaande blokkade voor alles wat de productiedatabase raakt (#19, #25, #29), maar vraagt nu alleen nog uitvoering door de eigenaar, geen besluit — en de vragenlijst-tool loopt daar niet op vast, want die bouwt tegen wegwerpcontainers.
+5. **Eerste concrete vervolgstap: Issue #7, spoor 1 — de Entra-guard.** Dat is nu de flessenhals: de leverancierskant is compleet en in de browser bewezen, maar álles aan de beheerkant (leveranciers wegschrijven, schermen, rollen) vraagt een geverifieerde tenantcontext. Vandaag leidt de backend de tenant af uit een ongeverifieerde header — het P0-restpunt. De PoC van 2026-07-27 is end-to-end geslaagd; wat rest zijn de drie stappen onderaan `docs/architecture-review/2026-07-27/01-entra-external-id-poc-bevindingen.md`.
+
+   Issue #30 (geen backups) blijft de zwaarste openstaande blokkade voor alles wat de productiedatabase raakt (#19, #25, #29), maar vraagt nu alleen nog uitvoering door de eigenaar, geen besluit — en er wordt tegen wegwerpcontainers gebouwd.
+
+   **Nieuw sinds 2026-07-30: #46 heeft een harde datum.** De pilot start rond 1 september en geüploade certificaten staan op een containerschijf die bij de eerstvolgende image-vervanging leeg is.
 
 ### Snel weer op gang komen
 
@@ -34,6 +38,9 @@ docker exec mcm2test psql -U postgres -c "ALTER ROLE clm_migrator WITH PASSWORD 
 MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres" npm run migrate:deploy
 DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" npm run test:e2e   # 155 tests
 
+# Unittests — geen database nodig
+npx jest                                  # 59 (58 vendor + 1 bestaande)
+
 # De twee vragenlijsten inlezen (tenant moet bestaan)
 DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" \
   npm run seed:vragenlijsten -- <tenant-uuid>
@@ -44,6 +51,8 @@ cd ../MCM2-frontend && npm run dev
 #   andere demo-tokens: demo-nietopen, demo-verlopen, demo-ingediend
 
 # De volledige keten (beide productie-images): docs/runbooks/otap-doorloop.md
+# Daarna de browsertest, met een VERSE tokenlink (indienen is eenmalig):
+cd ../MCM2-frontend && SURVEY_TOKEN=<verse-link> npm run e2e
 ```
 
 ## Vragenlijst-tool — scope vastgesteld op 2026-07-29, ontwerp is bouwbaar
@@ -95,9 +104,29 @@ Daarmee zijn alle blokkerende ontwerpvragen beantwoord. Wat nog openstaat in §1
 
 **Drie dingen raken bestaande, groene code** en verdienen aandacht bij het bouwen: `survey_run` krijgt drie kolommen (`status`, `is_test`, `survey_kind`), `survey_response` krijgt er drie (`subject_vendor_id`, `respondent_user_id`, `respondent_label`) waarbij `vendor_id` **nullable** wordt, en de bestaande guard moet de ronde-status meewegen naast `closes_at`/`revoked_at`. Die nullable-wijziging is een versoepeling op een tabel die vanochtend gemerged is — de UC1-garantie wordt overgenomen door een partiële unieke index plus twee CHECK-constraints, en testpunten 41 t/m 43 horen te bewijzen dat er niets weglekt.
 
-## Frontend — repository aangemaakt op 2026-07-29 (ADR-012), nog geen schermen
+## Frontend — leverancierportaal werkt end-to-end (2026-07-30)
 
-**`https://github.com/AlingAdvies/MCM2-frontend`** (privé, onder AlingAdvies). Fundament staat, CI groen op beide jobs. **Nog geen schermen** — het leverancierportaal is de volgende stap.
+**`https://github.com/AlingAdvies/MCM2-frontend`** (privé, onder AlingAdvies). CI groen op beide jobs.
+
+**Het portaal is afrondbaar.** Sinds PR #1 (2026-07-30) kan een leverancier de Transdev-vragenlijst van tokenlink tot bevestiging doorlopen: vragen lezen, bevestigen, certificaat uploaden, indienen. Daarna is de link op. Gemeten in de browser tegen de productie-images:
+
+```
+/questions 200  →  /attachment 201  →  /respond 200  →  tweede poging 410
+```
+
+Twee bugs uit de OTAP-doorloop van 2026-07-29 zijn daarmee weg:
+
+- **#42** — het portaal toonde "Bestandsupload volgt in een volgende versie" terwijl de backend het wél kon. Bevestigen op de ISO-vraag gaf een 422 die als "Er ging iets mis bij het versturen" verscheen: een doodlopende weg. Nu een uploadveld begrensd op `maxFiles`, en een 422 wordt **per vraag** getoond in plaats van als paginabrede blokkade — een 422 is herstelbaar, dus die hoort niet naar het geblokkeerde scherm te leiden.
+- **#43** — het leesblok kreeg drie keuzerondjes. Nu een apart `Leesblok`-component, en de nummering slaat leesblokken over zodat "vraag 8" klopt met wat de teller zegt.
+
+**Eerste browsertest** (`e2e/portaal-uc1.spec.ts`, Playwright): de volledige UC1-flow tegen de OTAP-stack, geen mock. **Draait niet in CI** — hij vraagt een verse tokenlink per run, want indienen is eenmalig. Zonder `SURVEY_TOKEN` slaat hij zichzelf over in plaats van te falen. Zie #47 en #53.
+
+Tegenproef gedaan: met de `instruction`-tak eruit vielen drie controles om, met het uploadveld verborgen twee plus een omvallende `setInputFiles`.
+
+**Twee bekende gaten, bewust niet gedicht:**
+
+- **Gemengde taal.** De vragen zijn Engels (uit het Transdev-bronbestand), de meldingen van het portaal Nederlands. Dat is een besluit voor de eigenaar, geen bug.
+- **Een geüploade bijlage is niet te verwijderen.** De backend heeft geen `DELETE` op `/survey/respond/attachment`. Er staat een vinkje, geen kruisje — een knop die niets kan aanroepen is erger dan geen knop. Verwijderen mogelijk maken is backend-werk en een nieuw issue.
 
 Wat er staat: Next.js 15 + Tailwind 3 (**bewust dezelfde majors als MVM_V2**, niet de nieuwste — Next 16/Tailwind 4 zouden het overnemen van MVM_V2-componenten juist duurder maken), versies exact gepind conform MCM2-CLAUDE.md §11, TypeScript meteen op `strict` (in de backend is dat nog Issue #3; achteraf strict maken kost meer).
 
@@ -175,6 +204,20 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Aantoonbaar werkend
 
+- **CSV-parser voor leveranciersimport (2026-07-30, PR #55).** `src/vendor/` — leest een bestand, meldt per rij wat er mis is, **schrijft niets weg**. Dat laatste is bewust: wegschrijven vraagt een geverifieerde tenantcontext (#7), en zonder die context weet een schrijfroute niet namens wie hij schrijft.
+
+  Onderscheid **blokkerend** (naam ontbreekt, dubbel in bestand) versus **waarschuwing** (KvK niet 8 cijfers, e-mail zonder apenstaartje, impactwaarde onbekend, bedrag geen getal). Dat is de kern: een fout KvK-nummer is achteraf te corrigeren, een ontbrekende naam niet. Regelnummers verwijzen naar wat de gebruiker in Excel ziet, en een dubbelmelding zegt wáár het duplicaat staat.
+
+  Tegen `db/seeds/voorbeeld-leveranciers-coupa.csv`: 28 rijen, 26 importeerbaar, 2 geblokkeerd, 3 met waarschuwing, en één gemelde onbekende kolom.
+
+  **58 unittests — de eerste echte unittestlaag in dit project** (gevraagd in #54). `npx jest` rapporteert 59: die ene extra is de bestaande `app.controller.spec.ts`. Tegenproef: ontsnapping van aanhalingstekens eruit → 2 rood; dubbelsleutel van KvK-eerst naar alleen-naam → 1 rood.
+
+  **Eigen CSV-lezer, niet die van MVM_V2.** Die wisselt `inQuotes` bij élk aanhalingsteken en kapt `Jansen "De Bouwer" B.V.` af. Deze leest ontsnapte aanhalingstekens, regeleinden binnen een veld, CRLF/LF door elkaar, en raadt het scheidingsteken — alle vier Transdev-specificatiebestanden in MVM_V2 gebruiken puntkomma's, want zo schrijft Nederlandse Excel.
+
+  **Let op — het voorbeeldbestand is zelf samengesteld.** Er staat geen echte Coupa-export in MVM_V2; het bestand is afgeleid uit `vendors.mock.ts`. De kolomkoppen zijn dus een **aanname** over wat Transdev levert. Aanpassen is één tabel wijzigen (`KOLOM_ALIASSEN`), niet de code eromheen.
+
+- **UC1 volledig afrondbaar in de browser (2026-07-30, MCM2-frontend PR #1).** Zie het frontend-blok hierboven: `/questions` 200 → `/attachment` 201 → `/respond` 200 → tweede poging 410, gemeten tegen de productie-images. Issue #42 en #43 gesloten.
+
 - **OTAP-doorloop t/m indienen en upload (2026-07-29, tweede doorloop).** Uitgebreid van 8 naar **21 controles** in negen stappen; `scripts/otap-doorloop.js` dekt nu ook de vragenlijst, de validatie, de bestandsupload en het indienen. **Vier keer gedraaid, vier keer geslaagd** — waarvan één keer volledig vanaf niets na `down -v`.
 
   **De volledige keten is in de browser bewezen:** het portaal toont de echte negen Transdev-vragen uit de database met de MVM_V2-huisstijl, en vanuit diezelfde pagina levert upload → 201 en indienen → 200. De 404 die de vorige doorloop signaleerde is weg.
@@ -185,7 +228,7 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
   2. **Het opruimblok van het doorloopscript was niet meer idempotent** zodra er echt ingediend werd — `ON DELETE RESTRICT` blokkeerde het verwijderen van een respons met antwoorden. Dat de constraint in de weg zat, is het bewijs dat hij werkt.
   3. **De seed vraagt een bestaande tenant** op een verse database. Toegevoegd als stap 3b in het runbook.
 
-  **Twee frontend-bevindingen, vastgelegd als Issue #42 en #43:** het portaal kan nog geen bestanden uploaden (waardoor een leverancier UC1 niet via de browser kan afronden — de backend kan het wél), en het rendert het `instruction`-leesblok als een vraag met keuzerondjes. Beide met de browser vastgesteld, niet beredeneerd.
+  **Twee frontend-bevindingen, vastgelegd als Issue #42 en #43 — beide gesloten op 2026-07-30** (MCM2-frontend PR #1): het portaal kon geen bestanden uploaden (waardoor een leverancier UC1 niet via de browser kon afronden — de backend kon het wél), en het rendeerde het `instruction`-leesblok als een vraag met keuzerondjes. Beide met de browser vastgesteld, niet beredeneerd. **Dat geen van beide door een test gevonden is, was de aanleiding voor #47** — de eerste browsertest.
 
 - **Bestandsupload met inhoudscontrole (2026-07-29, stap 8, Issue #9).** `src/survey/bestand-validatie.ts`, `bestand-opslag.service.ts` en `bijlage.service.ts`, plus `POST /survey/respond/attachment`. **155 van 155 e2e-tests groen** in twaalf suites.
 
@@ -255,7 +298,7 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 - **Leverancierportaal in de browser (2026-07-29, `MCM2-frontend`).** De acht Transdev-vragen renderen met de MVM_V2-huisstijl. Geverifieerd door het scherm daadwerkelijk te doorlopen: de toelichtingsplicht schakelt om zodra een niet-bevestiging gekozen wordt, indienen met ontbrekende antwoorden wordt geweigerd en markeert elke onvolledige vraag, en een toelichting van `"   -   "` valt af op de ondergrens van tien tekens. De vierde antwoordoptie verschijnt alleen bij de uploadvraag; de draft-toestand toont een oranje klok in plaats van een rode fout.
 
-  Draait op mock data. Tegen de live backend toont het portaal de vragenlijst nog niet — `/survey/respond/questions` is stap 5 uit de bouwvolgorde en bestaat nog niet.
+  *Deze notitie beschrijft de stand op 2026-07-29, toen het portaal nog op mock data draaide.* De mock/live-schakelaar bestaat nog steeds en is nuttig om schermen zonder backend te beoordelen — maar sinds 2026-07-30 werkt het portaal ook volledig tegen de echte backend. Zie het frontend-blok bovenaan.
 
 - **Vragenlijst-datamodel niveau B (2026-07-29, PR #33, migratie `0005_vragenlijst_niveau_b.sql`).** Vier nieuwe tabellen (`survey_category`, `survey_question`, `survey_answer`, `survey_attachment`) plus `survey_kind`/`status`/`is_test` op `survey_run` en drie respondentkolommen op `survey_response`. 459 regels, waarvan ongeveer een derde gegenereerd — de rest handwerk, precies zoals ADR-010 voorspelt.
 
@@ -328,9 +371,56 @@ Drie tests in `test/schema-conformiteit.e2e-spec.ts` bewaken de kolom. De middel
 
 **Aandachtspunt voor het contractspoor:** zodra `clm.contract` bestaat, moet die tabel een eigen RLS-policy krijgen vóórdat de foreign key gelegd wordt. Een verwijzing naar een tabel zonder RLS is een lek.
 
+**Bijgewerkt 2026-07-30: het vendorspoor is nu wél gestart, contracten nog niet.** De eigenaar heeft leveranciersbeheer als volgend spoor gekozen (aanmaken en importeren). Dat verandert het besluit hierboven niet — contracten blijven een eigen bouwspoor met eigen intake — maar het maakt één vondst uit die inventarisatie belangrijk:
+
+**De tabellen bestonden al.** `clm.vendor` (25 kolommen, met RLS), `clm.vendor_contact`, `clm.vendor_tag` en drie `ref.*`-tabellen stonden er al, overgenomen uit `mvm-api-pilot/Database/migrations/004_clm_vendor.sql`. Wat ontbrak was niet het datamodel maar de laag erboven: geen `src/vendor/`-module, geen routes, geen scherm. Tot 2026-07-30 schreven alleen testscripts er rechtstreeks via SQL in.
+
+**Twee dingen die de C#-pilot wél heeft en MCM2 niet:** `vendor_address` (adressen genormaliseerd in een eigen tabel) en `parent_vendor_id` (holdingstructuur). Geen van beide is nu nodig; wel goed om te weten dat de bron ze heeft.
+
+## Externe architectuurreview — ontvangen 2026-07-29, omgezet in negen issues
+
+Op verzoek van de eigenaar is de volledige architectuur, OTAP-straat en teststrategie ter review aangeboden aan een tweede AI-model. Beide documenten staan in `docs/architecture-review/`:
+
+| Document | Wat |
+|---|---|
+| `2026-07-29/00-review-aanvraag-architectuur-otap-tests.md` | de aanvraag, 1027 regels, zelfstandig leesbaar, met negen vragen die elk om een beslissing vragen |
+| `External-2026-07-29-mcm2-architectuurreview-otap-tests.pplx.md` | het antwoord |
+
+Alle negen vragen zijn beantwoord, met het gevraagde sjabloon per bevinding: ernst, onderbouwing, aanbeveling, kosten van niets doen, en **zekerheid** (zeker/waarschijnlijk/vermoeden). Dat laatste veld bleek het nuttigst — het is eerlijk gebruikt, niet alles staat op "zeker".
+
+**Omgezet in negen issues (#46 t/m #54).** Drie als pilotblokkade:
+
+| # | Wat |
+|---|---|
+| **#46** | duurzame objectopslag voor uploads + dump buiten de brondraaimachine — **harde datum: pilot rond 1 september** |
+| **#47** | Playwright-browsertest van de volledige UC1-flow — gedeeltelijk af, zie frontend-blok |
+| **#48** | pilot-runbook en alerting: wie kijkt wanneer naar welk signaal |
+
+Vijf voor productie (#49 quotarij voor `max_files`, #50 vergrendeling bewijzen, #51 frontend-image promoveerbaar, #52 virusscan-restrisico vastleggen, #53 OTAP-doorloop automatiseren) en één later (#54 unittestlaag — daarvan is de eerste laag geleverd in PR #55).
+
+### Waar de review mij corrigeerde, en gelijk had
+
+- **Waarneembaarheid was te licht ingeschat.** Ik had geen logging/monitoring als "kleiner punt" weggezet; de review tilt het naar blokkerend. Het argument snijdt hout: een stille storing blijft dagenlang onopgemerkt bij een link met 30 dagen geldigheid.
+- **Mijn eigen vraagstelling over `NEXT_PUBLIC_API_URL` was fout.** Ik zette twee opties tegenover elkaar; de review draagt een derde, betere aan (server-side runtime-config of same-origin proxy) zonder extra publiek endpoint. Zie #51.
+- **Virusscanning stond te hoog in mijn lijst.** Ik noemde zelf drie compenserende controles en concludeerde toch "het is niet nul", zonder te vragen of nul nodig is vóór een pilot met bekende leveranciers. Zie #52.
+- **Het CREATE ROLE-risico overschatte ik.** Op Amazon RDS heeft `rds_superuser` gewoon `CREATEROLE`. Het risico is reëel bij bepaalde serverless Postgres-aanbieders, niet bij de RDS-route die ik zelf als doel noem.
+- **De concurrency-aanpak bij `max_files` was te zwak.** Een kale trigger met `COUNT(*)` lost de race niet op — twee uploads passeren allebei vóór elkaars commit. Zie #49 voor twee uitgewerkte routes; de quotarij met atomaire `UPDATE ... WHERE used_files < max_files RETURNING` is de betere.
+
+### Eén reviewbevinding is nagerekend en vervallen
+
+Vraag 5 beval een e2e-test aan voor de UC2-tokenlookup over HTTP, met als onderbouwing dat die dekking ontbrak. **Die aanname is onjuist**: `test/vragenlijst-ophalen.e2e-spec.ts` regel 437 en 465 doen dit al, beide via `request(server)` door de guard heen. De eerste is de regressietest voor de 0008-bug, de tweede sluit af dat "join op `subject_vendor_id`" niet stilzwijgend "controleer niets meer" gaat betekenen.
+
+De reviewer kon dit niet zien: de testbestanden zaten niet in Bijlage A, alleen een tabel met testtellingen. Dit stond op zekerheid **waarschijnlijk**, en het is het enige van de negen antwoorden dat op een aanname over niet-meegeleverd materiaal rustte — en het enige dat bij narekenen sneuvelt. Vastgelegd in #24.
+
+Wat er van vraag 5 wél overblijft staat als later-item in #24: een expliciete `respondent_type`-kolom zodra een derde use case ontstaat waarin deelnemer en onderwerp niet meer via `vendor_id IS NULL` te onderscheiden zijn.
+
 ## Lessen uit deze sessies die tijd besparen
 
 Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan hier omdat ze anders opnieuw ontdekt worden.
+
+**Een regel die met geen enkele test rood te krijgen is, hoort weg — niet een derde test.** In `csv-lezer.ts` stond een losse BOM-verwijdering. Die bleek overbodig: `.trim()` op de koppen haalt U+FEFF in JavaScript óók weg. Er zijn twee tests geschreven om het mechanisme aan te tonen; beide bleven groen met de regel eruit. Toen is de regel verwijderd in plaats van een derde poging te doen. **Een regel die niets doet is erger dan geen regel**, want de volgende lezer denkt dat het probleem daar wordt afgehandeld. Kostte drie omwegen; het alternatief was code committen met een bewering die niet aantoonbaar was.
+
+**Een test die het juiste antwoord geeft, kan nog steeds het verkeerde meten.** Twee keer op één dag tegengekomen. In de browsercontrole zocht een assertie de naam van de vragenlijst in de koptekst in plaats van de titel van het leesblok — die faalde terwijl de code goed was. En `getByText(/al ingediend/i)` matchte twee elementen, want die tekst staat ook in de melding van de backend eronder. Beide keren was de fix in de test, niet in de code. Bij een falende assertie: kijk eerst wát er gemeten wordt.
 
 **`drizzle-kit` genereert migraties die op een gevulde database falen.** Bij `subject_vendor_id` produceerde het `ADD COLUMN ... NOT NULL`, wat alleen op een lege tabel slaagt. Elke nieuwe verplichte kolom vraagt handmatig de drie-stappenvorm: kolom toevoegen → backfillen → `SET NOT NULL`. Controleer dit bij **elke** gegenereerde migratie.
 
@@ -366,18 +456,25 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 ## Huidige branch en Git-status
 
-**Stand op 2026-07-29, tweede sessie:**
+**Stand op 2026-07-30:**
 
 | Repo | Branch | Werkboom | Openstaande PR's |
 |---|---|---|---|
-| MCM2 | **`chore/otap-doorloop-stap8`** | schoon | nog niet gepusht |
+| MCM2 | `main` | schoon | geen |
 | MCM2-frontend | `main` | schoon | geen |
 
-**Drie PR'''s gemerged naar `main`:** #37 (stap 3 en 4, `ef62cd6`), #38 (migratie 0007 plus de drie bevestigde ontwerpbesluiten, `4b09026`) en #39 (stap 5 plus de UC2-guardfix, `52f41b0`). Alle drie met CI groen op alle drie de jobs, alle branches lokaal én op GitHub verwijderd. Na elke merge opnieuw geverifieerd tégen `main` zelf.
+**Geen open branches in beide repositories.** Alle gemergede branches zijn lokaal én op GitHub verwijderd.
 
-**Vijf PR's gemerged naar `main`:** #37, #38, #39, #40 en #41 (stap 8, `7c0be9b`). Alle vijf met CI groen op alle drie de jobs, alle branches lokaal én op GitHub verwijderd.
+**Gemerged op 2026-07-30:**
 
-**`chore/otap-doorloop-stap8` staat open:** de uitgebreide doorloop, de Dockerfile-fix voor de uploadmap en deze statusbijwerking. Nog niet gepusht. Lokale poorten wél gedraaid: format, lint, typecheck, 155/155 e2e tegen een verse Postgres 17.6 (twee keer), en de Docker-productiebuild die start, de uploadroute mapt en `/health` met 200 beantwoordt.
+| PR | Repo | Wat |
+|---|---|---|
+| **#55** | MCM2 | CSV-parser en validatie voor leveranciersimport (`2d9a4ad`) |
+| **#1** | MCM2-frontend | Bestandsupload en leesblok — UC1 afrondbaar in de browser (`3a8a571`) |
+
+**Gemerged op 2026-07-29:** #37, #38, #39, #40, #41 (stap 8), #42/#43 als issues, #44, #45 (reviewaanvraag). Alle met CI groen op alle jobs.
+
+**Eén onopgeruimd punt uit een eerdere sessie:** `git branch -a` toonde na de merge van MCM2-frontend#1 nog een remote branch die GitHub al had verwijderd. Dat was een verouderde lokale cache; `git fetch --prune` loste het op. Meldenswaardig omdat het er even uitzag als een mislukte opruiming.
 
 - **`docs/sessiestand-otap` is op 2026-07-29 via PR #35 gemerged naar `main`** (merge-commit `cbe6c48`) en daarna lokaal én op GitHub verwijderd. Eén commit: uitsluitend deze statusbijwerking.
 - **`feat/issue-7-leveranciertoken` is op 2026-07-29 via PR #32 gemerged naar `main`** (merge-commit `7f0cc01`) en daarna lokaal én op GitHub verwijderd. CI groen op alle drie de jobs vóór de merge, opnieuw geverifieerd met `gh pr checks 32` op de laatste commit. Vijf commits: de tokenlaag, de HTTP-routes met logmaskering en auditregels, de fix op `maskeerDiep`, plus twee documentatiecommits. **Issue #31 is bij die merge gesloten** — migratie `0004` loste hem op. Let op: die migratie is bewezen in CI, **niet toegepast op `clm-enterprise`** — net als #29 en #25 wacht dat op #30.
@@ -399,15 +496,48 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 ## Eerstvolgende goedgekeurde stap
 
-De databaselaag is omgezet (ADR-010), spoor 2 van Issue #7 zit in `main`, en de vragenlijst-tool staat t/m stap 4: het datamodel, de guard, import/export en beide gevulde vragenlijsten.
+**De leverancierskant is klaar en in de browser bewezen.** UC1 is van tokenlink tot bevestiging afrondbaar (zie het frontend-blok hierboven). Daarmee is er voor het eerst iets demonstreerbaars voor de klant.
 
-**De backendkant van de leveranciersflow is compleet en in de keten bewezen.** De OTAP-doorloop van 2026-07-29 toont dat vragen ophalen, valideren, uploaden en indienen end-to-end werken vanuit de browser.
+**Het nieuwe spoor sinds 2026-07-30: leveranciersbeheer.** De opdrachtgever wil leveranciers kunnen aanmaken en importeren. Startpunt is Excel/CSV, daarna handinvoer; PC-only; het gaat mee in de pilot.
 
-**De eerstvolgende stap zit in de frontend, niet in de backend: Issue #42.** Het portaal kan nog geen bestanden uploaden, waardoor een leverancier de Transdev-vragenlijst niet via de browser kan afronden — bevestigen op de ISO-vraag levert een 422 op die als "Er ging iets mis" wordt getoond. Dat is nu de enige blokkade voor een werkende demonstratie aan de klant. Issue #43 (het leesblok met keuzerondjes) is cosmetisch maar verwarrend.
+**De eerstvolgende stap is Issue #7, spoor 1 — de Entra-guard.** Dat is nu de flessenhals, en dat is een verschuiving: de leverancierskant had een eigen, complete beveiliging (het token *is* de sleutel, de tenant komt uit de tokenlookup). De beheerkant heeft dat niet. Vandaag leidt de backend de tenant af uit een **ongeverifieerde header** — het P0-restpunt. Elke schrijfroute die daarop gebouwd wordt, is een route die met een verzonnen header in een andere tenant schrijft.
 
-Daarna is stap 7 (concept opslaan) de volgende inhoudelijke uitbreiding, en stap 10 (beheerroutes) wacht op spoor 1.
+De PoC van 2026-07-27 is end-to-end geslaagd (federatie, MFA, geldige authorization code). Wat rest zijn de drie stappen onderaan `docs/architecture-review/2026-07-27/01-entra-external-id-poc-bevindingen.md`: code inwisselen voor tokens, claims inspecteren, JWKS-guard bouwen. **Inspecteer de claims vóór er iets op gebouwd wordt** — dat document noemt `email`, `sub`, `oid` en `tid` als verwachting, niet als meting.
 
-**Daarnaast, en dat kost geen code:** het portaal tegen de echte backend zetten via een OTAP-doorloop. De vragen staan in de database en de route bestaat, dus dit is de eerste keer dat de klant de echte vragenlijst in de browser kan zien in plaats van mock data.
+### De vier stappen van het vendorspoor, in deze volgorde
+
+1. ~~**CSV-parser en validatie**~~ — **afgerond 2026-07-30** (PR #55). Leest een bestand, meldt per rij wat er mis is, schrijft niets weg. Raakt de tenantgrens niet en kon daarom vóór de guard.
+2. **Entra-guard (#7 spoor 1)** — identiteit en geverifieerde tenantcontext.
+3. **CATS-rollen** — zie het blok hieronder.
+4. **Wegschrijven** — de tweede helft van de import, plus formulier en lijst.
+
+### CATS-rollen — bron gevonden, nog niet gebouwd
+
+Op 2026-07-30 vastgesteld door de eigenaar: gebruikers krijgen **verschillende rollen**; of autorisatie later ook op individu gaat, is een besluit voor later.
+
+De bron is `MVM_V2/src/tenant/transdev/config/job-titles.ts`, afkomstig uit `CATS rollen.csv` (Bizaline/MyVendormanager). **Ongewijzigd actueel volgens de eigenaar.** Het bevat twee lagen, en dat onderscheid is de vondst:
+
+| Laag | Wat | Aantal |
+|---|---|---|
+| **CATS-rol** | bepaalt de rechten — platform | 5: `vraageigenaar`, `realisatie_verificatie_manager`, `inkoper`, `contractmanager`, `contractbeheerder` |
+| **Functietitel** | wat op het visitekaartje staat — tenantconfiguratie | 8 voor Transdev, elk gekoppeld aan één CATS-rol |
+
+**Niet de vier rollen uit `MVM_V2/src/core/auth/permissions.ts` overnemen** (`admin`/`manager`/`compliance_officer`/`viewer`). Dat zijn generieke applicatierollen; CATS is Transdev's eigen vakinhoudelijke model. In MVM_V2 staan ze náást elkaar en doet `canDo()` niets met CATS — daar is het gedocumenteerd maar niet aangesloten.
+
+**Twee ontwerpeisen die daaruit volgen:**
+
+- **Rol als eigen rij, niet als kolom op `clm.user`.** Zodra "autorisatie op individu" aan de orde komt, is er een plek nodig om bereik op te hangen. Een `clm.user_role`-rij geeft die; een `role`-kolom niet. Kost nu vrijwel niets en voorkomt een migratie op gevulde pilotdata.
+- **Rechten in code, niet in de database.** Rechten wijzigen hoort een codewijziging met een PR te zijn, geen `UPDATE`-statement.
+
+**`contractScope` (DOP/AOC) is een autorisatiegrens, geen label.** DOP = operationele prestatie-artikelen, AOC = prijs, boete, tekortkoming. MVM_V2's backlog B-025 is er expliciet over: *"Contract coordinator (DOP only) krijgt NOOIT toegang tot het volledige PDF-contract"*, met PDF alleen voor DOP+AOC/AOC-rollen en AOC-KPI's alleen voor AOC-geautoriseerden.
+
+Nu is er niets om dat op toe te passen — geen contracttabel, geen KPI's, geen PDF's, en bij leveranciers speelt het niet. **Kolom vastleggen, niet gebruiken**, zoals met `contract_id` op `survey_run` is gedaan. Wél als grens documenteren, anders leest een volgende ontwikkelaar het als een filtertje.
+
+**Eén aanname om te verifiëren:** B-025 stelt dat Transdev de scheiding DOP/AOC *zelf nog niet formeel kent* en dat die met AI uit contract-PDF's gehaald zou worden. Dat is een aanname over hun werkwijze uit maart 2026.
+
+### Daarna, in de vragenlijst-tool
+
+Stap 7 (concept opslaan) is de volgende inhoudelijke uitbreiding; stap 10 (beheerroutes) wacht op spoor 1.
 
 ~~1. Migratie met de vier nieuwe tabellen en de kolommen op `survey_run`/`survey_response`~~ — **afgerond 2026-07-29** (migratie 0005).
 ~~2. De bestaande guard uitbreiden met de ronde-statuscontrole~~ — **afgerond 2026-07-29** (migratie 0006).
@@ -458,7 +588,18 @@ Volledige backlog (alle 24 items, incl. Before production en Later): `gh issue l
   - `2026-07-28-vragenlijst-ontwerp.md` — vragenlijst-tool, antwoorden en certificaat-upload. **Status: bouwbaar** (niveau B, vastgesteld 2026-07-29). §0 legt de twee scopewijzigingen uit; §10 bevat de bouwvolgorde.
 - **Externe referentie:** `VendorComply Help en Manual.md` (OneDrive, `Bizaline/Producten/VendorComply/`) — handleiding van een bestaand, werkend product. Bron van de acht vraagtypen en de lifecycle. **Referentie, geen compatibiliteitseis:** geen gedeelde database, geen migratiepad. Wat is overgenomen en wat niet, staat in het ontwerp §1a.
 - **Klantaanlevering:** `Transdev Annual Vendor IT Risk SurveyV1_0.md` (repo-root) — de acht vragen die de eerste vulling van de tool vormen.
-- Architectuurreview: `docs/architecture-review/2026-07-24/` (00, 02-05, 07-09 — 06 is verplaatst naar `docs/archive/`, zie hierboven)
+- **Architectuurreviews:**
+  - `docs/architecture-review/2026-07-24/` — de oorspronkelijke review (00, 02-05, 07-09; 06 is verplaatst naar `docs/archive/`)
+  - `docs/architecture-review/2026-07-27/01-entra-external-id-poc-bevindingen.md` — **de Entra-PoC. Lees dit vóór het bouwen van de guard**; de drie concrete vervolgstappen staan onderaan.
+  - `docs/architecture-review/2026-07-29/00-review-aanvraag-architectuur-otap-tests.md` — de reviewaanvraag (1027 regels, zelfstandig leesbaar)
+  - `docs/architecture-review/External-2026-07-29-mcm2-architectuurreview-otap-tests.pplx.md` — het externe antwoord. Omgezet in #46 t/m #54; zie het reviewblok hierboven.
+- **Herbruikbaar uit MVM_V2** (`C:\dev\Work\MVM_V2`), geverifieerd op 2026-07-30:
+  - `src/tenant/transdev/config/job-titles.ts` — **de CATS-rollen en acht Transdev-functietitels.** Bron: `CATS rollen.csv`, ongewijzigd actueel volgens de eigenaar.
+  - `src/tenant/transdev/config/coupa-field-mapping.ts` — de kolomaliassen; de basis van `KOLOM_ALIASSEN` in de parser. **De CSV-lezer daarin is níét overgenomen** (kapt ontsnapte aanhalingstekens af).
+  - `src/app/vendors/` — lijst (316 regels), aanmaakformulier (272) en detailpagina (397). Vorm bruikbaar; `vendorService.ts` schrijft in localStorage en een in-memory array — dat is demo-code, geen persistentie.
+  - `BACKLOG.md` B-025 — de DOP/AOC-autorisatiegrens.
+  - `src/core/auth/permissions.ts` — **niet overnemen** als rollenmodel, zie het CATS-blok hierboven.
+- **Uit `mvm-api-pilot`:** `Database/migrations/004_clm_vendor.sql` is de bron van MCM2's vendorschema (dat werk is al binnengehaald). `Controllers/V2/VendorsController.cs` is bruikbaar als contract-referentie voor verplichte velden en defaults — **maar niet voor de tenantafleiding**, die komt daar uit `?tenant=demo`. `Database/migrations/009_staging.sql` bevat een staging-importmodel dat nooit in C# is geïmplementeerd; het idee (rijen eerst in staging met `pending/validated/imported/rejected`, ruwe rij als jsonb) is wel bruikbaar voor stap 4 van het vendorspoor.
 - Actieve ADR's: `docs/adr/`, inclusief ADR-012 (frontend-uitrol: Docker als enige weg, AWS App Runner beoogd, Vercel afgewezen), ADR-006 (CIAM-laag: Microsoft Entra External ID — herzien op 2026-07-27, AWS Cognito verworpen; bestand heette eerder `ADR-006-cognito-als-federatielaag.md`), ADR-007 (CI-platform: GitHub Actions; eerste CI-scope: format/lint/typecheck, test/build bewust uitgesteld tot na de ORM-spike), ADR-008 (P0-databaserolherstel: clm_api_runtime, ontbrekende schema-grants, tijdelijke clm_admin=clm_api-gelijkstelling), ADR-009 (migration-rol clm_migrator, rollenbootstrap, geautomatiseerde RLS-test in CI via ephemere testdatabase) ADR-010 (databaselaag Drizzle, Prisma verwijderd; inclusief de toetsing van de zeven §5-criteria) en ADR-011 (backup- en hersteleisen per fase: hoeveel dataverlies en hersteltijd acceptabel zijn tijdens ontwikkeling, pilot en productie). ADR-002 is op 2026-07-28 bijgewerkt met de werkelijke stand van de vier openstaande controls.
 - Runbooks: `docs/runbooks/` — bevat sinds 2026-07-28 `supabase-verificatie-en-restoretest.md`: vijf stappen (backupinventarisatie, restore-test, tier/garanties, Drizzle-migratiestand, provider-toets), met beproefde `pg_dump`/`pg_restore`-commando's, zes gedocumenteerde valkuilen en een meetregister voor hersteltijden.
 - Historisch projectcontextdocument: `docs/context/PROJECT-HISTORY-2026-07-24.md`
