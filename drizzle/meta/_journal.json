@@ -64,6 +64,13 @@
       "when": 1785336038094,
       "tag": "0008_guard_kent_uc2",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1785412800000,
+      "tag": "0009_identiteit_en_membership",
+      "breakpoints": true
     }
   ]
 }

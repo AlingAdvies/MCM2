@@ -7,6 +7,7 @@ import {
   jsonb,
   numeric,
   pgSchema,
+  primaryKey,
   smallint,
   text,
   timestamp,
@@ -51,19 +52,69 @@ export const tenant = clm.table(
   (t) => [uniqueIndex('tenant_name_key').on(t.name)],
 );
 
-export const user = clm.table('user', {
-  userId: uuid('user_id').primaryKey().defaultRandom(),
-  tenantId: uuid('tenant_id')
-    .notNull()
-    .references(() => tenant.tenantId, { onDelete: 'restrict' }),
-  fullName: text('full_name').notNull(),
-  email: text('email'),
-  createdAt: timestamp('created_at', { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }),
-  deletedAt: timestamp('deleted_at', { withTimezone: true }),
-});
+export const user = clm.table(
+  'user',
+  {
+    userId: uuid('user_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    fullName: text('full_name').notNull(),
+    email: text('email'),
+    // Stabiele identifier uit de identity provider (Entra: de oid-claim).
+    // Nooit het e-mailadres: dat verandert, een oid niet. NULL voor gebruikers
+    // die niet inloggen — respondenten van interne beoordelingen bijvoorbeeld.
+    externalSubject: text('external_subject'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('user_external_subject_key')
+      .on(t.externalSubject)
+      .where(sql`${t.externalSubject} IS NOT NULL`),
+  ],
+);
+
+/**
+ * Welke gebruiker mag in welke tenant werken, en met welke rol.
+ *
+ * Los van user.tenantId: dat is waar de gebruiker administratief thuishoort,
+ * dit is waar hij mag werken. Het verschil telt zodra iemand lid is van twee
+ * tenants — §6 staat die switch toe, mits server-side aantoonbaar (Issue #7).
+ */
+export const tenantMembership = clm.table(
+  'tenant_membership',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => user.userId, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    // 'admin' beheert leveranciers, vragenlijsten en rondes.
+    // 'reviewer' vult interne beoordelingen in en leest resultaten.
+    role: text('role').notNull().default('reviewer'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.userId, t.tenantId] }),
+    index('tenant_membership_tenant_id_idx').on(t.tenantId),
+    // Eén actieve tenant per gebruiker. Alleen platformbeheer heeft er meer
+    // nodig, en dat vraagt een eigen auditbaar mechanisme (Issue #57).
+    // Partieel op deleted_at: ingetrokken memberships blijven staan als
+    // historie, maar tellen niet mee.
+    uniqueIndex('tenant_membership_een_actief_per_gebruiker')
+      .on(t.userId)
+      .where(sql`${t.deletedAt} IS NULL`),
+  ],
+);
 
 // ─── clm schema: vendor-cluster ───────────────────────────────────────────
 
@@ -522,7 +573,22 @@ export const userRelations = relations(user, ({ one, many }) => ({
     references: [tenant.tenantId],
   }),
   ownedVendors: many(vendor),
+  memberships: many(tenantMembership),
 }));
+
+export const tenantMembershipRelations = relations(
+  tenantMembership,
+  ({ one }) => ({
+    user: one(user, {
+      fields: [tenantMembership.userId],
+      references: [user.userId],
+    }),
+    tenant: one(tenant, {
+      fields: [tenantMembership.tenantId],
+      references: [tenant.tenantId],
+    }),
+  }),
+);
 
 export const vendorRelations = relations(vendor, ({ one, many }) => ({
   tenant: one(tenant, {
