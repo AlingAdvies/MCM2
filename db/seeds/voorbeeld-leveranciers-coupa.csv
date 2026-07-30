@@ -1,0 +1,29 @@
+Supplier ID,Supplier Name,Impact Classification,Primary Contact Name,Primary Contact Email,KvK Number,Country,City,Annual Spend EUR,Supplier Status
+COUPA-SIE-001,Siemens Mobility B.V.,High Impact,Daan Hoekstra,d.hoekstra@siemens.com,34212178,NL,Den Haag,4800000,Active
+COUPA-ALS-002,Alstom Transport Nederland,High Impact,Laura Peeters,l.peeters@alstom.com,27302140,NL,Ridderkerk,3100000,Active
+COUPA-CAP-003,Capgemini Nederland B.V.,Medium Impact,Anne de Vries,a.devries@capgemini.com,33200803,NL,Utrecht,1250000,Active
+COUPA-THA-004,Thales Nederland B.V.,High Impact,Robert Smit,r.smit@thales.com,27119080,NL,Hengelo,2200000,Active
+COUPA-STR-005,Strukton Rail B.V.,Medium Impact,Joost Willems,j.willems@strukton.nl,30155768,NL,Utrecht,1800000,Active
+COUPA-MSFT-006,Microsoft Nederland B.V.,High Impact,Iris van Dijk,iris.vandijk@microsoft.com,33032887,NL,Amsterdam,950000,Active
+COUPA-SAP-007,SAP Nederland B.V.,Medium Impact,Thomas Bakker,t.bakker@sap.com,33223688,NL,'s-Hertogenbosch,780000,Active
+COUPA-HEI-008,Heijmans Infrastructuur B.V.,Medium Impact,Frank Verhoeven,f.verhoeven@heijmans.nl,17227994,NL,Rosmalen,2600000,Active
+COUPA-AON-009,Aon Risk Solutions Nederland,Low Impact,Sylvia Hendriks,s.hendriks@aon.com,33238179,NL,Rotterdam,320000,Active
+COUPA-VOD-010,Vodafone Ziggo B.V.,Medium Impact,Nina Groot,n.groot@vodafone.com,17270860,NL,Utrecht,410000,Active
+COUPA-ISS-011,ISS Facility Services B.V.,Low Impact,Paul Vermeer,p.vermeer@iss.com,27303994,NL,Utrecht,890000,Active
+COUPA-TIC-012,"TIC Group (Ticketing)",Medium Impact,Kevin Lammers,k.lammers@tic.nl,58012934,NL,Amsterdam,540000,Active
+COUPA-SHE-013,Shell Energy Nederland,Medium Impact,Emma Bos,e.bos@shell.com,27002690,NL,Den Haag,3400000,Active
+COUPA-DEL-014,Deloitte Nederland N.V.,Low Impact,Pieter van Dalen,p.vandalen@deloitte.nl,24362837,NL,Amsterdam,275000,Active
+COUPA-IDE-015,Identiv Security B.V.,Medium Impact,Chris de Jong,c.dejong@identiv.com,68012456,NL,Eindhoven,190000,Active
+COUPA-NS-016,"NS Groep N.V. (infra-delen)",High Impact,Hanne Visser,h.visser@ns.nl,30124359,NL,Utrecht,5200000,Active
+COUPA-ATO-017,Atos IT Solutions and Services B.V.,Medium Impact,Diana Schippers,d.schippers@atos.net,33155709,NL,Amstelveen,1100000,Active
+COUPA-ENE-018,Enel X Nederland B.V.,Low Impact,Marco de Graaf,m.degraaf@enelx.com,75104322,NL,Amsterdam,230000,Active
+COUPA-SOG-019,Sogeti Nederland B.V.,Medium Impact,Bas Meijer,b.meijer@sogeti.nl,34292289,NL,Vianen,670000,Active
+COUPA-PRO-020,"ProRail B.V. (capaciteitsmanagement)",High Impact,Jos van Loon,j.vanloon@prorail.nl,18079800,NL,Utrecht,4100000,Active
+COUPA-HIT-021,Hitachi Rail GTS Netherlands B.V.,High Impact,Kenji Watanabe,kenji.watanabe@hitachirail.com,34198412,NL,Amersfoort,2900000,Active
+COUPA-DUP-001,Siemens Mobility B.V.,High Impact,Daan Hoekstra,d.hoekstra@siemens.com,34212178,NL,Den Haag,4800000,Active
+COUPA-NON-022,,Medium Impact,Onbekend Persoon,geen.naam@voorbeeld.nl,99887766,NL,Rotterdam,150000,Active
+COUPA-QUO-023,"Jansen ""De Bouwer"" B.V.",Low Impact,Wim Jansen,w.jansen@jansenbouw.nl,12345678,NL,Zwolle,95000,Active
+COUPA-MAIL-024,Bakker Techniek B.V.,Medium Impact,Sanne Bakker,geen-apenstaartje,45678901,NL,Apeldoorn,88000,Active
+COUPA-KVK-025,Van Leeuwen Installaties B.V.,Low Impact,Piet van Leeuwen,p.vanleeuwen@vlinstall.nl,123,NL,Breda,62000,Active
+COUPA-IMP-026,Groen Advies B.V.,Onbekende Waarde,Marieke Groen,m.groen@groenadvies.nl,23456789,NL,Nijmegen,45000,Active
+COUPA-INA-027,Oude Leverancier B.V.,Low Impact,Jan Oud,j.oud@oudeleverancier.nl,34567890,NL,Tilburg,0,Inactive
