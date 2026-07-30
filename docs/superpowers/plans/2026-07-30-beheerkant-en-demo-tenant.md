@@ -1,9 +1,34 @@
 # Implementatieplan — beheerkant, demo-tenant en robuuste OTAP
 
 **Datum:** 2026-07-30
-**Status:** ter goedkeuring
+**Status:** goedgekeurd door de eigenaar; **fase 1 in uitvoering, driekwart af**
 **Aanleiding:** drie samenhangende doelen van de eigenaar (zie §1)
-**Raakt:** Issue #7 (spoor 1), #12, #16, #18, #23
+**Raakt:** Issue #7 (spoor 1), #12, #16, #18, #23, #57, #58
+
+---
+
+## Voortgang (bijgewerkt 2026-07-30, einde tweede sessie)
+
+Branch `feat/identiteit-en-membership`, vijf commits, nog niet gepusht.
+
+| Fase | Onderdeel | Stand |
+|---|---|---|
+| **1** | Migratie 0009 — `external_subject`, `tenant_membership`, `gebruiker_bij_subject()` | ✅ |
+| **1** | `src/auth/` — OIDC-config, code inwisselen, ID-tokenverificatie | ✅ |
+| **1** | Migratie 0010 — `clm.sessie` + drie `SECURITY DEFINER`-functies | ✅ |
+| **1** | `TenantContextGuard` | ❌ volgende stap |
+| **1** | Auth-routes `/auth/login`, `/auth/callback`, `/auth/logout` | ❌ |
+| **1** | `X-Tenant-Id` verwijderen | ❌ |
+| 2 | Vendorroutes en schermen | niet gestart |
+| 3 | Demo-tenant seed | niet gestart |
+| 4 | OTAP-doorloop uitgebreid | niet gestart |
+
+**Twee besluiten die tijdens fase 1 zijn genomen en het plan aanvullen:**
+
+- **Eén actief membership per gebruiker** (partiële unieke index). Multi-tenant toegang is alleen voor platformbeheer, en dat vraagt een eigen auditbaar mechanisme — uitgezocht werk, **Issue #57**. Weghalen is later één `DROP INDEX`.
+- **Sessies in de database met een glijdend venster van 8 uur**; uitloggen verwijdert de rij. Dit stond in §4 als openstaand ontwerppunt en is nu beslist en gebouwd.
+
+**Buiten het plan om afgerond:** de dagelijkse backup is ingericht en werkend bewezen (#30 grotendeels weg, restrisico in **#58**). Dat stond in §7 als "raakt dit plan maar lost het niet op".
 
 ---
 
