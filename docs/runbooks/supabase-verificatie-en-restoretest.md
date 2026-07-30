@@ -388,13 +388,58 @@ Op 2026-07-28 getest tegen `clm-enterprise`: 21,2 kB in 9,8s.
 
 ### 0b. Dagelijks inplannen
 
-Op Windows, via Taakplanner:
+**INGERICHT OP 2026-07-30.** De taak `MCM2 databasebackup` draait dagelijks om 07:00 en schrijft
+naar OneDrive. Onderstaande beschrijving is de werkende opzet, niet het advies dat er eerder stond —
+dat advies werkte namelijk niet, zie de valkuilen hieronder.
+
+De taak roept `scripts/backup-taak.cmd` aan. Dat tussenbestand is geen omweg maar de kern van de
+oplossing: het logt start, einde en uitkomst, en geeft de echte exitcode door aan Taakplanner.
 
 ```powershell
-$actie = New-ScheduledTaskAction -Execute "npm" -Argument "run backup:dump" -WorkingDirectory "C:\DEV\Work\MCM2"
+$actie = New-ScheduledTaskAction -Execute "C:\DEV\Work\MCM2\scripts\backup-taak.cmd" -WorkingDirectory "C:\DEV\Work\MCM2"
 $trigger = New-ScheduledTaskTrigger -Daily -At 07:00
-Register-ScheduledTask -TaskName "MCM2 databasebackup" -Action $actie -Trigger $trigger -Description "Enige backup van clm-enterprise; Supabase Free levert er geen. Zie ADR-011."
+$instellingen = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
+$principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
+Register-ScheduledTask -TaskName "MCM2 databasebackup" -Action $actie -Trigger $trigger -Settings $instellingen -Principal $principal -Description "Enige backup van clm-enterprise; Supabase Free levert er geen. Zie ADR-011."
 ```
+
+`-StartWhenAvailable` haalt een gemiste run in wanneer de laptop om 07:00 uit stond.
+
+#### Twee valkuilen die op 2026-07-30 daadwerkelijk toesloegen
+
+**1. Taakplanner meldde "geslaagd" terwijl er niets gebeurde.** De eerste opzet riep het commando
+rechtstreeks aan via `cmd.exe /c ...`. Resultaat: `LastTaskResult = 0`, geen dump, geen logregel.
+Reden: `cmd.exe` geeft 0 terug zodra het zelf kon starten — of het commando erbinnen slaagde, telt
+niet mee.
+
+Dit is exact de faalvorm waar de waarschuwing hieronder voor bedoeld is, en hij is dus geen
+theoretisch risico. Het tussenbestand lost het op door de exitcode expliciet door te geven
+(`exit /b %UITKOMST%`) en altijd te loggen.
+
+**2. Een `.cmd`-bestand in UTF-8 wordt onleesbaar voor `cmd.exe`.** Het tussenbestand is de eerste
+keer als UTF-8 weggeschreven (de standaard van de meeste editors). `cmd.exe` leest dat verkeerd en
+voert elke regel als los commando uit — een reeks meldingen als `'beschermd' is not recognized`.
+
+`scripts/backup-taak.cmd` moet daarom **ASCII** blijven, zonder accenten of speciale tekens. Bij
+bewerken:
+
+```powershell
+[System.IO.File]::WriteAllText($pad, $inhoud, [System.Text.Encoding]::ASCII)
+```
+
+#### Controleren of de taak echt draait
+
+```powershell
+# Wanneer draaide hij, en met welk resultaat?
+Get-ScheduledTaskInfo -TaskName "MCM2 databasebackup" | Select-Object LastRunTime, LastTaskResult, NextRunTime
+
+# Wat is er gebeurd? Elke run schrijft hier een start- en een uitkomstregel.
+Get-Content "C:\Users\cmali\OneDrive - Aling Advies\MCM2-backups\backup-taak.log" -Tail 20
+```
+
+> Handmatig twee keer snel achter elkaar starten werkt niet: Windows slaat een herstart over van een
+> taak die het als net-uitgevoerd beschouwt. Dat is geen fout — kijk in het log of er een nieuwe
+> `start`-regel bij kwam.
 
 > Controleer na een week of de taak daadwerkelijk draait — een geplande taak die stil faalt is
 > erger dan geen taak, want je denkt beschermd te zijn.
