@@ -1,7 +1,9 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-30 (**UC1 is nu volledig afrondbaar in de browser** — Issue #42 en #43 gerepareerd; eerste Playwright-browsertest; **externe architectuurreview ontvangen en omgezet in negen issues**; **CSV-parser voor leveranciersimport** met de eerste unittestlaag in dit project — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+2026-07-30, tweede sessie (**de dagelijkse backup draait nu écht** — #30 van "gereedschap bestaat" naar "ingericht en bewezen"; **fase 1 van de beheerkant gestart**: datamodel voor identiteit en membership plus de OIDC-laag, op branch `feat/identiteit-en-membership`. Alles hieronder is geverifieerd, niet uit gespreksgeheugen.)
+
+**Plan voor de komende fases:** `docs/superpowers/plans/2026-07-30-beheerkant-en-demo-tenant.md` — vier fases naar een frontend die eruitziet als MVM_V2, inloggen als tenant, vendors met contactpersonen aanmaken, een demo-tenant met mock data, en een robuuste OTAP-doorloop.
 
 ## Het project bestaat uit twee repositories
 
@@ -39,7 +41,13 @@ MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres" n
 DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" npm run test:e2e   # 155 tests
 
 # Unittests — geen database nodig
-npx jest                                  # 59 (58 vendor + 1 bestaande)
+npx jest                                  # 105 (58 vendor + 46 auth + 1 bestaande)
+
+# Backup handmatig draaien (draait dagelijks vanzelf om 07:00 naar OneDrive)
+npm run backup:dump
+# Heeft de geplande taak gedraaid?
+#   Get-ScheduledTaskInfo -TaskName "MCM2 databasebackup"
+#   Get-Content "$env:USERPROFILE\OneDrive - Aling Advies\MCM2-backups\backup-taak.log" -Tail 20
 
 # De twee vragenlijsten inlezen (tenant moet bestaan)
 DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" \
@@ -181,7 +189,13 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
   **Mitigatie is gebouwd, niet alleen beschreven:** `npm run backup:dump` (`scripts/backup-dump.js`) draait `pg_dump` via de container `postgres:17.6`, bewaart 14 dagen, ruimt ouder op, behandelt een lege dump als mislukking, en **waarschuwt als de vorige dump ouder is dan 36 uur** — de enige signalering dat de geplande taak heeft stilgelegen. Getest tegen `clm-enterprise` (21,2 kB in 9,8s) én aantoonbaar herstelbaar: dump → restore → rechten → defaults → **20 van 20 e2e-tests groen**. Inplannen via Taakplanner: runbook stap 0.
 
-  **Nog te doen door de eigenaar:** de dagelijkse taak daadwerkelijk inplannen, en `BACKUP_DIR` naar een tweede locatie zetten (de eigen thuisserver, OneDrive of een externe schijf). Zonder dat tweede punt beschermt de dump tegen "de database valt om", niet tegen "de laptop valt om".
+  **INGERICHT OP 2026-07-30 — beide openstaande punten gedaan.** De Windows-taak `MCM2 databasebackup` draait dagelijks om 07:00 en schrijft naar OneDrive (`C:\Users\cmali\OneDrive - Aling Advies\MCM2-backups`), dus de dump staat niet alleen op de laptop. Aantoonbaar via Taakplanner gedraaid, met dump én `GESLAAGD`-regel in het log als bewijs (21,2 kB in 4,8s).
+
+  Daarmee gaat #30 van **nul backups** naar **meestal dagelijks**, tegen nul kosten. De keuze voor een betaalde oplossing (Supabase Pro of Neon) blijft open en is niet langer dringend.
+
+  **Twee valkuilen sloegen daadwerkelijk toe** en staan in het runbook, want ze kosten anders opnieuw een half uur: (1) de directe aanroep via `cmd.exe /c` meldde `LastTaskResult = 0` terwijl er geen dump kwam — `cmd.exe` geeft 0 zodra het zélf kon starten. Precies de faalvorm waar het runbook voor waarschuwt. Opgelost met `scripts/backup-taak.cmd`, dat de echte exitcode doorgeeft en altijd logt. (2) Datzelfde `.cmd`-bestand in UTF-8 is onleesbaar voor `cmd.exe`; het moet ASCII blijven.
+
+  **Bewust geaccepteerde beperking (Issue #58):** de taak draait alleen als de laptop aanstaat. `-StartWhenAvailable` haalt een gemiste run in, maar bij langere afwezigheid valt er een gat — en Supabase pauzeert Free-projecten na circa 7 dagen. Dat geeft géén foutmeldingen; het script waarschuwt in het log zodra de vorige dump ouder is dan 36 uur. Vóór de pilotstart (rond 1 september) hoort dit naar de thuisserver, GitHub Actions of Supabase Pro.
 - **Providerkeuze open, maar niet blokkerend (Issue #30):** op 2026-07-28 is met `scripts/provider-migratietest.js` gemeten dat MCM2 **zonder enige codewijziging** op Neon draait (`eu-central-1`, PostgreSQL 17.10): alle zes rollen uit ADR-008 aangemaakt, `CREATE ROLE` toegestaan, migraties 0000–0002 toegepast, RLS en policies compleet, **20 van 20 e2e-tests groen**. Dat MCM2 draagbaar is, is geen toeval maar een gevolg van ADR-008/009: geen Supabase Auth, Storage, Edge Functions of `supabase-js` — uitsluitend standaard PostgreSQL. De testomgeving is daarna opgeruimd (geen tabellen, geen rollen). **Prijzen zijn niet op de bron geverifieerd** en Neon is overgenomen door Databricks; controleer dat vóór een besluit.
 - **Issue #19 (restore-test): kan pas ná #30.** Er valt niets te herstellen zolang er geen backup bestaat. Op 2026-07-28 verhoogd naar `priority:before-pilot`. Wél al bewezen: een handmatige dump-restore van `clm-enterprise` naar een verse container werkt end-to-end (dump 5s, restore 1s, verificatie GOEDGEKEURD). Dat bewijst een herstelpad, niet dat Supabase' eigen backup herstelbaar is — die vraag staat nog open.
 - **P0 (Issue #25): Drizzle-migratiestand op de bestaande Supabase-database.** `drizzle.__drizzle_migrations` bestaat daar niet; een `migrate:deploy` zou de baseline opnieuw willen toepassen op bestaande tabellen. **Grootste onzekerheid hierbij is op 2026-07-28 weggenomen:** het schema in Supabase komt volledig overeen met de Drizzle-baseline (read-only geverifieerd, zie hieronder), dus er is geen schema-afdrijving. Uitvoeren pas ná een geslaagde restore-test (#19) — zonder bewezen herstelpad niet aan de productiedatabase komen. Zie ADR-010 en het runbook, stap 3.
@@ -456,14 +470,20 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 ## Huidige branch en Git-status
 
-**Stand op 2026-07-30:**
+**Stand op 2026-07-30, einde tweede sessie:**
 
 | Repo | Branch | Werkboom | Openstaande PR's |
 |---|---|---|---|
-| MCM2 | `main` | schoon | geen |
+| MCM2 | `feat/identiteit-en-membership` | schoon, 3 commits vóór `main` | geen — nog niet gepusht |
 | MCM2-frontend | `main` | schoon | geen |
 
-**Geen open branches in beide repositories.** Alle gemergede branches zijn lokaal én op GitHub verwijderd.
+**Openstaande branch `feat/identiteit-en-membership`** (fase 1 van het plan, zie hieronder). Drie commits, alle drie geverifieerd, nog niet gepusht en nog niet gemerged:
+
+- `62f39f8` — migratie 0009: `external_subject`, `tenant_membership`, `gebruiker_bij_subject()`
+- `14c4aad` — `src/auth`: OIDC-config, code inwisselen, ID-tokenverificatie (46 unittests)
+- `0fc37af` — dagelijkse backup ingericht en werkend bewezen
+
+De branch is **niet af**: de guard zelf en de auth-routes ontbreken nog, en `X-Tenant-Id` is nog niet verwijderd. Zie "Eerstvolgende goedgekeurde stap".
 
 **Gemerged op 2026-07-30:**
 
@@ -502,14 +522,26 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 **De eerstvolgende stap is Issue #7, spoor 1 — de Entra-guard.** Dat is nu de flessenhals, en dat is een verschuiving: de leverancierskant had een eigen, complete beveiliging (het token *is* de sleutel, de tenant komt uit de tokenlookup). De beheerkant heeft dat niet. Vandaag leidt de backend de tenant af uit een **ongeverifieerde header** — het P0-restpunt. Elke schrijfroute die daarop gebouwd wordt, is een route die met een verzonnen header in een andere tenant schrijft.
 
-De PoC van 2026-07-27 is end-to-end geslaagd (federatie, MFA, geldige authorization code). Wat rest zijn de drie stappen onderaan `docs/architecture-review/2026-07-27/01-entra-external-id-poc-bevindingen.md`: code inwisselen voor tokens, claims inspecteren, JWKS-guard bouwen. **Inspecteer de claims vóór er iets op gebouwd wordt** — dat document noemt `email`, `sub`, `oid` en `tid` als verwachting, niet als meting.
+**Op 2026-07-30 is hiervan de helft gebouwd**, op branch `feat/identiteit-en-membership`:
+
+- ✅ **Datamodel** (migratie 0009) — `clm.user.external_subject`, `clm.tenant_membership` met RLS, en `clm.gebruiker_bij_subject()`. Die laatste lost een kip-ei-probleem op dat pas bij het bouwen zichtbaar werd: de guard moet de tenant vaststellen vóórdat er tenantcontext is, maar `clm.user` staat onder RLS en levert zonder die context nul rijen. De enige alternatieven waren een `BYPASSRLS`-rol (verboden, §6) of de client laten zeggen welke tenant hij wil — precies de header die eruit moet. Opgelost met `SECURITY DEFINER`, zelfde patroon als `resolve_survey_token()` uit 0003.
+- ✅ **OIDC-laag** (`src/auth/`) — configuratie, authorization code inwisselen, ID-token verifiëren tegen JWKS. 46 unittests tegen een lokaal gegenereerd sleutelpaar: strenger dan tegen de echte tenant, want een verlopen token of een handtekening van een vreemde sleutel geeft Entra nooit af.
+- ❌ **De guard zelf** — nog niet gebouwd.
+- ❌ **Auth-routes** (`/auth/login`, `/auth/callback`) — nog niet gebouwd. Openstaand ontwerppunt: waar de server-side sessie wordt opgeslagen (geheugen verdwijnt bij herstart en breekt bij meerdere containers; een tabel is een migratie erbij).
+- ❌ **`X-Tenant-Id` verwijderen** — kan pas als de guard werkt. Zolang beide bestaan is er een tweede pad naar tenantcontext en is P0 niet dicht.
+
+**De claims zijn nog steeds niet gemeten.** De PoC-bevindingen noemen `email`, `sub`, `oid` en `tid` als verwáchting. De code koppelt bewust op `oid` (stabiel per tenant) en niet op `sub` (in Entra per applicatie verschillend) of `email` (verandert). Dat is de juiste keuze op basis van Microsoft-documentatie, maar **bevestig het bij de eerste echte login**.
+
+**Wat de eigenaar nog moet aanleveren:** de OIDC-waarden in `.env` (zie `.env.example`, sectie Identity) — issuer, endpoints, client-ID en het client secret van de backend-app-registratie. Zonder die waarden weigert de backend te starten, en dat is opzet.
 
 ### De vier stappen van het vendorspoor, in deze volgorde
 
 1. ~~**CSV-parser en validatie**~~ — **afgerond 2026-07-30** (PR #55). Leest een bestand, meldt per rij wat er mis is, schrijft niets weg. Raakt de tenantgrens niet en kon daarom vóór de guard.
-2. **Entra-guard (#7 spoor 1)** — identiteit en geverifieerde tenantcontext.
-3. **CATS-rollen** — zie het blok hieronder.
+2. **Entra-guard (#7 spoor 1)** — identiteit en geverifieerde tenantcontext. **Half af**, zie hierboven: datamodel en OIDC-laag staan, guard en routes niet.
+3. **CATS-rollen** — zie het blok hieronder. Let op: migratie 0009 voert `tenant_membership.role` in met twee waarden (`admin`, `reviewer`) als CHECK-constraint. Dat is bewust minimaal en staat **los** van het CATS-model; wordt CATS ingevoerd, dan is dat een eigen migratie die deze constraint vervangt.
 4. **Wegschrijven** — de tweede helft van de import, plus formulier en lijst.
+
+**Goed nieuws voor stap 4:** het datamodel ligt er al. `clm.vendor` is rijk gevuld (KvK, vestigingsnummer, SBI, criticality, spend, review-datums, soft delete) en **`clm.vendor_contact` bestaat al** met `email`, `phone`, `job_title` en `is_primary`. Contactpersonen met e-mailadressen vragen dus geen nieuwe migratie — alleen schrijfroutes en schermen.
 
 ### CATS-rollen — bron gevonden, nog niet gebouwd
 
