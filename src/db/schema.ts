@@ -576,6 +576,51 @@ export const userRelations = relations(user, ({ one, many }) => ({
   memberships: many(tenantMembership),
 }));
 
+/**
+ * Server-side sessies voor interne gebruikers (migratie 0010, Issue #7).
+ *
+ * LET OP — deze tabel is voor de runtime-rol niet rechtstreeks bereikbaar. De
+ * rechten zijn expliciet ingetrokken; alle toegang loopt via de drie
+ * SECURITY DEFINER-functies `clm.sessie_aanmaken()`, `clm.sessie_oplossen()`
+ * en `clm.sessie_beeindigen()`.
+ *
+ * Reden: de sessie moet opgezocht worden vóórdat de tenantcontext bestaat — de
+ * tenant vólgt immers uit de sessie. RLS zou hier dus altijd nul rijen geven.
+ * De tabelbeschrijving staat hier voor typeveiligheid en documentatie; een
+ * query erop vanuit de applicatie levert "permission denied".
+ */
+export const sessie = clm.table(
+  'sessie',
+  {
+    sessieId: uuid('sessie_id').primaryKey().defaultRandom(),
+    // SHA-256 van het token, nooit het token zelf — zelfde patroon als
+    // survey_response.token_hash.
+    tokenHash: text('token_hash').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => user.userId, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    // Meegekopieerd bij inloggen: een rolwijziging geldt pas bij de volgende
+    // login, niet halverwege een sessie.
+    role: text('role').notNull(),
+    externalSubject: text('external_subject').notNull(),
+    aangemaaktOp: timestamp('aangemaakt_op', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    verlooptOp: timestamp('verloopt_op', { withTimezone: true }).notNull(),
+    laatstGezien: timestamp('laatst_gezien', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('sessie_token_hash_key').on(t.tokenHash),
+    index('sessie_user_id_idx').on(t.userId),
+    index('sessie_verloopt_op_idx').on(t.verlooptOp),
+  ],
+);
+
 export const tenantMembershipRelations = relations(
   tenantMembership,
   ({ one }) => ({

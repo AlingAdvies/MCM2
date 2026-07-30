@@ -69,3 +69,25 @@ export function inventariseerSchema(): TabelInventaris[] {
  * buiten: dat bevat tenant-agnostische lookup-data zonder RLS.
  */
 export const TENANT_SCHEMAS = ['clm', 'audit'] as const;
+
+/**
+ * Tabellen met een `tenant_id` die bewust géén RLS hebben.
+ *
+ * Deze lijst hoort kort te blijven en groeit alleen met een expliciete
+ * motivatie hieronder. Een tabel hier neerzetten omdat een test rood staat, is
+ * de poort omzeilen in plaats van hem te gebruiken — §7.4 is niet vrijblijvend.
+ *
+ * `clm.sessie` (migratie 0010): de sessie wordt opgezocht vóórdat de
+ * tenantcontext bestaat — de tenant vólgt immers uit de sessie. Een policy op
+ * `current_tenant_id()` zou hier structureel nul rijen opleveren en daarmee
+ * elke login onmogelijk maken. Hetzelfde kip-ei-probleem als bij
+ * `clm.gebruiker_bij_subject()` in migratie 0009.
+ *
+ * De bescherming is daarom niet zwakker maar anders: de tabel is voor de
+ * runtime-rol volledig ontoegankelijk (`REVOKE ALL`), en alle toegang loopt via
+ * drie SECURITY DEFINER-functies met een scherp begrensde opdracht. Dat de deur
+ * echt dicht zit, wordt bewezen in `test/sessie.e2e-spec.ts` — de eerste twee
+ * tests daar lokken een directe SELECT en INSERT uit en verwachten
+ * "permission denied".
+ */
+export const RLS_UITZONDERINGEN: ReadonlySet<string> = new Set(['clm.sessie']);

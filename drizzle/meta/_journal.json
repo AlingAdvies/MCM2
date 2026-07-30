@@ -71,6 +71,13 @@
       "when": 1785412800000,
       "tag": "0009_identiteit_en_membership",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1785416400000,
+      "tag": "0010_sessie",
+      "breakpoints": true
     }
   ]
 }
