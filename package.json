@@ -27,7 +27,8 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "verify": "node scripts/verify.js",
-    "verify:snel": "node scripts/verify.js --snel"
+    "verify:snel": "node scripts/verify.js --snel",
+    "verify:volledig": "node scripts/verify-volledig.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

@@ -5,9 +5,16 @@ import { AuthModule } from './auth/auth.module';
 import { DatabaseModule } from './db/database.module';
 import { HealthModule } from './health/health.module';
 import { SurveyModule } from './survey/survey.module';
+import { VendorModule } from './vendor/vendor.module';
 
 @Module({
-  imports: [DatabaseModule, HealthModule, SurveyModule, AuthModule],
+  imports: [
+    DatabaseModule,
+    HealthModule,
+    SurveyModule,
+    AuthModule,
+    VendorModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })

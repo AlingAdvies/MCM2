@@ -42,6 +42,15 @@ services:
       # De runtime-rol, nooit postgres en nooit clm_migrator (ADR-009).
       DATABASE_URL: postgresql://clm_api_runtime:otap_pw@db:5432/postgres
       PORT: "5001"
+      # Zonder deze waarde stuurt de browser het sessiecookie niet mee naar een
+      # andere herkomst — frontend op 3000, backend op 5001 — en geeft élk
+      # beheerscherm een 401. De combinatie `origin: *` met credentials wordt
+      # door elke browser geweigerd, dus de herkomst moet expliciet zijn.
+      CORS_ORIGIN: http://localhost:3000
+      # Het sessiecookie is standaard Secure en draagt de __Host--prefix. Deze
+      # doorloop draait over http, en dan weigert de browser zo'n cookie. Alleen
+      # hier uit; in productie faalt dit naar de veilige kant (zie sessie.ts).
+      SESSIE_COOKIE_INSECURE: "true"
     ports:
       - "5001:5001"
     depends_on:
