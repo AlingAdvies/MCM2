@@ -9,6 +9,7 @@ import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import { Client } from 'pg';
 import request from 'supertest';
+import type { App } from 'supertest/types';
 
 import { DatabaseModule } from '../src/db/database.module';
 import { SessieService } from '../src/auth/sessie.service';
@@ -101,7 +102,11 @@ async function verwijderTestdata(client: Client): Promise<void> {
 }
 
 describe('TenantContextGuard (e2e)', () => {
-  let app: INestApplication;
+  // Het typeargument op INestApplication is nodig, niet cosmetisch: zonder
+  // <App> geeft getHttpServer() `any` terug en faalt CI op --max-warnings=0.
+  // Zelfde patroon als survey-routes.e2e-spec.ts.
+  let app: INestApplication<App>;
+  let server: App;
   let client: Client;
   let sessies: SessieService;
   const cookieNaam = cookieInstellingen().naam;
@@ -160,6 +165,7 @@ describe('TenantContextGuard (e2e)', () => {
     app = moduleRef.createNestApplication();
     app.use(cookieParser());
     await app.init();
+    server = app.getHttpServer();
 
     sessies = moduleRef.get(SessieService);
     // Ruimer dan de standaard 5 seconden: deze opzet start een volledige
@@ -174,12 +180,12 @@ describe('TenantContextGuard (e2e)', () => {
 
   describe('geen toegang zonder geldige sessie', () => {
     it('weigert een verzoek zonder cookie', async () => {
-      await request(app.getHttpServer()).get('/beveiligd').expect(401);
+      await request(server).get('/beveiligd').expect(401);
     });
 
     it('weigert een cookie met een onbekend token', async () => {
       // Juiste vorm, maar er staat geen sessie tegenover.
-      await request(app.getHttpServer())
+      await request(server)
         .get('/beveiligd')
         .set('Cookie', `${cookieNaam}=${'a'.repeat(43)}`)
         .expect(401);
@@ -190,14 +196,14 @@ describe('TenantContextGuard (e2e)', () => {
       // precies het patroon van de verwijderde branch feat/fase0-skeleton-vendors
       // en van de oude X-Tenant-Id-route. Er mag geen enkele weg zijn waarlangs
       // een tenantcontext ontstaat zonder sessie.
-      await request(app.getHttpServer())
+      await request(server)
         .get('/beveiligd')
         .set('X-Tenant-Id', TENANT_B)
         .expect(401);
     });
 
     it('weigert een verzoek dat alleen een tenant in de query meestuurt', async () => {
-      await request(app.getHttpServer())
+      await request(server)
         .get('/beveiligd')
         .query({ tenant: TENANT_B, tenantId: TENANT_B })
         .expect(401);
@@ -207,7 +213,7 @@ describe('TenantContextGuard (e2e)', () => {
       // De gevaarlijkste variant: een verlopen of onzinnig cookie naast een
       // header. Een terugval "geen sessie, dan de header maar" zou hier
       // onopgemerkt blijven als alleen de gevallen zónder cookie getest waren.
-      await request(app.getHttpServer())
+      await request(server)
         .get('/beveiligd')
         .set('Cookie', `${cookieNaam}=${'a'.repeat(43)}`)
         .set('X-Tenant-Id', TENANT_B)
@@ -221,7 +227,7 @@ describe('TenantContextGuard (e2e)', () => {
       ['met tekens buiten base64url', `${'a'.repeat(42)}!`],
       ['een SQL-fragment', "' OR 1=1 --"],
     ])('weigert een cookie dat %s is', async (_omschrijving, waarde) => {
-      await request(app.getHttpServer())
+      await request(server)
         .get('/beveiligd')
         .set('Cookie', `${cookieNaam}=${encodeURIComponent(waarde)}`)
         .expect(401);
@@ -233,7 +239,7 @@ describe('TenantContextGuard (e2e)', () => {
       const sessie = await sessies.aanmaken(SUBJECT_A);
       expect(sessie).not.toBeNull();
 
-      await request(app.getHttpServer())
+      await request(server)
         .get('/beveiligd')
         .set('Cookie', `mijn_eigen_cookie=${sessie!.token}`)
         .expect(401);
@@ -247,7 +253,7 @@ describe('TenantContextGuard (e2e)', () => {
       const sessie = await sessies.aanmaken(SUBJECT_A);
       expect(sessie).not.toBeNull();
 
-      const antwoord = await request(app.getHttpServer())
+      const antwoord = await request(server)
         .get('/beveiligd')
         .set('Cookie', `${cookieNaam}=${sessie!.token}`)
         .expect(200);
@@ -267,12 +273,12 @@ describe('TenantContextGuard (e2e)', () => {
       const sessieA = await sessies.aanmaken(SUBJECT_A);
       const sessieB = await sessies.aanmaken(SUBJECT_B);
 
-      const antwoordA = await request(app.getHttpServer())
+      const antwoordA = await request(server)
         .get('/beveiligd')
         .set('Cookie', `${cookieNaam}=${sessieA!.token}`)
         .expect(200);
 
-      const antwoordB = await request(app.getHttpServer())
+      const antwoordB = await request(server)
         .get('/beveiligd')
         .set('Cookie', `${cookieNaam}=${sessieB!.token}`)
         .expect(200);
@@ -290,7 +296,7 @@ describe('TenantContextGuard (e2e)', () => {
       // dan valt deze test om.
       const sessie = await sessies.aanmaken(SUBJECT_A);
 
-      const antwoord = await request(app.getHttpServer())
+      const antwoord = await request(server)
         .get('/beveiligd')
         .query({ tenant: TENANT_B, tenantId: TENANT_B })
         .set('Cookie', `${cookieNaam}=${sessie!.token}`)
@@ -307,7 +313,7 @@ describe('TenantContextGuard (e2e)', () => {
     it('weigert het verzoek zodra de sessie beëindigd is', async () => {
       const sessie = await sessies.aanmaken(SUBJECT_A);
 
-      await request(app.getHttpServer())
+      await request(server)
         .get('/beveiligd')
         .set('Cookie', `${cookieNaam}=${sessie!.token}`)
         .expect(200);
@@ -316,7 +322,7 @@ describe('TenantContextGuard (e2e)', () => {
 
       // Hetzelfde cookie, nu waardeloos. Uitloggen werkt server-side, niet
       // alleen door het cookie bij de browser weg te halen.
-      await request(app.getHttpServer())
+      await request(server)
         .get('/beveiligd')
         .set('Cookie', `${cookieNaam}=${sessie!.token}`)
         .expect(401);
@@ -340,7 +346,7 @@ describe('TenantContextGuard (e2e)', () => {
       // (dat is het glijdende venster), en dan verloopt deze sessie niet meer.
       await new Promise((klaar) => setTimeout(klaar, 2500));
 
-      await request(app.getHttpServer())
+      await request(server)
         .get('/beveiligd')
         .set('Cookie', `${cookieNaam}=${token}`)
         .expect(401);
@@ -361,14 +367,14 @@ describe('TenantContextGuard (e2e)', () => {
         '2 seconds',
       ]);
 
-      await request(app.getHttpServer())
+      await request(server)
         .get('/beveiligd')
         .set('Cookie', `${cookieNaam}=${token}`)
         .expect(200);
 
       await new Promise((klaar) => setTimeout(klaar, 2500));
 
-      await request(app.getHttpServer())
+      await request(server)
         .get('/beveiligd')
         .set('Cookie', `${cookieNaam}=${token}`)
         .expect(200);
