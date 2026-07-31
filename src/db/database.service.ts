@@ -35,7 +35,26 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    this.pool = new Pool({ connectionString });
+    this.pool = new Pool({
+      connectionString,
+      // Expliciet begrensd, niet de standaard van node-postgres (10).
+      //
+      // Aanleiding: op 2026-07-31 viel de e2e-suite onregelmatig om — één keer
+      // 21 falende tests, daarna drie keer achter elkaar groen. Dat is de
+      // vervelendste faalvorm die er is, want hij ondermijnt het vertrouwen in
+      // álle tests zonder dat er iets mis is met de code.
+      //
+      // Oorzaak: Jest draait suites parallel (hier tot 11 tegelijk), elke suite
+      // start een eigen Nest-applicatie, en elke applicatie opende tot 10
+      // verbindingen. Dat past niet binnen de standaard max_connections=100 van
+      // Postgres. Bewezen door max_connections tijdelijk op 30 te zetten: dan
+      // faalt de suite reproduceerbaar.
+      //
+      // Vier is ruim voor de werklast van dit project (één verzoek = één
+      // transactie) en houdt de suite binnen de perken. Voor productie is dit
+      // eerder te krap dan te ruim; daarom is het instelbaar.
+      max: Number(process.env.DATABASE_POOL_MAX ?? 4),
+    });
     this.db = drizzle(this.pool, { schema });
   }
 

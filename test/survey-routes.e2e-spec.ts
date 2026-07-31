@@ -12,8 +12,12 @@ import {
   hashToken,
 } from '../src/survey/survey-token';
 import { maskeerDiep, maskeerToken } from '../src/survey/token-maskering';
+import { TEST_IDS } from './test-ids';
 
-const TENANT = '00000000-0000-0000-0000-0000000000e1';
+// Uit het gedeelde register (test/test-ids.ts). Stond hier eerder hardcoded
+// als ...e1 en botste daarmee met membership-isolatie: twee suites die
+// parallel dezelfde tenant aanmaken en opruimen.
+const TENANT = TEST_IDS['survey-routes'].tenant;
 
 /** Supertest typeert `res.body` als `any`; dit maakt de verwachtingen expliciet. */
 interface AntwoordBody {

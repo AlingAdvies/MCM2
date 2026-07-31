@@ -10,9 +10,13 @@ import {
 } from '../src/survey/survey-token';
 import { SurveyTokenService } from '../src/survey/survey-token.service';
 import { SurveyModule } from '../src/survey/survey.module';
+import { TEST_IDS } from './test-ids';
 
-const TENANT_A = '00000000-0000-0000-0000-0000000000f1';
-const TENANT_B = '00000000-0000-0000-0000-0000000000f2';
+// Uit het gedeelde register (test/test-ids.ts). Stonden hier eerder hardcoded
+// als ...f1/...f2 en botsten daarmee met membership-isolatie, dat diezelfde
+// waarden als user-id's gebruikt.
+const TENANT_A = TEST_IDS['survey-token-isolatie'].tenantA;
+const TENANT_B = TEST_IDS['survey-token-isolatie'].tenantB;
 
 /**
  * Token-isolatietest (Issue #10) voor het leverancierstoken uit Issue #7.
