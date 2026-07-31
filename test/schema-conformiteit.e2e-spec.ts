@@ -1,6 +1,7 @@
 import { Client } from 'pg';
 
 import {
+  RLS_UITZONDERINGEN,
   TENANT_SCHEMAS,
   inventariseerSchema,
 } from '../src/db/schema-inventory';
@@ -41,11 +42,15 @@ describe('Schema-conformiteit (e2e)', () => {
   });
 
   it('bevat elke tabel uit het schema ook daadwerkelijk in de database', async () => {
+    // pg_tables en niet information_schema: dat laatste toont uitsluitend
+    // objecten waar de huidige rol rechten op heeft. clm.sessie is voor de
+    // runtime-rol volledig afgesloten (migratie 0010) en zou daar dus
+    // ontbreken — waarmee deze test zou melden dat de tabel niet bestaat,
+    // terwijl hij er wel is. Gevonden op 2026-07-30.
     const { rows } = await client.query<{ volledige_naam: string }>(
-      `SELECT table_schema || '.' || table_name AS volledige_naam
-         FROM information_schema.tables
-        WHERE table_schema IN ('clm', 'ref', 'audit')
-          AND table_type = 'BASE TABLE'`,
+      `SELECT schemaname || '.' || tablename AS volledige_naam
+         FROM pg_tables
+        WHERE schemaname IN ('clm', 'ref', 'audit')`,
     );
 
     const aanwezig = new Set(rows.map((r) => r.volledige_naam));
@@ -61,10 +66,9 @@ describe('Schema-conformiteit (e2e)', () => {
     // ontstaan buiten de migratieketen om — bijvoorbeeld handmatig via het
     // Supabase-dashboard, wat MCM2-CLAUDE.md §7.2 verbiedt.
     const { rows } = await client.query<{ volledige_naam: string }>(
-      `SELECT table_schema || '.' || table_name AS volledige_naam
-         FROM information_schema.tables
-        WHERE table_schema IN ('clm', 'ref', 'audit')
-          AND table_type = 'BASE TABLE'`,
+      `SELECT schemaname || '.' || tablename AS volledige_naam
+         FROM pg_tables
+        WHERE schemaname IN ('clm', 'ref', 'audit')`,
     );
 
     const verwacht = new Set(verwachteTabellen.map((t) => t.volledigeNaam));
@@ -93,9 +97,42 @@ describe('Schema-conformiteit (e2e)', () => {
     const zonderRls = verwachteTabellen
       .filter((t) => t.tenantgebonden)
       .map((t) => t.volledigeNaam)
+      .filter((naam) => !RLS_UITZONDERINGEN.has(naam))
       .filter((naam) => rlsPerTabel.get(naam) !== true);
 
     expect(zonderRls).toEqual([]);
+  });
+
+  it('houdt de lijst met RLS-uitzonderingen kort en bewust', () => {
+    // Deze test bestaat om te voorkomen dat de uitzonderingenlijst een
+    // achterdeur wordt. Komt er een tabel bij, dan hoort dat een expliciete
+    // afweging te zijn met motivatie in schema-inventory.ts — niet een stille
+    // toevoeging omdat een andere test rood stond.
+    expect([...RLS_UITZONDERINGEN]).toEqual(['clm.sessie']);
+  });
+
+  it('sluit elke RLS-uitzondering volledig af voor de runtime-rol', async () => {
+    // Een uitzondering op RLS is alleen verdedigbaar als de bescherming ergens
+    // anders vandaan komt. Voor clm.sessie is dat: de tabel is onbereikbaar en
+    // alle toegang loopt via SECURITY DEFINER-functies. Zonder deze controle
+    // zou "geen RLS" stilzwijgend kunnen verworden tot "geen bescherming".
+    for (const volledigeNaam of RLS_UITZONDERINGEN) {
+      const [schemaNaam, tabelNaam] = volledigeNaam.split('.');
+
+      const { rows } = await client.query<{ privilege_type: string }>(
+        `SELECT privilege_type
+           FROM information_schema.table_privileges
+          WHERE table_schema = $1
+            AND table_name = $2
+            AND grantee IN ('clm_api', 'clm_admin', 'clm_readonly')`,
+        [schemaNaam, tabelNaam],
+      );
+
+      expect({
+        tabel: volledigeNaam,
+        rechten: rows.map((r) => r.privilege_type),
+      }).toEqual({ tabel: volledigeNaam, rechten: [] });
+    }
   });
 
   it('heeft op elke tenantgebonden tabel een policy met zowel USING als WITH CHECK', async () => {
@@ -114,7 +151,9 @@ describe('Schema-conformiteit (e2e)', () => {
 
     const gebrekkig: string[] = [];
 
-    for (const tabel of verwachteTabellen.filter((t) => t.tenantgebonden)) {
+    for (const tabel of verwachteTabellen
+      .filter((t) => t.tenantgebonden)
+      .filter((t) => !RLS_UITZONDERINGEN.has(t.volledigeNaam))) {
       const policies = rows.filter(
         (r) => r.volledige_naam === tabel.volledigeNaam,
       );
@@ -150,15 +189,27 @@ describe('Schema-conformiteit (e2e)', () => {
     //
     // De vorige versie van deze test gaf GOEDGEKEURD op precies die database.
     // Een INSERT zonder expliciete UUID faalt dan op een NOT NULL-constraint.
+    // pg_attribute/pg_attrdef en niet information_schema.columns: dat laatste
+    // toont alleen kolommen waar de huidige rol rechten op heeft, en clm.sessie
+    // is voor de runtime-rol volledig afgesloten (migratie 0010). Die tabel zou
+    // daar dus stilzwijgend buiten de controle vallen — precies het soort gat
+    // waar Issue #29 door kon ontstaan.
     const { rows } = await client.query<{
       volledige_naam: string;
       column_name: string;
       column_default: string | null;
     }>(
-      `SELECT table_schema || '.' || table_name AS volledige_naam,
-              column_name, column_default
-         FROM information_schema.columns
-        WHERE table_schema IN ('clm', 'ref', 'audit')`,
+      `SELECT n.nspname || '.' || c.relname AS volledige_naam,
+              a.attname                     AS column_name,
+              pg_get_expr(d.adbin, d.adrelid) AS column_default
+         FROM pg_attribute a
+         JOIN pg_class c     ON c.oid = a.attrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+         LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+        WHERE n.nspname IN ('clm', 'ref', 'audit')
+          AND c.relkind = 'r'
+          AND a.attnum > 0
+          AND NOT a.attisdropped`,
     );
 
     const defaultInDb = new Map(

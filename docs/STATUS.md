@@ -1,7 +1,9 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-30 (**UC1 is nu volledig afrondbaar in de browser** — Issue #42 en #43 gerepareerd; eerste Playwright-browsertest; **externe architectuurreview ontvangen en omgezet in negen issues**; **CSV-parser voor leveranciersimport** met de eerste unittestlaag in dit project — alles hieronder is geverifieerd, niet uit gespreksgeheugen)
+2026-07-31 (**fase 1 van de beheerkant is af**: de `TenantContextGuard` en de drie auth-routes staan, en daarmee is de tenantgrens dicht — P0 uit Issue #7 is gesloten. Branch `feat/identiteit-en-membership`, zes commits, **gepusht**, nog niet gemerged. Alles hieronder is geverifieerd, niet uit gespreksgeheugen.)
+
+**Plan voor de komende fases:** `docs/superpowers/plans/2026-07-30-beheerkant-en-demo-tenant.md` — vier fases naar een frontend die eruitziet als MVM_V2, inloggen als tenant, vendors met contactpersonen aanmaken, een demo-tenant met mock data, en een robuuste OTAP-doorloop.
 
 ## Het project bestaat uit twee repositories
 
@@ -20,11 +22,23 @@ Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in
 2. Lees dit document (`docs/STATUS.md`) volledig — het is de enige actuele waarheid over fase en blockers.
 3. Verifieer git-status zelf (`git status`, `git branch -a`) tegen wat hieronder staat — vertrouw niet blind op deze snapshot. **Doe dat in beide repositories.**
 4. Check de open GitHub Issues (`gh issue list --repo AlingAdvies/MCM2 --state open`) voor de actuele backlog — dit document verwijst naar issue-nummers, maar de Issues zelf zijn de bron van waarheid over wat daadwerkelijk nog open staat.
-5. **Eerste concrete vervolgstap: Issue #7, spoor 1 — de Entra-guard.** Dat is nu de flessenhals: de leverancierskant is compleet en in de browser bewezen, maar álles aan de beheerkant (leveranciers wegschrijven, schermen, rollen) vraagt een geverifieerde tenantcontext. Vandaag leidt de backend de tenant af uit een ongeverifieerde header — het P0-restpunt. De PoC van 2026-07-27 is end-to-end geslaagd; wat rest zijn de drie stappen onderaan `docs/architecture-review/2026-07-27/01-entra-external-id-poc-bevindingen.md`.
+5. **Werk verder volgens het plan** (`docs/superpowers/plans/2026-07-30-beheerkant-en-demo-tenant.md`), niet volgens losse ingevingen. Het plan heeft bovenaan een voortgangstabel. Uitdrukkelijke wens van de eigenaar op 2026-07-30: **de vier fases in volgorde afwerken.** De eerstvolgende concrete stap staat hieronder onder punt 6.
 
-   Issue #30 (geen backups) blijft de zwaarste openstaande blokkade voor alles wat de productiedatabase raakt (#19, #25, #29), maar vraagt nu alleen nog uitvoering door de eigenaar, geen besluit — en er wordt tegen wegwerpcontainers gebouwd.
+   Twee dingen die daarbij horen en makkelijk wegzakken:
+   - **Issue #59 — `npm audit` meldt 29 kwetsbaarheden.** Niet vergeten, maar ook niet nu oplossen: `npm audit --omit=dev` geeft **0**, dus er zit niets van in het productie-image. De voorgestelde automatische fix zet eslint jaren terug en breekt de lint-configuratie. Hoort bij de eerste major-onderhoudsronde op devDependencies, samen met Dependabot (#22). **Controleer wel bij elke sessie dat `npm audit --omit=dev` nul blijft** — wordt dat meer dan nul, dan is het geen onderhoudspunt meer maar een blocker.
+   - **Issue #58 — de backup hangt af van deze laptop.** Draait dagelijks, maar niet als de machine uitstaat. Vóór de pilotstart (rond 1 september) naar iets onafhankelijks.
 
-   **Nieuw sinds 2026-07-30: #46 heeft een harde datum.** De pilot start rond 1 september en geüploade certificaten staan op een containerschijf die bij de eerstvolgende image-vervanging leeg is.
+6. **Eerste concrete vervolgstap: fase 2 — vendorroutes en schermen.** Fase 1 is op 2026-07-31 afgerond; zie het blok "Beheerkant fase 1" hieronder voor wat er staat en wat níét bewezen is.
+
+   Twee dingen die daarbij horen:
+
+   **Bevestig bij de eerste echte login welke claims Entra werkelijk levert.** De code koppelt op `oid` op basis van documentatie, niet op meting. Dit is nu de grootste openstaande onzekerheid in de identiteitslaag: alle tests draaien tegen een lokaal sleutelpaar, niet tegen de echte Entra-tenant.
+
+   **De guard hangt nog nergens op.** Hij is gebouwd en bewezen, maar er is nog geen beheerroute die hem gebruikt — die komen in fase 2. `@UseGuards(TenantContextGuard)` op elke nieuwe beheercontroller is daarmee de eerste regel van fase 2, niet iets om later aan toe te voegen.
+
+   **Issue #30 is niet langer de zwaarste blokkade** — de dagelijkse backup draait sinds 2026-07-30 naar OneDrive. Wat rest is het restrisico in #58 (hangt af van de laptop). De drie issues die op backups wachtten (#19, #25, #29) raken de productiedatabase en kunnen nu heroverwogen worden; er wordt intussen tegen wegwerpcontainers gebouwd.
+
+   **#46 heeft een harde datum.** De pilot start rond 1 september en geüploade certificaten staan op een containerschijf die bij de eerstvolgende image-vervanging leeg is.
 
 ### Snel weer op gang komen
 
@@ -36,10 +50,19 @@ docker run -d --name mcm2test -e POSTGRES_PASSWORD=pw -p 55440:5432 postgres:17.
 docker exec -i mcm2test psql -U postgres -q < db/roles/bootstrap-roles.sql
 docker exec mcm2test psql -U postgres -c "ALTER ROLE clm_migrator WITH PASSWORD 'pw'; ALTER ROLE clm_api_runtime WITH PASSWORD 'pw';"
 MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres" npm run migrate:deploy
-DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" npm run test:e2e   # 155 tests
+DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" \
+  npx jest --config test/jest-e2e.json --forceExit    # 184 tests, 14 suites
+# --forceExit is nodig sinds de sessiesuite: die houdt een pg-verbinding open
+# waardoor Jest anders blijft hangen zonder foutmelding.
 
 # Unittests — geen database nodig
-npx jest                                  # 59 (58 vendor + 1 bestaande)
+npx jest                                  # 105 (58 vendor + 46 auth + 1 bestaande)
+
+# Backup handmatig draaien (draait dagelijks vanzelf om 07:00 naar OneDrive)
+npm run backup:dump
+# Heeft de geplande taak gedraaid?
+#   Get-ScheduledTaskInfo -TaskName "MCM2 databasebackup"
+#   Get-Content "$env:USERPROFILE\OneDrive - Aling Advies\MCM2-backups\backup-taak.log" -Tail 20
 
 # De twee vragenlijsten inlezen (tenant moet bestaan)
 DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" \
@@ -164,10 +187,10 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 - **P0 — databaserol/RLS-bereikbaarheid, opgelost op 2026-07-27:** de runtime database-connectie gebruikte de Supabase-rol `postgres` (`rolbypassrls: true`). Nieuwe login-rol `clm_api_runtime` aangemaakt (`LOGIN`, erft van `clm_api`, `rolbypassrls: false`), `DATABASE_URL` in `.env` bijgewerkt. Tussentijdse extra bevinding: geen van de vier `clm_*`-rollen had ooit `USAGE`-rechten op de schemas `clm`/`ref`/`audit` — hersteld via migratie `20260727053702_grant_schema_and_table_privileges`. Zie ADR-008.
 - **P0 — migration-rol en geautomatiseerde RLS-test, opgelost op 2026-07-27:** aparte login-rol `clm_migrator` toegevoegd (los van zowel `postgres` als `clm_api_runtime`), rollen-bootstrap vastgelegd in `prisma/roles/bootstrap-roles.sql` (niet in de Prisma-migratiehistorie, want rollen zijn cluster-breed). De handmatige, ad-hoc RLS-verificatie is vervangen door een geautomatiseerde test (`test/tenant-rls-isolation.e2e-spec.ts`), die nu ook in CI draait tegen een ephemere, wegwerpbare Postgres-container (`.github/workflows/ci.yml`, job `rls-isolation`) — bewust niet tegen de echte Supabase-database, om geen productiegeheim als GitHub Secret te hoeven gebruiken. Zie ADR-009 voor de volledige achtergrond, inclusief waarom dit geen Prisma-probleem was (de rolrechten-kwesties tijdens het bouwen hiervan waren PostgreSQL/Supabase-specifiek, los van de ORM-keuze).
-- **P0 — deels opgelost (Issue #7):** tenantcontext kwam blind uit client-input (`X-Tenant-Id`-header of query-parameter), zonder koppeling aan geverifieerde identiteit.
+- **P0 — opgelost op 2026-07-31 (Issue #7):** tenantcontext kwam blind uit client-input (`X-Tenant-Id`-header of query-parameter), zonder koppeling aan geverifieerde identiteit. **Beide sporen zijn nu dicht.**
 
-  Issue #7 vraagt om **twee gescheiden mechanismen**, met verschillende voortgang:
-  - **Interne beheerder (spoor 1)** — identity-infrastructuur staat en werkt. Besluit: Microsoft Entra External ID als CIAM-laag (ADR-006, herzien op 2026-07-27; AWS Cognito losgelaten vóór er resources waren aangemaakt, dus geen opruimwerk). De federatie-PoC is geslaagd: tenant `mcm2ciam.onmicrosoft.com`, federatie met `alingadvies.nl`, end-to-end doorlopen tot een geldige authorization code (`?code=...`, geen error). Volledige configuratie — tenant-ID's, client-ID's, endpoints — plus een gedocumenteerde tijdelijke blokkade die zonder configuratiewijziging verdween: `docs/architecture-review/2026-07-27/01-entra-external-id-poc-bevindingen.md`. **Nog te bouwen:** authorization code server-to-server inwisselen, claims inspecteren, NestJS-guard die de tenantcontext uit het geverifieerde ID-token afleidt. **Niet gestart.**
+  Issue #7 vraagt om **twee gescheiden mechanismen**:
+  - **Interne beheerder (spoor 1)** — **gebouwd en bewezen op 2026-07-31.** Besluit: Microsoft Entra External ID als CIAM-laag (ADR-006, herzien op 2026-07-27; AWS Cognito losgelaten vóór er resources waren aangemaakt, dus geen opruimwerk). De federatie-PoC is geslaagd: tenant `mcm2ciam.onmicrosoft.com`, federatie met `alingadvies.nl`, end-to-end doorlopen tot een geldige authorization code. Volledige configuratie: `docs/architecture-review/2026-07-27/01-entra-external-id-poc-bevindingen.md`. De keten `cookie → hash → clm.sessie_oplossen() → tenantId → withTenant()` staat; zie het blok "Beheerkant fase 1" hieronder. **Wat níét bewezen is: de tokenverificatie is nooit tegen de echte Entra-tenant gedraaid.**
   - **Externe leverancier (spoor 2)** — tokengebaseerde, accountloze survey-linktoegang. **Gebouwd op 2026-07-28, CI groen, gemerged op 2026-07-29 (PR #32).** Zie het blok "Aantoonbaar werkend" hieronder voor wat precies bewezen is.
 
   Het tijdelijke AWS-account `727732213368` is niet langer nodig voor identity.
@@ -181,7 +204,13 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
   **Mitigatie is gebouwd, niet alleen beschreven:** `npm run backup:dump` (`scripts/backup-dump.js`) draait `pg_dump` via de container `postgres:17.6`, bewaart 14 dagen, ruimt ouder op, behandelt een lege dump als mislukking, en **waarschuwt als de vorige dump ouder is dan 36 uur** — de enige signalering dat de geplande taak heeft stilgelegen. Getest tegen `clm-enterprise` (21,2 kB in 9,8s) én aantoonbaar herstelbaar: dump → restore → rechten → defaults → **20 van 20 e2e-tests groen**. Inplannen via Taakplanner: runbook stap 0.
 
-  **Nog te doen door de eigenaar:** de dagelijkse taak daadwerkelijk inplannen, en `BACKUP_DIR` naar een tweede locatie zetten (de eigen thuisserver, OneDrive of een externe schijf). Zonder dat tweede punt beschermt de dump tegen "de database valt om", niet tegen "de laptop valt om".
+  **INGERICHT OP 2026-07-30 — beide openstaande punten gedaan.** De Windows-taak `MCM2 databasebackup` draait dagelijks om 07:00 en schrijft naar OneDrive (`C:\Users\cmali\OneDrive - Aling Advies\MCM2-backups`), dus de dump staat niet alleen op de laptop. Aantoonbaar via Taakplanner gedraaid, met dump én `GESLAAGD`-regel in het log als bewijs (21,2 kB in 4,8s).
+
+  Daarmee gaat #30 van **nul backups** naar **meestal dagelijks**, tegen nul kosten. De keuze voor een betaalde oplossing (Supabase Pro of Neon) blijft open en is niet langer dringend.
+
+  **Twee valkuilen sloegen daadwerkelijk toe** en staan in het runbook, want ze kosten anders opnieuw een half uur: (1) de directe aanroep via `cmd.exe /c` meldde `LastTaskResult = 0` terwijl er geen dump kwam — `cmd.exe` geeft 0 zodra het zélf kon starten. Precies de faalvorm waar het runbook voor waarschuwt. Opgelost met `scripts/backup-taak.cmd`, dat de echte exitcode doorgeeft en altijd logt. (2) Datzelfde `.cmd`-bestand in UTF-8 is onleesbaar voor `cmd.exe`; het moet ASCII blijven.
+
+  **Bewust geaccepteerde beperking (Issue #58):** de taak draait alleen als de laptop aanstaat. `-StartWhenAvailable` haalt een gemiste run in, maar bij langere afwezigheid valt er een gat — en Supabase pauzeert Free-projecten na circa 7 dagen. Dat geeft géén foutmeldingen; het script waarschuwt in het log zodra de vorige dump ouder is dan 36 uur. Vóór de pilotstart (rond 1 september) hoort dit naar de thuisserver, GitHub Actions of Supabase Pro.
 - **Providerkeuze open, maar niet blokkerend (Issue #30):** op 2026-07-28 is met `scripts/provider-migratietest.js` gemeten dat MCM2 **zonder enige codewijziging** op Neon draait (`eu-central-1`, PostgreSQL 17.10): alle zes rollen uit ADR-008 aangemaakt, `CREATE ROLE` toegestaan, migraties 0000–0002 toegepast, RLS en policies compleet, **20 van 20 e2e-tests groen**. Dat MCM2 draagbaar is, is geen toeval maar een gevolg van ADR-008/009: geen Supabase Auth, Storage, Edge Functions of `supabase-js` — uitsluitend standaard PostgreSQL. De testomgeving is daarna opgeruimd (geen tabellen, geen rollen). **Prijzen zijn niet op de bron geverifieerd** en Neon is overgenomen door Databricks; controleer dat vóór een besluit.
 - **Issue #19 (restore-test): kan pas ná #30.** Er valt niets te herstellen zolang er geen backup bestaat. Op 2026-07-28 verhoogd naar `priority:before-pilot`. Wél al bewezen: een handmatige dump-restore van `clm-enterprise` naar een verse container werkt end-to-end (dump 5s, restore 1s, verificatie GOEDGEKEURD). Dat bewijst een herstelpad, niet dat Supabase' eigen backup herstelbaar is — die vraag staat nog open.
 - **P0 (Issue #25): Drizzle-migratiestand op de bestaande Supabase-database.** `drizzle.__drizzle_migrations` bestaat daar niet; een `migrate:deploy` zou de baseline opnieuw willen toepassen op bestaande tabellen. **Grootste onzekerheid hierbij is op 2026-07-28 weggenomen:** het schema in Supabase komt volledig overeen met de Drizzle-baseline (read-only geverifieerd, zie hieronder), dus er is geen schema-afdrijving. Uitvoeren pas ná een geslaagde restore-test (#19) — zonder bewezen herstelpad niet aan de productiedatabase komen. Zie ADR-010 en het runbook, stap 3.
@@ -203,6 +232,51 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
   Ook nieuw vastgelegd: de vragenlijst is **alleen Engels**. Geen vertaallaag.
 
 ## Aantoonbaar werkend
+
+- **Beheerkant fase 1 — de tenantgrens is dicht (2026-07-31, branch `feat/identiteit-en-membership`).** De laag die ontbrak is er:
+
+  ```
+  cookie  →  hash  →  clm.sessie_oplossen()  →  tenantId  →  withTenant()
+  ```
+
+  **205 e2e-tests groen in 15 suites** (was 184) plus **158 unittests** (was 105), tegen een database die vanaf niets is opgebouwd met migraties 0000 t/m 0010. Format, lint (0 errors) en typecheck schoon. `npm audit --omit=dev` blijft **0** — `cookie-parser` voegde niets toe.
+
+  Nieuw in `src/auth/`: `TenantContextGuard` (401 bij geen, onbekende of verlopen sessie), `SessieService` (de enige route naar `clm.sessie`), `inlogpoging.ts` (PKCE S256 plus state tegen CSRF), en de drie routes `/auth/login`, `/auth/callback`, `/auth/logout`.
+
+  **Drie keuzes die uitleg verdienen:**
+  - **De OIDC-configuratie wordt lui gelezen, niet in de constructor.** In de constructor zou een ontbrekende variabele de héle applicatie onstartbaar maken — ook de e2e-suite en de leverancierskant, die geen identity nodig hebben. De harde fout blijft: `/auth/login` geeft 500 met alle zes ontbrekende variabelen bij naam.
+  - **Het cookie is `httpOnly` en standaard `Secure` met `__Host-`-prefix.** Alleen een expliciete opt-out (exact `'true'`) zet Secure uit voor lokaal http; de naam valt dan mee terug, want de browser weigert `__Host-` zonder Secure.
+  - **`sameSite` is `'lax'`, niet `'strict'`.** Bij `'strict'` stuurt de browser het cookie niet mee na de terugkeer van de provider, en is de gebruiker na een geslaagde login alsnog uitgelogd.
+
+  **`X-Tenant-Id` verwijderen bleek niets te verwijderen.** De header bestaat nergens in `src/` of `test/` — hij ging mee met de weggegooide branch `feat/fase0-skeleton-vendors`. De stap veranderde daarmee van vorm: van iets weghalen naar **bewijzen dat er geen tweede pad is**. Elke `withTenant()`-aanroep krijgt zijn tenantId van `SurveyTokenGuard`, van `TenantContextGuard`, of van het seed-script waar een beheerder de tenant zelf meegeeft.
+
+  **De tegenproef vond een echt gat.** Met een terugval op de `X-Tenant-Id`-header ingebouwd bleven alle 18 guard-tests groen: de test die een meegestuurde tenant hoorde te negeren stuurde namelijk een *geldig* cookie mee, dus de terugval kwam nooit aan de beurt. Een verzoek met alléén een header zou er zo doorheen zijn gekomen. Drie tests toegevoegd; daarna faalde de sabotage wel. Een tweede sabotage (verloopcontrole eruit) liet negen tests omvallen, waaronder `permission denied` op een directe `SELECT` — dat herbewijst dat de deur naar `clm.sessie` dicht zit.
+
+  **Geverifieerd in het productie-image, niet alleen in de build:** modules laden op Node v24.18.1 (inclusief de `jose`-keten), `/health` 200, `/auth/logout` 302, `/auth/login` 500 met de verwachte configuratiemelding.
+
+  **Eerlijk over wat níét bewezen is:** er is nog geen beheerroute die de guard gebruikt — die komen in fase 2. En de tokenverificatie is nooit tegen de echte Entra-tenant gedraaid; de claims blijven een verwachting.
+
+  **Bevinding die tijd kostte:** Jest draait suites parallel, en de UUID-reeksen `c1`/`c2` en `d1`/`d2`/`d3` waren al in gebruik. Twee suites ruimden elkaars tenant op, met een foutmelding over een foreign key op `vendor` — ver van de oorzaak. Staat in de test.
+
+- **Identiteit, membership en sessies (2026-07-30, branch `feat/identiteit-en-membership`, migraties 0009 en 0010).** **184 e2e-tests groen in 14 suites** plus **105 unittests** — geverifieerd tegen een verse Postgres 17.6 met de volledige keten 0000 t/m 0010, en daarna nog een keer volledig vanaf niets.
+
+  **Drie besluiten van de eigenaar op 2026-07-30**, alle drie in de database vastgelegd:
+  - **Eén actief membership per gebruiker**, afgedwongen met een partiële unieke index. Alleen platformbeheer heeft meerdere tenants nodig, en dat is een ánder soort toegang: support bij een klant hoort auditbaar te zijn, niet ononderscheidbaar van een medewerker van die klant. Welk patroon daarvoor juist is (impersonation, break-glass, aparte identiteitslaag) is uitgezocht werk — **Issue #57**. Weghalen is later één `DROP INDEX`.
+  - **Sessies in de database, niet in het geheugen.** Geheugen betekent iedereen uitgelogd bij elke herstart — ook bij een gewone deploy — en het breekt zodra er een tweede container draait, wat de beoogde uitrolvorm is (ADR-012).
+  - **Glijdend venster van 8 uur; uitloggen verwijdert de rij.** Wie wat deed staat al in de audit trail; inlogpatronen bewaren is een persoonsgegeven met een bewaartermijn die niemand gaat bewaken.
+
+  **`clm.sessie` is de enige tenantgebonden tabel zónder RLS**, en dat is een bewuste uitzondering op §7.4 — geen vergissing. De sessie wordt opgezocht vóórdat de tenantcontext bestaat, want de tenant vólgt eruit; een policy op `current_tenant_id()` zou structureel nul rijen geven en elke login onmogelijk maken. Zelfde kip-ei-probleem als bij `gebruiker_bij_subject()`.
+
+  De bescherming is daarom niet zwakker maar anders: **`REVOKE ALL` op de tabel**, alle toegang via drie `SECURITY DEFINER`-functies. De uitzondering staat expliciet in `src/db/schema-inventory.ts` (`RLS_UITZONDERINGEN`) met motivatie, en **drie tests bewaken hem**: de lijst mag niet groeien, elke uitzondering moet volledig afgesloten zijn voor de runtime-rol, en een directe `SELECT`/`INSERT` moet "permission denied" geven. Tegenproef gedaan: met rechten toegekend aan `clm_api` vielen exact die twee deur-tests om.
+
+  **Vier bevindingen die het bouwen blootlegde, geen ervan beredeneerd:**
+
+  1. **`CHECK (verloopt_op > aangemaakt_op)` was te streng.** Leek redelijk, maar blokkeerde het *intrekken* van een lopende sessie — precies wat je wilt kunnen bij een gestolen laptop. Verwijderd; het scenario dat hij moest afvangen wordt afgevangen in `sessie_aanmaken()`.
+  2. **De conformiteitstest had een gat.** Die las uit `information_schema`, dat alleen toont waar de huidige rol rechten op heeft. `clm.sessie` viel daardoor stilzwijgend buiten de controle — precies het soort gat waar Issue #29 door kon ontstaan. Overgezet naar `pg_tables`/`pg_attribute`; die test dekt nu méér dan voorheen.
+  3. **De RLS-tegenproef gaf eerst een misleidend resultaat.** Met `WITH CHECK` uit de policy bleven alle tests groen: PostgreSQL valt dan terug op `USING` om schrijfacties te toetsen. Pas met `USING (true)` plus strenge `WITH CHECK` viel de juiste verdeling op — vier leestests op `USING`, de schrijftest op `WITH CHECK`. Vastgelegd in de test.
+  4. **`jose` 6 is ESM-only en dit project compileert naar CommonJS** — dezelfde combinatie waarop Prisma 7 hier stukliep (§5). Opgelost met `transformIgnorePatterns` voor Jest: standaard configuratie, geen experimentele Node-vlaggen. **En geverifieerd waar het telt:** in het productie-image zelf laadt en werkt `jose` (Node v24.18.0 — `require()` van ESM kan sinds Node 22). Een geslaagde `nest build` bewijst dat niet. **Let op bij een Node-downgrade:** zakt de base-image naar Node 20, dan breekt het inloggen in productie terwijl build en tests groen blijven. Staat in `src/auth/README.md`.
+
+  **Eerlijk over wat níét bewezen is:** de tokenverificatie is nooit tegen de echte Entra-tenant gedraaid. De claims uit de PoC-bevindingen (`email`, `sub`, `oid`, `tid`) zijn nog steeds een **verwachting, geen meting**. De code koppelt op `oid` — stabiel per tenant, anders dan `sub` (per applicatie verschillend) en `email` (verandert). Dat is de juiste keuze volgens de Microsoft-documentatie, maar bevestig het bij de eerste echte login.
 
 - **CSV-parser voor leveranciersimport (2026-07-30, PR #55).** `src/vendor/` — leest een bestand, meldt per rij wat er mis is, **schrijft niets weg**. Dat laatste is bewust: wegschrijven vraagt een geverifieerde tenantcontext (#7), en zonder die context weet een schrijfroute niet namens wie hij schrijft.
 
@@ -456,14 +530,22 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 ## Huidige branch en Git-status
 
-**Stand op 2026-07-30:**
+**Stand op 2026-07-30, einde tweede sessie:**
 
 | Repo | Branch | Werkboom | Openstaande PR's |
 |---|---|---|---|
-| MCM2 | `main` | schoon | geen |
+| MCM2 | `feat/identiteit-en-membership` | schoon, 3 commits vóór `main` | geen — nog niet gepusht |
 | MCM2-frontend | `main` | schoon | geen |
 
-**Geen open branches in beide repositories.** Alle gemergede branches zijn lokaal én op GitHub verwijderd.
+**Openstaande branch `feat/identiteit-en-membership`** (fase 1 van het plan, zie hieronder). Vijf commits, alle geverifieerd, **nog niet gepusht** en nog niet gemerged:
+
+- `62f39f8` — migratie 0009: `external_subject`, `tenant_membership`, `gebruiker_bij_subject()`
+- `14c4aad` — `src/auth`: OIDC-config, code inwisselen, ID-tokenverificatie (46 unittests)
+- `0fc37af` — dagelijkse backup ingericht en werkend bewezen
+- `4ba7af3` — tussentijdse statusbijwerking
+- `f0125f3` — migratie 0010: server-side sessies met drie SECURITY DEFINER-functies
+
+**Bijgewerkt 2026-07-31 — de branch is nu wél af en gepusht.** Commit `0c4d9f7` voegt de `TenantContextGuard`, de sessielaag en de drie auth-routes toe. Daarmee vervalt de reden om te parkeren: er ligt geen halve identiteitslaag meer, en er is geen tweede pad naar tenantcontext. **Nog niet gemerged naar `main`** — dat is een bewuste keuze van de eigenaar, geen vergeten stap.
 
 **Gemerged op 2026-07-30:**
 
@@ -500,16 +582,31 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 **Het nieuwe spoor sinds 2026-07-30: leveranciersbeheer.** De opdrachtgever wil leveranciers kunnen aanmaken en importeren. Startpunt is Excel/CSV, daarna handinvoer; PC-only; het gaat mee in de pilot.
 
-**De eerstvolgende stap is Issue #7, spoor 1 — de Entra-guard.** Dat is nu de flessenhals, en dat is een verschuiving: de leverancierskant had een eigen, complete beveiliging (het token *is* de sleutel, de tenant komt uit de tokenlookup). De beheerkant heeft dat niet. Vandaag leidt de backend de tenant af uit een **ongeverifieerde header** — het P0-restpunt. Elke schrijfroute die daarop gebouwd wordt, is een route die met een verzonnen header in een andere tenant schrijft.
+**Issue #7 spoor 1 is op 2026-07-31 afgerond.** Dat was de flessenhals: de leverancierskant had een eigen, complete beveiliging (het token *is* de sleutel, de tenant komt uit de tokenlookup), de beheerkant had dat niet. Nu wel — en de aanname dat de backend de tenant uit een ongeverifieerde header afleidde bleek bij het bouwen achterhaald: die header bestond al niet meer in de code.
 
-De PoC van 2026-07-27 is end-to-end geslaagd (federatie, MFA, geldige authorization code). Wat rest zijn de drie stappen onderaan `docs/architecture-review/2026-07-27/01-entra-external-id-poc-bevindingen.md`: code inwisselen voor tokens, claims inspecteren, JWKS-guard bouwen. **Inspecteer de claims vóór er iets op gebouwd wordt** — dat document noemt `email`, `sub`, `oid` en `tid` als verwachting, niet als meting.
+**De eerstvolgende stap is fase 2 van het plan: vendorroutes en schermen.** Eerste regel daarvan: `@UseGuards(TenantContextGuard)` op elke beheercontroller. De guard is gebouwd en bewezen, maar hangt nog nergens op.
+
+**Stand van spoor 1**, op branch `feat/identiteit-en-membership`:
+
+- ✅ **Datamodel** (migratie 0009) — `clm.user.external_subject`, `clm.tenant_membership` met RLS, en `clm.gebruiker_bij_subject()`. Die laatste lost een kip-ei-probleem op dat pas bij het bouwen zichtbaar werd: de guard moet de tenant vaststellen vóórdat er tenantcontext is, maar `clm.user` staat onder RLS en levert zonder die context nul rijen. De enige alternatieven waren een `BYPASSRLS`-rol (verboden, §6) of de client laten zeggen welke tenant hij wil — precies de header die eruit moet. Opgelost met `SECURITY DEFINER`, zelfde patroon als `resolve_survey_token()` uit 0003.
+- ✅ **OIDC-laag** (`src/auth/`) — configuratie, authorization code inwisselen, ID-token verifiëren tegen JWKS. 46 unittests tegen een lokaal gegenereerd sleutelpaar: strenger dan tegen de echte tenant, want een verlopen token of een handtekening van een vreemde sleutel geeft Entra nooit af.
+- ✅ **Sessies** (migratie 0010) — `clm.sessie` plus `sessie_aanmaken()`, `sessie_oplossen()` en `sessie_beeindigen()`. Zie het eigen blok hieronder; die tabel is de enige zonder RLS en dat verdient uitleg.
+- ✅ **De guard zelf** (2026-07-31) — `TenantContextGuard`: sessiecookie lezen → `sessie_oplossen()` → tenantId op de request. 401 bij geen, onbekende of verlopen sessie. Bewust géén rolcontrole: wie je bent en wat je mag zijn twee vragen.
+- ✅ **Auth-routes** (2026-07-31) — `/auth/login`, `/auth/callback`, `/auth/logout`, met PKCE (S256) en een state-parameter tegen CSRF op de inlogflow. `cookie-parser` toegevoegd als directe dependency (1.4.7, exact gepind).
+- ✅ **`X-Tenant-Id` verwijderen** — **bleek niets te verwijderen.** De header stond nergens in `src/` of `test/`; hij ging mee met de weggegooide branch `feat/fase0-skeleton-vendors`. In plaats daarvan bewezen dat er geen tweede pad naar tenantcontext bestaat, met drie tests die dat bewaken. Zie het blok "Beheerkant fase 1" hierboven.
+
+**De claims zijn nog steeds niet gemeten.** De PoC-bevindingen noemen `email`, `sub`, `oid` en `tid` als verwáchting. De code koppelt bewust op `oid` (stabiel per tenant) en niet op `sub` (in Entra per applicatie verschillend) of `email` (verandert). Dat is de juiste keuze op basis van Microsoft-documentatie, maar **bevestig het bij de eerste echte login**.
+
+**Wat de eigenaar nog moet aanleveren:** de OIDC-waarden in `.env` (zie `.env.example`, sectie Identity) — issuer, endpoints, client-ID en het client secret van de backend-app-registratie. **Zonder die waarden werkt alles behalve inloggen**: `/auth/login` geeft dan een 500 die precies opsomt welke variabelen ontbreken. Dat is een bewuste wijziging van 2026-07-31 — eerder zou de hele backend niet starten, en dat blokkeerde de e2e-suite en de leverancierskant, die geen identity nodig hebben.
 
 ### De vier stappen van het vendorspoor, in deze volgorde
 
 1. ~~**CSV-parser en validatie**~~ — **afgerond 2026-07-30** (PR #55). Leest een bestand, meldt per rij wat er mis is, schrijft niets weg. Raakt de tenantgrens niet en kon daarom vóór de guard.
-2. **Entra-guard (#7 spoor 1)** — identiteit en geverifieerde tenantcontext.
-3. **CATS-rollen** — zie het blok hieronder.
+2. ~~**Entra-guard (#7 spoor 1)**~~ — **afgerond 2026-07-31** (commit `0c4d9f7`). Identiteit, sessies, guard en auth-routes staan; de tenantgrens is dicht. Nog niet gemeten: welke claims Entra werkelijk levert.
+3. **CATS-rollen** — zie het blok hieronder. Let op: migratie 0009 voert `tenant_membership.role` in met twee waarden (`admin`, `reviewer`) als CHECK-constraint. Dat is bewust minimaal en staat **los** van het CATS-model; wordt CATS ingevoerd, dan is dat een eigen migratie die deze constraint vervangt.
 4. **Wegschrijven** — de tweede helft van de import, plus formulier en lijst.
+
+**Goed nieuws voor stap 4:** het datamodel ligt er al. `clm.vendor` is rijk gevuld (KvK, vestigingsnummer, SBI, criticality, spend, review-datums, soft delete) en **`clm.vendor_contact` bestaat al** met `email`, `phone`, `job_title` en `is_primary`. Contactpersonen met e-mailadressen vragen dus geen nieuwe migratie — alleen schrijfroutes en schermen.
 
 ### CATS-rollen — bron gevonden, nog niet gebouwd
 
