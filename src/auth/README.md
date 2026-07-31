@@ -39,9 +39,14 @@ OIDC-variabelen ontbreken. Dat raakt twee situaties waarin dat verkeerd is: de
 e2e-testsuite (die de `AppModule` opstart zonder identity) en een lokale run
 waarin alleen aan de leverancierskant gewerkt wordt.
 
-Geverifieerd in het productie-image op 2026-07-31: `/health` geeft 200,
-`/auth/logout` geeft 302, en `/auth/login` geeft 500 met de melding die alle zes
-ontbrekende variabelen opsomt.
+Geverifieerd in het productie-image op 2026-07-31, **zonder** OIDC-configuratie:
+`/health` geeft 200, `/auth/logout` geeft 302, en `/auth/login` geeft 500 met de
+melding die alle zes ontbrekende variabelen opsomt.
+
+**Mét configuratie** (dezelfde dag, tegen de echte tenant): `/auth/login` geeft
+302 naar de authorize-endpoint, met PKCE (S256), een state-parameter en de
+juiste redirect-URI. Entra antwoordt op die URL met 200 en zonder AADSTS-code —
+het bewijs dat client-ID, redirect-URI en scopes alle drie kloppen.
 
 ## Waarom `jose` in `transformIgnorePatterns` staat
 
@@ -160,3 +165,29 @@ bevat daarom de `oid`.
 afdelingswissel. Wie daarop koppelt, laat de gebruiker bij zo'n wijziging
 stilzwijgend een ander account worden — inclusief verlies van zijn membership.
 `email` blijft bestaan als weergavegegeven.
+
+## De claims meten: `scripts/claims-meten.js`
+
+De laatste onbewezen schakel in deze module is de vraag **welke claims Entra
+werkelijk levert**. De code koppelt op `oid`; dat is juist volgens de
+documentatie, maar het is nooit gemeten.
+
+```bash
+node scripts/claims-meten.js
+```
+
+Het script drukt een inloglink af, luistert op de redirect-URI, wisselt de code
+in en toont de claims. Eén keer draaien is genoeg — daarna is het antwoord
+bekend en kan dit script weg.
+
+**Voorwaarde:** de user flow (`mcm2-admin-signin`) moet aan de app-registratie
+`MCM2-backend` gekoppeld zijn. Zonder die koppeling weigert Entra met een
+AADSTS-code die niet verklapt dat het daarom gaat. Koppelen gaat via
+External Identities → User flows → Applications.
+
+**Waarom niet gewoon loggen wat er binnenkomt.** Een ID-token bevat
+persoonsgegevens: naam, e-mailadres, en identifiers die naar één persoon
+herleidbaar zijn. Die horen niet in een log dat blijft staan of in een backup
+belandt. Dit script schrijft niets weg en maskeert de waarden waar de vórm
+genoeg is — de vraag is "bestaat `oid` en is hij stabiel", niet "welke `oid`
+hoort bij wie".
