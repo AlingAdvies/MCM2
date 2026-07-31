@@ -91,3 +91,51 @@ export const TENANT_SCHEMAS = ['clm', 'audit'] as const;
  * "permission denied".
  */
 export const RLS_UITZONDERINGEN: ReadonlySet<string> = new Set(['clm.sessie']);
+
+/**
+ * Tabellen met RLS maar bewust ZONDER `FORCE ROW LEVEL SECURITY`
+ * (migratie 0011).
+ *
+ * Een aparte lijst, niet samengevoegd met `RLS_UITZONDERINGEN`: dit is een
+ * andere en veel smallere uitzondering. Deze tabellen hébben RLS en policies;
+ * alleen de eigenaar van de tabel wordt er niet aan onderworpen.
+ *
+ * ── Waarom deze vijf ─────────────────────────────────────────────────────────
+ *
+ * De vijf SECURITY DEFINER-functies zijn eigendom van `clm_migrator`. Met FORCE
+ * op deze tabellen vallen díé functies óók onder RLS — en zij draaien juist
+ * vóórdat er tenantcontext bestaat, want de tenant volgt uit wat ze opzoeken.
+ * Gemeten gevolg: eerst 90, daarna 77 falende e2e-tests. In productie zou het
+ * betekenen: geen login, en geen surveylink die nog opent.
+ *
+ * Welke functie welke tabel leest, afgeleid uit `pg_proc`:
+ *
+ *   resolve_survey_token()   survey_response, survey_run, vendor
+ *   gebruiker_bij_subject()  user, tenant_membership
+ *   sessie_aanmaken()        user, tenant_membership
+ *
+ * Dat het juist deze vijf zijn, is geen toeval: het zijn de tabellen rond
+ * identiteit en toegang, en precies die moeten vóór de tenantcontext leesbaar
+ * zijn.
+ *
+ * ── Wat het restrisico is, en waar het wordt afgedekt ────────────────────────
+ *
+ * De bescherming voor de runtime-rol blijft volledig intact: `clm_api_runtime`
+ * is geen eigenaar en valt dus gewoon onder de policies. Wat blijft bestaan is
+ * dat een verbinding als `clm_migrator` deze vijf tabellen ongefilterd ziet.
+ *
+ * Dat wordt afgedekt door de test "draait niet als de rol die eigenaar is van
+ * de tabellen" in `test/schema-conformiteit.e2e-spec.ts`. Die valt om zodra de
+ * applicatie op de migratierol draait — precies de situatie waarin dit gat pas
+ * schadelijk wordt.
+ *
+ * Volledig sluiten vraagt een aparte eigenaarsrol voor de functies. Dat werkt,
+ * maar raakt het rollenmodel uit ADR-008 en hoort bij een eigen afweging.
+ */
+export const FORCE_RLS_UITZONDERINGEN: ReadonlySet<string> = new Set([
+  'clm.user',
+  'clm.tenant_membership',
+  'clm.survey_response',
+  'clm.survey_run',
+  'clm.vendor',
+]);

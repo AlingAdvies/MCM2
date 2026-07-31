@@ -1,0 +1,121 @@
+-- =============================================================================
+-- FORCE ROW LEVEL SECURITY: RLS geldt ook voor de eigenaar van de tabel.
+--
+-- Aanleiding: externe review van 2026-07-31 op
+-- docs/architectuur-en-verificatie.md.
+--
+-- ── Het gat ──────────────────────────────────────────────────────────────────
+--
+-- De applicatie draait als clm_api_runtime, een rol zónder BYPASSRLS, en
+-- DatabaseService weigert op te starten als die vlag er wél is. Dat dekt één
+-- manier waarop RLS stilzwijgend niets doet.
+--
+-- Er is een tweede, en die stond nergens beschreven: PostgreSQL onderwerpt de
+-- *eigenaar* van een tabel standaard niet aan row security. Geen BYPASSRLS
+-- nodig, geen foutmelding — de policies worden simpelweg overgeslagen.
+--
+-- Gemeten op een verse database vóór deze migratie, met de tenantcontext op
+-- een tenant die de rij níét bezit:
+--
+--   clm_migrator (eigenaar)    → 1 rij   RLS doet niets
+--   clm_api_runtime (runtime)  → 0 rijen RLS werkt
+--
+-- ── Waarom dit vandaag geen lek is, en toch moet ─────────────────────────────
+--
+-- De eigenaar is clm_migrator en de applicatie draait als clm_api_runtime.
+-- Die scheiding is een bewuste keuze (ADR-009) en op dit moment intact.
+--
+-- Maar niets dwingt hem af. Wie ooit DATABASE_URL op de migratierol zet — bij
+-- een herstelactie, in een script, tijdens debuggen — verliest RLS zonder
+-- enige waarschuwing. Geen foutmelding, geen falende test. Precies de
+-- faalvorm waar dit project op let: stil, en pas zichtbaar wanneer het al mis
+-- is gegaan.
+--
+-- FORCE ROW LEVEL SECURITY haalt die voorwaarde weg. Daarna geldt RLS voor
+-- iedereen behalve rollen met BYPASSRLS, en dát wordt al bewaakt.
+--
+-- ── Wat dit betekent voor migraties ──────────────────────────────────────────
+--
+-- clm_migrator kan hierna geen tenantgebonden rijen meer lezen of schrijven
+-- zonder tenantcontext. Dat is geen bezwaar: migraties wijzigen structuur, geen
+-- klantgegevens. Zou een toekomstige migratie tóch rijen moeten aanraken, dan
+-- is `SET LOCAL app.current_tenant_id` de weg — dezelfde weg als de applicatie.
+--
+-- clm.sessie staat er bewust niet bij: die heeft geen RLS (migratie 0010) en
+-- FORCE zonder policies zou elke toegang blokkeren, ook via de drie
+-- SECURITY DEFINER-functies. Die tabel is op een andere manier dicht.
+-- =============================================================================
+
+-- ── Vijf tabellen krijgen bewust GEEN force ──────────────────────────────────
+--
+--   clm."user"             clm.survey_response
+--   clm.tenant_membership  clm.survey_run
+--                          clm.vendor
+--
+-- Bij het bouwen bleek FORCE op deze tabellen de applicatie te breken: eerst
+-- 90, daarna 77 falende e2e-tests. Geen testartefact maar een echte botsing,
+-- en dezelfde kip-ei-vorm als in migratie 0009 en 0010.
+--
+-- De vijf SECURITY DEFINER-functies zijn eigendom van clm_migrator. Met FORCE
+-- vallen díé functies óók onder RLS — en zij draaien juist vóórdat er
+-- tenantcontext bestaat, want de tenant volgt uit wat ze opzoeken. Het gevolg
+-- is niet "minder rijen" maar nul: geen login, en geen enkele surveylink die
+-- nog opent.
+--
+-- Welke functie welke tabel leest (afgeleid uit pg_proc, niet uit geheugen):
+--
+--   resolve_survey_token()   survey_response, survey_run, vendor
+--   gebruiker_bij_subject()  user, tenant_membership
+--   sessie_aanmaken()        user, tenant_membership, sessie
+--
+-- ── Wat deze migratie daarmee waard is ───────────────────────────────────────
+--
+-- Eerlijk gezegd minder dan de review suggereerde. Acht van de dertien
+-- tenanttabellen krijgen FORCE; de vijf die overblijven zijn juist de tabellen
+-- rond identiteit en toegang. Dat is geen toeval maar een gevolg van het
+-- ontwerp: precies die tabellen moeten vóór de tenantcontext leesbaar zijn.
+--
+-- De winst zit in de acht die wél afgedekt zijn, en vooral hierin: de
+-- uitzonderingen staan nu op één plek met motivatie, en drie tests bewaken ze.
+-- Waar het eerder een eigenschap was die niemand had opgemerkt, is het nu een
+-- expliciete keuze die niet stilzwijgend kan groeien.
+--
+-- ── Het restrisico, en waar het wordt afgedekt ───────────────────────────────
+--
+-- De bescherming voor de runtime-rol blijft volledig intact: clm_api_runtime is
+-- geen eigenaar en valt gewoon onder de policies. Wat blijft bestaan is dat een
+-- verbinding als clm_migrator deze vijf tabellen ongefilterd ziet.
+--
+-- Dat wordt afgedekt door de tweede test uit deze ronde — "draait niet als de
+-- rol die eigenaar is van de tabellen". Die valt om zodra de applicatie op de
+-- migratierol draait, en dát is de situatie waarin het eigenaarsgat pas
+-- schadelijk wordt.
+--
+-- ── Het alternatief, overwogen en verworpen ──────────────────────────────────
+--
+-- De functies laten toebehoren aan een aparte rol die geen eigenaar is van de
+-- tabellen. Dan kan FORCE overal aan. Dat werkt, maar voegt een vijfde rol toe
+-- aan een rollenmodel dat er al vier kent (ADR-008) en verplaatst de vraag naar
+-- "wie is eigenaar van de functies". Dat hoort bij een herziening van het
+-- rollenmodel, met een eigen afweging — niet bij deze review-opvolging.
+-- Vastgelegd als vervolgpunt.
+
+ALTER TABLE clm.tenant            FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE clm.vendor_contact    FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE clm.vendor_tag        FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE clm.survey_template   FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE clm.survey_category   FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE clm.survey_question   FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE clm.survey_answer     FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+ALTER TABLE clm.survey_attachment FORCE ROW LEVEL SECURITY;--> statement-breakpoint
+
+-- audit.audit_event staat in een ánder schema en werd bij het opstellen van
+-- deze migratie over het hoofd gezien — de eerste versie keek alleen naar clm.
+-- De nieuwe conformiteitstest wees hem meteen aan, want die leest de lijst uit
+-- het schema in plaats van uit een handmatige opsomming. Precies waarvoor die
+-- opzet bedoeld is (§4 van docs/architectuur-en-verificatie.md).
+--
+-- Uitgerekend de audittrail: de tabel die vastlegt wie wat deed. Als daar rijen
+-- van andere tenants zichtbaar zijn, lekt niet alleen data maar ook het
+-- gedragspatroon van een andere klant.
+ALTER TABLE audit.audit_event     FORCE ROW LEVEL SECURITY;
