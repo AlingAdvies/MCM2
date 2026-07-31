@@ -1,6 +1,7 @@
 import { Client } from 'pg';
 
 import {
+  FORCE_RLS_UITZONDERINGEN,
   RLS_UITZONDERINGEN,
   TENANT_SCHEMAS,
   inventariseerSchema,
@@ -101,6 +102,151 @@ describe('Schema-conformiteit (e2e)', () => {
       .filter((naam) => rlsPerTabel.get(naam) !== true);
 
     expect(zonderRls).toEqual([]);
+  });
+
+  it('heeft FORCE ROW LEVEL SECURITY op elke tenantgebonden tabel', async () => {
+    // Toegevoegd na de externe review van 2026-07-31 (migratie 0011).
+    //
+    // RLS inschakelen is niet genoeg: PostgreSQL onderwerpt de *eigenaar* van
+    // een tabel standaard niet aan row security. Geen BYPASSRLS nodig, geen
+    // foutmelding — de policies worden simpelweg overgeslagen.
+    //
+    // Gemeten vóór 0011, met de tenantcontext op een vreemde tenant:
+    //   clm_migrator (eigenaar)   → 1 rij
+    //   clm_api_runtime (runtime) → 0 rijen
+    //
+    // Vandaag is dat geen lek omdat eigenaar en runtime gescheiden zijn
+    // (ADR-009). Deze test bestaat omdat niets dát afdwingt: wie ooit
+    // DATABASE_URL op de migratierol zet, verliest RLS zonder waarschuwing.
+    const { rows } = await client.query<{
+      volledige_naam: string;
+      force_aan: boolean;
+    }>(
+      `SELECT n.nspname || '.' || c.relname AS volledige_naam,
+              c.relforcerowsecurity        AS force_aan
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = ANY($1) AND c.relkind = 'r'`,
+      [TENANT_SCHEMAS],
+    );
+
+    const forcePerTabel = new Map(
+      rows.map((r) => [r.volledige_naam, r.force_aan]),
+    );
+
+    const zonderForce = verwachteTabellen
+      .filter((t) => t.tenantgebonden)
+      .map((t) => t.volledigeNaam)
+      // clm.sessie heeft bewust geen RLS; FORCE zonder policies zou élke
+      // toegang blokkeren, ook via de SECURITY DEFINER-functies.
+      .filter((naam) => !RLS_UITZONDERINGEN.has(naam))
+      // Vijf tabellen die een SECURITY DEFINER-functie moet kunnen lezen
+      // vóórdat er tenantcontext is. FORCE brak daar de inlogflow en de
+      // surveylinks. Zie de motivatie bij FORCE_RLS_UITZONDERINGEN.
+      .filter((naam) => !FORCE_RLS_UITZONDERINGEN.has(naam))
+      .filter((naam) => forcePerTabel.get(naam) !== true);
+
+    expect(zonderForce).toEqual([]);
+  });
+
+  it('houdt de lijst met FORCE-uitzonderingen kort en bewust', () => {
+    // Zelfde reden als bij de RLS-uitzonderingen: zonder deze test wordt de
+    // lijst een achterdeur waar een tabel stilletjes in verdwijnt zodra een
+    // andere test rood staat. Uitbreiden hoort een expliciete afweging te zijn.
+    expect([...FORCE_RLS_UITZONDERINGEN].sort()).toEqual([
+      'clm.survey_response',
+      'clm.survey_run',
+      'clm.tenant_membership',
+      'clm.user',
+      'clm.vendor',
+    ]);
+  });
+
+  it('heeft op elke FORCE-uitzondering wél gewoon RLS met policies', async () => {
+    // De uitzondering gaat uitsluitend over de eigenaar. Zou op deze tabellen
+    // ook RLS zelf wegvallen, dan staan ze volledig open voor de runtime-rol —
+    // een heel ander verhaal dan waar deze uitzondering voor bedoeld is.
+    for (const volledigeNaam of FORCE_RLS_UITZONDERINGEN) {
+      const [schemaNaam, tabelNaam] = volledigeNaam.split('.');
+
+      const { rows } = await client.query<{
+        rls_aan: boolean;
+        aantal_policies: string;
+      }>(
+        `SELECT c.relrowsecurity AS rls_aan,
+                (SELECT count(*) FROM pg_policy p WHERE p.polrelid = c.oid)
+                  AS aantal_policies
+           FROM pg_class c
+           JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname = $1 AND c.relname = $2`,
+        [schemaNaam, tabelNaam],
+      );
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0].rls_aan).toBe(true);
+      expect(Number(rows[0].aantal_policies)).toBeGreaterThan(0);
+    }
+  });
+
+  it('draait niet als de rol die eigenaar is van de tabellen', async () => {
+    // De tweede helft van dezelfde garantie. FORCE ROW LEVEL SECURITY dekt het
+    // eigenaarsgat af, maar deze scheiding is de eerste verdedigingslinie en
+    // een expliciete keuze uit ADR-009: migreren en draaien zijn twee rollen.
+    //
+    // Deze test valt om zodra iemand de applicatie op de migratierol laat
+    // draaien — precies het scenario waarin het stil misgaat.
+    const { rows } = await client.query<{
+      eigenaar: string;
+      huidige_rol: string;
+    }>(
+      `SELECT DISTINCT c.relowner::regrole::text AS eigenaar,
+              current_user                       AS huidige_rol
+         FROM pg_class c
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = ANY($1) AND c.relkind = 'r'`,
+      [TENANT_SCHEMAS],
+    );
+
+    expect(rows.length).toBeGreaterThan(0);
+
+    for (const rij of rows) {
+      expect(rij.eigenaar).not.toBe(rij.huidige_rol);
+    }
+  });
+
+  it('zet op elke SECURITY DEFINER-functie een expliciete search_path', async () => {
+    // Een SECURITY DEFINER-functie draait met de rechten van de eigenaar.
+    // Zonder vaste search_path kan wie schrijfrechten heeft op een schema in
+    // dat pad een gelijknamig object plaatsen en de functie kapen.
+    //
+    // Alle elf functies hebben dit al sinds migratie 0003, met uitleg ter
+    // plekke. Wat ontbrak was deze bewaking: een nieuwe functie zónder
+    // search_path zou er nu doorheen glippen. De hardening was er, de
+    // controle niet — dat verschil is precies wat de review blootlegde.
+    const { rows } = await client.query<{
+      functie: string;
+      instellingen: string[] | null;
+    }>(
+      `SELECT n.nspname || '.' || p.proname AS functie,
+              p.proconfig                   AS instellingen
+         FROM pg_proc p
+         JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = ANY($1) AND p.prosecdef`,
+      [TENANT_SCHEMAS],
+    );
+
+    expect(rows.length).toBeGreaterThan(0);
+
+    const zonderSearchPath = rows
+      .filter(
+        (r) =>
+          !(r.instellingen ?? []).some((waarde) =>
+            waarde.startsWith('search_path='),
+          ),
+      )
+      .map((r) => r.functie);
+
+    expect(zonderSearchPath).toEqual([]);
   });
 
   it('houdt de lijst met RLS-uitzonderingen kort en bewust', () => {

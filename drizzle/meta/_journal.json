@@ -78,6 +78,13 @@
       "when": 1785416400000,
       "tag": "0010_sessie",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785499200000,
+      "tag": "0011_force_row_level_security",
+      "breakpoints": true
     }
   ]
 }

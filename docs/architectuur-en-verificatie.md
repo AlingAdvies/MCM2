@@ -1,6 +1,6 @@
 # MCM2 — de tenantgrens, en hoe elke laag ervan bewezen wordt
 
-**Opgesteld:** 2026-07-31
+**Opgesteld:** 2026-07-31 · **Bijgewerkt:** 2026-07-31 na externe review
 **Bedoeld voor:** de eigenaar en een externe reviewer
 **Leesbare webversie:** https://claude.ai/code/artifact/31d7819a-a7d9-4079-b224-c51d08497450
 
@@ -13,9 +13,9 @@ overgenomen uit eerdere verslagen.
 
 | | |
 |---|---|
-| E2e-tests | 205 in 15 suites |
+| E2e-tests | 210 in 15 suites |
 | Unittests | 161 in 8 suites |
-| Migraties | 0000 t/m 0010 |
+| Migraties | 0000 t/m 0011 |
 
 > **Onderhoud.** Dit document veroudert zodra de code verandert. Bij een wijziging
 > aan de tenantgrens, de testopzet of de verificatiepoort hoort een wijziging hier.
@@ -120,6 +120,59 @@ en drie tests bewaken hem:
 2. elke uitzondering moet volledig afgesloten zijn voor de runtime-rol;
 3. een rechtstreekse `SELECT`/`INSERT` moet stuklopen op "permission denied".
 
+### De tweede manier waarop RLS stil niets doet (migratie 0011)
+
+Aangedragen door de externe review van 2026-07-31, en het bleek terecht.
+PostgreSQL onderwerpt de **eigenaar** van een tabel standaard niet aan row security.
+Geen `BYPASSRLS` nodig, geen foutmelding — de policies worden overgeslagen.
+
+Gemeten vóór migratie 0011, met de tenantcontext op een vreemde tenant:
+
+```
+clm_migrator (eigenaar)    → 1 rij     RLS doet niets
+clm_api_runtime (runtime)  → 0 rijen   RLS werkt
+```
+
+Vandaag was dat geen lek: de eigenaar is `clm_migrator`, de applicatie draait als
+`clm_api_runtime`, en die scheiding is een bewuste keuze (ADR-009). Maar **niets dwong
+hem af**. Wie ooit `DATABASE_URL` op de migratierol zet — bij een herstelactie, in een
+script, tijdens debuggen — verliest RLS zonder waarschuwing.
+
+`FORCE ROW LEVEL SECURITY` staat nu op **acht** van de dertien tenanttabellen. Vijf
+tabellen kunnen het niet krijgen, en dat is geen slordigheid maar hetzelfde
+kip-ei-probleem in een nieuwe vorm:
+
+| Tabel | Wordt gelezen door |
+|---|---|
+| `user`, `tenant_membership` | `gebruiker_bij_subject()`, `sessie_aanmaken()` |
+| `survey_response`, `survey_run`, `vendor` | `resolve_survey_token()` |
+
+Die `SECURITY DEFINER`-functies zijn eigendom van `clm_migrator` en draaien juist
+vóórdat er tenantcontext bestaat. Met `FORCE` erop vallen zij óók onder RLS, en dan is
+het gevolg niet "minder rijen" maar **nul**: geen login, geen surveylink die nog opent.
+Gemeten: eerst 90, daarna 77 falende e2e-tests.
+
+**Wat deze maatregel dus waard is — eerlijk gezegd minder dan de review suggereerde.**
+De vijf tabellen die overblijven zijn juist die rond identiteit en toegang. De winst zit
+in de acht die wél afgedekt zijn, en vooral hierin: de uitzonderingen staan nu op één
+plek met motivatie (`FORCE_RLS_UITZONDERINGEN`), en drie tests bewaken ze. Waar het
+eerder een eigenschap was die niemand had opgemerkt, is het nu een expliciete keuze die
+niet stilzwijgend kan groeien.
+
+Volledig sluiten vraagt een aparte eigenaarsrol voor de functies. Dat raakt het
+rollenmodel uit ADR-008 en hoort bij een eigen afweging — **Issue #65**.
+
+### `search_path` op de SECURITY DEFINER-functies
+
+De review noemde dit als openstaand punt. Dat is **feitelijk onjuist**: alle vijf
+functies hebben `SET search_path = clm, pg_temp`, al sinds migratie 0003, met uitleg ter
+plekke over waarom dat geen detail is.
+
+Wat wél ontbrak was een **test** die het afdwingt. Een nieuwe functie zonder
+`search_path` zou er doorheen zijn geglipt. De hardening was er, de bewaking niet — en
+dat verschil is precies de categorie fout die dit project probeert uit te bannen. Nu
+afgedekt.
+
 ---
 
 ## 4. Het principe achter de testopzet
@@ -196,7 +249,7 @@ Entra-tenant, en dat is *strenger* in plaats van losser. Een echte provider geef
 verlopen token af, of een token met een vervalste handtekening — en juist dat zijn de
 aanvallen. Met een lokaal gegenereerd sleutelpaar zijn die wél te maken.
 
-### E2e-tests — 205, tegen een wegwerpdatabase
+### E2e-tests — 210, tegen een wegwerpdatabase
 
 | Suite | Bewaakt | Tests |
 |---|---|---:|
@@ -209,7 +262,7 @@ aanvallen. Met een lokaal gegenereerd sleutelpaar zijn die wél te maken.
 | `vragenlijst-seed` | Inlezen van de acht Transdev-vragen | 15 |
 | `sessie` | Aanmaken, verlopen, intrekken; de tabel is afgesloten | 14 |
 | `membership-isolatie` | Lidmaatschap bepaalt de tenant, niet de invoer | 13 |
-| `schema-conformiteit` | Elke tenanttabel heeft een policy — uit het schema afgeleid | 12 |
+| `schema-conformiteit` | Policies, FORCE RLS, tabeleigenaarschap en `search_path` — uit het schema afgeleid | 17 |
 | `survey-routes` | De volledige UC1-flow over HTTP | 12 |
 | `drizzle-tenant-context` | Isolatie ook via de querylaag, niet alleen ruwe SQL | 6 |
 | `tenant-rls-isolation` | Lezen én schrijven over de tenantgrens heen | 5 |
@@ -310,7 +363,8 @@ moeten lezen. Alles hierboven is gemeten; alles hieronder is dat niet.
 | Gelijktijdige uploads | **Onbewezen** | De `FOR UPDATE`-vergrendeling is er, maar met die vergrendeling verwijderd bleven alle tests groen. De race was niet uit te lokken zonder kunstgrepen in productiecode. |
 | Gezondheid van een uitgerolde omgeving | **Bestaat niet** | De e2e-tests beantwoorden dit nooit — ze zijn destructief van aard. Er is een aparte, alleen-lezende rookproef nodig: **Issue #61**. |
 | Virusscan op bijlagen | **Niet gebouwd** | De klant heeft er niets over gezegd (OV-7); het ontwerp benoemt dit expliciet als openstaand risico. |
-| Branch protection op `main` | **Technisch geblokkeerd** | Vereist een betaald GitHub-plan. Tot dan is "nooit rechtstreeks op main werken" een werkafspraak, geen afdwinging. |
+| Eigenaarsgat op vijf tabellen | **Deels afgedekt** | `FORCE RLS` kon niet op `user`, `tenant_membership`, `survey_response`, `survey_run` en `vendor` — de `SECURITY DEFINER`-functies moeten die lezen vóór er tenantcontext is. Bewaakt door een test op tabeleigenaarschap; volledig sluiten vraagt een aparte eigenaarsrol (**Issue #65**). |
+| Branch protection op `main` | **Bewust niet geregeld** | Vereist GitHub Team (~$4 per gebruiker per maand). Op 2026-07-31 als kostenafweging voorgelegd aan de eigenaar en bewust zo gelaten. "Nooit rechtstreeks op main werken" blijft daarmee een werkafspraak zonder technische afdwinging — een keuze, geen technische blokkade zoals eerder in dit document stond. |
 
 > **Over de dekking van `verify`.** De poort dekt de Docker-productiebuild *niet* — die
 > draait alleen in CI (job `docker-build`). Een geslaagde `nest build` bewijst bovendien
@@ -341,6 +395,53 @@ Vijf vragen waarvan het antwoord het meest zegt over de houdbaarheid van dit ont
 5. **Wat gebeurt er bij de tweede klant?** Alles hierboven is gebouwd voor meerdere
    klanten, maar er draait er nu één. De eerste echte tweede klant is de werkelijke test
    van dit ontwerp.
+
+---
+
+## 10. Uit de externe review van 2026-07-31
+
+De review leverde twee concrete aanbevelingen op. Beide zijn getoetst vóórdat er iets
+werd gebouwd — dat toetsen was zinvol, want de uitkomst verschilde per punt.
+
+| Aanbeveling | Uitkomst |
+|---|---|
+| `FORCE ROW LEVEL SECURITY` en tabeleigenaarschap | **Terecht.** Gemeten en verholpen (migratie 0011), met drie bewakingstests. Deels — zie §3 en Issue #65. |
+| `search_path` op de `SECURITY DEFINER`-functies | **Feitelijk onjuist.** Stond er al sinds migratie 0003. Wat ontbrak was de *test*; die is toegevoegd. |
+
+De overige punten uit de review — de guard die nergens op hangt, de vier verbindingen als
+testfix, en branch protection — stonden al in §8 en zijn daar aangescherpt.
+
+### Over mutation testing (Stryker)
+
+De review merkte terecht op dat de tegenproefmethode in feite handmatige mutation testing
+is, en stelde voor dat te automatiseren met Stryker.
+
+**Overwogen en voorlopig niet gedaan, om één inhoudelijke reden:** Stryker muteert
+TypeScript, en de tenantgrens zit grotendeels niet in TypeScript. De guards zijn samen
+230 regels; de migraties 1631. Geen van de vier gaten die de tegenproef vond, zou door
+Stryker gevonden zijn:
+
+| Gat | Waar het zat | Binnen Stryker's bereik? |
+|---|---|---|
+| Guard viel terug op een kopregel | Ontbrekende testdekking, niet muteerbare code | Nee |
+| RLS-policy zonder `WITH CHECK` | SQL in een migratie | Nee |
+| Conformiteitstest las de verkeerde systeemweergave | Testcode zelf | Nee |
+| `CHECK`-constraint te streng | SQL-constraint | Nee |
+
+Dat is geen toeval maar een gevolg van het ontwerpprincipe uit §1: de garantie ligt in de
+database. Een mutatietester op de applicatielaag meet dan het dunste deel van de
+verdediging.
+
+**Twee praktische bezwaren daarbovenop.** Stryker draait de testsuite per mutatie; met een
+e2e-suite die een database nodig heeft wordt dat een run van uren, en dus een eigen
+CI-baan. En het risico dat het zwaarst weegt: een mutatiescore van 85% *voelt* als bewijs,
+terwijl hij niets zegt over de vier gaten hierboven. **Een cijfer dat de verkeerde laag
+meet, is gevaarlijker dan geen cijfer.**
+
+**Wanneer het wél zinvol wordt:** zodra er substantiële applicatielogica bijkomt die niet
+op de database steunt. De CSV-parser (58 unittests) en de validatieregels zijn daar al
+kandidaten voor; de vendorlogica uit fase 2 wordt dat ook. Daar meet een mutatiescore wél
+wat hij belooft.
 
 ---
 
