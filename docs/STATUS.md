@@ -20,6 +20,8 @@ Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in
 
 1. Lees `MCM2-CLAUDE.md` volledig (sessiestartprotocol, §14).
 2. Lees dit document (`docs/STATUS.md`) volledig — het is de enige actuele waarheid over fase en blockers.
+
+   Wie wil begrijpen **waarom** de tenantgrens is zoals hij is, en hoe elke laag ervan bewezen wordt: `docs/architectuur-en-verificatie.md`. Dat document beschrijft de architectuur, het principe achter de testopzet (elke beveiligingstest krijgt een tegenproef) en — het belangrijkste hoofdstuk — wat er nog **niet** bewezen is. Het veroudert zodra de code verandert, dus werk het bij wanneer je de tenantgrens of de testopzet raakt.
 3. Verifieer git-status zelf (`git status`, `git branch -a`) tegen wat hieronder staat — vertrouw niet blind op deze snapshot. **Doe dat in beide repositories.**
 4. Check de open GitHub Issues (`gh issue list --repo AlingAdvies/MCM2 --state open`) voor de actuele backlog — dit document verwijst naar issue-nummers, maar de Issues zelf zijn de bron van waarheid over wat daadwerkelijk nog open staat.
 5. **Werk verder volgens het plan** (`docs/superpowers/plans/2026-07-30-beheerkant-en-demo-tenant.md`), niet volgens losse ingevingen. Het plan heeft bovenaan een voortgangstabel. Uitdrukkelijke wens van de eigenaar op 2026-07-30: **de vier fases in volgorde afwerken.** De eerstvolgende concrete stap staat hieronder onder punt 6.
