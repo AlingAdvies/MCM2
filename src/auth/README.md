@@ -10,6 +10,38 @@ die uit een geverifieerd ID-token komt. Zie MCM2-CLAUDE.md §6 en het plan in
 |---|---|
 | `auth.config.ts` | Leest en valideert de OIDC-configuratie uit environment-variabelen. Faalt hard bij een ontbrekende waarde. |
 | `id-token-verificatie.ts` | Controleert handtekening, issuer, audience en geldigheidsduur; levert de identiteit. |
+| `code-inwisselen.ts` | Wisselt de authorization code server-to-server in bij het token-endpoint. |
+| `inlogpoging.ts` | PKCE en de state-parameter: de twee dingen die de omweg langs de provider moeten overleven. |
+| `sessie.ts` | Sessietoken (genereren, hashen, vormcontrole) en de cookie-instellingen. |
+| `sessie.service.ts` | De enige route naar `clm.sessie`, via de drie `SECURITY DEFINER`-functies. |
+| `tenant-context.guard.ts` | Sessiecookie → tenantcontext op de request. Dit is de laag die P0 sluit. |
+| `auth.controller.ts` | `/auth/login`, `/auth/callback`, `/auth/logout`. |
+| `auth.service.ts` | Bindt de bouwstenen aan elkaar; bevat de volgorde, geen eigen securitylogica. |
+
+## De keten in één regel
+
+```
+cookie  →  hash  →  clm.sessie_oplossen()  →  tenantId  →  withTenant()
+```
+
+Er is geen tweede route. De browser bezit één betekenisloze sleutel; er bestaat
+geen veld in het verzoek waarin een andere tenant benoemd kan worden. Zie de
+uitleg over `X-Tenant-Id` in `tenant-context.guard.ts`.
+
+## Waarom de configuratie pas bij de eerste inlogpoging gelezen wordt
+
+`AuthService` leest de OIDC-configuratie lui, niet in de constructor. Dat is een
+afweging, geen verzwakking — `leesAuthConfig()` faalt nog steeds hard, en de
+melding noemt exact welke variabelen ontbreken.
+
+In de constructor zou die fout de **hele applicatie** onstartbaar maken zodra de
+OIDC-variabelen ontbreken. Dat raakt twee situaties waarin dat verkeerd is: de
+e2e-testsuite (die de `AppModule` opstart zonder identity) en een lokale run
+waarin alleen aan de leverancierskant gewerkt wordt.
+
+Geverifieerd in het productie-image op 2026-07-31: `/health` geeft 200,
+`/auth/logout` geeft 302, en `/auth/login` geeft 500 met de melding die alle zes
+ontbrekende variabelen opsomt.
 
 ## Waarom `jose` in `transformIgnorePatterns` staat
 
