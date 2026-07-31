@@ -47,24 +47,64 @@ Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in
    - `SESSIE_COOKIE_INSECURE=true` moet in `.env` staan, anders weigert de browser het `__Host-`-cookie over http en lukt inloggen niet. In productie hoort die regel er níét te staan.
    - De `oid` in `clm.user.external_subject` hoort bij **mcm2ciam**, niet bij AlingAdvies. Verhuist de CIAM-tenant ooit, dan is dat een **datamigratie** — zie `docs/architectuur-en-verificatie.md` §11.
 
+### Twee scripts in `scripts/` die hun werk gedaan hebben
+
+`claims-meten.js` en `echte-login.js` zijn op 2026-07-31 gebouwd om één vraag te beantwoorden: **welke claims levert Entra werkelijk, en sluit de keten van login tot beheerroute?** Die vraag is beantwoord (§11 van het architectuurdocument), dus ze zijn nu niet meer nodig.
+
+**Bewust laten staan, niet verwijderd.** Ze worden weer bruikbaar zodra de identity-configuratie verandert:
+
+| Wanneer | Welk script |
+|---|---|
+| Verhuizing naar een Bizaline-tenant (ADR-006) | allebei — de `oid`'s veranderen dan |
+| Een tweede app-registratie erbij | `claims-meten.js` |
+| "Inloggen doet het niet meer" | `echte-login.js` — die noemt per stap waar het strandt |
+
+Geen van beide schrijft iets weg of drukt een `oid` af; de waarden gaan rechtstreeks van het token naar de database. Zie de kop van elk bestand voor de werkwijze en de valkuilen (oude browsertabs, de cookienaam).
+
+Blijken ze over een half jaar nog steeds ongebruikt, dan kunnen ze weg — de kennis staat in `src/auth/README.md`, niet in de scripts.
+
    **Issue #30 is niet langer de zwaarste blokkade** — de dagelijkse backup draait sinds 2026-07-30 naar OneDrive. Wat rest is het restrisico in #58 (hangt af van de laptop). De drie issues die op backups wachtten (#19, #25, #29) raken de productiedatabase en kunnen nu heroverwogen worden; er wordt intussen tegen wegwerpcontainers gebouwd.
 
    **#46 heeft een harde datum.** De pilot start rond 1 september en geüploade certificaten staan op een containerschijf die bij de eerstvolgende image-vervanging leeg is.
 
 ### Snel weer op gang komen
 
+**De hele keten in één commando** (aanbevolen — sinds 2026-07-31):
+
 ```bash
-# Backend: tests tegen een wegwerpcontainer
+npm run verify:volledig
+```
+
+Vijf stappen: code, 161 unittests, 228 e2e tegen een wegwerpdatabase, beide
+productie-images bouwen, zes browsertests, en altijd opruimen. Stopt bij de
+eerste rode stap en noemt welke CI-job dat is.
+
+Alleen de code-poorten, zonder stack: `npm run verify` (vraagt `DATABASE_URL`)
+of `npm run verify:snel` (slaat de e2e-laag over en zegt dat er ook bij).
+
+**Nooit meer losse commando's gebruiken om "groen" vast te stellen** — zie
+MCM2-CLAUDE.md §15a. `npm run lint` en `npm run format` doen iets ánders dan wat
+CI draait, en dat is op 2026-07-31 een keer misgegaan.
+
+<details>
+<summary>Handmatig een wegwerpdatabase opzetten (zelden nodig)</summary>
+
+```bash
 # Let op: de containernaam moet minstens twee tekens hebben. Docker 29 weigert
 # een naam van één teken ("Invalid container name"); oudere versies deden dat niet.
 docker run -d --name mcm2test -e POSTGRES_PASSWORD=pw -p 55440:5432 postgres:17.6
 docker exec -i mcm2test psql -U postgres -q < db/roles/bootstrap-roles.sql
-docker exec mcm2test psql -U postgres -c "ALTER ROLE clm_migrator WITH PASSWORD 'pw'; ALTER ROLE clm_api_runtime WITH PASSWORD 'pw';"
+docker exec mcm2test psql -U postgres -d postgres -c "ALTER ROLE clm_migrator WITH PASSWORD 'pw'; ALTER ROLE clm_api_runtime WITH PASSWORD 'pw';"
 MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres" npm run migrate:deploy
 DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" \
-  npx jest --config test/jest-e2e.json --forceExit    # 184 tests, 14 suites
+  npx jest --config test/jest-e2e.json --forceExit    # 228 tests, 16 suites
 # --forceExit is nodig sinds de sessiesuite: die houdt een pg-verbinding open
 # waardoor Jest anders blijft hangen zonder foutmelding.
+# `-d postgres` is niet optioneel: psql neemt anders de rolnaam als
+# databasenaam en faalt met een melding die naar de verkeerde oorzaak wijst.
+```
+
+</details>
 
 # Unittests — geen database nodig
 npx jest                                  # 105 (58 vendor + 46 auth + 1 bestaande)
