@@ -1,3 +1,18 @@
+// Vóór elke andere import: AuthService leest de OIDC-configuratie bij de
+// eerste inlogpoging, en DatabaseService leest DATABASE_URL in zijn
+// constructor. Staat dit lager, dan zijn die waarden er nog niet.
+//
+// Toegevoegd 2026-07-31. Tot dan laadde niets het .env-bestand buiten de
+// testsuite: `dotenv` stond als dependency in package.json, maar werd alleen
+// aangeroepen in test/jest-e2e.setup.ts. Lokaal werkte de backend daardoor
+// uitsluitend met variabelen die al in de shell stonden — en /auth/login gaf
+// een 500 met "alle zes ontbreken", ook als ze in .env stonden.
+//
+// In een container is dit een no-op: daar komen de waarden uit de omgeving en
+// bestaat er geen .env-bestand. `dotenv` overschrijft bestaande variabelen
+// niet, dus de omgeving wint altijd.
+import 'dotenv/config';
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';

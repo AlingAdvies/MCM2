@@ -113,6 +113,42 @@ precies de aanvallen.
 De verificatielogica is identiek: `jose` weet niet of de sleutels van een
 lokale set of van een JWKS-endpoint komen.
 
+## De issuer wijkt af van de andere endpoints — gemeten, niet aangenomen
+
+Op 2026-07-31 aangesloten op de echte Entra-tenant. Eén ding bleek anders dan
+elke voor de hand liggende aanname:
+
+```
+token endpoint  https://mcm2ciam.ciamlogin.com/<tenant-id>/oauth2/v2.0/token
+jwks uri        https://mcm2ciam.ciamlogin.com/<tenant-id>/discovery/v2.0/keys
+issuer          https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0
+                       ^^^^^^^^^^^ tenant-ID, niet de tenantnaam
+```
+
+De `iss`-claim gebruikt het **tenant-ID** als subdomein, de andere endpoints de
+**tenantnaam**. `jwtVerify` vergelijkt de issuer exact, dus met de logische
+variant (`mcm2ciam.ciamlogin.com/...`) faalt élke login — en de melding zegt
+niet dát het om de issuer gaat.
+
+Vastgesteld via `.well-known/openid-configuration`, niet uit documentatie
+afgeleid. Bij een verhuizing naar een andere tenant is dat het eerste dat je
+opnieuw ophaalt.
+
+## Waarom `import 'dotenv/config'` bovenaan main.ts staat
+
+Tot 2026-07-31 laadde niets het `.env`-bestand buiten de testsuite: `dotenv`
+stond als dependency in `package.json`, maar werd alleen aangeroepen in
+`test/jest-e2e.setup.ts`. Lokaal werkte de backend daardoor uitsluitend met
+variabelen die al in de shell stonden, en gaf `/auth/login` een 500 met "alle
+zes ontbreken" — ook toen ze keurig in `.env` stonden.
+
+De import staat vóór alle andere: `DatabaseService` leest `DATABASE_URL` in zijn
+constructor, en die draait bij het samenstellen van de module.
+
+In een container is het een no-op — daar komt de configuratie uit de omgeving
+en bestaat er geen `.env`. `dotenv` overschrijft bestaande variabelen niet, dus
+de omgeving wint altijd.
+
 ## Twee keuzes die makkelijk verkeerd gaan
 
 **`oid`, niet `sub`.** In Entra is `sub` per applicatie verschillend
