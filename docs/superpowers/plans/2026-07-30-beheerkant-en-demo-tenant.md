@@ -16,12 +16,18 @@ Branch `feat/identiteit-en-membership`, vijf commits, nog niet gepusht.
 | **1** | Migratie 0009 — `external_subject`, `tenant_membership`, `gebruiker_bij_subject()` | ✅ |
 | **1** | `src/auth/` — OIDC-config, code inwisselen, ID-tokenverificatie | ✅ |
 | **1** | Migratie 0010 — `clm.sessie` + drie `SECURITY DEFINER`-functies | ✅ |
-| **1** | `TenantContextGuard` | ❌ volgende stap |
-| **1** | Auth-routes `/auth/login`, `/auth/callback`, `/auth/logout` | ❌ |
-| **1** | `X-Tenant-Id` verwijderen | ❌ |
+| **1** | `TenantContextGuard` | ✅ |
+| **1** | Auth-routes `/auth/login`, `/auth/callback`, `/auth/logout` | ✅ |
+| **1** | `X-Tenant-Id` verwijderen | ✅ bleek niets te verwijderen — zie hieronder |
 | 2 | Vendorroutes en schermen | niet gestart |
 | 3 | Demo-tenant seed | niet gestart |
 | 4 | OTAP-doorloop uitgebreid | niet gestart |
+
+**Fase 1 is af (2026-07-31).** De keten `cookie → hash → clm.sessie_oplossen() → tenantId → withTenant()` staat en is bewezen. 205 e2e-tests in 15 suites, 158 unittests, productie-image gecontroleerd.
+
+**`X-Tenant-Id` verwijderen bleek niets te verwijderen.** De header bestaat nergens in `src/` of `test/` — hij ging mee met de weggegooide branch `feat/fase0-skeleton-vendors`. Wat er nog van over is, staat uitsluitend in documentatie en gearchiveerde plannen. De stap is daarmee van vorm veranderd: van iets weghalen naar **bewijzen dat er geen tweede pad naar een tenantcontext bestaat**. Nagelopen: elke `withTenant()`-aanroep krijgt zijn tenantId van `SurveyTokenGuard` (spoor 2), van `TenantContextGuard` (spoor 1), of van het seed-script waar een beheerder de tenant zelf op de opdrachtregel meegeeft. Geen enkele HTTP-route accepteert een tenant uit de invoer.
+
+**De tegenproef vond een echt gat** — het soort dat groene tests verbergt. Met een terugval op de `X-Tenant-Id`-header ingebouwd bleven alle 18 guard-tests groen: de test die een meegestuurde tenant hoorde te negeren stuurde namelijk een *geldig* cookie mee, dus de terugval kwam nooit aan de beurt. Een verzoek met alleen een header en geen cookie zou er zo doorheen zijn gekomen. Drie tests toegevoegd voor precies die gevallen; daarna faalde de sabotage wel. Dit is de vierde keer in dit project dat een tegenproef iets vond dat de tests misten.
 
 **Twee besluiten die tijdens fase 1 zijn genomen en het plan aanvullen:**
 
