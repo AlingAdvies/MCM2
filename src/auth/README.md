@@ -154,6 +154,79 @@ In een container is het een no-op — daar komt de configuratie uit de omgeving
 en bestaat er geen `.env`. `dotenv` overschrijft bestaande variabelen niet, dus
 de omgeving wint altijd.
 
+## De claims zijn gemeten (2026-07-31)
+
+Niet langer een verwachting. Eén echte login met een echt account, via
+`scripts/claims-meten.js`:
+
+| Claim | Gemeten | Betekenis |
+|---|---|---|
+| `oid` | 36 tekens (UUID) | ✅ aanwezig — de koppeling in de code klopt |
+| `sub` | 43 tekens | pairwise, per applicatie verschillend |
+| `iss` | tenant-ID als subdomein | ✅ komt overeen met `OIDC_ISSUER` |
+| `aud` | client-ID van `MCM2-backend` | ✅ |
+| `email`, `preferred_username` | beide gevuld | weergavegegevens |
+| `tid` | het tenant-ID van `mcm2ciam` | |
+
+**Het lengteverschil bevestigt de keuze.** `sub` is 43 tekens en dus géén UUID —
+een pairwise identifier die per app-registratie verschilt. `oid` is een echt
+UUID, stabiel binnen de tenant. Was er op `sub` gekoppeld, dan zou dezelfde
+persoon in een tweede app-registratie een ander account krijgen, inclusief
+verlies van zijn membership. Dat is nu geen redenering meer maar een meting.
+
+### De `oid` hoort bij `mcm2ciam`, niet bij AlingAdvies
+
+De `idp`-claim toont de federatieketen: de gebruiker komt binnen via
+`login.microsoftonline.com/<alingadvies-tenant-id>`, en `mcm2ciam` maakt daar
+een eigen gebruiker voor aan. De `oid` die in `clm.user.external_subject`
+belandt is die van **mcm2ciam**.
+
+Praktisch gevolg: verhuist de CIAM-tenant ooit naar een Bizaline-tenant (ADR-006
+houdt daar rekening mee), dan veranderen álle `oid`-waarden en moet
+`clm.user.external_subject` gemigreerd worden. Dat is geen configuratiewijziging
+maar een datamigratie — het enige punt waarop die verhuizing niet vrijblijvend
+is.
+
+## De hele keten is doorlopen met een echte login (2026-07-31)
+
+`scripts/echte-login.js`, één keer gedraaid met een echt account:
+
+```
+1  code ingewisseld          OK
+2  token geverifieerd        OK  ← IdTokenVerificateur uit dist/, niet een kopie
+3  gebruiker + membership    OK
+4  sessie aangemaakt         OK  (rol: admin, via clm.sessie_aanmaken)
+5  /vendors met sessie       200
+6  /vendors zonder sessie    401
+```
+
+Daarmee is de laatste onbewezen schakel dicht: de keten van Entra tot een
+beheerroute werkt, met echte tokens en een echte sessie.
+
+### Twee dingen die daarbij tijd kostten
+
+**De cookienaam volgt de configuratie, niet een vaste waarde.** Zonder
+`SESSIE_COOKIE_INSECURE` verwacht de guard `__Host-mcm2_sessie`; mét die
+schakelaar `mcm2_sessie`. Een verkeerde naam geeft een **401 die niet verklapt
+dát het om de naam gaat** — dezelfde melding als een verlopen sessie. Het
+script leest de naam nu uit `cookieInstellingen()` in plaats van hem te
+verzinnen.
+
+Praktisch gevolg voor lokaal werken: over `http` moet
+`SESSIE_COOKIE_INSECURE=true` in `.env`, anders weigert de browser het
+`__Host-`-cookie en lukt inloggen niet. In productie hoort die regel er níét te
+staan.
+
+**Een oude browsertab op de callback-URL breekt de meting.** Zo'n tab herlaadt
+zichzelf met de state van een vórige poging. De eerste versie van het script
+sloot daarop af met "state komt niet overeen" — een melding die naar een
+probleem wees dat er niet was, terwijl de echte login nooit aan de beurt kwam.
+Het script negeert verouderde verzoeken nu.
+
+Let op het verschil met de applicatiecode: in `auth.controller.ts` is een
+afwijkende state terecht wél een harde afwijzing. Daar is het een CSRF-signaal;
+hier is het een wegwerpscript met één mens ervoor.
+
 ## Twee keuzes die makkelijk verkeerd gaan
 
 **`oid`, niet `sub`.** In Entra is `sub` per applicatie verschillend
