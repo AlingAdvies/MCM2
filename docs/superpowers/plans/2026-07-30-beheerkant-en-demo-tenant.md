@@ -19,7 +19,7 @@ Branch `feat/identiteit-en-membership`, vijf commits, nog niet gepusht.
 | **1** | `TenantContextGuard` | ✅ |
 | **1** | Auth-routes `/auth/login`, `/auth/callback`, `/auth/logout` | ✅ |
 | **1** | `X-Tenant-Id` verwijderen | ✅ bleek niets te verwijderen — zie hieronder |
-| 2 | Vendorroutes en schermen | niet gestart |
+| **2** | Vendorroutes en schermen | ✅ gemerged 2026-07-31 (MCM2#67, frontend#2) |
 | 3 | Demo-tenant seed | niet gestart |
 | 4 | OTAP-doorloop uitgebreid | niet gestart |
 

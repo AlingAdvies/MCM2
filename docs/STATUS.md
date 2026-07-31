@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-31 (**fase 1 van de beheerkant is af**: de `TenantContextGuard` en de drie auth-routes staan, en daarmee is de tenantgrens dicht — P0 uit Issue #7 is gesloten. Branch `feat/identiteit-en-membership`, zes commits, **gepusht**, nog niet gemerged. Alles hieronder is geverifieerd, niet uit gespreksgeheugen.)
+2026-07-31, avond (**fase 1 én 2 zijn af, en inloggen via Entra werkt aantoonbaar**. Er is een zichtbaar beheerscherm op `/beheer/leveranciers`, één commando dat de hele keten doortest, en de laatste onbewezen aanname — welke claims Entra levert — is gemeten. Alles gemerged, CI groen op `main` in beide repositories. Alles hieronder is geverifieerd, niet uit gespreksgeheugen.)
 
 **Plan voor de komende fases:** `docs/superpowers/plans/2026-07-30-beheerkant-en-demo-tenant.md` — vier fases naar een frontend die eruitziet als MVM_V2, inloggen als tenant, vendors met contactpersonen aanmaken, een demo-tenant met mock data, en een robuuste OTAP-doorloop.
 
@@ -30,13 +30,22 @@ Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in
    - **Issue #59 — `npm audit` meldt 29 kwetsbaarheden.** Niet vergeten, maar ook niet nu oplossen: `npm audit --omit=dev` geeft **0**, dus er zit niets van in het productie-image. De voorgestelde automatische fix zet eslint jaren terug en breekt de lint-configuratie. Hoort bij de eerste major-onderhoudsronde op devDependencies, samen met Dependabot (#22). **Controleer wel bij elke sessie dat `npm audit --omit=dev` nul blijft** — wordt dat meer dan nul, dan is het geen onderhoudspunt meer maar een blocker.
    - **Issue #58 — de backup hangt af van deze laptop.** Draait dagelijks, maar niet als de machine uitstaat. Vóór de pilotstart (rond 1 september) naar iets onafhankelijks.
 
-6. **Eerste concrete vervolgstap: fase 2 — vendorroutes en schermen.** Fase 1 is op 2026-07-31 afgerond; zie het blok "Beheerkant fase 1" hieronder voor wat er staat en wat níét bewezen is.
+6. **Eerste concrete vervolgstap: fase 3 — de demo-tenant met mock data.** Fase 1 en 2 zijn op 2026-07-31 afgerond en gemerged.
 
-   Twee dingen die daarbij horen:
+   **Wat er nu werkt en zichtbaar is:**
 
-   **Bevestig bij de eerste echte login welke claims Entra werkelijk levert.** De code koppelt op `oid` op basis van documentatie, niet op meting. Dit is nu de grootste openstaande onzekerheid in de identiteitslaag: alle tests draaien tegen een lokaal sleutelpaar, niet tegen de echte Entra-tenant.
+   ```
+   /beheer/leveranciers   lijst + aanmaakformulier met contactpersoon
+   npm run verify:volledig   code → 161 unit → 228 e2e → stack → 6 browsertests
+   ```
 
-   **De guard hangt nog nergens op.** Hij is gebouwd en bewezen, maar er is nog geen beheerroute die hem gebruikt — die komen in fase 2. `@UseGuards(TenantContextGuard)` op elke nieuwe beheercontroller is daarmee de eerste regel van fase 2, niet iets om later aan toe te voegen.
+   **Inloggen via Entra werkt aantoonbaar.** Eén echte login doorlopen: code inwisselen, token verifiëren met de échte applicatiecode, gebruiker en membership, sessie via `clm.sessie_aanmaken()`, en met dat cookie `/vendors` → 200. Zonder cookie → 401.
+
+   **De claims zijn gemeten**, niet langer aangenomen: `oid` is 36 tekens (UUID), `sub` 43 en dus géén UUID. Dat lengteverschil bevestigt de keuze voor `oid` — op `sub` koppelen had betekend dat dezelfde persoon in een tweede app-registratie een ander account kreeg.
+
+   **Twee dingen om te onthouden bij lokaal werken:**
+   - `SESSIE_COOKIE_INSECURE=true` moet in `.env` staan, anders weigert de browser het `__Host-`-cookie over http en lukt inloggen niet. In productie hoort die regel er níét te staan.
+   - De `oid` in `clm.user.external_subject` hoort bij **mcm2ciam**, niet bij AlingAdvies. Verhuist de CIAM-tenant ooit, dan is dat een **datamigratie** — zie `docs/architectuur-en-verificatie.md` §11.
 
    **Issue #30 is niet langer de zwaarste blokkade** — de dagelijkse backup draait sinds 2026-07-30 naar OneDrive. Wat rest is het restrisico in #58 (hangt af van de laptop). De drie issues die op backups wachtten (#19, #25, #29) raken de productiedatabase en kunnen nu heroverwogen worden; er wordt intussen tegen wegwerpcontainers gebouwd.
 

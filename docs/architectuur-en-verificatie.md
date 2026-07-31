@@ -358,8 +358,9 @@ moeten lezen. Alles hierboven is gemeten; alles hieronder is dat niet.
 
 | Onderwerp | Stand | Wat dat betekent |
 |---|---|---|
-| Claims uit Microsoft Entra | **Aanname** | Alle tests draaien tegen een lokaal sleutelpaar. Welke claims de echte tenant levert (`oid`, `tid`, `email`), is nooit gemeten. Te bevestigen bij de eerste echte login. |
-| De sessieguard in gebruik | **Niet aangesloten** | Gebouwd en bewezen, maar er is nog geen beheerroute die hem gebruikt. `@UseGuards(TenantContextGuard)` is de eerste stap van fase 2. |
+| ~~Claims uit Microsoft Entra~~ | **Gemeten 2026-07-31** | `oid` is 36 tekens (UUID), `sub` 43 en dus géén UUID — het lengteverschil bevestigt de keuze voor `oid`. Zie §11. |
+| ~~De sessieguard in gebruik~~ | **Aangesloten 2026-07-31** | `GET`/`POST /vendors` draaien erachter, met 18 e2e-tests en een tegenproef. |
+| Wachtwoordrotatie `postgres` | **Niet gedaan** | Issue #1. De beheerrol heeft nog het oorspronkelijke wachtwoord. |
 | Gelijktijdige uploads | **Onbewezen** | De `FOR UPDATE`-vergrendeling is er, maar met die vergrendeling verwijderd bleven alle tests groen. De race was niet uit te lokken zonder kunstgrepen in productiecode. |
 | Gezondheid van een uitgerolde omgeving | **Bestaat niet** | De e2e-tests beantwoorden dit nooit — ze zijn destructief van aard. Er is een aparte, alleen-lezende rookproef nodig: **Issue #61**. |
 | Virusscan op bijlagen | **Niet gebouwd** | De klant heeft er niets over gezegd (OV-7); het ontwerp benoemt dit expliciet als openstaand risico. |
@@ -442,6 +443,59 @@ meet, is gevaarlijker dan geen cijfer.**
 op de database steunt. De CSV-parser (58 unittests) en de validatieregels zijn daar al
 kandidaten voor; de vendorlogica uit fase 2 wordt dat ook. Daar meet een mutatiescore wél
 wat hij belooft.
+
+---
+
+## 11. De keten is doorlopen met een echte login (2026-07-31)
+
+De laatste onbewezen schakel uit §8 is dicht. `scripts/echte-login.js`, één keer
+gedraaid met een echt account tegen de echte Entra-tenant:
+
+```
+1  code ingewisseld          OK
+2  token geverifieerd        OK   IdTokenVerificateur uit dist/, geen kopie
+3  gebruiker + membership    OK
+4  sessie aangemaakt         OK   rol admin, via clm.sessie_aanmaken()
+5  /vendors met sessie       200
+6  /vendors zonder sessie    401
+```
+
+### De claims zijn meting geworden
+
+| Claim | Gemeten | Betekenis |
+|---|---|---|
+| `oid` | 36 tekens, UUID | ✅ de koppeling in de code klopt |
+| `sub` | 43 tekens, géén UUID | pairwise, per applicatie verschillend |
+| `iss` | tenant-ID als subdomein | komt overeen met `OIDC_ISSUER` |
+| `aud` | client-ID van `MCM2-backend` | ✅ |
+
+**Het lengteverschil bevestigt de keuze.** Was er op `sub` gekoppeld, dan kreeg dezelfde
+persoon in een tweede app-registratie een ander account, inclusief verlies van zijn
+membership. Dat is nu geen redenering meer.
+
+### Twee dingen die de meting blootlegde
+
+**De issuer wijkt af van de andere endpoints.** Token- en JWKS-endpoint gebruiken de
+tenantnáám, de `iss`-claim het tenant-**ID** als subdomein. `jwtVerify` vergelijkt exact,
+dus de logische variant laat elke login stranden — met een melding die niet zegt dat het
+om de issuer gaat. Opgehaald via `.well-known/openid-configuration`.
+
+**De `oid` hoort bij `mcm2ciam`, niet bij AlingAdvies.** De `idp`-claim toont de
+federatieketen: de gebruiker komt binnen via de AlingAdvies-tenant, en `mcm2ciam` maakt
+daar een eigen gebruiker voor aan. Verhuist de CIAM-tenant ooit (ADR-006 houdt daar
+rekening mee), dan veranderen álle `oid`-waarden en is dat een **datamigratie**, geen
+configuratiewijziging. Het enige punt waarop die verhuizing niet vrijblijvend is.
+
+### Wat de Docker-poort ving dat `verify` niet zag
+
+De eerste versie van deze wijziging bouwde wél maar startte niet: `dotenv` is een
+devDependency en zit niet in het productie-image, dus `import 'dotenv/config'` gaf
+`MODULE_NOT_FOUND`. Dat is precies waarvoor de Docker-job bestaat — hij start het image
+en controleert dat het een pagina serveert.
+
+**Voor de tweede keer bewezen** dat een geslaagde `nest build` niets zegt over het
+artefact; de eerste keer was `jose` in het productie-image. §6 benoemt dit al als grens
+van `verify`.
 
 ---
 
