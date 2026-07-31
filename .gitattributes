@@ -1,0 +1,32 @@
+# Regeleindes zijn een eigenschap van deze repository, niet van de machine
+# waarop iemand werkt.
+#
+# ── Waarom dit bestand er is ─────────────────────────────────────────────────
+#
+# Op 2026-07-31 bleek `npm run format:check` op Windows structureel rood, ook
+# op bestanden die niemand had aangeraakt — terwijl CI groen was. Oorzaak:
+# git staat hier op core.autocrlf=true (CRLF in de werkmap, LF in de opslag),
+# en prettier valt zonder instelling terug op endOfLine: "lf". Die twee spreken
+# elkaar dan tegen.
+#
+# Het gevolg was erger dan een rode stap: het maakt het verificatiescript
+# onbetrouwbaar. Wie went aan "die meldingen horen erbij", ziet de echte fout
+# ook niet meer.
+#
+# `text=auto eol=lf` dwingt LF af in de werkmap én in de opslag, ongeacht de
+# git-instelling van de gebruiker. Daarmee zien Windows, Linux en CI hetzelfde.
+* text=auto eol=lf
+
+# Binaire bestanden nooit converteren: dat beschadigt ze.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+
+# Windows-scripts moeten CRLF houden. Bewust een uitzondering: cmd.exe leest
+# een .cmd-bestand met LF-regeleindes niet betrouwbaar. Dezelfde valkuil die
+# bij de backup-taak toesloeg — zie docs/runbooks, stap 0.
+*.cmd text eol=crlf
+*.bat text eol=crlf
