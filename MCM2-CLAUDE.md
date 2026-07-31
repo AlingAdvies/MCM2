@@ -463,7 +463,7 @@ Een wijziging is pas “klaar” wanneer:
 [ ] Relevante architectuur- en securityregels toegepast
 [ ] Geen secrets hardcoded of zichtbaar gemaakt
 [ ] Lokaal getest in de Docker-werkwijze, waar van toepassing
-[ ] Format, lint, typecheck en relevante tests groen
+[ ] `npm run verify` groen — NIET losse commando's, zie §15a
 [ ] RLS read/write-isolatietest toegevoegd bij tenantdata
 [ ] Migratie getest op lege database, indien schema gewijzigd
 [ ] Docker production build geslaagd
@@ -472,6 +472,45 @@ Een wijziging is pas “klaar” wanneer:
 [ ] Crosscheck uitgevoerd bij architectuur-, security- of scopewijziging
 [ ] OTAP-route gevolgd vóór productie wordt voorgesteld
 ```
+
+### 15a. "Groen" wordt vastgesteld met `npm run verify` — nooit met losse commando's
+
+```bash
+npm run verify        # alle vijf poorten, vraagt DATABASE_URL
+npm run verify:snel   # zonder e2e — meldt zelf dat het onvolledig is
+```
+
+**Waarom dit een harde regel is en geen aanbeveling.** Op 2026-07-31 faalde CI
+op de lintstap terwijl lokaal alles groen leek. De oorzaak was geen typefout
+maar een naamsverwarring: er bestaan drie paren scripts waarvan de "gewone"
+variant iets anders doet dan wat CI draait.
+
+| Lokaal gedraaid | Wat CI draait | Verschil |
+|---|---|---|
+| `npm run lint` | `npm run lint:check` | `--fix` en waarschuwingen toegestaan versus `--max-warnings=0` |
+| `npm run format` | `npm run format:check` | schrijft weg versus controleert |
+| `npm test` | `npm test` **plus** de e2e-suite | unittests dekken de tenantgrens niet |
+
+Wie moet onthouden welke variant CI gebruikt, gaat dat een keer mis hebben —
+en dan is "groen" een mening in plaats van een meting. `scripts/verify.js`
+draait ze in dezelfde volgorde als de workflow en stopt bij de eerste rode
+stap. Elke stap noemt bij een fout de bijbehorende CI-job.
+
+**Wat `verify` bewust niet dekt:** de Docker-productiebuild. Die draait alleen
+in CI (job `docker-build`). Bij een wijziging aan de `Dockerfile` of aan
+runtime-dependencies hoort een lokale `docker build` — een geslaagde
+`nest build` bewijst niet dat het artefact werkt (zie `src/auth/README.md`).
+
+**De veiligheidsklep.** `verify` weigert te draaien wanneer `DATABASE_URL` niet
+naar een lokale wegwerpdatabase wijst. De e2e-suite maakt tenants aan en
+verwijdert rijen; tegen `clm-enterprise` gedraaid is dat onherstelbaar, en de
+productie-URL staat in `.env`. Dit is de laatste plek waar die vergissing nog
+te vangen is.
+
+**De e2e-tests draaien nooit tegen productie, en dat blijft zo.** Ze zijn
+destructief van aard. De vraag "draait de uitgerolde omgeving en klopt hij" is
+een andere controle — een leesbare rookproef, Issue #61 — die bij de
+OTAP-doorloop hoort (#18), niet hier.
 
 ---
 
