@@ -39,9 +39,14 @@ OIDC-variabelen ontbreken. Dat raakt twee situaties waarin dat verkeerd is: de
 e2e-testsuite (die de `AppModule` opstart zonder identity) en een lokale run
 waarin alleen aan de leverancierskant gewerkt wordt.
 
-Geverifieerd in het productie-image op 2026-07-31: `/health` geeft 200,
-`/auth/logout` geeft 302, en `/auth/login` geeft 500 met de melding die alle zes
-ontbrekende variabelen opsomt.
+Geverifieerd in het productie-image op 2026-07-31, **zonder** OIDC-configuratie:
+`/health` geeft 200, `/auth/logout` geeft 302, en `/auth/login` geeft 500 met de
+melding die alle zes ontbrekende variabelen opsomt.
+
+**Mét configuratie** (dezelfde dag, tegen de echte tenant): `/auth/login` geeft
+302 naar de authorize-endpoint, met PKCE (S256), een state-parameter en de
+juiste redirect-URI. Entra antwoordt op die URL met 200 en zonder AADSTS-code —
+het bewijs dat client-ID, redirect-URI en scopes alle drie kloppen.
 
 ## Waarom `jose` in `transformIgnorePatterns` staat
 
@@ -113,6 +118,115 @@ precies de aanvallen.
 De verificatielogica is identiek: `jose` weet niet of de sleutels van een
 lokale set of van een JWKS-endpoint komen.
 
+## De issuer wijkt af van de andere endpoints — gemeten, niet aangenomen
+
+Op 2026-07-31 aangesloten op de echte Entra-tenant. Eén ding bleek anders dan
+elke voor de hand liggende aanname:
+
+```
+token endpoint  https://mcm2ciam.ciamlogin.com/<tenant-id>/oauth2/v2.0/token
+jwks uri        https://mcm2ciam.ciamlogin.com/<tenant-id>/discovery/v2.0/keys
+issuer          https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0
+                       ^^^^^^^^^^^ tenant-ID, niet de tenantnaam
+```
+
+De `iss`-claim gebruikt het **tenant-ID** als subdomein, de andere endpoints de
+**tenantnaam**. `jwtVerify` vergelijkt de issuer exact, dus met de logische
+variant (`mcm2ciam.ciamlogin.com/...`) faalt élke login — en de melding zegt
+niet dát het om de issuer gaat.
+
+Vastgesteld via `.well-known/openid-configuration`, niet uit documentatie
+afgeleid. Bij een verhuizing naar een andere tenant is dat het eerste dat je
+opnieuw ophaalt.
+
+## Waarom `import 'dotenv/config'` bovenaan main.ts staat
+
+Tot 2026-07-31 laadde niets het `.env`-bestand buiten de testsuite: `dotenv`
+stond als dependency in `package.json`, maar werd alleen aangeroepen in
+`test/jest-e2e.setup.ts`. Lokaal werkte de backend daardoor uitsluitend met
+variabelen die al in de shell stonden, en gaf `/auth/login` een 500 met "alle
+zes ontbreken" — ook toen ze keurig in `.env` stonden.
+
+De import staat vóór alle andere: `DatabaseService` leest `DATABASE_URL` in zijn
+constructor, en die draait bij het samenstellen van de module.
+
+In een container is het een no-op — daar komt de configuratie uit de omgeving
+en bestaat er geen `.env`. `dotenv` overschrijft bestaande variabelen niet, dus
+de omgeving wint altijd.
+
+## De claims zijn gemeten (2026-07-31)
+
+Niet langer een verwachting. Eén echte login met een echt account, via
+`scripts/claims-meten.js`:
+
+| Claim | Gemeten | Betekenis |
+|---|---|---|
+| `oid` | 36 tekens (UUID) | ✅ aanwezig — de koppeling in de code klopt |
+| `sub` | 43 tekens | pairwise, per applicatie verschillend |
+| `iss` | tenant-ID als subdomein | ✅ komt overeen met `OIDC_ISSUER` |
+| `aud` | client-ID van `MCM2-backend` | ✅ |
+| `email`, `preferred_username` | beide gevuld | weergavegegevens |
+| `tid` | het tenant-ID van `mcm2ciam` | |
+
+**Het lengteverschil bevestigt de keuze.** `sub` is 43 tekens en dus géén UUID —
+een pairwise identifier die per app-registratie verschilt. `oid` is een echt
+UUID, stabiel binnen de tenant. Was er op `sub` gekoppeld, dan zou dezelfde
+persoon in een tweede app-registratie een ander account krijgen, inclusief
+verlies van zijn membership. Dat is nu geen redenering meer maar een meting.
+
+### De `oid` hoort bij `mcm2ciam`, niet bij AlingAdvies
+
+De `idp`-claim toont de federatieketen: de gebruiker komt binnen via
+`login.microsoftonline.com/<alingadvies-tenant-id>`, en `mcm2ciam` maakt daar
+een eigen gebruiker voor aan. De `oid` die in `clm.user.external_subject`
+belandt is die van **mcm2ciam**.
+
+Praktisch gevolg: verhuist de CIAM-tenant ooit naar een Bizaline-tenant (ADR-006
+houdt daar rekening mee), dan veranderen álle `oid`-waarden en moet
+`clm.user.external_subject` gemigreerd worden. Dat is geen configuratiewijziging
+maar een datamigratie — het enige punt waarop die verhuizing niet vrijblijvend
+is.
+
+## De hele keten is doorlopen met een echte login (2026-07-31)
+
+`scripts/echte-login.js`, één keer gedraaid met een echt account:
+
+```
+1  code ingewisseld          OK
+2  token geverifieerd        OK  ← IdTokenVerificateur uit dist/, niet een kopie
+3  gebruiker + membership    OK
+4  sessie aangemaakt         OK  (rol: admin, via clm.sessie_aanmaken)
+5  /vendors met sessie       200
+6  /vendors zonder sessie    401
+```
+
+Daarmee is de laatste onbewezen schakel dicht: de keten van Entra tot een
+beheerroute werkt, met echte tokens en een echte sessie.
+
+### Twee dingen die daarbij tijd kostten
+
+**De cookienaam volgt de configuratie, niet een vaste waarde.** Zonder
+`SESSIE_COOKIE_INSECURE` verwacht de guard `__Host-mcm2_sessie`; mét die
+schakelaar `mcm2_sessie`. Een verkeerde naam geeft een **401 die niet verklapt
+dát het om de naam gaat** — dezelfde melding als een verlopen sessie. Het
+script leest de naam nu uit `cookieInstellingen()` in plaats van hem te
+verzinnen.
+
+Praktisch gevolg voor lokaal werken: over `http` moet
+`SESSIE_COOKIE_INSECURE=true` in `.env`, anders weigert de browser het
+`__Host-`-cookie en lukt inloggen niet. In productie hoort die regel er níét te
+staan.
+
+**Een oude browsertab op de callback-URL breekt de meting.** Zo'n tab herlaadt
+zichzelf met de state van een vórige poging. De eerste versie van het script
+sloot daarop af met "state komt niet overeen" — een melding die naar een
+probleem wees dat er niet was, terwijl de echte login nooit aan de beurt kwam.
+Het script negeert verouderde verzoeken nu.
+
+Let op het verschil met de applicatiecode: in `auth.controller.ts` is een
+afwijkende state terecht wél een harde afwijzing. Daar is het een CSRF-signaal;
+hier is het een wegwerpscript met één mens ervoor.
+
 ## Twee keuzes die makkelijk verkeerd gaan
 
 **`oid`, niet `sub`.** In Entra is `sub` per applicatie verschillend
@@ -124,3 +238,29 @@ bevat daarom de `oid`.
 afdelingswissel. Wie daarop koppelt, laat de gebruiker bij zo'n wijziging
 stilzwijgend een ander account worden — inclusief verlies van zijn membership.
 `email` blijft bestaan als weergavegegeven.
+
+## De claims meten: `scripts/claims-meten.js`
+
+De laatste onbewezen schakel in deze module is de vraag **welke claims Entra
+werkelijk levert**. De code koppelt op `oid`; dat is juist volgens de
+documentatie, maar het is nooit gemeten.
+
+```bash
+node scripts/claims-meten.js
+```
+
+Het script drukt een inloglink af, luistert op de redirect-URI, wisselt de code
+in en toont de claims. Eén keer draaien is genoeg — daarna is het antwoord
+bekend en kan dit script weg.
+
+**Voorwaarde:** de user flow (`mcm2-admin-signin`) moet aan de app-registratie
+`MCM2-backend` gekoppeld zijn. Zonder die koppeling weigert Entra met een
+AADSTS-code die niet verklapt dat het daarom gaat. Koppelen gaat via
+External Identities → User flows → Applications.
+
+**Waarom niet gewoon loggen wat er binnenkomt.** Een ID-token bevat
+persoonsgegevens: naam, e-mailadres, en identifiers die naar één persoon
+herleidbaar zijn. Die horen niet in een log dat blijft staan of in een backup
+belandt. Dit script schrijft niets weg en maskeert de waarden waar de vórm
+genoeg is — de vraag is "bestaat `oid` en is hij stabiel", niet "welke `oid`
+hoort bij wie".

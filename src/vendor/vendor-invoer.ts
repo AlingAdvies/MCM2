@@ -1,0 +1,195 @@
+import type { NieuweVendor } from './vendor.service';
+
+/**
+ * Validatie van wat een browser opstuurt bij het aanmaken van een leverancier.
+ *
+ * Bewust hier en niet in de service: de service werkt met een getypeerd
+ * object, de buitenwereld met `unknown`. Die grens hoort op één plek te liggen.
+ *
+ * Bewust ook géén class-validator, hoewel dat als dependency aanwezig is. De
+ * bestaande controller valideert op dezelfde manier — handmatig, met `unknown`
+ * als invoer — en een tweede stijl ernaast maakt het geheel ongelijkmatig
+ * zonder iets op te lossen. Zie MCM2-CLAUDE.md over eenduidige werkwijze.
+ *
+ * De regels hier zijn bewust ruim. Streng valideren op een leveranciersnaam
+ * of een adres levert vooral valse afwijzingen op: een naam mag cijfers en
+ * leestekens bevatten, en een buitenlandse plaatsnaam ziet er anders uit dan
+ * een Nederlandse. Wat hier wordt tegengehouden is het soort invoer dat op een
+ * vergissing of een aanval wijst — lege verplichte velden, absurde lengtes,
+ * een verkeerd type.
+ */
+
+/** Bovengrenzen. Ruim genoeg voor echte waarden, krap genoeg om onzin te weren. */
+const MAX_NAAM = 200;
+const MAX_KORT = 100;
+const MAX_URL = 500;
+
+export class InvoerFout extends Error {
+  constructor(
+    readonly veld: string,
+    melding: string,
+  ) {
+    super(melding);
+    this.name = 'InvoerFout';
+  }
+}
+
+/** Leest een verplicht tekstveld. */
+function verplichteTekst(
+  waarde: unknown,
+  veld: string,
+  maxLengte: number,
+): string {
+  if (typeof waarde !== 'string' || waarde.trim() === '') {
+    throw new InvoerFout(veld, `${veld} is verplicht.`);
+  }
+
+  const geknipt = waarde.trim();
+
+  if (geknipt.length > maxLengte) {
+    throw new InvoerFout(
+      veld,
+      `${veld} mag maximaal ${maxLengte} tekens bevatten.`,
+    );
+  }
+
+  return geknipt;
+}
+
+/** Leest een optioneel tekstveld; leeg en ontbrekend zijn hetzelfde. */
+function optioneleTekst(
+  waarde: unknown,
+  veld: string,
+  maxLengte: number,
+): string | null {
+  if (waarde === undefined || waarde === null || waarde === '') {
+    return null;
+  }
+
+  if (typeof waarde !== 'string') {
+    throw new InvoerFout(veld, `${veld} moet tekst zijn.`);
+  }
+
+  const geknipt = waarde.trim();
+
+  if (geknipt === '') {
+    return null;
+  }
+
+  if (geknipt.length > maxLengte) {
+    throw new InvoerFout(
+      veld,
+      `${veld} mag maximaal ${maxLengte} tekens bevatten.`,
+    );
+  }
+
+  return geknipt;
+}
+
+/**
+ * Een KvK-nummer is acht cijfers.
+ *
+ * Bij de CSV-import is dit een *waarschuwing* en geen blokkade: een fout
+ * nummer in een bestand van 200 rijen mag de hele import niet tegenhouden, en
+ * is achteraf te corrigeren. Hier is het wél een fout — iemand typt één
+ * leverancier in en kan het meteen verbeteren. Verschillende situatie,
+ * verschillende strengheid; dat verschil is bewust.
+ */
+function kvkNummer(waarde: unknown): string | null {
+  const tekst = optioneleTekst(waarde, 'KvK-nummer', 20);
+
+  if (tekst === null) {
+    return null;
+  }
+
+  // Spaties en punten eruit: mensen typen 1234 5678.
+  const cijfers = tekst.replace(/[\s.]/g, '');
+
+  if (!/^\d{8}$/.test(cijfers)) {
+    throw new InvoerFout(
+      'kvkNumber',
+      'Een KvK-nummer bestaat uit acht cijfers.',
+    );
+  }
+
+  return cijfers;
+}
+
+/**
+ * Een e-mailadres moet er plausibel uitzien.
+ *
+ * Bewust geen strenge RFC-controle: die is berucht om geldige adressen af te
+ * wijzen, en de echte controle is toch of er een e-mail aankomt. Wat hier
+ * wordt gevangen is de vergissing — een naam in het e-mailveld, een ontbrekend
+ * apenstaartje.
+ */
+function emailAdres(waarde: unknown): string | null {
+  const tekst = optioneleTekst(waarde, 'E-mailadres', MAX_KORT);
+
+  if (tekst === null) {
+    return null;
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tekst)) {
+    throw new InvoerFout('contact.email', 'Dit lijkt geen geldig e-mailadres.');
+  }
+
+  return tekst;
+}
+
+/**
+ * Leest en valideert de body van POST /vendors.
+ *
+ * Werpt `InvoerFout` bij de eerste fout, met het veld erbij zodat het scherm
+ * de melding naast het juiste invoerveld kan zetten.
+ */
+export function leesNieuweVendor(body: unknown): NieuweVendor {
+  if (typeof body !== 'object' || body === null) {
+    throw new InvoerFout('body', 'Er is geen leverancier meegestuurd.');
+  }
+
+  const ruw = body as Record<string, unknown>;
+
+  const invoer: NieuweVendor = {
+    name: verplichteTekst(ruw.name, 'Naam', MAX_NAAM),
+    kvkNumber: kvkNummer(ruw.kvkNumber),
+    city: optioneleTekst(ruw.city, 'Plaats', MAX_KORT),
+    country: optioneleTekst(ruw.country, 'Land', MAX_KORT),
+    website: optioneleTekst(ruw.website, 'Website', MAX_URL),
+  };
+
+  const contact = ruw.contact;
+
+  if (contact !== undefined && contact !== null) {
+    if (typeof contact !== 'object') {
+      throw new InvoerFout('contact', 'Contactpersoon is niet goed ingevuld.');
+    }
+
+    const ruwContact = contact as Record<string, unknown>;
+    const naam = optioneleTekst(ruwContact.fullName, 'Naam', MAX_NAAM);
+
+    // Een contactpersoon zonder naam is geen contactpersoon. Wél een e-mail
+    // zonder naam invullen wijst op een half ingevuld formulier, en dat hoort
+    // gemeld te worden in plaats van stilzwijgend genegeerd.
+    if (naam === null) {
+      const heeftIetsAnders =
+        ruwContact.email || ruwContact.phone || ruwContact.jobTitle;
+
+      if (heeftIetsAnders) {
+        throw new InvoerFout(
+          'contact.fullName',
+          'Vul ook de naam van de contactpersoon in.',
+        );
+      }
+    } else {
+      invoer.contact = {
+        fullName: naam,
+        email: emailAdres(ruwContact.email),
+        phone: optioneleTekst(ruwContact.phone, 'Telefoonnummer', MAX_KORT),
+        jobTitle: optioneleTekst(ruwContact.jobTitle, 'Functie', MAX_KORT),
+      };
+    }
+  }
+
+  return invoer;
+}

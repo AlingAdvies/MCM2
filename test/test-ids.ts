@@ -98,6 +98,12 @@ export const TEST_IDS = {
   'vragenlijst-seed': {
     tenant: id('d3'),
   },
+  'vendor-routes': {
+    tenantA: id('7a'),
+    tenantB: id('7b'),
+    userA: id('7c'),
+    userB: id('7d'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */
