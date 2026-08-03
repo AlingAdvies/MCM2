@@ -1,7 +1,9 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-08-03, avond (**`app.current_actor` toegevoegd**: de database kan sinds migratie 0013 onderscheid maken tussen een medewerker en een leverancier. Dat kon hij niet — `withTenant()` zette alleen de tenant, en beide paden riepen hem identiek aan. Nodig voor de beoordelingstabel uit het surveybeheerplan, waar "zelfde tenant = mag het zien" voor het eerst níét opgaat. 269 e2e-tests en 25 browsertests groen. Drie tegenproeven gedaan; de derde bleef groen en leverde een nieuwe les op — zie hieronder.)
+2026-08-03, avond (**`app.current_actor` toegevoegd en gemerged**, PR #73: de database kan sinds migratie 0013 onderscheid maken tussen een medewerker en een leverancier. Dat kon hij niet — `withTenant()` zette alleen de tenant, en beide paden riepen hem identiek aan. Nodig voor de beoordelingstabel uit het surveybeheerplan, waar "zelfde tenant = mag het zien" voor het eerst níét opgaat. 269 e2e-tests en 25 browsertests groen, CI groen op `main`, geen open branches. Drie tegenproeven gedaan; de derde bleef groen en leverde een nieuwe les op — zie hieronder.)
+
+**Volgende stap:** fase A uit `docs/superpowers/plans/2026-08-03-surveybeheer.md` — het menu-item **Vragenlijsten** met de twee Transdev-lijsten uit de database.
 
 <details>
 <summary>Vorige stand (2026-08-03, middag)</summary>
@@ -19,7 +21,16 @@
 
 Alles hieronder is geverifieerd, niet uit gespreksgeheugen.
 
-**Plan voor de komende fases:** `docs/superpowers/plans/2026-07-30-beheerkant-en-demo-tenant.md` — vier fases naar een frontend die eruitziet als MVM_V2, inloggen als tenant, vendors met contactpersonen aanmaken, een demo-tenant met mock data, en een robuuste OTAP-doorloop.
+**Plan voor de komende fases:** `docs/superpowers/plans/2026-08-03-surveybeheer.md` — vier fases naar een tenant die zelf een vragenlijst kan uitzetten: rondes bekijken (A), een ronde starten en deelnemers uitnodigen (B), voortgang volgen, antwoorden lezen en beoordelen (C), en uitnodigingen mailen (D). Alle openstaande vragen daarin zijn op 2026-08-03 beantwoord.
+
+Dat plan begint met een bevinding die het waard is om te onthouden: **`genereerToken()` heeft geen enkele productieaanroeper.** Alleen `seed-demo-tenant.js` en `otap-doorloop.js` maken responses aan. Er bestaat dus nog geen weg waarlangs een echte uitnodiging tot stand komt — de beheerkant kan leveranciers beheren, maar geen vragenlijst uitzetten.
+
+<details>
+<summary>Vorig plan (2026-07-30, alle vier de fases af)</summary>
+
+`docs/superpowers/plans/2026-07-30-beheerkant-en-demo-tenant.md` — een frontend die eruitziet als MVM_V2, inloggen als tenant, vendors met contactpersonen aanmaken, een demo-tenant met mock data, en een robuuste OTAP-doorloop.
+
+</details>
 
 ## Het project bestaat uit twee repositories
 
@@ -58,7 +69,7 @@ Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in
    /beheer/leveranciers        sidebar + lijst met zoeken + aanmaakformulier
    /beheer/leveranciers/[id]   detail: stamgegevens wijzigen, contactpersonen beheren
    npm run seed:demo           demo-tenant: 21 leveranciers, 3 gebruikers, 3 responses
-   npm run verify:volledig     code → 161 unit → 264 e2e → stack → 25 browsertests
+   npm run verify:volledig     code → 161 unit → 269 e2e → stack → 25 browsertests
    ```
 
    **Inloggen via Entra werkt aantoonbaar.** Eén echte login doorlopen: code inwisselen, token verifiëren met de échte applicatiecode, gebruiker en membership, sessie via `clm.sessie_aanmaken()`, en met dat cookie `/vendors` → 200. Zonder cookie → 401.
@@ -97,9 +108,21 @@ Blijken ze over een half jaar nog steeds ongebruikt, dan kunnen ze weg — de ke
 npm run verify:volledig
 ```
 
-Vijf stappen: code, 161 unittests, 264 e2e tegen een wegwerpdatabase, beide
+Vijf stappen: code, 161 unittests, 269 e2e tegen een wegwerpdatabase, beide
 productie-images bouwen, 25 browsertests, en altijd opruimen. Stopt bij de
 eerste rode stap en noemt welke CI-job dat is.
+
+**Sinds 2026-08-03 controleert hij eerst of poort 5001 en 3000 vrij zijn.** Draait
+daar een dev-server, dan stopt hij binnen ~2,5 seconde met een melding die zegt
+welke poort bezet is en hoe je het proces vindt. Daarvóór strandde de doorloop
+pas ná stap 1 — minuten aan tests voor niets, met een Docker-melding die niet zei
+wélk proces in de weg zat.
+
+Dat was ook een correctheidsprobleem: `wachtOpStack()` pollt op die twee poorten,
+dus een draaiende dev-server antwoordde met 200 en het script dacht dat de stack
+gezond was — waarna de browsertest tegen die dev-server draaide in plaats van
+tegen de productie-images. Vandaar hard falen en niet alleen waarschuwen. Het
+script sluit bewust niets zelf af.
 
 **Let op bij handmatig een testcontainer draaien:** `verify:volledig` claimt poort
 **55441**. Draait daar nog iets van een vorige sessie, dan faalt stap 1 met
@@ -124,7 +147,7 @@ docker exec -i mcm2test psql -U postgres -q < db/roles/bootstrap-roles.sql
 docker exec mcm2test psql -U postgres -d postgres -c "ALTER ROLE clm_migrator WITH PASSWORD 'pw'; ALTER ROLE clm_api_runtime WITH PASSWORD 'pw';"
 MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres" npm run migrate:deploy
 DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" \
-  npx jest --config test/jest-e2e.json --forceExit    # 228 tests, 16 suites
+  npx jest --config test/jest-e2e.json --forceExit    # 269 tests, 20 suites
 # --forceExit is nodig sinds de sessiesuite: die houdt een pg-verbinding open
 # waardoor Jest anders blijft hangen zonder foutmelding.
 # `-d postgres` is niet optioneel: psql neemt anders de rolnaam als
@@ -456,6 +479,14 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Aantoonbaar werkend
 
+- **De actor-grens (2026-08-03, migratie 0013, PR #73).** De database kan onderscheid maken tussen een medewerker en een leverancier van dezelfde tenant. `withTenant()` zet naast de tenant nu ook `app.current_actor`, gelezen via `clm.current_actor()`; niet gezet betekent `onbekend`, de striktste stand.
+
+  **269 e2e-tests groen in 20 suites** plus **161 unittests**, tegen een database die vanaf niets is opgebouwd met migraties 0000 t/m 0013. Vier leverancierspaden geven `leverancier` door, twaalf medewerkerspaden `medewerker` — geverifieerd na afloop, niet aangenomen.
+
+  **Eerlijk over wat níét bewezen is:** er is nog geen policy die de actor gebruikt. Deze migratie verandert bewust geen gedrag; wat hier bewezen is, is uitsluitend dat de waarde correct in de database aankomt en per transactie geïsoleerd blijft. De eerste policy die erop leunt is migratie 0014 (`survey_review`), en die bestaat nog niet.
+
+  Dat is precies waarom de derde tegenproef groen bleef — zie de sectie hieronder over migratie 0013.
+
 - **Beheerkant fase 1 — de tenantgrens is dicht (2026-07-31, branch `feat/identiteit-en-membership`).** De laag die ontbrak is er:
 
   ```
@@ -731,7 +762,7 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 **Drizzle verpakt databasefouten: een triggermelding staat in `cause`, niet in `message`.** Een test die met `rejects.toThrow(/bevroren/)` op `message` matcht, wordt daardoor óók groen bij een tikfout in de SQL — dan test hij niets. Lees `(fout as Error & { cause?: Error }).cause?.message`.
 
-**Testsuites die dezelfde tenant-id gebruiken botsen bij de tweede run.** Templates zijn uniek op `(tenant_id, name, version)` en de lokale testdatabase blijft staan. In gebruik: `…e1` (survey-routes), `…f1`/`…f2` (token-isolatie), `…d1`/`…d2`/`…d3` (vragenlijst). Kies een eigen paar, en geef testtemplates een unieke versie in plaats van een vast nummer.
+**Testsuites die dezelfde tenant-id gebruiken botsen bij de tweede run.** Templates zijn uniek op `(tenant_id, name, version)` en de lokale testdatabase blijft staan. **Sinds 2026-07-31 deelt `test/test-ids.ts` de id's uit, per suite een eigen blok, en bewaakt `test/test-ids.spec.ts` dat er geen dubbelen ontstaan** — inclusief een controle dat geen suite een id hardcodeert langs het register heen. Een nieuwe suite voegt daar een blok toe en gebruikt `TEST_IDS['naam']`; zelf een UUID kiezen faalt de unittest. Geef testtemplates daarnaast een unieke versie in plaats van een vast nummer.
 
 **Docker 29 weigert een containernaam van één teken.** Het oude `--name t` uit dit document faalde met "Invalid container name"; de opstartcommando's hierboven zijn gecorrigeerd naar `mcm2test`.
 
@@ -742,6 +773,12 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 **Drizzle geeft een JS-array door als `record`, niet als `text[]`.** Een `INSERT` in een array-kolom faalt met "column X is of type text[] but expression is of type record". Werkende vorm: `ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(waarden)}::jsonb))`. Zelf een array-literal opbouwen kan ook, maar vraagt quoting van komma's, aanhalingstekens en accolades die in de waarden kunnen voorkomen — precies waar een injectiefout in sluipt.
 
 **Een nullable kolom maken raakt méér dan de tabel.** Migratie 0005 maakte `survey_response.vendor_id` nullable voor UC2, maar `resolve_survey_token()` joinde daar nog op — waardoor elke interne beoordeling 410 gaf. Bij het versoepelen van een kolom hoort een zoektocht naar elke plek die hem gebruikt: functies, views, policies. `grep -rn "vendor_id" drizzle/` had dit gevonden.
+
+**Bouw je een grens in twee stappen, dan is stap één onbewaakt tot stap twee er is.** Migratie 0013 voegt `app.current_actor` toe zonder één policy die hem gebruikt — bewust, zodat hij apart groen kan zijn. Gevolg: het leverancierspad zich laten voordoen als medewerker liet **alle 268 tests groen**. Terecht, want er viel niets te meten. En tegelijk het gevaarlijkste moment: precies het venster waarin iemand een nieuwe route bouwt en de actor van het verkeerde voorbeeld overneemt. **Hoort in stap één een test die de afspraak zélf bewaakt** — desnoods door de broncode te lezen, zoals `actor-context.e2e-spec.ts` en `test-ids.spec.ts` doen. Wachten tot stap twee betekent dat de fout er ondertussen in kan sluipen.
+
+**Een lang script hoort zijn goedkoopste controle als eerste te doen.** `verify:volledig` strandde twee keer op een bezette poort 5001/3000 — beide keren pas ná stap 1, die minuten duurt inclusief een wegwerpdatabase en 269 tests. De controle die het had voorkomen kost 2,5 seconde. Bijkomend: die poorten werden ook gebruikt om te bepalen óf de stack gezond was, dus een draaiende dev-server maakte de doorloop niet alleen traag maar ook onbetrouwbaar. **Vraag bij elke voorwaarde: wat kost het om dit vooraf te controleren, en wat kost het als het pas halverwege blijkt?**
+
+**Een test die een extern proces start, past zelden binnen de standaard 5 seconden.** `demo-seed.e2e-spec` viel reproduceerbaar om op een timeout omdat hij het seed-script twee keer als apart Node-proces draait (~1,6 s per keer, gemeten). Binnen de volledige suite — twintig suites parallel — was dat structureel te krap. De foutmelding wees naar hashing terwijl er niets mis was met hashing, dezelfde verwarrende faalvorm als de botsende test-id's. **Meet wat de test doet en geef hem een limiet die daarbij past, met de reden erbij.**
 
 ## Niet als bewezen beschouwen
 

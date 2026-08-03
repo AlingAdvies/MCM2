@@ -1,6 +1,6 @@
 # MCM2 — de tenantgrens, en hoe elke laag ervan bewezen wordt
 
-**Opgesteld:** 2026-07-31 · **Bijgewerkt:** 2026-07-31 na externe review
+**Opgesteld:** 2026-07-31 · **Bijgewerkt:** 2026-08-03 (actorgrens, migratie 0013)
 **Bedoeld voor:** de eigenaar en een externe reviewer
 **Leesbare webversie:** https://claude.ai/code/artifact/31d7819a-a7d9-4079-b224-c51d08497450
 
@@ -13,9 +13,9 @@ overgenomen uit eerdere verslagen.
 
 | | |
 |---|---|
-| E2e-tests | 210 in 15 suites |
+| E2e-tests | 269 in 20 suites |
 | Unittests | 161 in 8 suites |
-| Migraties | 0000 t/m 0011 |
+| Migraties | 0000 t/m 0013 |
 
 > **Onderhoud.** Dit document veroudert zodra de code verandert. Bij een wijziging
 > aan de tenantgrens, de testopzet of de verificatiepoort hoort een wijziging hier.
@@ -93,6 +93,47 @@ ingestelde klant te tonen.
 Dat werkt alleen wanneer de databaserol die regel niet mag negeren. Vandaar dat de
 applicatie draait als een rol **zonder** `BYPASSRLS` — en dat de applicatie weigert op te
 starten als dat recht er wél blijkt te zijn (`DatabaseService.onModuleInit`).
+
+### Waar de tenantgrens niet genoeg is: de actor (migratie 0013)
+
+Alles hierboven beantwoordt één vraag: **van welke klant is deze rij?** Voor vrijwel het
+hele systeem is dat de juiste vraag. Er is één plek waar het niet volstaat.
+
+De leverancier en de medewerker zitten in **dezelfde tenant**. Dat moet ook: de respons van
+een leverancier is klantgegeven van Transdev. Maar zodra Transdev een oordeel over die
+leverancier vastlegt, ontstaat er een rij die binnen dezelfde tenant valt en die de
+leverancier juist níét mag zien.
+
+Tot 2026-08-03 kon de database dat onderscheid niet maken. `withTenant()` zette precies één
+variabele, en beide paden riepen hem identiek aan:
+
+```
+leverancier (tokenlookup)  →  withTenant(tenantId)  →  app.current_tenant_id
+medewerker  (sessiecookie) →  withTenant(tenantId)  →  app.current_tenant_id
+```
+
+De enige bescherming zou dus zijn dat er geen route bestaat die het oordeel teruggeeft.
+**Dat is bescherming door afwezigheid** — precies het patroon dat in §4 als faalvorm staat
+beschreven: ze houdt stand tot iemand een route bouwt die "de respons met alles eromheen"
+ophaalt, en die persoon hoeft deze regel niet te kennen.
+
+Sinds migratie 0013 legt elke transactie ook vast **wie** hem opent:
+
+```
+app.current_actor  =  'medewerker' | 'leverancier' | 'onbekend'
+```
+
+Niet gezet betekent `onbekend`, en dat is de striktste stand. Een vergeten actor faalt
+dicht, niet open — de omgekeerde keuze zou betekenen dat elke nieuwe aanroeper die het
+vergeet stilzwijgend de ruimste rechten krijgt.
+
+**Wat hiervan bewezen is en wat niet.** Bewezen: de waarde komt correct in de database aan,
+blijft per transactie geïsoleerd (ook bij gelijktijdige transacties) en lekt niet naar een
+volgende transactie via de verbindingenpool. Niet bewezen: dat een policy hem correct
+gebruikt — die bestaat nog niet. Migratie 0013 verandert bewust geen gedrag; migratie 0014
+(`survey_review`) is de eerste die erop leunt.
+
+Dat verklaart ook een tegenproef die groen bleef; zie §4.
 
 ---
 
@@ -185,7 +226,7 @@ worden.
 > te vangen bewust in. Zie de test omvallen. Draai terug. Pas dan telt groen als bewijs.
 > Zonder die stap weet je alleen dat de test draait, niet dat hij iets bewaakt.
 
-Dat is geen theorie. In dit project heeft de tegenproef **vier keer** een gat gevonden dat
+Dat is geen theorie. In dit project heeft de tegenproef **vijf keer** een gat gevonden dat
 de groene tests niet lieten zien.
 
 ### De guardtest die 18 keer groen was en toch een gat liet
@@ -211,6 +252,34 @@ aanroept levert die waarschuwing niet op.
 Dat is het vermelden waard omdat het laat zien dat een tegenproef zélf ook fout kan zijn.
 Pas met een constructie waar de regel wél op afgaat, werd de poort rood. **Een mislukte
 tegenproef is geen bewijs dat de code goed is.**
+
+### De tegenproef die groen bleef omdat er nog niets te meten viel
+
+De ernstigste sabotage van 2026-08-03: het leverancierspad zich laten aankondigen als
+`medewerker`. Slaagt dat, dan krijgt een leverancier straks toegang tot beoordelingen over
+zichzelf — precies waar de actorgrens voor bestaat.
+
+**Alle 268 tests bleven groen.**
+
+En dat was terecht. Migratie 0013 voegt `app.current_actor` toe zonder één policy die hem
+gebruikt (§2). Er ís geen gedrag dat een verkeerde actor kan opmerken; de eerste policy die
+erop leunt komt in migratie 0014.
+
+Dat maakt het niet ongevaarlijk maar juist het tegendeel. **Tussen de twee migraties is de
+doorgifte volledig onbewaakt** — en dat is precies het venster waarin iemand een nieuwe
+survey-route bouwt en de actor vergeet of van het verkeerde voorbeeld overneemt. De fout
+zou dan pas zichtbaar worden op het moment dat de policy hem gaat gebruiken, in code die er
+al maanden staat.
+
+Een gedragstest is hier onmogelijk. Opgelost met een test die de **broncode zelf** leest en
+controleert dat de vier leverancierspaden zich als `leverancier` aankondigen
+(`actor-context.e2e-spec.ts`). Lelijker dan een gedragstest, en dezelfde afweging als
+`test-ids.spec.ts`, dat bewaakt dat suites geen UUID's langs het register heen hardcoderen.
+Na toevoeging faalt de sabotage wél.
+
+**De les, en die is breder dan dit geval:** bouw je een grens in twee stappen — eerst het
+mechanisme, dan de regel die erop leunt — dan hoort er in stap één een test die de afspraak
+zélf bewaakt. Wachten tot stap twee betekent dat de fout er ondertussen in kan sluipen.
 
 ### Waar de tests hun verwachting vandaan halen
 
@@ -249,26 +318,34 @@ Entra-tenant, en dat is *strenger* in plaats van losser. Een echte provider geef
 verlopen token af, of een token met een vervalste handtekening — en juist dat zijn de
 aanvallen. Met een lokaal gegenereerd sleutelpaar zijn die wél te maken.
 
-### E2e-tests — 210, tegen een wegwerpdatabase
+### E2e-tests — 269 in 20 suites, tegen een wegwerpdatabase
+
+Aantallen gemeten op 2026-08-03 tegen een database die vanaf niets is opgebouwd met
+migraties 0000 t/m 0013, niet geschat.
 
 | Suite | Bewaakt | Tests |
 |---|---|---:|
 | `antwoord-indienen` | Valideren vóór wegschrijven; tweede poging afgewezen (410) | 25 |
+| `vendor-detail` | Detail, wijzigen en verwijderen; een reviewer mag lezen maar niet schrijven | 23 |
 | `survey-token-isolatie` | Een token geeft toegang tot precies één respons | 21 |
 | `vragenlijst-import` | Import blijft binnen één tenant | 21 |
 | `tenant-context-guard` | **De sessieguard: geen tenantcontext zonder sessie** | 21 |
 | `vragenlijst-ophalen` | Alleen eigen vragenlijsten zichtbaar | 20 |
+| `vendor-routes` | De beheerroutes over HTTP, met twee tenants | 18 |
 | `bijlage-upload` | Inhoud bepaalt het bestandstype, niet de naam | 18 |
+| `schema-conformiteit` | Policies, FORCE RLS, tabeleigenaarschap en `search_path` — uit het schema afgeleid | 17 |
 | `vragenlijst-seed` | Inlezen van de acht Transdev-vragen | 15 |
 | `sessie` | Aanmaken, verlopen, intrekken; de tabel is afgesloten | 14 |
 | `membership-isolatie` | Lidmaatschap bepaalt de tenant, niet de invoer | 13 |
-| `schema-conformiteit` | Policies, FORCE RLS, tabeleigenaarschap en `search_path` — uit het schema afgeleid | 17 |
 | `survey-routes` | De volledige UC1-flow over HTTP | 12 |
+| `demo-seed` | De demo-tenant is idempotent en lekt niet naar een andere tenant | 8 |
 | `drizzle-tenant-context` | Isolatie ook via de querylaag, niet alleen ruwe SQL | 6 |
 | `tenant-rls-isolation` | Lezen én schrijven over de tenantgrens heen | 5 |
+| `actor-context` | **De actorgrens: medewerker, leverancier en onbekend** | 5 |
+| `sessie-route` | `/auth/sessie` geeft alleen naam, tenantnaam en rol terug | 5 |
 | `app`, `health` | De applicatie start en antwoordt | 2 |
 
-Vier van deze suites bestaan uitsluitend om de tenantgrens te toetsen, en ze doen dat
+Vijf van deze suites bestaan uitsluitend om de tenantgrens te toetsen, en ze doen dat
 langs verschillende wegen: ruwe SQL, de Drizzle-querylaag, het tokenpad en het sessiepad.
 Dat is bewust — **een garantie die maar op één manier getest is, is getest voor één manier
 van gebruiken.**
@@ -346,8 +423,9 @@ Die bewakingstest is het punt. De guard-suite had dit probleem eerder "opgelost"
 alleen een commentaarregel die voor botsingen waarschuwde — **een afspraak die niemand
 controleert, is geen afspraak.**
 
-Resultaat: **vijf keer achter elkaar 205 groen**, waar eerder ongeveer één op de vier runs
-faalde.
+Resultaat, gemeten op 2026-07-31: **vijf keer achter elkaar 205 groen**, waar eerder
+ongeveer één op de vier runs faalde. De suite is sindsdien naar 269 tests gegroeid en
+blijft stabiel; het register deelt inmiddels 17 blokken uit.
 
 ---
 
@@ -360,6 +438,7 @@ moeten lezen. Alles hierboven is gemeten; alles hieronder is dat niet.
 |---|---|---|
 | ~~Claims uit Microsoft Entra~~ | **Gemeten 2026-07-31** | `oid` is 36 tekens (UUID), `sub` 43 en dus géén UUID — het lengteverschil bevestigt de keuze voor `oid`. Zie §11. |
 | ~~De sessieguard in gebruik~~ | **Aangesloten 2026-07-31** | `GET`/`POST /vendors` draaien erachter, met 18 e2e-tests en een tegenproef. |
+| De actorgrens in een policy | **Onbewezen** | `app.current_actor` komt aantoonbaar in de database aan en blijft per transactie geïsoleerd (5 tests). Maar **geen enkele policy gebruikt hem** — migratie 0013 verandert bewust geen gedrag. Dat een leverancier straks écht buiten een beoordeling blijft, wordt pas bewezen door migratie 0014 plus de tegenproef die `survey_review` aan het leverancierspad toevoegt. Tot dan is de doorgifte alleen bewaakt door een test die de broncode leest; zie §4. |
 | Wachtwoordrotatie `postgres` | **Niet gedaan** | Issue #1. De beheerrol heeft nog het oorspronkelijke wachtwoord. |
 | Gelijktijdige uploads | **Onbewezen** | De `FOR UPDATE`-vergrendeling is er, maar met die vergrendeling verwijderd bleven alle tests groen. De race was niet uit te lokken zonder kunstgrepen in productiecode. |
 | Gezondheid van een uitgerolde omgeving | **Bestaat niet** | De e2e-tests beantwoorden dit nooit — ze zijn destructief van aard. Er is een aparte, alleen-lezende rookproef nodig: **Issue #61**. |
