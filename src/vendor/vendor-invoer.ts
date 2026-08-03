@@ -1,4 +1,8 @@
-import type { NieuweVendor } from './vendor.service';
+import type {
+  ContactInvoer,
+  NieuweVendor,
+  VendorWijziging,
+} from './vendor.service';
 
 /**
  * Validatie van wat een browser opstuurt bij het aanmaken van een leverancier.
@@ -189,6 +193,126 @@ export function leesNieuweVendor(body: unknown): NieuweVendor {
         jobTitle: optioneleTekst(ruwContact.jobTitle, 'Functie', MAX_KORT),
       };
     }
+  }
+
+  return invoer;
+}
+
+/**
+ * Leest de body van PATCH /vendors/:id.
+ *
+ * Anders dan bij aanmaken: hier telt het verschil tussen "niet meegestuurd" en
+ * "leeggemaakt". Een veld dat ontbreekt blijft staan; een veld met `null` of
+ * een lege tekst wordt gewist. Zonder dat onderscheid zou elk formulier dat
+ * niet álle velden kent, stilzwijgend gegevens wissen.
+ *
+ * Vandaar `if (veld in ruw)` en niet `if (ruw.veld)`.
+ */
+export function leesVendorWijziging(body: unknown): VendorWijziging {
+  if (typeof body !== 'object' || body === null) {
+    throw new InvoerFout('body', 'Er is geen wijziging meegestuurd.');
+  }
+
+  const ruw = body as Record<string, unknown>;
+  const wijziging: VendorWijziging = {};
+
+  if ('name' in ruw) {
+    wijziging.name = verplichteTekst(ruw.name, 'Naam', MAX_NAAM);
+  }
+  if ('kvkNumber' in ruw) {
+    wijziging.kvkNumber = kvkNummer(ruw.kvkNumber);
+  }
+  if ('vestigingsnummer' in ruw) {
+    wijziging.vestigingsnummer = optioneleTekst(
+      ruw.vestigingsnummer,
+      'Vestigingsnummer',
+      MAX_KORT,
+    );
+  }
+  if ('statutoryName' in ruw) {
+    wijziging.statutoryName = optioneleTekst(
+      ruw.statutoryName,
+      'Statutaire naam',
+      MAX_NAAM,
+    );
+  }
+  if ('city' in ruw) {
+    wijziging.city = optioneleTekst(ruw.city, 'Plaats', MAX_KORT);
+  }
+  if ('country' in ruw) {
+    wijziging.country = optioneleTekst(ruw.country, 'Land', MAX_KORT);
+  }
+  if ('website' in ruw) {
+    wijziging.website = optioneleTekst(ruw.website, 'Website', MAX_URL);
+  }
+
+  // De drie classificatievelden hebben een foreign key naar een ref-tabel. Een
+  // onbekende code levert daar een databasefout op; die wordt in de controller
+  // omgezet naar een leesbare melding. Hier alleen de vorm controleren — welke
+  // codes bestaan, weet de database beter dan dit bestand.
+  if ('categoryCode' in ruw) {
+    wijziging.categoryCode = optioneleTekst(
+      ruw.categoryCode,
+      'Categorie',
+      MAX_KORT,
+    );
+  }
+  if ('businessCriticalityCode' in ruw) {
+    wijziging.businessCriticalityCode = optioneleTekst(
+      ruw.businessCriticalityCode,
+      'Bedrijfskritiek',
+      MAX_KORT,
+    );
+  }
+  if ('complianceStatusCode' in ruw) {
+    wijziging.complianceStatusCode = optioneleTekst(
+      ruw.complianceStatusCode,
+      'Compliancestatus',
+      MAX_KORT,
+    );
+  }
+
+  return wijziging;
+}
+
+/**
+ * Leest de body van POST/PATCH op een contactpersoon.
+ *
+ * `naamVerplicht` verschilt per gebruik: bij toevoegen moet er een naam zijn,
+ * bij wijzigen mag je alleen een e-mailadres corrigeren.
+ */
+export function leesContact(
+  body: unknown,
+  naamVerplicht: boolean,
+): ContactInvoer {
+  if (typeof body !== 'object' || body === null) {
+    throw new InvoerFout('body', 'Er is geen contactpersoon meegestuurd.');
+  }
+
+  const ruw = body as Record<string, unknown>;
+  const invoer: ContactInvoer = {};
+
+  if (naamVerplicht) {
+    invoer.fullName = verplichteTekst(ruw.fullName, 'Naam', MAX_NAAM);
+  } else if ('fullName' in ruw) {
+    invoer.fullName = verplichteTekst(ruw.fullName, 'Naam', MAX_NAAM);
+  }
+
+  if ('email' in ruw) {
+    invoer.email = emailAdres(ruw.email);
+  }
+  if ('phone' in ruw) {
+    invoer.phone = optioneleTekst(ruw.phone, 'Telefoonnummer', MAX_KORT);
+  }
+  if ('jobTitle' in ruw) {
+    invoer.jobTitle = optioneleTekst(ruw.jobTitle, 'Functie', MAX_KORT);
+  }
+
+  if ('isPrimary' in ruw) {
+    if (typeof ruw.isPrimary !== 'boolean') {
+      throw new InvoerFout('isPrimary', 'isPrimary moet true of false zijn.');
+    }
+    invoer.isPrimary = ruw.isPrimary;
   }
 
   return invoer;

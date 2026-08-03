@@ -2,19 +2,34 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
+  NotFoundException,
+  Param,
+  Patch,
   Post,
   Req,
   UseGuards,
 } from '@nestjs/common';
 
+import { RolGuard, VereistRol } from '../auth/rol.guard';
 import {
   TenantContextGuard,
   type RequestMetSessie,
 } from '../auth/tenant-context.guard';
-import { InvoerFout, leesNieuweVendor } from './vendor-invoer';
-import { VendorService, type NieuweVendor } from './vendor.service';
+import {
+  InvoerFout,
+  leesContact,
+  leesNieuweVendor,
+  leesVendorWijziging,
+} from './vendor-invoer';
+import {
+  VendorService,
+  type ContactInvoer,
+  type NieuweVendor,
+  type VendorWijziging,
+} from './vendor.service';
 
 /**
  * De eerste beheerroutes van MCM2 (Issue #7 spoor 1, fase 2 van het plan).
@@ -30,7 +45,7 @@ import { VendorService, type NieuweVendor } from './vendor.service';
  * docs/architectuur-en-verificatie.md §8.
  */
 @Controller('vendors')
-@UseGuards(TenantContextGuard)
+@UseGuards(TenantContextGuard, RolGuard)
 export class VendorController {
   constructor(private readonly vendors: VendorService) {}
 
@@ -59,6 +74,7 @@ export class VendorController {
    * het KvK-nummer al bestaat binnen deze tenant.
    */
   @Post()
+  @VereistRol('admin')
   @HttpCode(201)
   async maakAan(@Req() request: RequestMetSessie, @Body() body: unknown) {
     const sessie = request.sessie!;
@@ -84,4 +100,210 @@ export class VendorController {
 
     return aangemaakt;
   }
+
+  /**
+   * Eén leverancier met zijn contactpersonen.
+   *
+   * 404 bij onbekend, verwijderd óf van een andere tenant. Die drie zijn
+   * bewust niet te onderscheiden — een apart antwoord zou verklappen dat een
+   * id elders wél bestaat.
+   */
+  @Get(':id')
+  async detail(@Req() request: RequestMetSessie, @Param('id') id: string) {
+    const sessie = request.sessie!;
+
+    const vendor = await this.vendors.detail(sessie.tenantId, leesUuid(id));
+
+    if (!vendor) {
+      throw new NotFoundException('Leverancier niet gevonden.');
+    }
+
+    return vendor;
+  }
+
+  /**
+   * Wijzigt een leverancier. Alleen de meegestuurde velden.
+   *
+   * `@VereistRol('admin')`: een reviewer mag lezen maar niet schrijven. De
+   * controle staat hier en niet alleen in het scherm — een verborgen knop bij
+   * een open route is geen beveiliging.
+   */
+  @Patch(':id')
+  @VereistRol('admin')
+  async wijzig(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const sessie = request.sessie!;
+
+    let wijziging: VendorWijziging;
+
+    try {
+      wijziging = leesVendorWijziging(body);
+    } catch (err) {
+      throw alsHttpFout(err);
+    }
+
+    const vendor = await this.vendors
+      .wijzig(sessie.tenantId, leesUuid(id), wijziging)
+      .catch(alsRefFout);
+
+    if (!vendor) {
+      throw new NotFoundException('Leverancier niet gevonden.');
+    }
+
+    return vendor;
+  }
+
+  /** Verwijdert een leverancier — soft delete, inclusief zijn contactpersonen. */
+  @Delete(':id')
+  @VereistRol('admin')
+  @HttpCode(204)
+  async verwijder(@Req() request: RequestMetSessie, @Param('id') id: string) {
+    const sessie = request.sessie!;
+
+    const gelukt = await this.vendors.verwijder(sessie.tenantId, leesUuid(id));
+
+    if (!gelukt) {
+      throw new NotFoundException('Leverancier niet gevonden.');
+    }
+  }
+
+  // ── Contactpersonen ──────────────────────────────────────────────────────
+
+  @Post(':id/contacts')
+  @VereistRol('admin')
+  @HttpCode(201)
+  async voegContactToe(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const sessie = request.sessie!;
+
+    let invoer: ContactInvoer;
+
+    try {
+      invoer = leesContact(body, true);
+    } catch (err) {
+      throw alsHttpFout(err);
+    }
+
+    const contact = await this.vendors.voegContactToe(
+      sessie.tenantId,
+      leesUuid(id),
+      invoer,
+    );
+
+    if (!contact) {
+      throw new NotFoundException('Leverancier niet gevonden.');
+    }
+
+    return contact;
+  }
+
+  @Patch(':id/contacts/:contactId')
+  @VereistRol('admin')
+  async wijzigContact(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Param('contactId') contactId: string,
+    @Body() body: unknown,
+  ) {
+    const sessie = request.sessie!;
+
+    let invoer: ContactInvoer;
+
+    try {
+      invoer = leesContact(body, false);
+    } catch (err) {
+      throw alsHttpFout(err);
+    }
+
+    const contact = await this.vendors.wijzigContact(
+      sessie.tenantId,
+      leesUuid(id),
+      leesUuid(contactId),
+      invoer,
+    );
+
+    if (!contact) {
+      throw new NotFoundException('Contactpersoon niet gevonden.');
+    }
+
+    return contact;
+  }
+
+  @Delete(':id/contacts/:contactId')
+  @VereistRol('admin')
+  @HttpCode(204)
+  async verwijderContact(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Param('contactId') contactId: string,
+  ) {
+    const sessie = request.sessie!;
+
+    const gelukt = await this.vendors.verwijderContact(
+      sessie.tenantId,
+      leesUuid(id),
+      leesUuid(contactId),
+    );
+
+    if (!gelukt) {
+      throw new NotFoundException('Contactpersoon niet gevonden.');
+    }
+  }
+}
+
+const UUID_PATROON =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Controleert de vorm van een id vóór de database geraadpleegd wordt.
+ *
+ * Zonder deze controle levert `/vendors/onzin` een databasefout op ("invalid
+ * input syntax for type uuid") die als 500 naar buiten komt. Dat is een fout
+ * van de aanvrager, geen storing — en een 500 in het log leidt de aandacht weg
+ * van echte problemen. Zelfde redenering als `heeftGeldigeVorm()` bij het
+ * surveytoken.
+ */
+function leesUuid(waarde: string): string {
+  if (!UUID_PATROON.test(waarde)) {
+    throw new NotFoundException('Leverancier niet gevonden.');
+  }
+
+  return waarde;
+}
+
+/** Zet een InvoerFout om naar een 400 met het veld erbij. */
+function alsHttpFout(err: unknown): unknown {
+  if (err instanceof InvoerFout) {
+    return new BadRequestException({ message: err.message, veld: err.veld });
+  }
+
+  return err;
+}
+
+/**
+ * Een onbekende classificatiecode is een gebruikersfout, geen storing.
+ *
+ * De drie code-velden hebben een foreign key naar `ref.vendor_category`,
+ * `ref.business_criticality` en `ref.compliance_status`. Een waarde die daar
+ * niet in staat geeft een `23503`-fout, en die zou zonder deze vertaling als
+ * 500 naar buiten komen — terwijl het scherm gewoon een verkeerde code stuurde.
+ */
+function alsRefFout(err: unknown): never {
+  const code = (err as { cause?: { code?: string }; code?: string })?.cause
+    ?.code;
+
+  if (code === '23503') {
+    throw new BadRequestException({
+      message: 'Onbekende categorie, criticality of compliancestatus.',
+      veld: 'categoryCode',
+    });
+  }
+
+  throw err;
 }

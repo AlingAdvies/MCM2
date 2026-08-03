@@ -85,6 +85,13 @@ export const TEST_IDS = {
     tenant: id('8a'),
     user: id('8b'),
   },
+  'vendor-detail': {
+    tenant: id('8c'),
+    adminUser: id('8d'),
+    reviewerUser: id('8e'),
+    andereTenant: id('8f'),
+    andereUser: id('80'),
+  },
   'tenant-context-guard': {
     tenantA: id('9a'),
     tenantB: id('9b'),
