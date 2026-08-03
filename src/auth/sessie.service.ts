@@ -144,26 +144,30 @@ export class SessieService {
   async profiel(
     context: SessieContext,
   ): Promise<{ naam: string; tenantNaam: string } | null> {
-    return this.db.withTenant(context.tenantId, async (tx) => {
-      const resultaat = await tx.execute<{
-        naam: string;
-        tenant_naam: string;
-      }>(
-        sql`SELECT u.full_name AS naam, t.name AS tenant_naam
+    return this.db.withTenant(
+      context.tenantId,
+      async (tx) => {
+        const resultaat = await tx.execute<{
+          naam: string;
+          tenant_naam: string;
+        }>(
+          sql`SELECT u.full_name AS naam, t.name AS tenant_naam
               FROM clm."user" u
               JOIN clm.tenant t ON t.tenant_id = u.tenant_id
              WHERE u.user_id = ${context.userId}
                AND u.deleted_at IS NULL`,
-      );
+        );
 
-      const rij = resultaat.rows[0];
+        const rij = resultaat.rows[0];
 
-      if (!rij) {
-        return null;
-      }
+        if (!rij) {
+          return null;
+        }
 
-      return { naam: rij.naam, tenantNaam: rij.tenant_naam };
-    });
+        return { naam: rij.naam, tenantNaam: rij.tenant_naam };
+      },
+      'medewerker',
+    );
   }
 
   /**

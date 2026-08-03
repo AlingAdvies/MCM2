@@ -542,7 +542,7 @@ Daarna herstellen, en controleren dat het bestand weer identiek is
 
 **Waarom dit een harde regel is.** Een test die groen is bij een werkende
 implementatie én groen blijft bij een kapotte, meet niets. Dat klinkt
-theoretisch tot het gebeurt, en in dit project is het **zes keer** gebeurd:
+theoretisch tot het gebeurt, en in dit project is het **negen keer** gebeurd:
 
 | Wanneer | Sabotage | Wat de tests deden |
 |---|---|---|
@@ -552,14 +552,30 @@ theoretisch tot het gebeurt, en in dit project is het **zes keer** gebeurd:
 | 2026-07-30 | `instruction`-tak uit het portaal | 3 controles vielen om, zoals bedoeld |
 | 2026-08-03 | tokenhash vervangen door hex-codering | **alle 8 tests bleven groen** — de test keek naar de vórm van de hash, niet of het de hash ís |
 | 2026-08-03 | `tenantId` toegevoegd aan `/auth/sessie` | **alle 8 browsertests bleven groen** — de sidebar toont dat veld niet, dus het kwam nooit in beeld |
+| 2026-08-03 | `withTenant()` zet de actor altijd op `medewerker` | 2 tests vielen om, zoals bedoeld |
+| 2026-08-03 | standaardactor omgedraaid naar `medewerker` i.p.v. `onbekend` | 3 tests vielen om, zoals bedoeld |
+| 2026-08-03 | leverancierspad kondigt zich aan als `medewerker` | **alle 268 tests bleven groen** — er was nog geen policy die de actor gebruikt, dus niets kon het merken |
 
-Twee van de zes keer bleven de tests volledig groen bij een echt lek. Beide
-keren was de test op de verkeerde plek geschreven.
+Drie van de negen keer bleven de tests volledig groen bij een echt lek. Drie
+keer was de test op de verkeerde plek geschreven — of hij bestond nog niet.
 
-**De les uit die twee.** Test een lek **bij de bron**, niet bij de plek waar je
-hoopt dat het niet opduikt. Een browsertest die controleert wat er in een scherm
-terechtkomt, mist alles wat wél over de lijn gaat maar niet getoond wordt. Het
-antwoord van de route zelf controleren vangt dat wel.
+**De les uit de eerste twee.** Test een lek **bij de bron**, niet bij de plek
+waar je hoopt dat het niet opduikt. Een browsertest die controleert wat er in een
+scherm terechtkomt, mist alles wat wél over de lijn gaat maar niet getoond wordt.
+Het antwoord van de route zelf controleren vangt dat wel.
+
+**De les uit de derde is nieuw en scherper.** Migratie 0013 voegt
+`app.current_actor` toe zonder één policy die hem gebruikt — bewust, zodat hij
+apart groen kan zijn. Gevolg: tussen migratie 0013 en 0014 kan een pad zich als
+de verkeerde actor aankondigen zonder dat íéts dat merkt. Niet omdat de test op
+de verkeerde plek staat, maar omdat er nog geen gedrag is om te meten.
+
+Dat venster is precies wanneer iemand een nieuwe route bouwt en de actor
+overneemt van het verkeerde voorbeeld. **Bouw je een grens in twee stappen, dan
+hoort er in stap één een test die de afspraak zelf bewaakt** — desnoods door de
+broncode te lezen, zoals `actor-context.e2e-spec.ts` doet en `test-ids.spec.ts`
+al deed. Wachten tot stap twee betekent dat de fout er ondertussen in kan
+sluipen.
 
 **Wanneer verplicht:** bij elke wijziging aan RLS-policies, guards, tokens,
 sessies, rolcontroles of iets anders dat bepaalt wie wat mag zien. Niet nodig

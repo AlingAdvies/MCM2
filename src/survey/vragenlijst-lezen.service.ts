@@ -163,13 +163,15 @@ export class VragenlijstLeesService {
     tenantId: string,
     responseId: string,
   ): Promise<Vragenlijst | null> {
-    return this.db.withTenant(tenantId, async (tx) => {
-      const resultaat = await tx.execute<VraagRij>(
-        // De keten response → run → template → vragen. Elke stap zit binnen de
-        // tenantcontext, dus RLS beschermt tegen een andere tenant; de
-        // response_id-voorwaarde beschermt tegen een andere respons binnen
-        // dezelfde tenant.
-        sql`SELECT q.question_key,
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const resultaat = await tx.execute<VraagRij>(
+          // De keten response → run → template → vragen. Elke stap zit binnen de
+          // tenantcontext, dus RLS beschermt tegen een andere tenant; de
+          // response_id-voorwaarde beschermt tegen een andere respons binnen
+          // dezelfde tenant.
+          sql`SELECT q.question_key,
                    q.title,
                    q.body,
                    q.answer_type,
@@ -190,69 +192,71 @@ export class VragenlijstLeesService {
               LEFT JOIN clm.survey_category c ON c.category_id = q.category_id
              WHERE r.response_id = ${responseId}
              ORDER BY c.position NULLS FIRST, q.position`,
-      );
+        );
 
-      const rijen = resultaat.rows;
+        const rijen = resultaat.rows;
 
-      // Geen rijen betekent: de respons bestaat niet in deze tenant, of de
-      // template heeft nog geen vragen. Voor de aanroeper is dat hetzelfde —
-      // er valt niets te tonen.
-      if (rijen.length === 0) {
-        return null;
-      }
-
-      const categorieen = new Map<string, Categorie>();
-      const losseVragen: Vraag[] = [];
-
-      for (const rij of rijen) {
-        const vraag: Vraag = {
-          questionKey: rij.question_key,
-          title: rij.title,
-          body: rij.body,
-          answerType: rij.answer_type as AntwoordType,
-          isRequired: rij.is_required,
-          allowsUpload: rij.allows_upload,
-          maxFiles: rij.max_files,
-          config: vertaalConfig(rij.config),
-        };
-
-        if (rij.category_id === null || rij.category_name === null) {
-          losseVragen.push(vraag);
-          continue;
+        // Geen rijen betekent: de respons bestaat niet in deze tenant, of de
+        // template heeft nog geen vragen. Voor de aanroeper is dat hetzelfde —
+        // er valt niets te tonen.
+        if (rijen.length === 0) {
+          return null;
         }
 
-        let categorie = categorieen.get(rij.category_id);
+        const categorieen = new Map<string, Categorie>();
+        const losseVragen: Vraag[] = [];
 
-        if (!categorie) {
-          categorie = {
-            key: maakSleutel(rij.category_name),
-            name: rij.category_name,
-            minAnswers: rij.category_min_answers ?? 0,
-            questions: [],
+        for (const rij of rijen) {
+          const vraag: Vraag = {
+            questionKey: rij.question_key,
+            title: rij.title,
+            body: rij.body,
+            answerType: rij.answer_type as AntwoordType,
+            isRequired: rij.is_required,
+            allowsUpload: rij.allows_upload,
+            maxFiles: rij.max_files,
+            config: vertaalConfig(rij.config),
           };
-          categorieen.set(rij.category_id, categorie);
+
+          if (rij.category_id === null || rij.category_name === null) {
+            losseVragen.push(vraag);
+            continue;
+          }
+
+          let categorie = categorieen.get(rij.category_id);
+
+          if (!categorie) {
+            categorie = {
+              key: maakSleutel(rij.category_name),
+              name: rij.category_name,
+              minAnswers: rij.category_min_answers ?? 0,
+              questions: [],
+            };
+            categorieen.set(rij.category_id, categorie);
+          }
+
+          categorie.questions.push(vraag);
         }
 
-        categorie.questions.push(vraag);
-      }
+        const eerste = rijen[0];
+        const sluit = eerste.closes_at;
 
-      const eerste = rijen[0];
-      const sluit = eerste.closes_at;
-
-      return {
-        name: eerste.template_name,
-        categories: [...categorieen.values()],
-        questions: losseVragen,
-        // Tijdstippen komen bij ruwe SQL als string terug wanneer ze uit een
-        // JOIN komen; vandaar de dubbele behandeling. Zelfde patroon als
-        // alsDatum() in survey-token.service.ts.
-        closesAt:
-          sluit === null
-            ? null
-            : sluit instanceof Date
-              ? sluit.toISOString()
-              : new Date(sluit).toISOString(),
-      };
-    });
+        return {
+          name: eerste.template_name,
+          categories: [...categorieen.values()],
+          questions: losseVragen,
+          // Tijdstippen komen bij ruwe SQL als string terug wanneer ze uit een
+          // JOIN komen; vandaar de dubbele behandeling. Zelfde patroon als
+          // alsDatum() in survey-token.service.ts.
+          closesAt:
+            sluit === null
+              ? null
+              : sluit instanceof Date
+                ? sluit.toISOString()
+                : new Date(sluit).toISOString(),
+        };
+      },
+      'leverancier',
+    );
   }
 }

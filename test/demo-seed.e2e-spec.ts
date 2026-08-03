@@ -245,7 +245,24 @@ describe('Demo-seed (e2e)', () => {
       const alsTekst = Buffer.from(rij.token_hash, 'hex').toString('utf8');
       expect(alsTekst).not.toContain('demo-');
     }
-  });
+    // Twintig seconden en niet de standaard vijf.
+    //
+    // Deze test start het seed-script twee keer als apart Node-proces. Eén
+    // aanroep duurt ~1,6 s tegen een rustige database: een Node-start, de
+    // migratiecontrole en ruim honderd inserts. Twee aanroepen zitten daarmee
+    // al op ~3,2 s, en dat is binnen de standaardlimiet van 5 s alleen genoeg
+    // zolang de machine niets anders doet.
+    //
+    // In de volledige suite doet hij dat wel: twintig suites draaien parallel
+    // tegen dezelfde database en delen een pool van vier verbindingen per
+    // applicatie. Dan valt deze test om op een timeout — met een foutmelding
+    // die naar hashing wijst terwijl er niets mis is met hashing.
+    //
+    // Dat is dezelfde faalvorm als de botsende test-id's van 2026-07-31: de
+    // melding wijst naar het gevolg, niet naar de oorzaak, en "even opnieuw
+    // draaien" wordt een gewoonte. Vandaar een limiet die past bij wat de test
+    // daadwerkelijk doet.
+  }, 20_000);
 
   it('gebruikt tokens met de vorm die de guard accepteert', () => {
     // Deze test bestaat door schade: de eerste versie van het script gebruikte
@@ -268,7 +285,8 @@ describe('Demo-seed (e2e)', () => {
     for (const token of links) {
       expect(token).toMatch(TOKEN_PATROON);
     }
-  });
+    // Ook twee scriptaanroepen, dus dezelfde limiet als de test hierboven.
+  }, 20_000);
 
   // ── Tenantgrens ───────────────────────────────────────────────────────────
 

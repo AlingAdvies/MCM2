@@ -187,9 +187,11 @@ export class VendorService {
    * elkaar halen maakt allebei moeilijker te doorgronden.
    */
   async lijst(tenantId: string): Promise<VendorSamenvatting[]> {
-    return this.db.withTenant(tenantId, async (tx) => {
-      const resultaat = await tx.execute<VendorRij>(
-        sql`SELECT v.vendor_id,
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const resultaat = await tx.execute<VendorRij>(
+          sql`SELECT v.vendor_id,
                    v.name,
                    v.kvk_number,
                    v.city,
@@ -203,19 +205,21 @@ export class VendorService {
               FROM clm.vendor v
              WHERE v.deleted_at IS NULL
              ORDER BY v.created_at DESC`,
-      );
+        );
 
-      return resultaat.rows.map((r) => ({
-        vendorId: r.vendor_id,
-        name: r.name,
-        kvkNumber: r.kvk_number,
-        city: r.city,
-        country: r.country,
-        website: r.website,
-        aantalContacten: Number(r.aantal_contacten),
-        createdAt: alsTekst(r.created_at),
-      }));
-    });
+        return resultaat.rows.map((r) => ({
+          vendorId: r.vendor_id,
+          name: r.name,
+          kvkNumber: r.kvk_number,
+          city: r.city,
+          country: r.country,
+          website: r.website,
+          aantalContacten: Number(r.aantal_contacten),
+          createdAt: alsTekst(r.created_at),
+        }));
+      },
+      'medewerker',
+    );
   }
 
   /**
@@ -233,31 +237,33 @@ export class VendorService {
     tenantId: string,
     invoer: NieuweVendor,
   ): Promise<AangemaakteVendor> {
-    return this.db.withTenant(tenantId, async (tx) => {
-      const kvk = leegIsNull(invoer.kvkNumber);
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const kvk = leegIsNull(invoer.kvkNumber);
 
-      // Vooraf controleren geeft een bruikbare melding; de unieke index blijft
-      // de echte garantie. Zonder deze controle krijgt de gebruiker een
-      // databasefout te zien in plaats van "dit KvK-nummer bestaat al".
-      if (kvk) {
-        const bestaand = await tx.execute<{ name: string }>(
-          sql`SELECT name FROM clm.vendor
+        // Vooraf controleren geeft een bruikbare melding; de unieke index blijft
+        // de echte garantie. Zonder deze controle krijgt de gebruiker een
+        // databasefout te zien in plaats van "dit KvK-nummer bestaat al".
+        if (kvk) {
+          const bestaand = await tx.execute<{ name: string }>(
+            sql`SELECT name FROM clm.vendor
                WHERE kvk_number = ${kvk} AND deleted_at IS NULL
                LIMIT 1`,
-        );
-
-        if (bestaand.rows.length > 0) {
-          throw new ConflictException(
-            `Er bestaat al een leverancier met KvK-nummer ${kvk}: ${bestaand.rows[0].name}.`,
           );
-        }
-      }
 
-      const vendorResultaat = await tx.execute<{
-        vendor_id: string;
-        name: string;
-      }>(
-        sql`INSERT INTO clm.vendor (tenant_id, name, kvk_number, city, country, website)
+          if (bestaand.rows.length > 0) {
+            throw new ConflictException(
+              `Er bestaat al een leverancier met KvK-nummer ${kvk}: ${bestaand.rows[0].name}.`,
+            );
+          }
+        }
+
+        const vendorResultaat = await tx.execute<{
+          vendor_id: string;
+          name: string;
+        }>(
+          sql`INSERT INTO clm.vendor (tenant_id, name, kvk_number, city, country, website)
             VALUES (${tenantId},
                     ${invoer.name.trim()},
                     ${kvk},
@@ -265,17 +271,17 @@ export class VendorService {
                     ${leegIsNull(invoer.country) ?? 'NL'},
                     ${leegIsNull(invoer.website)})
             RETURNING vendor_id, name`,
-      );
+        );
 
-      const nieuweVendor = vendorResultaat.rows[0];
-      let contactId: string | null = null;
+        const nieuweVendor = vendorResultaat.rows[0];
+        let contactId: string | null = null;
 
-      if (invoer.contact?.fullName?.trim()) {
-        // is_primary op true: dit is de eerste contactpersoon, en een
-        // leverancier zonder primair contact levert straks geen ontvanger op
-        // voor de uitnodiging.
-        const contactResultaat = await tx.execute<{ contact_id: string }>(
-          sql`INSERT INTO clm.vendor_contact
+        if (invoer.contact?.fullName?.trim()) {
+          // is_primary op true: dit is de eerste contactpersoon, en een
+          // leverancier zonder primair contact levert straks geen ontvanger op
+          // voor de uitnodiging.
+          const contactResultaat = await tx.execute<{ contact_id: string }>(
+            sql`INSERT INTO clm.vendor_contact
                 (vendor_id, tenant_id, full_name, email, phone, job_title, is_primary)
               VALUES (${nieuweVendor.vendor_id},
                       ${tenantId},
@@ -285,21 +291,23 @@ export class VendorService {
                       ${leegIsNull(invoer.contact.jobTitle)},
                       true)
               RETURNING contact_id`,
+          );
+
+          contactId = contactResultaat.rows[0].contact_id;
+        }
+
+        this.logger.log(
+          `Leverancier aangemaakt (${nieuweVendor.vendor_id})${contactId ? ' met contactpersoon' : ''}.`,
         );
 
-        contactId = contactResultaat.rows[0].contact_id;
-      }
-
-      this.logger.log(
-        `Leverancier aangemaakt (${nieuweVendor.vendor_id})${contactId ? ' met contactpersoon' : ''}.`,
-      );
-
-      return {
-        vendorId: nieuweVendor.vendor_id,
-        name: nieuweVendor.name,
-        contactId,
-      };
-    });
+        return {
+          vendorId: nieuweVendor.vendor_id,
+          name: nieuweVendor.name,
+          contactId,
+        };
+      },
+      'medewerker',
+    );
   }
 
   /**
@@ -315,8 +323,10 @@ export class VendorService {
     tenantId: string,
     vendorId: string,
   ): Promise<VendorDetail | null> {
-    return this.db.withTenant(tenantId, (tx) =>
-      this.detailBinnenTransactie(tx, vendorId),
+    return this.db.withTenant(
+      tenantId,
+      (tx) => this.detailBinnenTransactie(tx, vendorId),
+      'medewerker',
     );
   }
 
@@ -341,92 +351,98 @@ export class VendorService {
         ? undefined
         : leegIsNull(wijziging.kvkNumber);
 
-    return this.db.withTenant(tenantId, async (tx) => {
-      const bestaat = await tx.execute<{ vendor_id: string }>(
-        sql`SELECT vendor_id FROM clm.vendor
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const bestaat = await tx.execute<{ vendor_id: string }>(
+          sql`SELECT vendor_id FROM clm.vendor
              WHERE vendor_id = ${vendorId} AND deleted_at IS NULL`,
-      );
+        );
 
-      if (bestaat.rows.length === 0) {
-        return null;
-      }
+        if (bestaat.rows.length === 0) {
+          return null;
+        }
 
-      // Zelfde controle als bij aanmaken, plus "en niet ikzelf": zonder die
-      // uitzondering kan een leverancier zijn eigen KvK-nummer niet opnieuw
-      // opslaan.
-      if (kvk) {
-        const botsing = await tx.execute<{ name: string }>(
-          sql`SELECT name FROM clm.vendor
+        // Zelfde controle als bij aanmaken, plus "en niet ikzelf": zonder die
+        // uitzondering kan een leverancier zijn eigen KvK-nummer niet opnieuw
+        // opslaan.
+        if (kvk) {
+          const botsing = await tx.execute<{ name: string }>(
+            sql`SELECT name FROM clm.vendor
                WHERE kvk_number = ${kvk}
                  AND vendor_id <> ${vendorId}
                  AND deleted_at IS NULL
                LIMIT 1`,
-        );
+          );
 
-        if (botsing.rows.length > 0) {
-          throw new ConflictException(
-            `Er bestaat al een leverancier met KvK-nummer ${kvk}: ${botsing.rows[0].name}.`,
+          if (botsing.rows.length > 0) {
+            throw new ConflictException(
+              `Er bestaat al een leverancier met KvK-nummer ${kvk}: ${botsing.rows[0].name}.`,
+            );
+          }
+        }
+
+        const zetten: SQL[] = [];
+
+        if (wijziging.name !== undefined) {
+          zetten.push(sql`name = ${wijziging.name.trim()}`);
+        }
+        if (kvk !== undefined) {
+          zetten.push(sql`kvk_number = ${kvk}`);
+        }
+        if (wijziging.vestigingsnummer !== undefined) {
+          zetten.push(
+            sql`vestigingsnummer = ${leegIsNull(wijziging.vestigingsnummer)}`,
           );
         }
-      }
+        if (wijziging.statutoryName !== undefined) {
+          zetten.push(
+            sql`statutory_name = ${leegIsNull(wijziging.statutoryName)}`,
+          );
+        }
+        if (wijziging.city !== undefined) {
+          zetten.push(sql`city = ${leegIsNull(wijziging.city)}`);
+        }
+        if (wijziging.country !== undefined) {
+          zetten.push(sql`country = ${leegIsNull(wijziging.country) ?? 'NL'}`);
+        }
+        if (wijziging.website !== undefined) {
+          zetten.push(sql`website = ${leegIsNull(wijziging.website)}`);
+        }
+        if (wijziging.categoryCode !== undefined) {
+          zetten.push(
+            sql`category_code = ${leegIsNull(wijziging.categoryCode)}`,
+          );
+        }
+        if (wijziging.businessCriticalityCode !== undefined) {
+          zetten.push(
+            sql`business_criticality_code = ${leegIsNull(wijziging.businessCriticalityCode)}`,
+          );
+        }
+        if (wijziging.complianceStatusCode !== undefined) {
+          zetten.push(
+            sql`compliance_status_code = ${leegIsNull(wijziging.complianceStatusCode)}`,
+          );
+        }
 
-      const zetten: SQL[] = [];
+        // Niets meegestuurd: geen UPDATE draaien, maar wel het detail teruggeven.
+        // Een lege PATCH is geen fout — hij verandert alleen niets.
+        if (zetten.length > 0) {
+          zetten.push(sql`updated_at = now()`);
 
-      if (wijziging.name !== undefined) {
-        zetten.push(sql`name = ${wijziging.name.trim()}`);
-      }
-      if (kvk !== undefined) {
-        zetten.push(sql`kvk_number = ${kvk}`);
-      }
-      if (wijziging.vestigingsnummer !== undefined) {
-        zetten.push(
-          sql`vestigingsnummer = ${leegIsNull(wijziging.vestigingsnummer)}`,
-        );
-      }
-      if (wijziging.statutoryName !== undefined) {
-        zetten.push(
-          sql`statutory_name = ${leegIsNull(wijziging.statutoryName)}`,
-        );
-      }
-      if (wijziging.city !== undefined) {
-        zetten.push(sql`city = ${leegIsNull(wijziging.city)}`);
-      }
-      if (wijziging.country !== undefined) {
-        zetten.push(sql`country = ${leegIsNull(wijziging.country) ?? 'NL'}`);
-      }
-      if (wijziging.website !== undefined) {
-        zetten.push(sql`website = ${leegIsNull(wijziging.website)}`);
-      }
-      if (wijziging.categoryCode !== undefined) {
-        zetten.push(sql`category_code = ${leegIsNull(wijziging.categoryCode)}`);
-      }
-      if (wijziging.businessCriticalityCode !== undefined) {
-        zetten.push(
-          sql`business_criticality_code = ${leegIsNull(wijziging.businessCriticalityCode)}`,
-        );
-      }
-      if (wijziging.complianceStatusCode !== undefined) {
-        zetten.push(
-          sql`compliance_status_code = ${leegIsNull(wijziging.complianceStatusCode)}`,
-        );
-      }
-
-      // Niets meegestuurd: geen UPDATE draaien, maar wel het detail teruggeven.
-      // Een lege PATCH is geen fout — hij verandert alleen niets.
-      if (zetten.length > 0) {
-        zetten.push(sql`updated_at = now()`);
-
-        await tx.execute(
-          sql`UPDATE clm.vendor
+          await tx.execute(
+            sql`UPDATE clm.vendor
                  SET ${sql.join(zetten, sql`, `)}
                WHERE vendor_id = ${vendorId}`,
-        );
+          );
 
-        this.logger.log(`Leverancier gewijzigd (${vendorId}).`);
-      }
+          this.logger.log(`Leverancier gewijzigd (${vendorId}).`);
+        }
 
-      return this.detailBinnenTransactie(tx, vendorId);
-    });
+        return this.detailBinnenTransactie(tx, vendorId);
+      },
+      'medewerker',
+    );
   }
 
   /**
@@ -437,29 +453,33 @@ export class VendorService {
    * in een surveyronde voorkomen en die respons is bewijsmateriaal.
    */
   async verwijder(tenantId: string, vendorId: string): Promise<boolean> {
-    return this.db.withTenant(tenantId, async (tx) => {
-      const resultaat = await tx.execute<{ vendor_id: string }>(
-        sql`UPDATE clm.vendor
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const resultaat = await tx.execute<{ vendor_id: string }>(
+          sql`UPDATE clm.vendor
                SET deleted_at = now()
              WHERE vendor_id = ${vendorId}
                AND deleted_at IS NULL
              RETURNING vendor_id`,
-      );
+        );
 
-      if (resultaat.rows.length === 0) {
-        return false;
-      }
+        if (resultaat.rows.length === 0) {
+          return false;
+        }
 
-      await tx.execute(
-        sql`UPDATE clm.vendor_contact
+        await tx.execute(
+          sql`UPDATE clm.vendor_contact
                SET deleted_at = now()
              WHERE vendor_id = ${vendorId}
                AND deleted_at IS NULL`,
-      );
+        );
 
-      this.logger.log(`Leverancier verwijderd (${vendorId}).`);
-      return true;
-    });
+        this.logger.log(`Leverancier verwijderd (${vendorId}).`);
+        return true;
+      },
+      'medewerker',
+    );
   }
 
   // ── Contactpersonen ──────────────────────────────────────────────────────
@@ -477,36 +497,38 @@ export class VendorService {
     vendorId: string,
     invoer: ContactInvoer,
   ): Promise<Contactpersoon | null> {
-    return this.db.withTenant(tenantId, async (tx) => {
-      const bestaat = await tx.execute<{ vendor_id: string }>(
-        sql`SELECT vendor_id FROM clm.vendor
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const bestaat = await tx.execute<{ vendor_id: string }>(
+          sql`SELECT vendor_id FROM clm.vendor
              WHERE vendor_id = ${vendorId} AND deleted_at IS NULL`,
-      );
+        );
 
-      if (bestaat.rows.length === 0) {
-        return null;
-      }
+        if (bestaat.rows.length === 0) {
+          return null;
+        }
 
-      // Eerste contactpersoon wordt vanzelf primair: anders heeft een
-      // leverancier contacten maar geen aanspreekpunt.
-      const aantal = await tx.execute<{ n: string }>(
-        sql`SELECT count(*) AS n FROM clm.vendor_contact
+        // Eerste contactpersoon wordt vanzelf primair: anders heeft een
+        // leverancier contacten maar geen aanspreekpunt.
+        const aantal = await tx.execute<{ n: string }>(
+          sql`SELECT count(*) AS n FROM clm.vendor_contact
              WHERE vendor_id = ${vendorId} AND deleted_at IS NULL`,
-      );
+        );
 
-      const wordtPrimair =
-        invoer.isPrimary === true || Number(aantal.rows[0].n) === 0;
+        const wordtPrimair =
+          invoer.isPrimary === true || Number(aantal.rows[0].n) === 0;
 
-      if (wordtPrimair) {
-        await tx.execute(
-          sql`UPDATE clm.vendor_contact
+        if (wordtPrimair) {
+          await tx.execute(
+            sql`UPDATE clm.vendor_contact
                  SET is_primary = false, updated_at = now()
                WHERE vendor_id = ${vendorId} AND is_primary = true`,
-        );
-      }
+          );
+        }
 
-      const resultaat = await tx.execute<ContactRij>(
-        sql`INSERT INTO clm.vendor_contact
+        const resultaat = await tx.execute<ContactRij>(
+          sql`INSERT INTO clm.vendor_contact
                 (vendor_id, tenant_id, full_name, email, phone, job_title,
                  is_primary)
             VALUES (${vendorId}, ${tenantId},
@@ -516,20 +538,22 @@ export class VendorService {
                     ${leegIsNull(invoer.jobTitle)},
                     ${wordtPrimair})
             RETURNING contact_id, full_name, email, phone, job_title, is_primary`,
-      );
+        );
 
-      const c = resultaat.rows[0];
-      this.logger.log(`Contactpersoon toegevoegd (${c.contact_id}).`);
+        const c = resultaat.rows[0];
+        this.logger.log(`Contactpersoon toegevoegd (${c.contact_id}).`);
 
-      return {
-        contactId: c.contact_id,
-        fullName: c.full_name,
-        email: c.email,
-        phone: c.phone,
-        jobTitle: c.job_title,
-        isPrimary: c.is_primary,
-      };
-    });
+        return {
+          contactId: c.contact_id,
+          fullName: c.full_name,
+          email: c.email,
+          phone: c.phone,
+          jobTitle: c.job_title,
+          isPrimary: c.is_primary,
+        };
+      },
+      'medewerker',
+    );
   }
 
   /** Wijzigt een contactpersoon. Alleen de meegestuurde velden. */
@@ -539,73 +563,77 @@ export class VendorService {
     contactId: string,
     invoer: ContactInvoer,
   ): Promise<Contactpersoon | null> {
-    return this.db.withTenant(tenantId, async (tx) => {
-      const bestaat = await tx.execute<{ contact_id: string }>(
-        sql`SELECT contact_id FROM clm.vendor_contact
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const bestaat = await tx.execute<{ contact_id: string }>(
+          sql`SELECT contact_id FROM clm.vendor_contact
              WHERE contact_id = ${contactId}
                AND vendor_id = ${vendorId}
                AND deleted_at IS NULL`,
-      );
+        );
 
-      if (bestaat.rows.length === 0) {
-        return null;
-      }
+        if (bestaat.rows.length === 0) {
+          return null;
+        }
 
-      if (invoer.isPrimary === true) {
-        await tx.execute(
-          sql`UPDATE clm.vendor_contact
+        if (invoer.isPrimary === true) {
+          await tx.execute(
+            sql`UPDATE clm.vendor_contact
                  SET is_primary = false, updated_at = now()
                WHERE vendor_id = ${vendorId}
                  AND contact_id <> ${contactId}
                  AND is_primary = true`,
-        );
-      }
+          );
+        }
 
-      const zetten: SQL[] = [];
+        const zetten: SQL[] = [];
 
-      if (invoer.fullName !== undefined) {
-        zetten.push(sql`full_name = ${invoer.fullName.trim()}`);
-      }
-      if (invoer.email !== undefined) {
-        zetten.push(sql`email = ${leegIsNull(invoer.email)}`);
-      }
-      if (invoer.phone !== undefined) {
-        zetten.push(sql`phone = ${leegIsNull(invoer.phone)}`);
-      }
-      if (invoer.jobTitle !== undefined) {
-        zetten.push(sql`job_title = ${leegIsNull(invoer.jobTitle)}`);
-      }
-      if (invoer.isPrimary !== undefined) {
-        zetten.push(sql`is_primary = ${invoer.isPrimary}`);
-      }
+        if (invoer.fullName !== undefined) {
+          zetten.push(sql`full_name = ${invoer.fullName.trim()}`);
+        }
+        if (invoer.email !== undefined) {
+          zetten.push(sql`email = ${leegIsNull(invoer.email)}`);
+        }
+        if (invoer.phone !== undefined) {
+          zetten.push(sql`phone = ${leegIsNull(invoer.phone)}`);
+        }
+        if (invoer.jobTitle !== undefined) {
+          zetten.push(sql`job_title = ${leegIsNull(invoer.jobTitle)}`);
+        }
+        if (invoer.isPrimary !== undefined) {
+          zetten.push(sql`is_primary = ${invoer.isPrimary}`);
+        }
 
-      if (zetten.length > 0) {
-        zetten.push(sql`updated_at = now()`);
+        if (zetten.length > 0) {
+          zetten.push(sql`updated_at = now()`);
 
-        await tx.execute(
-          sql`UPDATE clm.vendor_contact
+          await tx.execute(
+            sql`UPDATE clm.vendor_contact
                  SET ${sql.join(zetten, sql`, `)}
                WHERE contact_id = ${contactId}`,
-        );
-      }
+          );
+        }
 
-      const resultaat = await tx.execute<ContactRij>(
-        sql`SELECT contact_id, full_name, email, phone, job_title, is_primary
+        const resultaat = await tx.execute<ContactRij>(
+          sql`SELECT contact_id, full_name, email, phone, job_title, is_primary
               FROM clm.vendor_contact
              WHERE contact_id = ${contactId}`,
-      );
+        );
 
-      const c = resultaat.rows[0];
+        const c = resultaat.rows[0];
 
-      return {
-        contactId: c.contact_id,
-        fullName: c.full_name,
-        email: c.email,
-        phone: c.phone,
-        jobTitle: c.job_title,
-        isPrimary: c.is_primary,
-      };
-    });
+        return {
+          contactId: c.contact_id,
+          fullName: c.full_name,
+          email: c.email,
+          phone: c.phone,
+          jobTitle: c.job_title,
+          isPrimary: c.is_primary,
+        };
+      },
+      'medewerker',
+    );
   }
 
   /**
@@ -620,23 +648,25 @@ export class VendorService {
     vendorId: string,
     contactId: string,
   ): Promise<boolean> {
-    return this.db.withTenant(tenantId, async (tx) => {
-      const resultaat = await tx.execute<{ is_primary: boolean }>(
-        sql`UPDATE clm.vendor_contact
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const resultaat = await tx.execute<{ is_primary: boolean }>(
+          sql`UPDATE clm.vendor_contact
                SET deleted_at = now()
              WHERE contact_id = ${contactId}
                AND vendor_id = ${vendorId}
                AND deleted_at IS NULL
              RETURNING is_primary`,
-      );
+        );
 
-      if (resultaat.rows.length === 0) {
-        return false;
-      }
+        if (resultaat.rows.length === 0) {
+          return false;
+        }
 
-      if (resultaat.rows[0].is_primary) {
-        await tx.execute(
-          sql`UPDATE clm.vendor_contact
+        if (resultaat.rows[0].is_primary) {
+          await tx.execute(
+            sql`UPDATE clm.vendor_contact
                  SET is_primary = true, updated_at = now()
                WHERE contact_id = (
                  SELECT contact_id FROM clm.vendor_contact
@@ -644,12 +674,14 @@ export class VendorService {
                   ORDER BY created_at
                   LIMIT 1
                )`,
-        );
-      }
+          );
+        }
 
-      this.logger.log(`Contactpersoon verwijderd (${contactId}).`);
-      return true;
-    });
+        this.logger.log(`Contactpersoon verwijderd (${contactId}).`);
+        return true;
+      },
+      'medewerker',
+    );
   }
 
   /**

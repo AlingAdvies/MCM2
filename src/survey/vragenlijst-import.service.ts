@@ -104,40 +104,44 @@ export class VragenlijstImportService {
   ): Promise<ImportResultaat> {
     const lijst = valideerVragenlijst(document);
 
-    return this.db.withTenant(tenantId, async (tx) => {
-      const templateId = await this.maakTemplate(tx, tenantId, lijst);
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const templateId = await this.maakTemplate(tx, tenantId, lijst);
 
-      // De koppeling vraag → categorie loopt via category_key uit het bestand.
-      // Deze map vertaalt die sleutel naar de UUID die we zojuist zelf hebben
-      // gegenereerd; een UUID uit het bestand komt er niet aan te pas.
-      const categorieIds = await this.maakCategorieen(
-        tx,
-        tenantId,
-        templateId,
-        lijst.categories ?? [],
-      );
+        // De koppeling vraag → categorie loopt via category_key uit het bestand.
+        // Deze map vertaalt die sleutel naar de UUID die we zojuist zelf hebben
+        // gegenereerd; een UUID uit het bestand komt er niet aan te pas.
+        const categorieIds = await this.maakCategorieen(
+          tx,
+          tenantId,
+          templateId,
+          lijst.categories ?? [],
+        );
 
-      await this.maakVragen(
-        tx,
-        tenantId,
-        templateId,
-        lijst.questions,
-        categorieIds,
-      );
+        await this.maakVragen(
+          tx,
+          tenantId,
+          templateId,
+          lijst.questions,
+          categorieIds,
+        );
 
-      this.logger.log(
-        `Vragenlijst '${lijst.name}' v${lijst.version} geïmporteerd: ` +
-          `${lijst.questions.length} vragen, ${categorieIds.size} categorieën.`,
-      );
+        this.logger.log(
+          `Vragenlijst '${lijst.name}' v${lijst.version} geïmporteerd: ` +
+            `${lijst.questions.length} vragen, ${categorieIds.size} categorieën.`,
+        );
 
-      return {
-        templateId,
-        naam: lijst.name,
-        versie: lijst.version,
-        aantalCategorieen: categorieIds.size,
-        aantalVragen: lijst.questions.length,
-      };
-    });
+        return {
+          templateId,
+          naam: lijst.name,
+          versie: lijst.version,
+          aantalCategorieen: categorieIds.size,
+          aantalVragen: lijst.questions.length,
+        };
+      },
+      'medewerker',
+    );
   }
 
   private async maakTemplate(
@@ -260,77 +264,81 @@ export class VragenlijstImportService {
     tenantId: string,
     templateId: string,
   ): Promise<VragenlijstInvoer> {
-    return this.db.withTenant(tenantId, async (tx) => {
-      const template = await tx.execute<{ name: string; version: number }>(
-        sql`SELECT name, version FROM clm.survey_template
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const template = await tx.execute<{ name: string; version: number }>(
+          sql`SELECT name, version FROM clm.survey_template
              WHERE template_id = ${templateId}`,
-      );
+        );
 
-      const kop = template.rows[0];
+        const kop = template.rows[0];
 
-      // Geen rij betekent hier "bestaat niet of hoort bij een andere tenant" —
-      // RLS maakt dat onderscheid onzichtbaar, en dat is precies de bedoeling.
-      if (!kop) {
-        throw new TemplateOnbekendError(templateId);
-      }
+        // Geen rij betekent hier "bestaat niet of hoort bij een andere tenant" —
+        // RLS maakt dat onderscheid onzichtbaar, en dat is precies de bedoeling.
+        if (!kop) {
+          throw new TemplateOnbekendError(templateId);
+        }
 
-      const categorieen = await tx.execute<CategorieRij>(
-        sql`SELECT category_id, position, name, min_answers
+        const categorieen = await tx.execute<CategorieRij>(
+          sql`SELECT category_id, position, name, min_answers
               FROM clm.survey_category
              WHERE template_id = ${templateId}
              ORDER BY position`,
-      );
+        );
 
-      // De sleutel in het exportbestand wordt afgeleid van de naam, niet van de
-      // UUID: een export moet leesbaar en herimporteerbaar zijn zonder iets
-      // over de interne identiteiten te verklappen.
-      const sleutels = new Map<string, string>();
-      const gebruikt = new Set<string>();
+        // De sleutel in het exportbestand wordt afgeleid van de naam, niet van de
+        // UUID: een export moet leesbaar en herimporteerbaar zijn zonder iets
+        // over de interne identiteiten te verklappen.
+        const sleutels = new Map<string, string>();
+        const gebruikt = new Set<string>();
 
-      for (const categorie of categorieen.rows) {
-        let sleutel = maakSleutel(categorie.name);
-        let volgnummer = 2;
-        while (gebruikt.has(sleutel)) {
-          sleutel = `${maakSleutel(categorie.name)}-${volgnummer++}`;
+        for (const categorie of categorieen.rows) {
+          let sleutel = maakSleutel(categorie.name);
+          let volgnummer = 2;
+          while (gebruikt.has(sleutel)) {
+            sleutel = `${maakSleutel(categorie.name)}-${volgnummer++}`;
+          }
+          gebruikt.add(sleutel);
+          sleutels.set(categorie.category_id, sleutel);
         }
-        gebruikt.add(sleutel);
-        sleutels.set(categorie.category_id, sleutel);
-      }
 
-      const vragen = await tx.execute<VraagRij>(
-        sql`SELECT question_key, category_id, position, title, body,
+        const vragen = await tx.execute<VraagRij>(
+          sql`SELECT question_key, category_id, position, title, body,
                    answer_type, is_required, allows_upload, max_files, config
               FROM clm.survey_question
              WHERE template_id = ${templateId}
              ORDER BY position`,
-      );
+        );
 
-      return {
-        schema_version: SCHEMA_VERSIE,
-        name: kop.name,
-        version: kop.version,
-        categories: categorieen.rows.map((categorie) => ({
-          key: sleutels.get(categorie.category_id) as string,
-          position: categorie.position,
-          name: categorie.name,
-          min_answers: categorie.min_answers,
-        })),
-        questions: vragen.rows.map((vraag) => ({
-          question_key: vraag.question_key,
-          category_key: vraag.category_id
-            ? (sleutels.get(vraag.category_id) ?? null)
-            : null,
-          position: vraag.position,
-          title: vraag.title,
-          body: vraag.body,
-          answer_type: vraag.answer_type as AntwoordType,
-          is_required: vraag.is_required,
-          allows_upload: vraag.allows_upload,
-          max_files: vraag.max_files,
-          config: vraag.config ?? {},
-        })),
-      };
-    });
+        return {
+          schema_version: SCHEMA_VERSIE,
+          name: kop.name,
+          version: kop.version,
+          categories: categorieen.rows.map((categorie) => ({
+            key: sleutels.get(categorie.category_id) as string,
+            position: categorie.position,
+            name: categorie.name,
+            min_answers: categorie.min_answers,
+          })),
+          questions: vragen.rows.map((vraag) => ({
+            question_key: vraag.question_key,
+            category_key: vraag.category_id
+              ? (sleutels.get(vraag.category_id) ?? null)
+              : null,
+            position: vraag.position,
+            title: vraag.title,
+            body: vraag.body,
+            answer_type: vraag.answer_type as AntwoordType,
+            is_required: vraag.is_required,
+            allows_upload: vraag.allows_upload,
+            max_files: vraag.max_files,
+            config: vraag.config ?? {},
+          })),
+        };
+      },
+      'medewerker',
+    );
   }
 }
 
