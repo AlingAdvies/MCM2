@@ -6,6 +6,7 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
@@ -19,7 +20,11 @@ import {
   stateKlopt,
 } from './inlogpoging';
 import { cookieInstellingen } from './sessie';
-import { leesCookies, type RequestMetSessie } from './tenant-context.guard';
+import {
+  TenantContextGuard,
+  leesCookies,
+  type RequestMetSessie,
+} from './tenant-context.guard';
 
 /**
  * De drie routes van de inlogflow (Issue #7, spoor 1).
@@ -141,6 +146,47 @@ export class AuthController {
     });
 
     response.redirect(this.auth.naLoginBestemming());
+  }
+
+  /**
+   * Wie is er ingelogd, en met welke rol.
+   *
+   * De enige route in deze controller mét de guard. De andere drie bestaan om
+   * een sessie te krijgen of kwijt te raken; deze vereist er juist één en geeft
+   * 401 zonder.
+   *
+   * Bestaat omdat de frontend anders niets over de ingelogde gebruiker weet:
+   * het sessiecookie is httpOnly en dus onleesbaar voor JavaScript, en dat is
+   * met opzet — een token binnen JavaScript-bereik is een XSS-doelwit. De
+   * schermen hebben de naam nodig om te tonen wie er is, en de rol om te
+   * bepalen wat er zichtbaar hoort te zijn.
+   *
+   * **Geeft geen userId, sessieId of tenantId terug.** Een scherm heeft ze niet
+   * nodig — elke route leidt de tenant zelf af uit het cookie — en een tenantId
+   * in een antwoord is precies wat de CI-poort van de frontend verbiedt
+   * (MCM2-CLAUDE.md §6). Wat er niet in staat, kan ook niet per ongeluk in een
+   * URL belanden.
+   */
+  @Get('sessie')
+  @UseGuards(TenantContextGuard)
+  async huidigeSessie(@Req() request: RequestMetSessie) {
+    // Veilig: zonder sessie is de guard nooit voorbijgekomen.
+    const sessie = request.sessie!;
+
+    const profiel = await this.auth.profiel(sessie);
+
+    if (!profiel) {
+      // Geldige sessie, maar de gebruiker bestaat niet meer of is verwijderd.
+      // Zeldzaam — het membership zou dan ook weg moeten zijn — maar een lege
+      // naam in de sidebar is een raadsel voor wie hem ziet.
+      throw new UnauthorizedException('De gebruiker bestaat niet meer.');
+    }
+
+    return {
+      naam: profiel.naam,
+      tenantNaam: profiel.tenantNaam,
+      rol: sessie.role,
+    };
   }
 
   /**

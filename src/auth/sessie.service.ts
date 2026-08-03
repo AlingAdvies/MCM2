@@ -131,6 +131,42 @@ export class SessieService {
   }
 
   /**
+   * De gegevens die een scherm nodig heeft om te tonen wie er is ingelogd.
+   *
+   * Apart van oplossen(): die draait bij élk verzoek en moet zo klein mogelijk
+   * blijven. Dit is één extra query die alleen loopt wanneer een scherm er om
+   * vraagt — de sidebar, één keer per paginalading.
+   *
+   * Gaat door withTenant(), dus RLS geldt: de query kan per constructie geen
+   * gebruiker of tenant van iemand anders opleveren, ook niet bij een fout in
+   * de WHERE-clausule.
+   */
+  async profiel(
+    context: SessieContext,
+  ): Promise<{ naam: string; tenantNaam: string } | null> {
+    return this.db.withTenant(context.tenantId, async (tx) => {
+      const resultaat = await tx.execute<{
+        naam: string;
+        tenant_naam: string;
+      }>(
+        sql`SELECT u.full_name AS naam, t.name AS tenant_naam
+              FROM clm."user" u
+              JOIN clm.tenant t ON t.tenant_id = u.tenant_id
+             WHERE u.user_id = ${context.userId}
+               AND u.deleted_at IS NULL`,
+      );
+
+      const rij = resultaat.rows[0];
+
+      if (!rij) {
+        return null;
+      }
+
+      return { naam: rij.naam, tenantNaam: rij.tenant_naam };
+    });
+  }
+
+  /**
    * Beëindigt de sessie. Verwijdert de rij en ruimt meteen verlopen sessies op.
    *
    * Werpt niet bij een onbekend token: uitloggen moet altijd slagen. Wie op

@@ -20,6 +20,7 @@ Branch `feat/identiteit-en-membership`, vijf commits, nog niet gepusht.
 | **1** | Auth-routes `/auth/login`, `/auth/callback`, `/auth/logout` | ✅ |
 | **1** | `X-Tenant-Id` verwijderen | ✅ bleek niets te verwijderen — zie hieronder |
 | **2** | Vendorroutes en schermen | ✅ gemerged 2026-07-31 (MCM2#67, frontend#2) |
+| **2b** | Sidebar, schermindeling en zoeken | ✅ 2026-08-03 — het deel van fase 2 dat was blijven liggen |
 | **3** | Demo-tenant seed | ✅ 2026-08-03 — `npm run seed:demo`, 8 e2e-tests, tegenproef vond een echt gat |
 | 4 | OTAP-doorloop uitgebreid | niet gestart |
 
@@ -216,6 +217,52 @@ zou tegenhouden.
 
 **Klaar wanneer:** je logt in als tenant, maakt een vendor aan met contactpersoon en
 e-mailadres, en ziet die terug in de lijst — in de browser, tegen de echte backend.
+
+#### Fase 2b — wat er van 2b was blijven liggen (uitgevoerd 2026-08-03)
+
+Fase 2 is op 2026-07-31 afgevinkt terwijl de frontend-helft maar deels gedaan was.
+Van "sidebar, kleuren, typografie, schermindeling" hierboven waren alleen de
+kleuren en typografie overgenomen; de sidebar en de schermindeling niet. Dat viel
+op toen de eigenaar vroeg waarom het er anders uitzag dan MVM_V2.
+
+**Gebouwd:**
+
+- `Sidebar.tsx` en `AppLayout.tsx`, overgenomen uit MVM_V2 met bronvermelding.
+- Zoeken op de leverancierslijst (naam, KvK, plaats; losse woorden).
+- `GET /auth/sessie` in de backend — de frontend wist niet wie er was ingelogd.
+
+**Drie dingen bewust anders dan MVM_V2:**
+
+- **Alleen menu-items die werken.** MVM_V2 toont er zes; hiervan bestaat alleen
+  Leveranciers. Een menu-item naar een lege pagina belooft iets dat er niet is.
+- **Geen gebruikersschakelaar.** MVM_V2 heeft er een voor demo's op mock data;
+  hier zou dat een tweede pad naar identiteit zijn naast het sessiecookie —
+  precies wat Issue #7 uitsluit.
+- **Geen verborgen knoppen bij open routes.** `POST /vendors` staat open voor elke
+  geldige sessie, dus ook voor een `reviewer`. De knop verbergen zou de indruk
+  wekken dat er een rechtenmodel is. Zie het rechten-ontwerp §6.
+
+**De tegenproef vond opnieuw een echt gat.** Met een `tenantId` toegevoegd aan het
+antwoord van `/auth/sessie` bleven **alle acht browsertests groen**: de sidebar
+toont dat veld niet, dus het kwam nooit in beeld terwijl het wél over de lijn
+ging. Een lek test je bij de bron, niet bij de plek waar je hoopt dat het niet
+opduikt — vandaar `test/sessie-route.e2e-spec.ts`, die het antwoord zelf
+controleert. Met de sabotage erin vallen daar twee tests om.
+
+**Bijvangst: een onregelmatig falende doorloop opgelost.** `verify:volledig` faalde
+wisselend op `psql: connection to server on socket … failed`. Oorzaak: het
+postgres-image start tijdens de eerste initialisatie een *tijdelijke* server die
+alleen op de Unix-socket luistert; `pg_isready` meldt die als gereed, waarna het
+image herstart. Een `psql` die daartussen valt, faalt met een melding die naar de
+verkeerde oorzaak wijst. De wachtlus eist nu twee opeenvolgende geslaagde
+queries. Daarna vijf runs achter elkaar groen.
+
+**Feature flags zijn níét gebouwd.** De eigenaar wees erop dat die twee lagen
+kennen — betaalde features per tenant, én verschillen per gebruiker binnen een
+tenant. Dat is uitgewerkt in
+`docs/superpowers/specs/2026-08-03-feature-flags-en-rechten.md`, met drie manieren
+om laag 1 vast te leggen en een advies. Besluit ligt bij de eigenaar; 2b bouwt
+alleen `magZien()`, de plek waar beide lagen straks samenkomen.
 
 ---
 

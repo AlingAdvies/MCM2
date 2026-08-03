@@ -81,6 +81,10 @@ export const TEST_IDS = {
     tenantA: id('a2'),
     tenantB: id('a3'),
   },
+  'sessie-route': {
+    tenant: id('8a'),
+    user: id('8b'),
+  },
   'tenant-context-guard': {
     tenantA: id('9a'),
     tenantB: id('9b'),
