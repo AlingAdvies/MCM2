@@ -463,7 +463,8 @@ Een wijziging is pas “klaar” wanneer:
 [ ] Relevante architectuur- en securityregels toegepast
 [ ] Geen secrets hardcoded of zichtbaar gemaakt
 [ ] Lokaal getest in de Docker-werkwijze, waar van toepassing
-[ ] `npm run verify` groen — NIET losse commando's, zie §15a
+[ ] `npm run verify:volledig` groen — NIET losse commando's, zie §15a
+[ ] Tegenproef gedaan op wat er aan beveiliging is toegevoegd, zie §15b
 [ ] RLS read/write-isolatietest toegevoegd bij tenantdata
 [ ] Migratie getest op lege database, indien schema gewijzigd
 [ ] Docker production build geslaagd
@@ -473,12 +474,25 @@ Een wijziging is pas “klaar” wanneer:
 [ ] OTAP-route gevolgd vóór productie wordt voorgesteld
 ```
 
-### 15a. "Groen" wordt vastgesteld met `npm run verify` — nooit met losse commando's
+### 15a. "Groen" wordt vastgesteld met één commando — nooit met losse commando's
 
 ```bash
-npm run verify        # alle vijf poorten, vraagt DATABASE_URL
-npm run verify:snel   # zonder e2e — meldt zelf dat het onvolledig is
+npm run verify:volledig   # de hele keten: code → unit → e2e → images → browser
+npm run verify            # alleen de code-poorten, vraagt DATABASE_URL
+npm run verify:snel       # zonder e2e — meldt zelf dat het onvolledig is
 ```
+
+**`verify:volledig` is de norm** (sinds 2026-07-31). Die zet zelf een
+wegwerpdatabase op, draait de migratieketen vanaf niets, bouwt **beide**
+productie-images, start de stack en klikt door de browser. Stopt bij de eerste
+rode stap en noemt welke CI-job dat is.
+
+`npm run verify` blijft bruikbaar tijdens het werk — sneller, en genoeg om te
+zien of de code-poorten dichtblijven. Maar een fase of PR afsluiten op `verify`
+alleen laat twee dingen ongetest die in dit project al eens zijn misgegaan: het
+productie-image (dat startte niet door een ontbrekende `dotenv`) en de schermen
+(Issue #42 en #43 zijn door de browser gevonden en door 155 backendtests
+gemist).
 
 **Waarom dit een harde regel is en geen aanbeveling.** Op 2026-07-31 faalde CI
 op de lintstap terwijl lokaal alles groen leek. De oorzaak was geen typefout
@@ -496,10 +510,17 @@ en dan is "groen" een mening in plaats van een meting. `scripts/verify.js`
 draait ze in dezelfde volgorde als de workflow en stopt bij de eerste rode
 stap. Elke stap noemt bij een fout de bijbehorende CI-job.
 
-**Wat `verify` bewust niet dekt:** de Docker-productiebuild. Die draait alleen
-in CI (job `docker-build`). Bij een wijziging aan de `Dockerfile` of aan
-runtime-dependencies hoort een lokale `docker build` — een geslaagde
-`nest build` bewijst niet dat het artefact werkt (zie `src/auth/README.md`).
+**Wat `verify` bewust niet dekt:** de Docker-productiebuild en de schermen.
+Daarvoor is `verify:volledig` er — die bouwt beide images en start ze, want een
+geslaagde `nest build` bewijst niet dat het artefact werkt (zie
+`src/auth/README.md`), en een Next.js-server met een kapotte build start wél en
+geeft een 500.
+
+**Let op de poorten bij handmatig testen.** `verify:volledig` claimt **55441**
+voor zijn wegwerpdatabase; de doorloopstack gebruikt 55500 en een handmatige
+`verify` 55440. Draait er nog een container van een afgebroken run, dan faalt
+stap 1 met "geen testdatabase kunnen starten" — een melding die naar de
+verkeerde oorzaak wijst. Opruimen met `docker rm -f <naam>`.
 
 **De veiligheidsklep.** `verify` weigert te draaien wanneer `DATABASE_URL` niet
 naar een lokale wegwerpdatabase wijst. De e2e-suite maakt tenants aan en
@@ -511,6 +532,42 @@ te vangen is.
 destructief van aard. De vraag "draait de uitgerolde omgeving en klopt hij" is
 een andere controle — een leesbare rookproef, Issue #61 — die bij de
 OTAP-doorloop hoort (#18), niet hier.
+
+### 15b. Groene tests zonder tegenproef bewijzen niets
+
+**De regel.** Wie een beveiligingsgarantie toevoegt of wijzigt, breekt hem
+daarna opzettelijk en stelt vast dat **precies de bedoelde tests omvallen**.
+Daarna herstellen, en controleren dat het bestand weer identiek is
+(`diff` tegen een kopie — niet op het oog).
+
+**Waarom dit een harde regel is.** Een test die groen is bij een werkende
+implementatie én groen blijft bij een kapotte, meet niets. Dat klinkt
+theoretisch tot het gebeurt, en in dit project is het **zes keer** gebeurd:
+
+| Wanneer | Sabotage | Wat de tests deden |
+|---|---|---|
+| 2026-07-31 | terugval op `X-Tenant-Id` in de guard | 18 guard-tests bleven groen — de test die een header hoorde te negeren stuurde zelf een gèldig cookie mee |
+| 2026-07-31 | verloopcontrole van de sessie eruit | 9 tests vielen om, zoals bedoeld |
+| 2026-07-31 | rechten op `clm.sessie` toegekend | 2 deur-tests vielen om, zoals bedoeld |
+| 2026-07-30 | `instruction`-tak uit het portaal | 3 controles vielen om, zoals bedoeld |
+| 2026-08-03 | tokenhash vervangen door hex-codering | **alle 8 tests bleven groen** — de test keek naar de vórm van de hash, niet of het de hash ís |
+| 2026-08-03 | `tenantId` toegevoegd aan `/auth/sessie` | **alle 8 browsertests bleven groen** — de sidebar toont dat veld niet, dus het kwam nooit in beeld |
+
+Twee van de zes keer bleven de tests volledig groen bij een echt lek. Beide
+keren was de test op de verkeerde plek geschreven.
+
+**De les uit die twee.** Test een lek **bij de bron**, niet bij de plek waar je
+hoopt dat het niet opduikt. Een browsertest die controleert wat er in een scherm
+terechtkomt, mist alles wat wél over de lijn gaat maar niet getoond wordt. Het
+antwoord van de route zelf controleren vangt dat wel.
+
+**Wanneer verplicht:** bij elke wijziging aan RLS-policies, guards, tokens,
+sessies, rolcontroles of iets anders dat bepaalt wie wat mag zien. Niet nodig
+bij tekstwijzigingen, opmaak of documentatie.
+
+**Vastleggen waar het thuishoort.** De uitkomst hoort in de commit-boodschap en
+in `docs/STATUS.md`, niet alleen in het gesprek waarin het gebeurde — anders is
+de kennis weg zodra de sessie afloopt.
 
 ---
 
