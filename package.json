@@ -21,6 +21,7 @@
     "db:check": "drizzle-kit check",
     "migrate:deploy": "node scripts/migrate.js",
     "seed:vragenlijsten": "node scripts/seed-vragenlijsten.js",
+    "seed:demo": "node scripts/seed-demo-tenant.js",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",

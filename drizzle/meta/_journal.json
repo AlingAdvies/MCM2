@@ -85,6 +85,13 @@
       "when": 1785499200000,
       "tag": "0011_force_row_level_security",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1785758400000,
+      "tag": "0012_ref_codes_uitbreiden",
+      "breakpoints": true
     }
   ]
 }

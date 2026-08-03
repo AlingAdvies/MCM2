@@ -50,6 +50,13 @@ export const TEST_IDS = {
   'bijlage-upload': {
     tenant: id('a5'),
   },
+  'demo-seed': {
+    // De demo-tenant zelf staat niet hier maar in scripts/seed-demo-tenant.js:
+    // dat is productiecode met een eigen vast UUID (dededede-…), geen testid.
+    // Dit blok bevat alleen de vreemde tenant waarmee de suite cross-tenant
+    // zichtbaarheid uitlokt.
+    vreemdeTenant: id('da'),
+  },
   'drizzle-tenant-context': {
     tenantA: id('ca'),
     tenantB: id('cb'),
