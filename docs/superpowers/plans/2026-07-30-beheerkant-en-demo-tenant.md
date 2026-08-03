@@ -21,6 +21,7 @@ Branch `feat/identiteit-en-membership`, vijf commits, nog niet gepusht.
 | **1** | `X-Tenant-Id` verwijderen | ✅ bleek niets te verwijderen — zie hieronder |
 | **2** | Vendorroutes en schermen | ✅ gemerged 2026-07-31 (MCM2#67, frontend#2) |
 | **2b** | Sidebar, schermindeling en zoeken | ✅ 2026-08-03 — het deel van fase 2 dat was blijven liggen |
+| **2c** | Vendordetail, wijzigen, contactpersonen | ✅ 2026-08-03 — inclusief rolcontrole; sluit §6 van het rechten-ontwerp |
 | **3** | Demo-tenant seed | ✅ 2026-08-03 — `npm run seed:demo`, 8 e2e-tests, tegenproef vond een echt gat |
 | 4 | OTAP-doorloop uitgebreid | niet gestart |
 
@@ -263,6 +264,56 @@ tenant. Dat is uitgewerkt in
 `docs/superpowers/specs/2026-08-03-feature-flags-en-rechten.md`, met drie manieren
 om laag 1 vast te leggen en een advies. Besluit ligt bij de eigenaar; 2b bouwt
 alleen `magZien()`, de plek waar beide lagen straks samenkomen.
+
+#### Fase 2c — detail, wijzigen en contactpersonen (uitgevoerd 2026-08-03)
+
+Het laatste deel van fase 2. Een leverancier is nu te openen op
+`/beheer/leveranciers/[id]`, te wijzigen en te verwijderen, en zijn
+contactpersonen zijn te beheren.
+
+**Nieuw in de backend:** `GET /vendors/:id`, `PATCH /vendors/:id`,
+`DELETE /vendors/:id`, plus `POST`, `PATCH` en `DELETE` op
+`/vendors/:id/contacts`. Allemaal soft delete — een leverancier kan in een
+surveyronde voorkomen, en die respons is bewijsmateriaal.
+
+**`RolGuard` sluit een openstaand punt.** Tot vandaag stond `POST /vendors` open
+voor elke geldige sessie: `reviewer` was een label in de sidebar zonder
+betekenis. Nu geeft elke schrijfroute 403 voor een reviewer, en lezen mag hij
+wel. Daarmee is §6 van het rechten-ontwerp dicht — de tussenvorm die dat
+document als gevaarlijkst benoemde (knop verborgen, route open) is nooit
+gebouwd.
+
+**Wat bewust níét wijzigbaar is:** risicoscore, jaarbedrag en reviewdatums. Die
+horen uit een beoordeling of een inkoopsysteem te komen; een handmatig
+ingevulde risicoscore botst met een berekende zodra die er is. Besluit van de
+eigenaar.
+
+**Twee tegenproeven, beide raak:**
+
+- Rolcontrole uitgeschakeld → de vijf reviewer-tests vielen om, zoals bedoeld.
+- De `vendor_id`-controle uit de contactquery → precies één test viel om.
+  Zonder die controle was een contactpersoon van leverancier A te wijzigen via
+  het adres van leverancier B, binnen dezelfde tenant.
+
+**Een onregelmatig falende test opgespoord en opgelost.** `demo-seed.e2e-spec.ts`
+(fase 3) faalde wisselend op de tokenhash-test: die las de tokens uit de
+uitvoer van het seed-script, en dat script drukt de links alleen af wanneer het
+de ronde daadwerkelijk aanmaakt. Had een andere suite de tenant al gevuld, dan
+vond de test nul links en viel om op iets dat niets met hashing te maken had.
+De tokens worden nu berekend zoals het script ze berekent. Daarna drie keer
+vanaf een lege database groen.
+
+**Twee dingen die het bouwen opleverde en aandacht verdienen:**
+
+- **`consulting` en `consultancy` staan allebei in `ref.vendor_category`** — twee
+  codes voor hetzelfde begrip. `consultancy` komt uit de baseline, `consulting`
+  uit migratie 0012 van vanochtend. De frontend toont alleen `consulting`;
+  bestaande rijen met `consultancy` blijven werken en tonen hun eigen waarde.
+  Opruimen is een migratie die bestaande data raakt en apart afgestemd moet
+  worden.
+- **De startpagina gebruikte een `<a>` naar een interne route.** Die lintfout
+  sluimerde en werd pas zichtbaar toen de detailroute erbij kwam: ESLint
+  herkent `/beheer/leveranciers` nu als bekende pagina. Opgelost met `<Link>`.
 
 ---
 

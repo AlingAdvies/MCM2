@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-08-03 (**fase 3 en 2b zijn af**: `npm run seed:demo` vult in één commando een demo-tenant, en de beheerkant heeft nu de sidebar en schermindeling van MVM_V2 plus zoeken. 241 e2e-tests en 14 browsertests groen. Twee dingen die aandacht vragen staan onder "Actieve blokkades": de dagelijkse backup heeft drie dagen stilgelegen, en er staat een productiewachtwoord in de git-historie van `mvm-api-pilot`.)
+2026-08-03 (**fase 2b, 2c en 3 zijn af**: demo-tenant met één commando, de sidebar en schermindeling van MVM_V2, zoeken, en een detailscherm waarop een leverancier te wijzigen is. Een `reviewer` mag nu aantoonbaar lezen maar niet schrijven. 264 e2e-tests en 25 browsertests groen. Twee dingen die aandacht vragen staan onder "Actieve blokkades": de dagelijkse backup heeft drie dagen stilgelegen, en er staat een productiewachtwoord in de git-historie van `mvm-api-pilot`.)
 
 <details>
 <summary>Vorige stand (2026-07-31, avond)</summary>
@@ -39,14 +39,19 @@ Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in
    - **Issue #59 — `npm audit` meldt 29 kwetsbaarheden.** Niet vergeten, maar ook niet nu oplossen: `npm audit --omit=dev` geeft **0**, dus er zit niets van in het productie-image. De voorgestelde automatische fix zet eslint jaren terug en breekt de lint-configuratie. Hoort bij de eerste major-onderhoudsronde op devDependencies, samen met Dependabot (#22). **Controleer wel bij elke sessie dat `npm audit --omit=dev` nul blijft** — wordt dat meer dan nul, dan is het geen onderhoudspunt meer maar een blocker.
    - **Issue #58 — de backup hangt af van deze laptop.** Draait dagelijks, maar niet als de machine uitstaat. Vóór de pilotstart (rond 1 september) naar iets onafhankelijks.
 
-6. **Eerste concrete vervolgstap: fase 4 — de OTAP-doorloop uitbreiden.** Fase 1 en 2 zijn op 2026-07-31 afgerond, fase 3 en 2b op 2026-08-03.
+6. **Eerste concrete vervolgstap: surveybeheer, dan fase 4.** Fase 1 en 2 zijn op 2026-07-31 afgerond, fase 2b, 2c en 3 op 2026-08-03.
+
+   **Advies over de volgorde (2026-08-03):** eerst functionaliteit, dan fase 4. De doorloop test wat er ís; elke functie die er daarna bij komt, moet er alsnog in. Fase 4 later doen betekent niet dat het werk verdwijnt — het voorkomt dat het twee keer gebeurt. Voorwaarde is wel dat elke fase blijft eindigen met `verify:volledig` groen plus een tegenproef (§15, §15b), anders wordt fase 4 een opruimactie in plaats van een uitbreiding.
+
+   **Het grootste gat is surveybeheer.** `survey/respond` is de leverancierskant — invullen via een token. Er is géén enkele beheerroute: geen vragenlijsten bekijken, geen ronde starten, geen resultaten inzien. De database kan het allemaal al (`survey_template`, `survey_run`, `survey_response`), en de demo-seed vult het. Dat verdient een eigen plan vóór er code komt.
 
    **Wat er nu werkt en zichtbaar is:**
 
    ```
-   /beheer/leveranciers   sidebar + lijst met zoeken + aanmaakformulier
-   npm run seed:demo      demo-tenant: 21 leveranciers, 3 gebruikers, 3 responses
-   npm run verify:volledig   code → 161 unit → 241 e2e → stack → 14 browsertests
+   /beheer/leveranciers        sidebar + lijst met zoeken + aanmaakformulier
+   /beheer/leveranciers/[id]   detail: stamgegevens wijzigen, contactpersonen beheren
+   npm run seed:demo           demo-tenant: 21 leveranciers, 3 gebruikers, 3 responses
+   npm run verify:volledig     code → 161 unit → 264 e2e → stack → 25 browsertests
    ```
 
    **Inloggen via Entra werkt aantoonbaar.** Eén echte login doorlopen: code inwisselen, token verifiëren met de échte applicatiecode, gebruiker en membership, sessie via `clm.sessie_aanmaken()`, en met dat cookie `/vendors` → 200. Zonder cookie → 401.
@@ -85,8 +90,8 @@ Blijken ze over een half jaar nog steeds ongebruikt, dan kunnen ze weg — de ke
 npm run verify:volledig
 ```
 
-Vijf stappen: code, 161 unittests, 241 e2e tegen een wegwerpdatabase, beide
-productie-images bouwen, veertien browsertests, en altijd opruimen. Stopt bij de
+Vijf stappen: code, 161 unittests, 264 e2e tegen een wegwerpdatabase, beide
+productie-images bouwen, 25 browsertests, en altijd opruimen. Stopt bij de
 eerste rode stap en noemt welke CI-job dat is.
 
 **Let op bij handmatig een testcontainer draaien:** `verify:volledig` claimt poort
@@ -149,6 +154,30 @@ cd ../MCM2-frontend && npm run dev
 # Daarna de browsertest, met een VERSE tokenlink (indienen is eenmalig):
 cd ../MCM2-frontend && SURVEY_TOKEN=<verse-link> npm run e2e
 ```
+
+## Beheerkant — detail, wijzigen en rolcontrole (2026-08-03, fase 2c)
+
+Een leverancier is te openen op `/beheer/leveranciers/[id]`, te wijzigen en te verwijderen; contactpersonen zijn toe te voegen, primair te maken en te verwijderen.
+
+**Nieuw in de backend:** `GET`, `PATCH` en `DELETE` op `/vendors/:id`, plus `POST`, `PATCH` en `DELETE` op `/vendors/:id/contacts`. Alles soft delete — een leverancier kan in een surveyronde voorkomen, en die respons is bewijsmateriaal.
+
+**`RolGuard` sluit §6 van het rechten-ontwerp.** Tot vandaag stond `POST /vendors` open voor elke geldige sessie: `reviewer` was een label in de sidebar zonder betekenis. Nu geeft elke schrijfroute 403 voor een reviewer, lezen mag wel. Gemeten:
+
+```
+reviewer  GET lijst 200 · GET detail 200
+          POST 403 · PATCH 403 · DELETE 403 · contacten 403
+```
+
+**Bewust níét wijzigbaar:** risicoscore, jaarbedrag en reviewdatums. Die horen uit een beoordeling of een inkoopsysteem te komen; een handmatig ingevulde risicoscore botst met een berekende zodra die er is.
+
+**Twee tegenproeven, beide raak:** rolcontrole uitgeschakeld → vijf reviewer-tests vielen om; de `vendor_id`-controle uit de contactquery → precies één test viel om. Zonder die controle was een contactpersoon van leverancier A te wijzigen via het adres van leverancier B, binnen dezelfde tenant.
+
+**Een onregelmatig falende test opgelost.** `demo-seed.e2e-spec.ts` faalde wisselend: de tokenhash-test las de tokens uit de uitvoer van het seed-script, maar dat script drukt de links alleen af wanneer het de ronde daadwerkelijk aanmaakt. Had een andere suite de tenant al gevuld, dan vond de test nul links en viel om op iets dat niets met hashing te maken had. De tokens worden nu berekend zoals het script ze berekent; daarna drie keer vanaf een lege database groen.
+
+### Twee punten die aandacht verdienen
+
+- **`consulting` én `consultancy` staan allebei in `ref.vendor_category`** — twee codes voor hetzelfde begrip. `consultancy` komt uit de baseline, `consulting` uit migratie 0012 van vanochtend. De frontend toont alleen `consulting`; bestaande rijen met `consultancy` blijven werken en tonen hun eigen waarde (`keuzesMetHuidige()`). Opruimen is een migratie die bestaande data raakt en apart afgestemd moet worden.
+- **`POST /vendors` was open voor reviewers en dat is nu dicht** — maar dat betekent ook dat een reviewer sinds vandaag geen leveranciers meer kan aanmaken. Als dat in de praktijk wél de bedoeling is, is dat één regel: de `@VereistRol('admin')` van die route halen.
 
 ## Beheerkant — sidebar, schermindeling en zoeken (2026-08-03, fase 2b)
 

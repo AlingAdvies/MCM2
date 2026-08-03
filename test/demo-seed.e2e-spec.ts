@@ -57,6 +57,22 @@ interface Telling {
   antwoorden: number;
 }
 
+/**
+ * De demo-tokens zoals het script ze berekent.
+ *
+ * Bewust dezelfde berekening en niet de waarden overgetypt: verandert het
+ * voorvoegsel of de lengte in het script, dan verandert dit mee. Overgetypte
+ * waarden zouden stilzwijgend uit de pas gaan lopen, en dan test deze suite
+ * iets anders dan wat er draait.
+ */
+function leesDemoTokens(): string[] {
+  const TOKEN_LENGTE = 43;
+
+  return ['open', 'concept', 'ingediend'].map((naam) =>
+    `demo-${naam}`.padEnd(TOKEN_LENGTE, 'x'),
+  );
+}
+
 function draaiSeed(argumenten: string[] = []): string {
   return execFileSync(process.execPath, [SCRIPT, ...argumenten], {
     encoding: 'utf8',
@@ -192,19 +208,21 @@ describe('Demo-seed (e2e)', () => {
     //
     // Daarom herberekenen we hier de verwachte hash uit het bekende ruwe
     // token. Alleen een echte SHA-256 komt daar doorheen.
-    // Altijd vanaf niets. Het script drukt de links alleen af wanneer het de
-    // ronde daadwerkelijk aanmaakt, dus een bestaande demo-tenant zou hier een
-    // lege lijst opleveren — en dan hangt deze test af van de volgorde waarin
-    // Jest de tests draait. Dat is precies de faalvorm die het lastigst te
-    // vinden is: groen alleen, rood in de suite.
-    draaiSeed(['--verwijder']);
-
-    const uitvoer = draaiSeed();
-    const tokens = [...uitvoer.matchAll(/\/portal\/survey\/(\S+)/g)].map(
-      (match) => match[1],
-    );
+    //
+    // De tokens komen uit het script zelf en niet uit zijn uitvoer. Een eerdere
+    // versie las ze uit de afgedrukte links, en die faalde onregelmatig: het
+    // script drukt ze alleen af wanneer het de ronde daadwerkelijk aanmaakt,
+    // en bij een tweede seed slaat het die stap over. In de volledige suite
+    // had een andere test de tenant soms al gevuld — dan vond deze test nul
+    // links en viel om op iets dat niets met hashing te maken had.
+    const tokens = leesDemoTokens();
 
     expect(tokens).toHaveLength(3);
+
+    // Vanaf niets, zodat de hashes bij déze tokens horen en niet bij een
+    // eerdere seed met andere waarden.
+    draaiSeed(['--verwijder']);
+    draaiSeed();
 
     const verwachteHashes = tokens
       .map((token) => createHash('sha256').update(token, 'utf8').digest('hex'))
