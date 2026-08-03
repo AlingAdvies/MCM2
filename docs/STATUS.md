@@ -207,6 +207,27 @@ De wachtlus eist nu **twee opeenvolgende geslaagde queries** in plaats van één
 
 ## Demo-tenant — één commando, geen klantdata (2026-08-03, fase 3)
 
+**De hele omgeving in één commando** (aanbevolen — container, migraties en data):
+
+```bash
+npm run demo:start              # opzetten, of met rust laten als hij draait
+npm run demo:status             # draait hij, wat zit erin, is er een account gekoppeld?
+npm run demo:stop               # opruimen
+npm run demo:start -- --opnieuw # weggooien en vanaf niets opbouwen
+```
+
+`demo:start` is idempotent en kent drie situaties: draaiend (blijft staan, data intact), gestopt (start op mét data — het scenario "Docker Desktop herstart"), afwezig (bouwt op). De container heet `mcm2demo`, draait op poort **55450** en heeft het label `mcm2.rol=demo`.
+
+**Dat label is er met reden.** Op 2026-08-03 is de demo-database twee keer weggegooid door een opruimactie over álle containers, en daarmee ook de koppeling van een echt Entra-account aan een demo-gebruiker. Een opruimactie kan hem nu overslaan:
+
+```bash
+docker rm -f $(docker ps -aq --filter "label!=mcm2.rol=demo")
+```
+
+De teststraat raakte hem overigens nooit: `verify` weigert te draaien tegen iets anders dan een lokale wegwerpdatabase, en `verify:volledig` maakt zijn eigen container op poort 55441. Vier poorten, vier doelen: 55440 handmatige `verify`, 55441 `verify:volledig`, 55450 demo, 55500 OTAP-doorloop.
+
+**Alleen de data, tegen een bestaande database:**
+
 ```bash
 DATABASE_URL=… npm run seed:demo              # vullen (idempotent)
 DATABASE_URL=… node scripts/seed-demo-tenant.js --verwijder   # weghalen
