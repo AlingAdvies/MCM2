@@ -20,7 +20,7 @@ Branch `feat/identiteit-en-membership`, vijf commits, nog niet gepusht.
 | **1** | Auth-routes `/auth/login`, `/auth/callback`, `/auth/logout` | ✅ |
 | **1** | `X-Tenant-Id` verwijderen | ✅ bleek niets te verwijderen — zie hieronder |
 | **2** | Vendorroutes en schermen | ✅ gemerged 2026-07-31 (MCM2#67, frontend#2) |
-| 3 | Demo-tenant seed | niet gestart |
+| **3** | Demo-tenant seed | ✅ 2026-08-03 — `npm run seed:demo`, 8 e2e-tests, tegenproef vond een echt gat |
 | 4 | OTAP-doorloop uitgebreid | niet gestart |
 
 **Fase 1 is af (2026-07-31).** De keten `cookie → hash → clm.sessie_oplossen() → tenantId → withTenant()` staat en is bewezen. 205 e2e-tests in 15 suites, 158 unittests, productie-image gecontroleerd.
@@ -242,6 +242,70 @@ opzet; twee scripts die dezelfde rijen claimen gaan elkaar in de weg zitten.
 
 **Klaar wanneer:** één commando vult een demo-tenant, je logt erin en ziet gevulde
 schermen.
+
+#### Uitgevoerd op 2026-08-03
+
+`npm run seed:demo` vult de tenant `dededede-…-0001` in één commando: 3 gebruikers
+met membership, 21 leveranciers met contactpersoon en tags, beide vragenlijsten en
+één actieve ronde met drie responses. `--verwijder` haalt alles weer weg.
+
+**De bron is MVM_V2** (`src/data/vendors.mock.ts`), zoals dit plan voorschreef —
+maar éénmalig geëxtraheerd naar `db/seeds/demo/leveranciers.json` in plaats van
+geïmporteerd. Een `import` uit `../../MVM_V2` werkt niet in een container of op een
+andere machine, en dat is precies waar dit script moet draaien.
+
+**`mvm-api-pilot/Database/import-mock-data.ts` is bekeken en niet hergebruikt.**
+Dat script zet RLS uit (`session_replication_role = 'replica'`), draait als
+superuser, heeft productiereferenties hardgecodeerd en schrijft naar tabellen die
+MCM2 niet heeft (`contract`, `document`, `certification`, `task`, `issue`). Alleen
+de databron eruit is bruikbaar. Zie ook de opmerking bij Issue #1 hieronder.
+
+**Migratie 0012 was nodig.** De mock-data gebruikt negen code-waarden die de
+`ref`-tabellen niet kenden — zeven categorieën, plus `critical` en `at_risk`.
+Besluit van de eigenaar: toevoegen, niet vervlakken naar `other`/`high`. Anders
+heet de helft van de demo "Overig" en is dezelfde migratie later alsnog nodig,
+dan met gevulde rijen.
+
+**Drie dingen die het datamodel afdwong** en waar het script zich naar voegt in
+plaats van omheen:
+
+- **"Concept" is geen status.** `survey_response.status` kent alleen `pending`,
+  `submitted` en `revoked`. Een concept is een `pending` response mét antwoorden.
+- **Antwoorden kunnen alleen op een `pending` response.** De policy op
+  `survey_answer` heeft dat in zijn `WITH CHECK`. Het ingediende stadium wordt dus
+  eerst ingevuld en daarna ingediend — dezelfde volgorde als een echte invuller.
+- **De tenantrij wordt aangemaakt bínnen de tenantcontext.** Buiten de context
+  weigert RLS de INSERT.
+
+**De tegenproef vond een echt gat** — de vijfde keer in dit project. Met de
+tokenhash vervangen door een hex-codering van het ruwe token bleven alle acht
+tests groen, terwijl de waarde omkeerbaar was: wie de databasedump heeft, kan dan
+elke openstaande survey openen. De test controleerde de vórm van de hash, niet dat
+het de hash ís. Nu herberekent hij de verwachte SHA-256 uit het bekende token; met
+de sabotage erin valt precies die ene test om.
+
+**Een tweede fout kwam pas bij het openen van een link aan het licht:** de eerste
+demo-tokens waren 38 en 39 tekens, terwijl `heeftGeldigeVorm()` er exact 43 eist.
+Het seeden slaagde, de database accepteerde de hash — maar elke demo-link werd
+door de guard geweigerd vóórdat de database geraadpleegd werd. Het script berekent
+de lengte nu zelf en faalt hard bij een afwijking.
+
+**Gemeten tegen de draaiende API**, niet alleen in tests:
+
+```
+open       /survey/respond/questions?t=…  200  (9 vragen)
+concept    /survey/respond/questions?t=…  200
+ingediend  /survey/respond/questions?t=…  410  "al ingediend op 3 augustus 2026"
+```
+
+Plus: 21 leveranciers zichtbaar in demo-context, **0** vanuit een andere tenant,
+**0** zonder tenantcontext, en nul tenant- of response-ID's in de respons.
+
+**Wat er níét is:** inloggen als demo-gebruiker. Hun `external_subject` begint met
+`demo:` en is geen echte Entra-`oid`, dus de guard laat ze niet door. Dat is
+bewust — een verzonnen UUID zou niet te onderscheiden zijn van een echte
+identiteit en zou kunnen botsen op de unieke index. De schermen zijn te bekijken
+via de tokenlinks; inloggen vraagt om het koppelen van een echte `oid`.
 
 ---
 

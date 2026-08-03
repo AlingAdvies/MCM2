@@ -1,7 +1,16 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-07-31, avond (**fase 1 én 2 zijn af, en inloggen via Entra werkt aantoonbaar**. Er is een zichtbaar beheerscherm op `/beheer/leveranciers`, één commando dat de hele keten doortest, en de laatste onbewezen aanname — welke claims Entra levert — is gemeten. Alles gemerged, CI groen op `main` in beide repositories. Alles hieronder is geverifieerd, niet uit gespreksgeheugen.)
+2026-08-03 (**fase 3 is af**: `npm run seed:demo` vult in één commando een demo-tenant met 21 leveranciers, drie gebruikers, beide vragenlijsten en een lopende ronde. 236 e2e-tests groen — acht nieuwe. Twee dingen die aandacht vragen staan onder "Actieve blokkades": de dagelijkse backup heeft drie dagen stilgelegen, en er staat een productiewachtwoord in de git-historie van `mvm-api-pilot`.)
+
+<details>
+<summary>Vorige stand (2026-07-31, avond)</summary>
+
+**fase 1 én 2 zijn af, en inloggen via Entra werkt aantoonbaar**. Er is een zichtbaar beheerscherm op `/beheer/leveranciers`, één commando dat de hele keten doortest, en de laatste onbewezen aanname — welke claims Entra levert — is gemeten. Alles gemerged, CI groen op `main` in beide repositories.
+
+</details>
+
+Alles hieronder is geverifieerd, niet uit gespreksgeheugen.
 
 **Plan voor de komende fases:** `docs/superpowers/plans/2026-07-30-beheerkant-en-demo-tenant.md` — vier fases naar een frontend die eruitziet als MVM_V2, inloggen als tenant, vendors met contactpersonen aanmaken, een demo-tenant met mock data, en een robuuste OTAP-doorloop.
 
@@ -30,13 +39,14 @@ Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in
    - **Issue #59 — `npm audit` meldt 29 kwetsbaarheden.** Niet vergeten, maar ook niet nu oplossen: `npm audit --omit=dev` geeft **0**, dus er zit niets van in het productie-image. De voorgestelde automatische fix zet eslint jaren terug en breekt de lint-configuratie. Hoort bij de eerste major-onderhoudsronde op devDependencies, samen met Dependabot (#22). **Controleer wel bij elke sessie dat `npm audit --omit=dev` nul blijft** — wordt dat meer dan nul, dan is het geen onderhoudspunt meer maar een blocker.
    - **Issue #58 — de backup hangt af van deze laptop.** Draait dagelijks, maar niet als de machine uitstaat. Vóór de pilotstart (rond 1 september) naar iets onafhankelijks.
 
-6. **Eerste concrete vervolgstap: fase 3 — de demo-tenant met mock data.** Fase 1 en 2 zijn op 2026-07-31 afgerond en gemerged.
+6. **Eerste concrete vervolgstap: fase 4 — de OTAP-doorloop uitbreiden.** Fase 1 en 2 zijn op 2026-07-31 afgerond, fase 3 op 2026-08-03.
 
    **Wat er nu werkt en zichtbaar is:**
 
    ```
    /beheer/leveranciers   lijst + aanmaakformulier met contactpersoon
-   npm run verify:volledig   code → 161 unit → 228 e2e → stack → 6 browsertests
+   npm run seed:demo      demo-tenant: 21 leveranciers, 3 gebruikers, 3 responses
+   npm run verify:volledig   code → 161 unit → 236 e2e → stack → 6 browsertests
    ```
 
    **Inloggen via Entra werkt aantoonbaar.** Eén echte login doorlopen: code inwisselen, token verifiëren met de échte applicatiecode, gebruiker en membership, sessie via `clm.sessie_aanmaken()`, en met dat cookie `/vendors` → 200. Zonder cookie → 401.
@@ -75,9 +85,14 @@ Blijken ze over een half jaar nog steeds ongebruikt, dan kunnen ze weg — de ke
 npm run verify:volledig
 ```
 
-Vijf stappen: code, 161 unittests, 228 e2e tegen een wegwerpdatabase, beide
+Vijf stappen: code, 161 unittests, 236 e2e tegen een wegwerpdatabase, beide
 productie-images bouwen, zes browsertests, en altijd opruimen. Stopt bij de
 eerste rode stap en noemt welke CI-job dat is.
+
+**Let op bij handmatig een testcontainer draaien:** `verify:volledig` claimt poort
+**55441**. Draait daar nog iets van een vorige sessie, dan faalt stap 1 met
+"geen testdatabase kunnen starten" — een melding die naar de verkeerde oorzaak
+wijst. Opruimen met `docker rm -f <naam>`.
 
 Alleen de code-poorten, zonder stack: `npm run verify` (vraagt `DATABASE_URL`)
 of `npm run verify:snel` (slaat de e2e-laag over en zegt dat er ook bij).
@@ -119,6 +134,12 @@ npm run backup:dump
 DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" \
   npm run seed:vragenlijsten -- <tenant-uuid>
 
+# De demo-tenant vullen (doet de vragenlijsten zelf ook)
+DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" \
+  npm run seed:demo
+#   → drukt drie tokenlinks af: open, concept, ingediend
+#   weghalen: node scripts/seed-demo-tenant.js --verwijder
+
 # Frontend: het portaal bekijken zonder backend
 cd ../MCM2-frontend && npm run dev
 # → http://localhost:3000/portal/survey/demo-geldig
@@ -128,6 +149,28 @@ cd ../MCM2-frontend && npm run dev
 # Daarna de browsertest, met een VERSE tokenlink (indienen is eenmalig):
 cd ../MCM2-frontend && SURVEY_TOKEN=<verse-link> npm run e2e
 ```
+
+## Demo-tenant — één commando, geen klantdata (2026-08-03, fase 3)
+
+```bash
+DATABASE_URL=… npm run seed:demo              # vullen (idempotent)
+DATABASE_URL=… node scripts/seed-demo-tenant.js --verwijder   # weghalen
+```
+
+Vult tenant `dededede-0000-4000-8000-000000000001` met 3 gebruikers (met membership), 21 leveranciers met contactpersoon en tags, beide vragenlijsten en één actieve ronde met drie responses: open, concept en ingediend.
+
+**De data komt uit MVM_V2** (`src/data/vendors.mock.ts`), éénmalig geëxtraheerd naar `db/seeds/demo/leveranciers.json`. Bewust geëxtraheerd en niet geïmporteerd: een `import` uit `../../MVM_V2` werkt niet in een container of op een andere machine, en dat is juist waar dit script moet draaien.
+
+**Migratie 0012 hoort hierbij.** De mock-data gebruikt negen `ref`-codes die MCM2 niet kende (zeven categorieën, plus `critical` en `at_risk`). Besluit van de eigenaar: toevoegen in plaats van vervlakken naar `other`/`high`.
+
+**Twee dingen om te weten bij gebruik:**
+
+- **Inloggen als demo-gebruiker kan niet.** Hun `external_subject` begint met `demo:` en is geen echte Entra-`oid`. Dat is bewust: een verzonnen UUID zou niet te onderscheiden zijn van een echte identiteit en kan botsen op de unieke index. De schermen bekijk je via de tokenlinks die het script afdrukt.
+- **De demo-tokens staan leesbaar in het script.** Dat mag daar en nergens anders: ze geven alleen toegang tot verzonnen data in deze ene tenant. De opslag blijft een SHA-256-hash — het pad is identiek aan dat van een echte uitnodiging, alleen de invoer is bekend.
+
+**Bewezen, niet aangenomen** (8 e2e-tests in `test/demo-seed.e2e-spec.ts`): idempotent, drie werkelijk verschillende stadia, tokens in de vorm die de guard accepteert, en cross-tenant onzichtbaar. Gemeten tegen de draaiende API gaven de drie links respectievelijk 200, 200 en 410 ("al ingediend op 3 augustus 2026").
+
+**De tegenproef vond een echt gat** — de vijfde keer in dit project. Met de tokenhash vervangen door een hex-codering van het ruwe token bleven alle acht tests groen, terwijl de waarde omkeerbaar was: een databasedump zou dan elke openstaande survey openen. De test keek naar de vórm van de hash, niet of het de hash ís. Nu herberekent hij de verwachte SHA-256 uit het bekende token.
 
 ## Vragenlijst-tool — scope vastgesteld op 2026-07-29, ontwerp is bouwbaar
 
@@ -235,6 +278,16 @@ Raakt **#12** (acceptatieomgeving — wordt zwaarder: twee containers), **#18** 
 Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Actieve blokkades
+
+- **NIEUW 2026-08-03 — de dagelijkse backup heeft drie dagen stilgelegen.** Op 1, 2 en 3 augustus faalde de geplande taak, telkens met dezelfde oorzaak: **Docker Desktop draaide niet** om 07:00. De laatste geslaagde automatische dump is die van 31 juli; handmatig ingehaald op 3 augustus (21,2 kB in 4,7s).
+
+  Dit is Issue #58, maar met een andere oorzaak dan daar beschreven. Het issue gaat uit van "de laptop staat uit"; hier stónd de laptop aan en was Docker simpelweg nog niet opgestart. Het script waarschuwt keurig in het log — **maar niemand leest dat log.** Een mislukte backup is stil, en dat is het eigenlijke probleem: drie dagen geen backup zonder dat iemand het merkte, terwijl deze dump op Supabase Free de énige backup is.
+
+  Vóór de pilotstart (rond 1 september) hoort hier een signaal op dat níét afhangt van iemand die een logbestand openslaat.
+
+- **NIEUW 2026-08-03 — een productiewachtwoord staat in de git-historie van `mvm-api-pilot`.** Gevonden bij het bekijken van `Database/import-mock-data.ts` voor de demo-data: host, gebruiker en wachtwoord van `clm-enterprise` staan daar hardgecodeerd (regels 21-28), en het bestand staat in git. Dat is dezelfde database als waar MCM2 op draait.
+
+  Raakt **Issue #1** (wachtwoordrotatie `postgres`-beheerrol), maar is dringender dan dat issue suggereert: dit is geen hygiënepunt meer maar een gelekt geheim. Rotatie alleen is niet genoeg — het wachtwoord blijft in de historie staan, dus het moet ook daar weg of de rol moet vervangen worden. **Niet aangeraakt in deze sessie**: het is een andere repository en een besluit van de eigenaar.
 
 - **P0 — databaserol/RLS-bereikbaarheid, opgelost op 2026-07-27:** de runtime database-connectie gebruikte de Supabase-rol `postgres` (`rolbypassrls: true`). Nieuwe login-rol `clm_api_runtime` aangemaakt (`LOGIN`, erft van `clm_api`, `rolbypassrls: false`), `DATABASE_URL` in `.env` bijgewerkt. Tussentijdse extra bevinding: geen van de vier `clm_*`-rollen had ooit `USAGE`-rechten op de schemas `clm`/`ref`/`audit` — hersteld via migratie `20260727053702_grant_schema_and_table_privileges`. Zie ADR-008.
 - **P0 — migration-rol en geautomatiseerde RLS-test, opgelost op 2026-07-27:** aparte login-rol `clm_migrator` toegevoegd (los van zowel `postgres` als `clm_api_runtime`), rollen-bootstrap vastgelegd in `prisma/roles/bootstrap-roles.sql` (niet in de Prisma-migratiehistorie, want rollen zijn cluster-breed). De handmatige, ad-hoc RLS-verificatie is vervangen door een geautomatiseerde test (`test/tenant-rls-isolation.e2e-spec.ts`), die nu ook in CI draait tegen een ephemere, wegwerpbare Postgres-container (`.github/workflows/ci.yml`, job `rls-isolation`) — bewust niet tegen de echte Supabase-database, om geen productiegeheim als GitHub Secret te hoeven gebruiken. Zie ADR-009 voor de volledige achtergrond, inclusief waarom dit geen Prisma-probleem was (de rolrechten-kwesties tijdens het bouwen hiervan waren PostgreSQL/Supabase-specifiek, los van de ORM-keuze).
