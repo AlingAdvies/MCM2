@@ -8,7 +8,11 @@ import {
   type GeverifieerdeIdentiteit,
 } from './id-token-verificatie';
 import { Inlogpoging, codeChallenge, nieuweInlogpoging } from './inlogpoging';
-import { SessieService, type NieuweSessie } from './sessie.service';
+import {
+  SessieService,
+  type NieuweSessie,
+  type SessieContext,
+} from './sessie.service';
 
 /**
  * Bindt de vier bestaande bouwstenen aan elkaar tot één inlogflow:
@@ -146,6 +150,13 @@ export class AuthService {
   /** Beëindigt de sessie bij het ruwe token uit het cookie. */
   async uitloggen(ruwToken: unknown): Promise<void> {
     await this.sessies.beeindigen(ruwToken);
+  }
+
+  /** Naam en tenantnaam van de ingelogde gebruiker, voor de schermen. */
+  async profiel(
+    context: SessieContext,
+  ): Promise<{ naam: string; tenantNaam: string } | null> {
+    return this.sessies.profiel(context);
   }
 
   naLoginBestemming(): string {

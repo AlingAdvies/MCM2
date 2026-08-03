@@ -1,7 +1,7 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-08-03 (**fase 3 is af**: `npm run seed:demo` vult in één commando een demo-tenant met 21 leveranciers, drie gebruikers, beide vragenlijsten en een lopende ronde. 236 e2e-tests groen — acht nieuwe. Twee dingen die aandacht vragen staan onder "Actieve blokkades": de dagelijkse backup heeft drie dagen stilgelegen, en er staat een productiewachtwoord in de git-historie van `mvm-api-pilot`.)
+2026-08-03 (**fase 3 en 2b zijn af**: `npm run seed:demo` vult in één commando een demo-tenant, en de beheerkant heeft nu de sidebar en schermindeling van MVM_V2 plus zoeken. 241 e2e-tests en 14 browsertests groen. Twee dingen die aandacht vragen staan onder "Actieve blokkades": de dagelijkse backup heeft drie dagen stilgelegen, en er staat een productiewachtwoord in de git-historie van `mvm-api-pilot`.)
 
 <details>
 <summary>Vorige stand (2026-07-31, avond)</summary>
@@ -39,14 +39,14 @@ Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in
    - **Issue #59 — `npm audit` meldt 29 kwetsbaarheden.** Niet vergeten, maar ook niet nu oplossen: `npm audit --omit=dev` geeft **0**, dus er zit niets van in het productie-image. De voorgestelde automatische fix zet eslint jaren terug en breekt de lint-configuratie. Hoort bij de eerste major-onderhoudsronde op devDependencies, samen met Dependabot (#22). **Controleer wel bij elke sessie dat `npm audit --omit=dev` nul blijft** — wordt dat meer dan nul, dan is het geen onderhoudspunt meer maar een blocker.
    - **Issue #58 — de backup hangt af van deze laptop.** Draait dagelijks, maar niet als de machine uitstaat. Vóór de pilotstart (rond 1 september) naar iets onafhankelijks.
 
-6. **Eerste concrete vervolgstap: fase 4 — de OTAP-doorloop uitbreiden.** Fase 1 en 2 zijn op 2026-07-31 afgerond, fase 3 op 2026-08-03.
+6. **Eerste concrete vervolgstap: fase 4 — de OTAP-doorloop uitbreiden.** Fase 1 en 2 zijn op 2026-07-31 afgerond, fase 3 en 2b op 2026-08-03.
 
    **Wat er nu werkt en zichtbaar is:**
 
    ```
-   /beheer/leveranciers   lijst + aanmaakformulier met contactpersoon
+   /beheer/leveranciers   sidebar + lijst met zoeken + aanmaakformulier
    npm run seed:demo      demo-tenant: 21 leveranciers, 3 gebruikers, 3 responses
-   npm run verify:volledig   code → 161 unit → 236 e2e → stack → 6 browsertests
+   npm run verify:volledig   code → 161 unit → 241 e2e → stack → 14 browsertests
    ```
 
    **Inloggen via Entra werkt aantoonbaar.** Eén echte login doorlopen: code inwisselen, token verifiëren met de échte applicatiecode, gebruiker en membership, sessie via `clm.sessie_aanmaken()`, en met dat cookie `/vendors` → 200. Zonder cookie → 401.
@@ -85,8 +85,8 @@ Blijken ze over een half jaar nog steeds ongebruikt, dan kunnen ze weg — de ke
 npm run verify:volledig
 ```
 
-Vijf stappen: code, 161 unittests, 236 e2e tegen een wegwerpdatabase, beide
-productie-images bouwen, zes browsertests, en altijd opruimen. Stopt bij de
+Vijf stappen: code, 161 unittests, 241 e2e tegen een wegwerpdatabase, beide
+productie-images bouwen, veertien browsertests, en altijd opruimen. Stopt bij de
 eerste rode stap en noemt welke CI-job dat is.
 
 **Let op bij handmatig een testcontainer draaien:** `verify:volledig` claimt poort
@@ -149,6 +149,32 @@ cd ../MCM2-frontend && npm run dev
 # Daarna de browsertest, met een VERSE tokenlink (indienen is eenmalig):
 cd ../MCM2-frontend && SURVEY_TOKEN=<verse-link> npm run e2e
 ```
+
+## Beheerkant — sidebar, schermindeling en zoeken (2026-08-03, fase 2b)
+
+De beheerkant lijkt nu op MVM_V2: navigatiekolom links, titelbalk boven, de huisstijlkleuren. Aanleiding was de vraag van de eigenaar waarom het er zo anders uitzag — en het antwoord was dat fase 2 als "af" was afgevinkt terwijl alleen de kleuren waren overgenomen, niet de layout. Het plan vroeg letterlijk om "sidebar, kleuren, typografie, schermindeling".
+
+**Nieuw in de backend: `GET /auth/sessie`.** De frontend wist niet wie er was ingelogd — het sessiecookie is `httpOnly` en dus onleesbaar voor JavaScript. Deze route geeft naam, tenantnaam en rol; **geen tenantId, userId of sessieId**, want wat er niet in staat kan ook niet in een URL belanden (§6).
+
+**Nieuw in de frontend:** `Sidebar.tsx`, `AppLayout.tsx` (beide uit MVM_V2, met bronvermelding), zoeken op naam/KvK/plaats, en `magZien()` — de ene plek die bepaalt of iemand een menu-item ziet.
+
+**Drie dingen bewust anders dan MVM_V2:**
+
+- **Alleen menu-items die werken.** MVM_V2 heeft er zes; hier bestaat alleen Leveranciers.
+- **Geen gebruikersschakelaar.** Die zou een tweede pad naar identiteit zijn naast het sessiecookie.
+- **Geen verborgen knoppen bij open routes.** `POST /vendors` staat open voor elke geldige sessie, ook voor een `reviewer`. De knop verbergen zou de indruk wekken dat er een rechtenmodel is dat er niet is.
+
+**De tegenproef vond een echt gat, de zesde keer in dit project.** Met een `tenantId` toegevoegd aan `/auth/sessie` bleven **alle acht browsertests groen** — de sidebar toont dat veld niet, dus het kwam nooit in beeld terwijl het wél over de lijn ging. Een lek hoort bij de bron getest te worden; `test/sessie-route.e2e-spec.ts` controleert nu het antwoord zelf, en daar vallen met de sabotage twee tests om.
+
+**Feature flags: ontworpen, niet gebouwd.** De eigenaar wees op twee lagen — betaalde features per tenant én verschillen per gebruiker binnen een tenant. Uitgewerkt in `docs/superpowers/specs/2026-08-03-feature-flags-en-rechten.md`, inclusief drie manieren om laag 1 vast te leggen en een advies. **Besluit ligt bij de eigenaar.** Vier openstaande vragen staan in §7 van dat document; geen daarvan blokkeert fase 4.
+
+### Onregelmatig falende doorloop opgelost
+
+`verify:volledig` faalde wisselend op `psql: connection to server on socket … failed: No such file or directory` — een melding die naar de verkeerde oorzaak wijst, want de container was gezond.
+
+Oorzaak: het `postgres`-image start tijdens de **eerste initialisatie** een tijdelijke server die alleen op de Unix-socket luistert. `pg_isready` meldt die als "accepting connections", waarna het image hem stopt en de echte server start. Een `psql` die precies daartussen valt, faalt.
+
+De wachtlus eist nu **twee opeenvolgende geslaagde queries** in plaats van één `pg_isready`. Daarna vijf runs achter elkaar groen.
 
 ## Demo-tenant — één commando, geen klantdata (2026-08-03, fase 3)
 

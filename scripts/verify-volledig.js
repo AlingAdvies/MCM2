@@ -173,14 +173,34 @@ function startTestDatabase() {
   }
 
   // Wachten tot Postgres verbindingen accepteert.
-  for (let poging = 0; poging < 40; poging += 1) {
+  //
+  // `pg_isready` alleen is niet genoeg, en dat leverde een onregelmatig
+  // falende doorloop op (2026-08-03): het officiële postgres-image start
+  // tijdens de eerste initialisatie een *tijdelijke* server die alleen op de
+  // Unix-socket luistert. pg_isready meldt die als "accepting connections",
+  // waarna het image de server stopt en opnieuw start voor de echte. Een psql
+  // die precies daartussen valt, faalt met:
+  //
+  //   connection to server on socket "/var/run/postgresql/.s.PGSQL.5432"
+  //   failed: No such file or directory
+  //
+  // Een melding die naar de verkeerde oorzaak wijst — hij suggereert dat er
+  // geen server draait, terwijl de container gezond is.
+  //
+  // Daarom een echte query als bewijs van gereedheid, en pas doorgaan als die
+  // twee keer achter elkaar slaagt: één keer kan nog de tijdelijke server zijn.
+  let opeenvolgendGoed = 0;
+
+  for (let poging = 0; poging < 60; poging += 1) {
     const gereed = draai(
       'docker',
-      ['exec', TESTDB, 'pg_isready', '-U', 'postgres'],
+      ['exec', TESTDB, 'psql', '-U', 'postgres', '-tAc', '"SELECT 1"'],
       { stil: true },
     );
 
-    if (gereed.ok) {
+    opeenvolgendGoed = gereed.ok ? opeenvolgendGoed + 1 : 0;
+
+    if (opeenvolgendGoed >= 2) {
       const rollen = draai(
         'docker',
         ['exec', '-i', TESTDB, 'psql', '-U', 'postgres', '-q'],
@@ -228,7 +248,10 @@ function startTestDatabase() {
     });
   }
 
-  return { ok: false, reden: 'Postgres werd niet op tijd bereikbaar.' };
+  return {
+    ok: false,
+    reden: `Postgres in ${TESTDB} accepteerde binnen 60 seconden geen twee opeenvolgende queries. Bekijk 'docker logs ${TESTDB}'.`,
+  };
 }
 
 function stopTestDatabase() {
