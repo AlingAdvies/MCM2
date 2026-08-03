@@ -8,7 +8,7 @@ import { NodePgDatabase, drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 
 import * as schema from './schema';
-import { setTenantContext } from './schema';
+import { setActorContext, setTenantContext, type Actor } from './schema';
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -94,10 +94,29 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
    *
    * De tenantId hoort uit geverifieerde identiteit te komen — een ID-token of
    * een tokenlookup — nooit uit een header of query-parameter (Issue #7).
+   *
+   * ── De actor ─────────────────────────────────────────────────────────────
+   * Naast de tenant legt elke transactie vast wélke soort aanroeper hem opent:
+   * een `medewerker` (sessiepad) of een `leverancier` (tokenpad). Zie
+   * drizzle/0013_actor_context.sql.
+   *
+   * De parameter is bewust optioneel in de signatuur en tegelijk verplicht in
+   * de praktijk. Dat lijkt tegenstrijdig en is het niet:
+   *
+   * - Weglaten levert actor `onbekend` op. Dat is de striktste stand — geen
+   *   toegang tot wat achter een actor-eis ligt. Een vergeten actor faalt dus
+   *   dicht, niet open.
+   * - Een verplichte parameter zou ~70 testregels raken die niets met dit
+   *   onderwerp te maken hebben. Die aanpassen levert ruis op in precies de
+   *   tests die de tenantgrens bewijzen, en dat is een slechte ruil.
+   *
+   * Voor productiecode geldt: altijd meegeven. De tegenproef in
+   * survey-review.e2e-spec bewaakt dat het tokenpad `leverancier` doorgeeft.
    */
   async withTenant<T>(
     tenantId: string,
     fn: (tx: TenantTransaction) => Promise<T>,
+    actor?: Actor,
   ): Promise<T> {
     if (!UUID_REGEX.test(tenantId)) {
       throw new Error(`Ongeldige tenant-id: '${tenantId}'`);
@@ -105,6 +124,15 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
     return this.db.transaction(async (tx) => {
       await tx.execute(setTenantContext(tenantId));
+
+      // Alleen zetten als hij meegegeven is. Niet zetten laat de variabele
+      // leeg, en clm.current_actor() maakt daar 'onbekend' van — de striktste
+      // uitkomst. Hier expliciet 'onbekend' schrijven zou hetzelfde doen maar
+      // suggereren dat het een bewuste keuze van de aanroeper was.
+      if (actor) {
+        await tx.execute(setActorContext(actor));
+      }
+
       return fn(tx);
     });
   }

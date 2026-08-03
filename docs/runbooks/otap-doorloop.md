@@ -31,9 +31,25 @@ uitrollen werkt".
 - `MCM2-frontend` staat als zustermap naast `MCM2`
 - Poorten 3000, 5001 en 55500 zijn vrij
 
-> **Poort 3000 is de gebruikelijke struikelblok.** Een `npm run dev` die nog
-> draait houdt hem bezet en de stack weigert te starten met "ports are not
-> available". Sluit die eerst af.
+> **Poort 3000 en 5001 zijn de gebruikelijke struikelblokken.** Een `npm run dev`
+> of `npm run start:prod` die nog draait houdt ze bezet, en Docker weigert dan te
+> starten met "ports are not available".
+>
+> **`npm run verify:volledig` controleert dit sinds 2026-08-03 vooraf** en stopt
+> binnen enkele seconden met een melding die vertelt welke poort bezet is en hoe
+> je het proces vindt. Daarvóór strandde de doorloop pas ná stap 1 — enkele
+> minuten aan tests en een wegwerpdatabase voor niets, met een foutmelding van
+> Docker die niet zei wélk proces in de weg zat.
+>
+> Het script sluit die processen bewust **niet** zelf af: dat is meestal een
+> dev-server die iemand zelf heeft gestart.
+>
+> Er zat ook een correctheidsprobleem in. `wachtOpStack()` pollt op
+> `localhost:5001/health` en `:3000`; draaide daar al iets, dan antwoordde dát
+> met 200 en concludeerde het script dat de stack gezond was — waarna de
+> browsertest tegen een dev-server draaide in plaats van tegen de
+> productie-images die deze stap juist moet bewijzen. Een groene doorloop die
+> het verkeerde getest heeft, is erger dan een rode.
 
 ---
 

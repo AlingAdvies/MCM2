@@ -1,7 +1,14 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-08-03 (**fase 2b, 2c en 3 zijn af**: demo-tenant met één commando, de sidebar en schermindeling van MVM_V2, zoeken, en een detailscherm waarop een leverancier te wijzigen is. Een `reviewer` mag nu aantoonbaar lezen maar niet schrijven. 264 e2e-tests en 25 browsertests groen. Twee dingen die aandacht vragen staan onder "Actieve blokkades": de dagelijkse backup heeft drie dagen stilgelegen, en er staat een productiewachtwoord in de git-historie van `mvm-api-pilot`.)
+2026-08-03, avond (**`app.current_actor` toegevoegd**: de database kan sinds migratie 0013 onderscheid maken tussen een medewerker en een leverancier. Dat kon hij niet — `withTenant()` zette alleen de tenant, en beide paden riepen hem identiek aan. Nodig voor de beoordelingstabel uit het surveybeheerplan, waar "zelfde tenant = mag het zien" voor het eerst níét opgaat. 269 e2e-tests en 25 browsertests groen. Drie tegenproeven gedaan; de derde bleef groen en leverde een nieuwe les op — zie hieronder.)
+
+<details>
+<summary>Vorige stand (2026-08-03, middag)</summary>
+
+**fase 2b, 2c en 3 zijn af**: demo-tenant met één commando, de sidebar en schermindeling van MVM_V2, zoeken, en een detailscherm waarop een leverancier te wijzigen is. Een `reviewer` mag nu aantoonbaar lezen maar niet schrijven. 264 e2e-tests en 25 browsertests groen. Twee dingen die aandacht vragen staan onder "Actieve blokkades": de dagelijkse backup heeft drie dagen stilgelegen, en er staat een productiewachtwoord in de git-historie van `mvm-api-pilot`.
+
+</details>
 
 <details>
 <summary>Vorige stand (2026-07-31, avond)</summary>
@@ -154,6 +161,42 @@ cd ../MCM2-frontend && npm run dev
 # Daarna de browsertest, met een VERSE tokenlink (indienen is eenmalig):
 cd ../MCM2-frontend && SURVEY_TOKEN=<verse-link> npm run e2e
 ```
+
+## De database kent nu het verschil tussen medewerker en leverancier (2026-08-03, migratie 0013)
+
+**Wat er ontbrak.** `DatabaseService.withTenant()` zette precies één sessievariabele: `app.current_tenant_id`. Het leverancierspad (tokenlookup) en het medewerkerspad (sessiecookie) riepen die functie identiek aan, met dezelfde tenantId. Elke policy luidt `USING (tenant_id = clm.current_tenant_id())`.
+
+Gemeten op 2026-08-03: **de database kon geen onderscheid maken tussen een medewerker en een leverancier van dezelfde tenant.** Voor elke bestaande tabel is dat juist — een leverancier hoort zijn eigen respons te kunnen lezen. Het wordt pas een probleem bij de beoordelingstabel uit `docs/superpowers/plans/2026-08-03-surveybeheer.md`: daar mag de leverancier het oordeel over zichzelf níét zien, ook al staat het in zijn tenant.
+
+Zonder deze migratie zou die bescherming volledig bestaan uit de afwezigheid van een route die het oordeel teruggeeft — hetzelfde faalpatroon als tegenproef 6.
+
+**Wat er nu staat.** `app.current_actor` met waarden `medewerker`, `leverancier` en `onbekend`, gelezen via `clm.current_actor()`. Niet gezet betekent `onbekend`, en dat is de striktste stand: een vergeten actor faalt dicht, niet open.
+
+De migratie **verandert bewust geen gedrag** — geen enkele bestaande policy leunt erop. De eerste die dat doet is migratie 0014 (`survey_review`).
+
+**Waarom de parameter optioneel is en toch verplicht.** In de signatuur optioneel, omdat verplicht maken ~70 testregels zou raken die niets met dit onderwerp te maken hebben — ruis in precies de tests die de tenantgrens bewijzen. In de praktijk verplicht, omdat weglaten `onbekend` oplevert en een nieuwe test de leverancierspaden bewaakt.
+
+### Drie tegenproeven, en de derde leverde een nieuwe les
+
+| Sabotage | Uitkomst |
+|---|---|
+| `withTenant()` zet de actor altijd op `medewerker` | 2 tests vielen om, zoals bedoeld |
+| standaard omgedraaid naar `medewerker` i.p.v. `onbekend` | 3 tests vielen om, zoals bedoeld |
+| `vragenlijst-lezen.service.ts` kondigt zich aan als `medewerker` | **alle 268 tests bleven groen** |
+
+Die derde is het ernstigste wat er met dit mechanisme mis kan gaan: een leverancier die zich als medewerker voordoet, krijgt straks toegang tot beoordelingen over zichzelf. Niets merkte het.
+
+**Terecht en tegelijk onacceptabel.** Terecht, want er was nog geen policy die de actor gebruikt — er viel niets te meten. Onacceptabel, want daarmee is de doorgifte tot migratie 0014 volledig onbewaakt, en dat is precies het venster waarin iemand een nieuwe survey-route bouwt en de actor van het verkeerde voorbeeld overneemt.
+
+Opgelost met een test die de broncode zelf leest (`actor-context.e2e-spec.ts`, laatste test) — lelijker dan een gedragstest, maar het verschil tussen een bewaakte afspraak en een goed voornemen. Dezelfde afweging als `test-ids.spec.ts`. Na toevoeging faalt de sabotage wél.
+
+De les staat in MCM2-CLAUDE.md §15b: **bouw je een grens in twee stappen, dan hoort er in stap één een test die de afspraak zelf bewaakt.**
+
+### Bijvangst: een test met een te krappe tijdslimiet
+
+`demo-seed.e2e-spec.ts` viel reproduceerbaar om op een timeout van 5 s. Niet door deze wijziging — het seed-script gebruikt zijn eigen `set_config` en raakt `withTenant()` niet. De test start dat script twee keer als apart Node-proces (~1,6 s per keer, gemeten), wat binnen 5 s alleen past als de machine niets anders doet. In de volledige suite doet hij dat wel.
+
+De foutmelding wees naar hashing terwijl er niets mis was met hashing — dezelfde verwarrende faalvorm als de botsende test-id's van 2026-07-31. Twee tests hebben nu een limiet van 20 s met de reden erbij.
 
 ## Beheerkant — detail, wijzigen en rolcontrole (2026-08-03, fase 2c)
 

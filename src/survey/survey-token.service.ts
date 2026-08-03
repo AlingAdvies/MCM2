@@ -200,13 +200,15 @@ export class SurveyTokenService {
    * Geen rij terug betekent: iemand was eerder, of hij is inmiddels verlopen.
    */
   async dienIn(tenantId: string, responseId: string): Promise<boolean> {
-    return this.db.withTenant(tenantId, async (tx) => {
-      const resultaat = await tx.execute<{ response_id: string }>(
-        // De ronde-status staat óók in dit statement, niet alleen in de guard.
-        // De guard beschermt het HTTP-pad; deze voorwaarde beschermt de
-        // methode zelf, zodat een toekomstige aanroeper die de guard niet
-        // passeert geen indiening kan forceren op een ronde die dicht staat.
-        sql`UPDATE clm.survey_response AS r
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const resultaat = await tx.execute<{ response_id: string }>(
+          // De ronde-status staat óók in dit statement, niet alleen in de guard.
+          // De guard beschermt het HTTP-pad; deze voorwaarde beschermt de
+          // methode zelf, zodat een toekomstige aanroeper die de guard niet
+          // passeert geen indiening kan forceren op een ronde die dicht staat.
+          sql`UPDATE clm.survey_response AS r
                SET status = 'submitted', submitted_at = now()
              WHERE r.response_id = ${responseId}
                AND r.status = 'pending'
@@ -217,28 +219,30 @@ export class SurveyTokenService {
                         AND run.status = 'active'
                    )
          RETURNING r.response_id`,
-      );
-
-      const gelukt = resultaat.rows.length === 1;
-
-      if (!gelukt) {
-        // Geen fout: dit is het verwachte gedrag bij een tweede poging.
-        this.logger.warn(
-          `Indienen geweigerd voor response ${responseId}: al ingediend of verlopen.`,
         );
-        return false;
-      }
 
-      // Binnen dezelfde transactie (AC8): rolt de indiening terug, dan
-      // verdwijnt de auditregel mee. Een auditregel voor iets dat niet
-      // gebeurd is, is erger dan geen auditregel.
-      await this.audit.leg(tx, {
-        tenantId,
-        actie: 'survey_response_ingediend',
-        responseId,
-      });
+        const gelukt = resultaat.rows.length === 1;
 
-      return true;
-    });
+        if (!gelukt) {
+          // Geen fout: dit is het verwachte gedrag bij een tweede poging.
+          this.logger.warn(
+            `Indienen geweigerd voor response ${responseId}: al ingediend of verlopen.`,
+          );
+          return false;
+        }
+
+        // Binnen dezelfde transactie (AC8): rolt de indiening terug, dan
+        // verdwijnt de auditregel mee. Een auditregel voor iets dat niet
+        // gebeurd is, is erger dan geen auditregel.
+        await this.audit.leg(tx, {
+          tenantId,
+          actie: 'survey_response_ingediend',
+          responseId,
+        });
+
+        return true;
+      },
+      'leverancier',
+    );
   }
 }

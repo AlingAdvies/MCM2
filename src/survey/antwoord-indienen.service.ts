@@ -56,49 +56,51 @@ export class AntwoordIndienService {
     invoer: unknown,
   ): Promise<IndienUitkomst> {
     return this.db
-      .withTenant<IndienUitkomst>(tenantId, async (tx) => {
-        const vragen = await this.haalVragen(tx, responseId);
+      .withTenant<IndienUitkomst>(
+        tenantId,
+        async (tx) => {
+          const vragen = await this.haalVragen(tx, responseId);
 
-        // Geen vragen betekent: er valt niets in te dienen. Behandeld als
-        // "niet meer open" in plaats van als lege geldige indiening — anders
-        // zou een lege template een response kunnen afsluiten zonder inhoud.
-        if (vragen.length === 0) {
-          return { status: 'niet-meer-open' };
-        }
+          // Geen vragen betekent: er valt niets in te dienen. Behandeld als
+          // "niet meer open" in plaats van als lege geldige indiening — anders
+          // zou een lege template een response kunnen afsluiten zonder inhoud.
+          if (vragen.length === 0) {
+            return { status: 'niet-meer-open' };
+          }
 
-        const bestanden = await this.telBestanden(tx, responseId);
+          const bestanden = await this.telBestanden(tx, responseId);
 
-        const uitkomst = valideerAntwoorden(
-          vragen.map(naarValidatievraag),
-          invoer,
-          bestanden,
-        );
+          const uitkomst = valideerAntwoorden(
+            vragen.map(naarValidatievraag),
+            invoer,
+            bestanden,
+          );
 
-        if (!uitkomst.geldig) {
-          // Bewust vóór elke schrijfactie. De transactie heeft nog niets
-          // gewijzigd, dus er valt niets terug te draaien en de link blijft
-          // bruikbaar (testpunt 25).
-          return { status: 'ongeldig', fouten: uitkomst.fouten };
-        }
+          if (!uitkomst.geldig) {
+            // Bewust vóór elke schrijfactie. De transactie heeft nog niets
+            // gewijzigd, dus er valt niets terug te draaien en de link blijft
+            // bruikbaar (testpunt 25).
+            return { status: 'ongeldig', fouten: uitkomst.fouten };
+          }
 
-        const idPerSleutel = new Map(
-          vragen.map((v) => [v.question_key, v.question_id]),
-        );
+          const idPerSleutel = new Map(
+            vragen.map((v) => [v.question_key, v.question_id]),
+          );
 
-        await this.schrijfAntwoorden(
-          tx,
-          tenantId,
-          responseId,
-          uitkomst.antwoorden,
-          idPerSleutel,
-        );
+          await this.schrijfAntwoorden(
+            tx,
+            tenantId,
+            responseId,
+            uitkomst.antwoorden,
+            idPerSleutel,
+          );
 
-        // Pas hierna afsluiten. Eén atomair statement met de status als
-        // voorwaarde, net als in SurveyTokenService.dienIn(): de database
-        // beslist wie wint bij gelijktijdige verzoeken, niet de volgorde waarin
-        // ze toevallig aankomen.
-        const afgesloten = await tx.execute<{ response_id: string }>(
-          sql`UPDATE clm.survey_response AS r
+          // Pas hierna afsluiten. Eén atomair statement met de status als
+          // voorwaarde, net als in SurveyTokenService.dienIn(): de database
+          // beslist wie wint bij gelijktijdige verzoeken, niet de volgorde waarin
+          // ze toevallig aankomen.
+          const afgesloten = await tx.execute<{ response_id: string }>(
+            sql`UPDATE clm.survey_response AS r
                SET status = 'submitted', submitted_at = now()
              WHERE r.response_id = ${responseId}
                AND r.status = 'pending'
@@ -109,28 +111,30 @@ export class AntwoordIndienService {
                         AND run.status = 'active'
                    )
          RETURNING r.response_id`,
-        );
+          );
 
-        if (afgesloten.rows.length !== 1) {
-          // Iemand was eerder, of de ronde is inmiddels dicht. De transactie
-          // rolt terug door de fout hieronder niet te gooien maar de uitkomst
-          // te melden — Drizzle commit anders de zojuist geschreven antwoorden.
-          throw new NietMeerOpenError();
-        }
+          if (afgesloten.rows.length !== 1) {
+            // Iemand was eerder, of de ronde is inmiddels dicht. De transactie
+            // rolt terug door de fout hieronder niet te gooien maar de uitkomst
+            // te melden — Drizzle commit anders de zojuist geschreven antwoorden.
+            throw new NietMeerOpenError();
+          }
 
-        await this.audit.leg(tx, {
-          tenantId,
-          actie: 'survey_response_ingediend',
-          responseId,
-          details: { aantalAntwoorden: uitkomst.antwoorden.length },
-        });
+          await this.audit.leg(tx, {
+            tenantId,
+            actie: 'survey_response_ingediend',
+            responseId,
+            details: { aantalAntwoorden: uitkomst.antwoorden.length },
+          });
 
-        this.logger.log(
-          `Response ${responseId} ingediend met ${uitkomst.antwoorden.length} antwoorden.`,
-        );
+          this.logger.log(
+            `Response ${responseId} ingediend met ${uitkomst.antwoorden.length} antwoorden.`,
+          );
 
-        return { status: 'ingediend' };
-      })
+          return { status: 'ingediend' };
+        },
+        'leverancier',
+      )
       .catch((fout: unknown) => {
         // NietMeerOpenError is geen storing maar het verwachte gedrag bij een
         // tweede poging. Door hem als fout te gooien rolt de transactie terug;

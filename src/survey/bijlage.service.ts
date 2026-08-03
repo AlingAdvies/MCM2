@@ -65,68 +65,70 @@ export class BijlageService {
     await this.opslag.bewaar(storageKey, bestand.buffer);
 
     try {
-      return await this.db.withTenant<BijlageUitkomst>(tenantId, async (tx) => {
-        // FOR UPDATE op de responserij, zodat twee overlappende uploads niet
-        // allebei hetzelfde aantal tellen en samen over max_files heen gaan.
-        // Een CHECK kan dit niet afvangen: die kan noch over meerdere rijen
-        // tellen noch survey_question raadplegen.
-        //
-        // EERLIJK OVER WAT BEWEZEN IS: de tests tonen dat het maximum
-        // standhoudt, niet dat déze vergrendeling daarvoor nodig is. Met de
-        // FOR UPDATE verwijderd bleven ze groen — gemeten, niet aangenomen.
-        // Twee transacties via dezelfde pg-Pool komen in de praktijk achter
-        // elkaar aan de beurt, dus de race was niet uit te lokken zonder een
-        // wachtpunt in deze code te bouwen. Dat is de prijs niet waard voor
-        // een vergrendeling die goedkoop en correct is; hij blijft staan voor
-        // het geval de transacties wél overlappen (meerdere processen).
-        const response = await tx.execute<{ status: string }>(
-          sql`SELECT status FROM clm.survey_response
+      return await this.db.withTenant<BijlageUitkomst>(
+        tenantId,
+        async (tx) => {
+          // FOR UPDATE op de responserij, zodat twee overlappende uploads niet
+          // allebei hetzelfde aantal tellen en samen over max_files heen gaan.
+          // Een CHECK kan dit niet afvangen: die kan noch over meerdere rijen
+          // tellen noch survey_question raadplegen.
+          //
+          // EERLIJK OVER WAT BEWEZEN IS: de tests tonen dat het maximum
+          // standhoudt, niet dat déze vergrendeling daarvoor nodig is. Met de
+          // FOR UPDATE verwijderd bleven ze groen — gemeten, niet aangenomen.
+          // Twee transacties via dezelfde pg-Pool komen in de praktijk achter
+          // elkaar aan de beurt, dus de race was niet uit te lokken zonder een
+          // wachtpunt in deze code te bouwen. Dat is de prijs niet waard voor
+          // een vergrendeling die goedkoop en correct is; hij blijft staan voor
+          // het geval de transacties wél overlappen (meerdere processen).
+          const response = await tx.execute<{ status: string }>(
+            sql`SELECT status FROM clm.survey_response
                  WHERE response_id = ${responseId}
                  FOR UPDATE`,
-        );
+          );
 
-        const status = response.rows[0]?.status;
+          const status = response.rows[0]?.status;
 
-        // Na indienen geen uploads meer. De RLS-policy weigert dit ook, maar
-        // dan als databasefout; hier wordt het een nette 410.
-        if (status !== 'pending') {
-          return { status: 'niet-meer-open' };
-        }
+          // Na indienen geen uploads meer. De RLS-policy weigert dit ook, maar
+          // dan als databasefout; hier wordt het een nette 410.
+          if (status !== 'pending') {
+            return { status: 'niet-meer-open' };
+          }
 
-        const vraag = await tx.execute<VraagRij>(
-          sql`SELECT q.question_id, q.allows_upload, q.max_files
+          const vraag = await tx.execute<VraagRij>(
+            sql`SELECT q.question_id, q.allows_upload, q.max_files
                   FROM clm.survey_response r
                   JOIN clm.survey_run      run ON run.run_id    = r.run_id
                   JOIN clm.survey_question q   ON q.template_id = run.template_id
                  WHERE r.response_id = ${responseId}
                    AND q.question_key = ${questionKey}`,
-        );
+          );
 
-        const rij = vraag.rows[0];
+          const rij = vraag.rows[0];
 
-        // Geen rij betekent: deze vraag hoort niet bij de vragenlijst van
-        // déze run. Dezelfde regel als bij het indienen — RLS beschermt
-        // tegen een andere tenant, deze join tegen een andere template.
-        if (!rij) {
-          return { status: 'onbekende-vraag' };
-        }
+          // Geen rij betekent: deze vraag hoort niet bij de vragenlijst van
+          // déze run. Dezelfde regel als bij het indienen — RLS beschermt
+          // tegen een andere tenant, deze join tegen een andere template.
+          if (!rij) {
+            return { status: 'onbekende-vraag' };
+          }
 
-        if (!rij.allows_upload || rij.max_files < 1) {
-          return { status: 'geen-upload-vraag' };
-        }
+          if (!rij.allows_upload || rij.max_files < 1) {
+            return { status: 'geen-upload-vraag' };
+          }
 
-        const aantal = await tx.execute<{ n: string }>(
-          sql`SELECT count(*)::text AS n FROM clm.survey_attachment
+          const aantal = await tx.execute<{ n: string }>(
+            sql`SELECT count(*)::text AS n FROM clm.survey_attachment
                  WHERE response_id = ${responseId}
                    AND question_id = ${rij.question_id}`,
-        );
+          );
 
-        if (Number(aantal.rows[0].n) >= rij.max_files) {
-          return { status: 'te-veel-bestanden', maximum: rij.max_files };
-        }
+          if (Number(aantal.rows[0].n) >= rij.max_files) {
+            return { status: 'te-veel-bestanden', maximum: rij.max_files };
+          }
 
-        const bijlage = await tx.execute<{ attachment_id: string }>(
-          sql`INSERT INTO clm.survey_attachment
+          const bijlage = await tx.execute<{ attachment_id: string }>(
+            sql`INSERT INTO clm.survey_attachment
                     (tenant_id, response_id, question_id, original_name,
                      storage_key, content_type, byte_size, sha256)
                 VALUES (${tenantId}, ${responseId}, ${rij.question_id},
@@ -134,18 +136,20 @@ export class BijlageService {
                         ${storageKey}, ${gecontroleerd.contentType},
                         ${bestand.buffer.length}, ${gecontroleerd.sha256})
                 RETURNING attachment_id`,
-        );
+          );
 
-        this.logger.log(
-          `Bijlage toegevoegd aan response ${responseId} (${gecontroleerd.contentType}, ${bestand.buffer.length} bytes).`,
-        );
+          this.logger.log(
+            `Bijlage toegevoegd aan response ${responseId} (${gecontroleerd.contentType}, ${bestand.buffer.length} bytes).`,
+          );
 
-        return {
-          status: 'opgeslagen',
-          attachmentId: bijlage.rows[0].attachment_id,
-          contentType: gecontroleerd.contentType,
-        };
-      });
+          return {
+            status: 'opgeslagen',
+            attachmentId: bijlage.rows[0].attachment_id,
+            contentType: gecontroleerd.contentType,
+          };
+        },
+        'leverancier',
+      );
     } finally {
       // Elke uitkomst behalve 'opgeslagen' laat een bestand achter zonder rij.
       // Dat opruimen gebeurt hier, ook wanneer de transactie een fout gooide.
@@ -166,11 +170,14 @@ export class BijlageService {
     storageKey: string,
   ): Promise<void> {
     try {
-      const bestaat = await this.db.withTenant(tenantId, (tx) =>
-        tx.execute<{ n: string }>(
-          sql`SELECT count(*)::text AS n FROM clm.survey_attachment
+      const bestaat = await this.db.withTenant(
+        tenantId,
+        (tx) =>
+          tx.execute<{ n: string }>(
+            sql`SELECT count(*)::text AS n FROM clm.survey_attachment
                WHERE storage_key = ${storageKey}`,
-        ),
+          ),
+        'leverancier',
       );
 
       if (Number(bestaat.rows[0].n) === 0) {

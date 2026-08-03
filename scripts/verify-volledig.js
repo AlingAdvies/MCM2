@@ -138,6 +138,85 @@ function wachtOpStack(maxSeconden = 120) {
   return { ok: false, reden: laatsteFout };
 }
 
+/**
+ * De poorten die de doorloopstack nodig heeft, met wie ze normaal bezet houdt.
+ *
+ * Zie controleerPoortenVrij() hieronder voor waarom dit vooraf gebeurt.
+ */
+const STACK_POORTEN = [
+  { poort: 5001, wat: 'de API', gebruikelijk: 'npm run start:prod of npm run start:dev' },
+  { poort: 3000, wat: 'de frontend', gebruikelijk: 'npm run dev in MCM2-frontend' },
+];
+
+/**
+ * Weigert te starten zolang 5001 of 3000 bezet is.
+ *
+ * ── Waarom dit vóór stap 1 staat en niet bij stap 2 ──────────────────────────
+ *
+ * Aanleiding: op 2026-08-03 liep deze doorloop twee keer achter elkaar vast op
+ * een bezette poort. Beide keren pas ná stap 1 — die duurt enkele minuten,
+ * inclusief het opzetten en weer afbreken van een wegwerpdatabase en 269
+ * e2e-tests. De foutmelding kwam van Docker en luidde "ports are not
+ * available", zonder te zeggen wélk proces de poort vasthield.
+ *
+ * De poorten waren bezet door een handmatig gestarte backend en frontend uit
+ * een eerdere sessie — de normaalste zaak van de wereld tijdens ontwikkelen.
+ *
+ * Vooraf controleren kost een fractie van een seconde en bespaart die hele
+ * ronde. Dat is de hele reden dat dit hier staat.
+ *
+ * ── Waarom weigeren en niet zelf afsluiten ───────────────────────────────────
+ *
+ * Een proces doodschieten dat iemand bewust heeft gestart, is een
+ * onomkeerbare actie op andermans werk: een dev-server met ongesaveerde staat,
+ * een debugsessie, een demo die live staat. Het script meldt wat er in de weg
+ * staat en laat de keuze aan de gebruiker.
+ *
+ * ── Waarom dit óók een correctheidsprobleem is ───────────────────────────────
+ *
+ * wachtOpStack() pollt op http://localhost:5001/health en :3000. Draait daar al
+ * iets, dan antwoordt dát met 200 en concludeert het script dat de stack
+ * gezond is — terwijl de browsertest vervolgens tegen een dev-server draait in
+ * plaats van tegen de productie-images die deze stap juist moet bewijzen.
+ *
+ * Vandaar dat het bezet zijn van een poort hier hard faalt en niet alleen een
+ * waarschuwing geeft: een groene doorloop die het verkeerde getest heeft, is
+ * erger dan een rode.
+ */
+function controleerPoortenVrij() {
+  const bezet = [];
+
+  for (const { poort, wat, gebruikelijk } of STACK_POORTEN) {
+    // Bewust curl en geen netstat: netstat verschilt per platform en vraagt op
+    // Windows om parsing van een tabel. Een HTTP-antwoord bewijst bovendien
+    // méér — een luisterende poort zonder antwoord blokkeert Docker niet.
+    const antwoord = draai(
+      'curl',
+      [
+        '-s',
+        '-o',
+        isWindows ? 'NUL' : '/dev/null',
+        '-w',
+        '%{http_code}',
+        '--max-time',
+        '2',
+        `http://localhost:${poort}/`,
+      ],
+      { stil: true },
+    );
+
+    const code = antwoord.uitvoer.trim();
+
+    // Elk HTTP-antwoord betekent dat er iets luistert. Ook een 404 of 500:
+    // Docker kan de poort dan evengoed niet binden.
+    if (code && code !== '000') {
+      bezet.push({ poort, wat, gebruikelijk, code });
+    }
+  }
+
+  return bezet;
+}
+
 /** Containernaam voor de wegwerpdatabase van stap 1. */
 const TESTDB = 'mcm2-verify-volledig-db';
 const TESTDB_POORT = 55441;
@@ -373,6 +452,37 @@ function maakSessie() {
 function main() {
   const stappen = 5;
   let gestart = false;
+
+  // Vóór alles: stap 1 duurt minuten, en die zijn weggegooid als stap 2 op een
+  // bezette poort strandt. Zie controleerPoortenVrij().
+  const bezet = controleerPoortenVrij();
+
+  if (bezet.length > 0) {
+    console.error('\nROOD: de doorloop kan niet starten — poorten zijn bezet.\n');
+
+    for (const { poort, wat, gebruikelijk, code } of bezet) {
+      console.error(
+        `  poort ${poort} (${wat}) — er antwoordt al iets (HTTP ${code})`,
+      );
+      console.error(`     meestal: ${gebruikelijk}`);
+    }
+
+    console.error(
+      '\nDeze doorloop start de volledige stack op dezelfde poorten. Sluit af wat\n' +
+        'daar draait en probeer opnieuw. Zoeken welk proces het is:\n',
+    );
+    console.error(
+      isWindows
+        ? `  netstat -ano | findstr ":${bezet[0].poort} "     (laatste kolom is de PID)\n` +
+            '  taskkill /PID <pid> /F'
+        : `  lsof -i :${bezet[0].poort}\n  kill <pid>`,
+    );
+    console.error(
+      '\nBewust niet automatisch afgesloten: dat is meestal een dev-server die\n' +
+        'iemand zelf heeft gestart.',
+    );
+    process.exit(1);
+  }
 
   try {
     kop(1, stappen, 'Code, unittests en backend-e2e (npm run verify)');

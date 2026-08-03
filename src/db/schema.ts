@@ -819,3 +819,20 @@ export const surveyResponseRelations = relations(
 // feat/fase0-skeleton-vendors.
 export const setTenantContext = (tenantId: string) =>
   sql`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`;
+
+// ─── Actor-context ─────────────────────────────────────────────────────────
+// Naast de tenant legt elke transactie vast wélke soort aanroeper hem opent.
+// De database kon dat verschil tot migratie 0013 niet zien: het tokenpad van
+// een leverancier en het sessiepad van een medewerker riepen withTenant()
+// identiek aan, met dezelfde tenantId.
+//
+// Voor alle bestaande tabellen is dat juist — "zelfde tenant = mag het zien"
+// geldt daar. clm.survey_review is de eerste tabel waar dat niet opgaat: een
+// leverancier mag het oordeel over zichzelf niet lezen, ook al staat het in
+// zijn eigen tenant.
+//
+// Zie drizzle/0013_actor_context.sql voor de volledige onderbouwing.
+export type Actor = 'medewerker' | 'leverancier';
+
+export const setActorContext = (actor: Actor) =>
+  sql`SELECT set_config('app.current_actor', ${actor}, true)`;

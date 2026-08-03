@@ -44,6 +44,9 @@ function id(merk: string): string {
  * de herkomst van een id te vinden is zonder te zoeken.
  */
 export const TEST_IDS = {
+  'actor-context': {
+    tenant: id('ac'),
+  },
   'antwoord-indienen': {
     tenant: id('b1'),
   },
