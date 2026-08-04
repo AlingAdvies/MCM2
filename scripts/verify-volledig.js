@@ -449,8 +449,97 @@ function maakSessie() {
   return { ok: true, cookie: `mcm2_sessie=${token}` };
 }
 
+/**
+ * Controleert of de ECHTE omgevingen het schema hebben dat deze code verwacht.
+ *
+ * ── Waarom deze stap er is ──────────────────────────────────────────────────
+ *
+ * Alle andere stappen draaien tegen een wegwerpdatabase die vanaf niets met de
+ * migraties is opgebouwd. Dat is de juiste keuze — een testrun hoort geen
+ * productiedata aan te raken — maar het heeft een blinde vlek:
+ *
+ *   ze bewijzen dat de migraties correct ZIJN, niet dat ze ergens zijn
+ *   TOEGEPAST.
+ *
+ * Op 2026-08-04 bleek wat dat kost. `clm-enterprise` stond sinds 27 juli stil
+ * op de Prisma-historie en had 9 van de 18 tabellen — geen vragenlijsten, geen
+ * antwoorden, geen certificaten, geen rechtenmodel. Vijf dagen lang bleven
+ * 269 e2e-tests groen, want die draaiden allemaal tegen een verse container.
+ *
+ * De bevinding kwam pas boven bij een routinecontrole van de backup, en toen
+ * bleek ook dat de dagelijkse dump al die tijd de helft van de database miste.
+ *
+ * ── Read-only, en dat is essentieel ─────────────────────────────────────────
+ *
+ * Deze stap draait `verify-schema.js`, dat uitsluitend leest. Er wordt niets
+ * gemigreerd, niets gerepareerd en niets aangemaakt. Een doorloop die stilletjes
+ * de productiedatabase wijzigt is erger dan de drift die hij zou vinden.
+ *
+ * ── Waarom hij niet ROOD geeft ──────────────────────────────────────────────
+ *
+ * Een omgeving die achterloopt is een bevinding, geen bewijs dat de code stuk
+ * is. `verify:volledig` toetst de keten van code tot browser; die conclusie
+ * verandert niet doordat een externe database achterloopt.
+ *
+ * Bovendien draait dit commando ook op machines zonder toegang tot productie.
+ * Dan is er niets te meten, en dat mag geen rode doorloop opleveren.
+ *
+ * Wat het wél doet is het zichtbaar maken op het moment dat je toch al kijkt.
+ * Dat is precies wat er vijf dagen ontbrak.
+ */
+function controleerOmgevingsdrift() {
+  const omgevingen = [
+    { naam: 'productie (DATABASE_URL)', url: process.env.DATABASE_URL },
+  ];
+
+  const bevindingen = [];
+  let gemeten = 0;
+
+  for (const { naam, url } of omgevingen) {
+    if (!url) {
+      console.log(`  ${naam}: niet ingesteld — overgeslagen`);
+      continue;
+    }
+
+    // Nooit tegen een lokale wegwerpdatabase: die is deze doorloop zelf al
+    // aan het testen, en dat zou een vals gevoel van dekking geven.
+    //
+    // DRIFT_TOETS_LOKAAL=1 heft dit op. Dat is er uitsluitend om déze controle
+    // zelf te kunnen bewijzen: zonder die uitweg is niet aantoonbaar dat hij
+    // een achterlopende database ook wérkelijk vindt, en dan is het een
+    // controle die je moet geloven in plaats van kunnen toetsen. Precies het
+    // patroon dat op 2026-08-04 vijf dagen lang een halve backup verborg.
+    if (/localhost|127\.0\.0\.1/.test(url) && !process.env.DRIFT_TOETS_LOKAAL) {
+      console.log(`  ${naam}: wijst naar localhost — overgeslagen`);
+      continue;
+    }
+
+    gemeten++;
+
+    const resultaat = draai('node', ['scripts/verify-schema.js'], {
+      stil: true,
+      env: { VERIFY_DATABASE_URL: url },
+    });
+
+    if (resultaat.ok) {
+      console.log(`  ${naam}: schema komt overeen met de code`);
+    } else {
+      console.log(`  ${naam}: WIJKT AF van het schema in deze code`);
+      bevindingen.push({ naam, uitvoer: resultaat.uitvoer });
+    }
+  }
+
+  if (gemeten === 0) {
+    console.log('');
+    console.log('  Geen externe omgeving gemeten. Op een machine zonder');
+    console.log('  productietoegang is dat normaal.');
+  }
+
+  return bevindingen;
+}
+
 function main() {
-  const stappen = 5;
+  const stappen = 6;
   let gestart = false;
 
   // Vóór alles: stap 1 duurt minuten, en die zijn weggegooid als stap 2 op een
@@ -563,13 +652,39 @@ function main() {
       process.exit(1);
     }
 
-    kop(5, stappen, 'Opruimen');
+    kop(5, stappen, 'Draaien de echte omgevingen op dit schema? (read-only)');
+
+    const drift = controleerOmgevingsdrift();
+
+    kop(6, stappen, 'Opruimen');
     console.log('');
     console.log('GROEN — de hele keten, van code tot browser.');
     console.log('');
     console.log('Wat hiermee bewezen is:');
     console.log('  formulier → API → sessiecookie → guard → RLS → database → lijst');
     console.log('');
+
+    if (drift.length > 0) {
+      console.log('LET OP — een of meer echte omgevingen lopen achter:');
+      console.log('');
+
+      for (const { naam, uitvoer } of drift) {
+        console.log(`  ${naam}`);
+        for (const regel of uitvoer.trim().split('\n').slice(-6)) {
+          console.log(`    ${regel}`);
+        }
+        console.log('');
+      }
+
+      console.log('  Dit maakt de doorloop niet rood: de keten kloppen én een');
+      console.log('  omgeving die achterloopt zijn twee verschillende dingen.');
+      console.log('  Maar het betekent wel dat wat hierboven bewezen is, daar');
+      console.log('  niet draait — en dat de backup van die omgeving mist wat');
+      console.log('  er niet in staat.');
+      console.log('');
+      console.log('  Migraties toepassen: docs/runbooks/baseline-migratiestand.md');
+      console.log('');
+    }
   } finally {
     // Ook bij een afgebroken run: een achtergebleven container blokkeert de
     // volgende doorloop op een poort die al bezet is.

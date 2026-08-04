@@ -577,6 +577,44 @@ broncode te lezen, zoals `actor-context.e2e-spec.ts` doet en `test-ids.spec.ts`
 al deed. Wachten tot stap twee betekent dat de fout er ondertussen in kan
 sluipen.
 
+**De vierde les, 2026-08-04: tests bewijzen de code, niet de omgeving.**
+
+Op 4 augustus bleek `clm-enterprise` sinds 27 juli stil te staan: 9 van de 18
+tabellen, geen vragenlijsten, geen antwoorden, geen certificaten, geen
+rechtenmodel. **Vijf dagen lang bleven 269 e2e-tests groen**, want elke test —
+in CI, in `verify:volledig`, in de demo-omgeving — draait tegen een verse
+wegwerpdatabase die vanaf niets met de migraties is opgebouwd.
+
+Die keuze is juist: een testrun hoort geen productiedata aan te raken. Maar hij
+heeft een blinde vlek die niemand had benoemd:
+
+> De tests bewijzen dat de migraties correct **zijn**, niet dat ze ergens zijn
+> **toegepast**.
+
+Het kwam pas boven bij een routinecontrole van de backup — en toen bleek meteen
+dat de dagelijkse dump al die tijd de helft van de database miste.
+
+**Twee aanwijzingen lagen er wél, en niemand keek ernaar.** `verify-schema.js`
+bestond al en stelt precies de juiste vraag, maar was nooit tegen productie
+gedraaid; er was niet eens een npm-script voor. En alle dumps waren exact 21.683
+bytes, van 30 juli tot 4 augustus — voor een database waar migraties op zouden
+draaien is dat onmogelijk.
+
+**Wat daaruit volgt.** Een verificatie die alleen zijn eigen werkelijkheid
+opbouwt en zichzelf daartegen toetst, kan nooit vaststellen dat de échte
+omgeving anders is. `verify:volledig` heeft daarom sinds 2026-08-04 een stap 5
+die de omgevingen uit `.env` read-only toetst tegen het schema in de code.
+
+Die stap maakt de doorloop **niet rood** — de keten klopt, ook als een externe
+database achterloopt — maar meldt het waar je toch al kijkt.
+
+En conform deze paragraaf is die controle zelf met een tegenproef bewezen: een
+container met de oude dump van 9 tabellen wordt aantoonbaar als afwijkend
+gemeld. Daarvoor bestaat `DRIFT_TOETS_LOKAAL=1`, dat het localhost-filter
+opheft. Zonder die uitweg zou de controle iets zijn dat je moet gelóven in
+plaats van kunnen toetsen — precies het patroon dat hier vijf dagen een halve
+backup verborg.
+
 **Wanneer verplicht:** bij elke wijziging aan RLS-policies, guards, tokens,
 sessies, rolcontroles of iets anders dat bepaalt wie wat mag zien. Niet nodig
 bij tekstwijzigingen, opmaak of documentatie.
