@@ -1,0 +1,283 @@
+# Runbook — backupcontrole en Telegram-melding
+
+**Type:** D — routineoperaties
+**Eigenaar:** de eigenaar (Chris)
+**Laatste update:** 2026-08-04
+**Vereiste toegang:** deze PC, Docker Desktop, een Telegram-account
+
+> **Status: ingericht en werkend op 2026-08-04.** Beide taken staan in Taakplanner en zijn
+> aantoonbaar via Taakplanner gedraaid (niet alleen handmatig). Het testbericht is in Telegram
+> aangekomen. De stappen hieronder zijn de herhaalbare procedure — voor een nieuwe machine,
+> na een herinstallatie, of om te controleren of het nog klopt.
+
+> Ontwerp en onderbouwing: `docs/superpowers/specs/2026-08-04-backupcontrole-en-signalering.md`
+
+---
+
+## Waarom dit runbook bestaat
+
+Op 2026-08-04 bleken twee dingen tegelijk mis:
+
+1. **De dagelijkse dump miste negen van de achttien tabellen** — alle vragenlijsten, alle
+   antwoorden, alle geüploade certificaten en het complete rechtenmodel. Dat was er altijd al
+   zo geweest; alle dumps waren exact 21.683 bytes groot.
+2. **De taak had vier dagen stilgelegen** (31 juli → 4 augustus). Het script waarschuwde
+   correct in het log — maar niemand las dat log.
+
+Dit runbook richt de controle in die beide gevallen wél zou hebben gemeld.
+
+---
+
+## Wat de controle doet
+
+| Laag | Vraag | Wanneer |
+|---|---|---|
+| A | Is er een dump jonger dan 36 uur? | dagelijks |
+| B | Zit alles erin wat erin hoort? | dagelijks |
+| C | Komt het er na een echte restore ook weer uit? | wekelijks |
+
+Laag B vergelijkt de dump met `docs/runbooks/backup-verwachting.json` — een handgeschreven
+lijst van wat erin hoort. Die lijst wordt bewust **niet** uit de migraties afgeleid: dan zou
+de controle zichzelf verifiëren, en precies dat maakte de fout van 4 augustus onzichtbaar.
+
+---
+
+## Stap 1 — Credentials overnemen uit de Saxo-app
+
+**Besluit eigenaar 2026-08-04: gebruik de bestaande Telegram-bot van de Saxo-app.** Geen aparte
+MCM2-bot aanmaken — dit gaat uiteindelijk naar Slack, dus een tweede bot is moeite voor iets
+dat toch vervangen wordt.
+
+**Gevolg:** MCM2-meldingen komen in hetzelfde gesprek als de Saxo-meldingen. De berichten
+beginnen met "MCM2 backup", dus verwarring is er niet. Zodra iemand anders moet meekijken, is
+dat het moment voor Slack — niet voor een tweede Telegram-bot.
+
+**Actie:** haal de twee waarden op uit de `.env` van de Saxo-app. Die staat **op de server**,
+niet op deze PC:
+
+```
+~/saxo/.env
+```
+
+De lokale kopie in `C:\DEV\prive\Saxo\.env` bevat alleen de Saxo-API-sleutels, niet de
+Telegram-regels.
+
+Zet ze daarna in `C:\DEV\Work\MCM2\.env`:
+
+```
+TELEGRAM_BOT_TOKEN=<zelfde waarde als in ~/saxo/.env>
+TELEGRAM_CHAT_ID=<idem>
+```
+
+**Let op:** `.env` staat in `.gitignore` en hoort daar te blijven. Committeer deze waarden
+nooit.
+
+**Verwacht resultaat:** twee regels in `.env`.
+
+<details>
+<summary>Als je later alsnog een eigen bot wilt (vijf minuten)</summary>
+
+1. Open Telegram, zoek **@BotFather**, stuur `/newbot`.
+2. Kies een naam en een gebruikersnaam eindigend op `bot`.
+3. BotFather geeft een token terug.
+4. Start een gesprek met je nieuwe bot en stuur hem één bericht — anders mag hij jou niet
+   aanschrijven.
+5. Zoek **@userinfobot** en stuur `/start` voor je chat-id.
+
+</details>
+
+---
+
+## Stap 2 — De melding testen
+
+**Actie:**
+
+```powershell
+npm run backup:controle:test
+```
+
+**Verwacht resultaat:** `OK — testbericht verstuurd`, en een bericht in Telegram:
+*"🔔 Testbericht van de MCM2-backupcontrole..."*
+
+**Bij afwijking:**
+- *"TELEGRAM_BOT_TOKEN en/of TELEGRAM_CHAT_ID ontbreken"* → stap 1 niet gelukt.
+- *"Telegram-bericht mislukt: 401"* → het token klopt niet; controleer of je het volledig hebt
+  overgenomen uit `~/saxo/.env` (er zit een dubbele punt in, die hoort erbij).
+- *"Telegram-bericht mislukt: 400"* → de chat-id klopt niet.
+
+**Dit is geen optionele stap.** Zonder deze test weet je pas of de melding werkt op het moment
+dat je hem het hardst nodig hebt.
+
+---
+
+## Stap 3 — De controle handmatig draaien
+
+**Actie:**
+
+```powershell
+npm run backup:controle
+```
+
+**Verwacht resultaat op 2026-08-04** (zolang Issue #25 open staat):
+
+```
+🔴 MCM2 backup — 04-08, 10:09
+
+De dump mist 9 van de 18 tabellen:
+  • clm.sessie
+  • clm.survey_answer
+  ...
+```
+
+Dat is correct gedrag: de controle klaagt terecht, en blijft dat doen tot de migratiestand van
+`clm-enterprise` is bijgewerkt.
+
+**De wekelijkse variant, met echte herstelproef:**
+
+```powershell
+npm run backup:controle:volledig
+```
+
+Die duurt ongeveer een halve minuut en heeft Docker nodig.
+
+---
+
+## Stap 4 — De taken inplannen
+
+Twee taken in Taakplanner, ná de bestaande taak `MCM2 databasebackup` (die draait om 07:00).
+
+**Taak 1 — dagelijkse controle**
+
+| Veld | Waarde |
+|---|---|
+| Naam | `MCM2 backupcontrole` |
+| Trigger | Dagelijks, 07:30 |
+| Actie | Programma starten |
+| Programma | `C:\DEV\Work\MCM2\scripts\backup-controle-taak.cmd` |
+| Beginnen in | `C:\DEV\Work\MCM2` |
+
+**Taak 2 — wekelijkse herstelproef**
+
+| Veld | Waarde |
+|---|---|
+| Naam | `MCM2 backupcontrole volledig` |
+| Trigger | Wekelijks, maandag 07:45 |
+| Actie | Programma starten |
+| Programma | `C:\DEV\Work\MCM2\scripts\backup-controle-taak.cmd` |
+| Argumenten | `--volledig` |
+| Beginnen in | `C:\DEV\Work\MCM2` |
+
+**Waarom 07:30 en niet 07:00:** de backup zelf draait om 07:00 en duurt seconden. Een half uur
+marge is ruim, ook als Docker traag opstart.
+
+**Waarom via een `.cmd` en niet rechtstreeks:** een taak die het commando direct aanroept meldt
+"geslaagd" zodra `cmd.exe` zelf kon starten, ook als er daarbinnen niets gebeurde. Dat is op
+2026-07-30 daadwerkelijk gebeurd bij de backuptaak. Het `.cmd`-bestand geeft de echte exitcode
+door en logt altijd.
+
+### Aanmaken via PowerShell
+
+Zoals gebruikt op 2026-08-04:
+
+```powershell
+# Dagelijkse controle
+$actie = New-ScheduledTaskAction -Execute "C:\DEV\Work\MCM2\scripts\backup-controle-taak.cmd" -WorkingDirectory "C:\DEV\Work\MCM2"
+$trigger = New-ScheduledTaskTrigger -Daily -At "07:30"
+$principal = New-ScheduledTaskPrincipal -UserId "cmali" -LogonType Interactive -RunLevel Limited
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
+Register-ScheduledTask -TaskName "MCM2 backupcontrole" -Action $actie -Trigger $trigger -Principal $principal -Settings $settings
+
+# Wekelijkse herstelproef: idem, met -Argument "--volledig",
+# -Weekly -DaysOfWeek Monday -At "07:45" en 30 minuten tijdslimiet.
+```
+
+**`-StartWhenAvailable` is niet optioneel.** Zonder dat wordt een gemiste run (laptop uit om
+07:30) stilzwijgend overgeslagen in plaats van ingehaald — precies de faalvorm die dit runbook
+moet voorkomen.
+
+**`-AllowStartIfOnBatteries` bewust anders dan bij de backuptaak.** Die staat op
+`DisallowStartIfOnBatteries = True`; een dump maken op accu is te zwaar. Een controle is dat
+niet, en op accu draaien is juist het moment waarop je wilt weten of er iets mis is.
+
+> Let op: de parameter heet `-AllowStartIfOnBatteries`, niet `-DisallowStartIfOnBatteries:$false`.
+> Die tweede vorm bestaat niet en geeft een foutmelding.
+
+### Verificatie na het inplannen
+
+**Niet alleen de exitcode controleren.** `LastTaskResult = 0` betekent dat `cmd.exe` kon
+starten, niet dat de controle iets deed — dat is de valkuil uit §"Waarom via een `.cmd`".
+Kijk altijd in het log:
+
+```powershell
+Get-ScheduledTaskInfo -TaskName "MCM2 backupcontrole"
+Get-Content "$env:USERPROFILE\OneDrive - Aling Advies\MCM2-backups\backup-controle.log" -Tail 20
+```
+
+**Verwacht in het log** (stand 2026-08-04, zolang Issue #25 open staat):
+
+```
+===== di 04-08-2026 11:15:43 - start
+2026-08-04T09:15:45.455Z — 1 probleem(en)
+  Laatste dump: mcm2-2026-08-04_05-38-43.dump (3 uur oud)
+  PROBLEEM: De dump mist 9 van de 18 tabellen:
+===== di 04-08-2026 11:15:45 - PROBLEEM GEMELD, code 1
+```
+
+`PROBLEEM GEMELD, code 1` is hier een geldige uitkomst: de controle werkte en heeft gemeld.
+Het `.cmd` geeft zelf altijd exitcode 0 terug, zodat Taakplanner de taak niet als kapot
+markeert terwijl hij juist deed wat hij moest doen.
+
+---
+
+## Wat je van de melding mag verwachten
+
+**Bij een probleem:** één bericht meteen. Houdt het probleem aan, dan na 48 uur een tweede en
+**laatste** bericht. Daarna stilte tot het is opgelost.
+
+Dat is opzet: een probleem dat vijf dagen duurt moet niet vijf keer melden, want dan leer je
+het bericht negeren — en dan is de melding net zo stil als het logbestand.
+
+**Bij herstel:** `✅ Hersteld na 4d 2u: de dump is weer compleet`
+
+**Als alles goed gaat:** één keer per week een levensteken met de stand van zaken. Dit is het
+belangrijkste onderdeel van de hele opzet: zonder levensteken weet je bij uitblijvende
+berichten niet of alles goed gaat of dat de melder zelf stuk is.
+
+**Blijft het wekelijkse levensteken uit, dan is er iets mis** — met de controle, met Telegram,
+of met de machine. Dat is het signaal om te gaan kijken.
+
+---
+
+## Onderhoud
+
+**Bij elke migratie die een tabel toevoegt of hernoemt:** werk
+`docs/runbooks/backup-verwachting.json` bij. Vergeet je dat, dan meldt de controle een
+"onbekende tabel" — vervelend, maar zichtbaar. Dat hoort in de definition of done.
+
+**Bij de overstap naar een managed service:** alleen `haalNieuwsteBackup()` in
+`scripts/backup-controle.js` hoeft vervangen te worden. Die functie beantwoordt één vraag:
+"geef mij de nieuwste backup als iets waar `pg_restore --list` op werkt." Nu is dat een bestand
+in een map; straks een API-aanroep bij de provider. De verwachtingslijst, de vergelijking, de
+demping en het bericht blijven ongewijzigd.
+
+Laag A (draait hij?) kan dan vervallen — een managed service bewaakt zichzelf. Laag B en C
+blijven: geen enkele provider garandeert dat er in je backup staat wát jij denkt.
+
+**Bij de overstap naar Slack:** alleen `verstuur()` in `scripts/telegram.js` hoeft vervangen te
+worden door een webhook-POST. De demping, de statusbestanden, het levensteken en de
+berichtteksten blijven ongewijzigd — die logica is niet aan Telegram gebonden.
+
+Eén ding verandert dan wél inhoudelijk: een Slack-kanaal heeft meerdere lezers, en dan wordt
+"wie kijkt hiernaar" een echte vraag. Die staat open als Issue #48. Met één lezer is het
+antwoord triviaal; met een team niet meer.
+
+---
+
+## Bekende beperking
+
+**De controle draait op dezelfde machine als de backup.** Staat de laptop uit, dan draait geen
+van beide en komt er geen melding. Dat is hetzelfde gat als Issue #58.
+
+Het wekelijkse levensteken is de enige afdekking: blijft dat uit, dan weet je dat er iets niet
+draait. Volledig oplossen vraagt een controle búiten deze machine — werk dat bij de managed
+service hoort, niet ervoor.
