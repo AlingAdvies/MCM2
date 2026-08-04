@@ -124,6 +124,25 @@ hebt zien misgaan en wilt weten of een test het ook ziet. Een groene uitkomst
 zegt minder dan een groene `verify:volledig` — die draait tegen de
 productie-images.
 
+### De tests ruimen op wat ze aanmaken
+
+Elke browsertest maakt zijn eigen leverancier aan. In `verify:volledig` valt dat
+niet op — die gooit zijn database na afloop weg. Tegen de demo-database ligt dat
+anders, want die blijft bestaan.
+
+Op 4 augustus 2026 bleek wat dat kost: na één testronde stonden er naast de 21
+demo-leveranciers 20 stuks "Detailtest 178584… B.V.". De lijst was daarmee
+onbruikbaar om iets aan te laten zien.
+
+De suites hebben nu een `afterEach` (detailscherm) en `afterAll`
+(leveranciersbeheer) die hun eigen leveranciers weer weghalen, rechtstreeks via
+de API. Gemeten over twee opeenvolgende rondes: 21 vóór, 32 tests groen, 21 erna.
+
+Het opruimen zit in de test en niet in een schoonmaakscript achteraf. Een script
+zou op naam moeten raden wat afval is, en dan is één demo-leverancier die
+toevallig zo heet genoeg om echte data te verliezen. De test weet zelf precies
+wat hij heeft aangemaakt.
+
 ---
 
 ## Bij afwijking
