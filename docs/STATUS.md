@@ -1,9 +1,39 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-08-04, middag (**de productiedatabase is bijgewerkt van 9 naar 18 tabellen**. `clm-enterprise` stond sinds 27 juli stil op de Prisma-historie; de migraties 0003 t/m 0014 waren er nooit op toegepast. Daardoor miste de dagelijkse backup álle vragenlijsten, antwoorden, geüploade certificaten en het complete rechtenmodel — gevonden bij een routinecontrole diezelfde ochtend, toen bleek dat alle dumps exact 21.683 bytes waren. Migratiestand geïnitialiseerd (#25), UUID-defaults en tenant-indexen rechtgezet (#29), backup weer compleet en herstelbaar bewezen. Beide issues gesloten.)
+2026-08-04, avond (**fase A én B van het surveybeheerplan zijn af en gemerged.** De tenant kan nu een leverancier aanvinken, een ronde starten en werkende uitnodigingslinks krijgen — de eerste productiecode die `genereerToken()` aanroept. Daarnaast: `npm run demo` zet de hele stack in één commando neer, en de browsertests ruimen op wat ze aanmaken. Vier PR's gemerged: #79, #80, #81, #82 plus frontend #5 en #6. `verify:volledig` groen: 316 backend, 39 browser.)
 
-**Volgende stap:** fase A uit `docs/superpowers/plans/2026-08-03-surveybeheer.md` — het menu-item **Vragenlijsten** met de twee Transdev-lijsten uit de database. Die staan er nu ook werkelijk.
+**Volgende stap:** fase C uit `docs/superpowers/plans/2026-08-03-surveybeheer.md` — voortgang volgen, antwoorden lezen en beoordelen. Je kunt nu wel uitnodigen, maar niet zien wát een leverancier heeft ingevuld: het rondescherm toont alleen wie ingediend heeft.
+
+### Wat er vandaag bijkwam
+
+**Fase A — vragenlijsten bekijken** (#79, frontend #5). Vier leesroutes onder `/admin/survey`, plus de schermen. Bewust alleen lezen.
+
+**Fase B — uitnodigen** (#81, frontend #6). Drie schrijfroutes met `@VereistRol('admin')`; een reviewer mag lezen maar geen tokens uitgeven. De ronde begint in `draft` omdat actief zetten de vragenlijst onomkeerbaar bevriest. Alles in één transactie: faalt er één invoeging, dan rollen ook de al gegenereerde tokens terug.
+
+**`npm run demo`** — database, backend, frontend, sessie en een zelfcontrole in één commando. Aanleiding: het handmatig opstarten ging drie keer mis, en alle vier de oorzaken (ontbrekende `NEXT_PUBLIC_API_URL`, geen backend, `CORS_ORIGIN`, `SESSIE_COOKIE_INSECURE`) zien er in het scherm hetzelfde uit. Runbook: `docs/runbooks/zelf-testen.md`.
+
+**Een oranje balk** bovenin zolang je niet in een klantomgeving zit, met de tenantnaam erin. Leest uit de sessie en niet uit een omgevingsvariabele — die kan per ongeluk meegaan naar productie of ontbreken in de demo.
+
+### Wat er onderweg boven kwam
+
+| Bevinding | Waar |
+|---|---|
+| De zelfcontrole met `curl` was blind voor CORS-fouten — zonder `Origin`-header geeft de backend ook bij een verkeerde `CORS_ORIGIN` een 200 | `scripts/demo-stack.js` |
+| `verify:volledig` ruimde zijn stack niet op na een rode run: `process.exit(1)` slaat `finally` over | `scripts/verify-volledig.js` |
+| De browsertests lieten hun leveranciers staan — 20 stuks testafval naast 21 demo-leveranciers | `e2e/vendor-detail.spec.ts` |
+| Een verborgen afhankelijkheid tussen suites: `navigatie-en-zoeken` leunde op wat een andere suite achterliet | idem |
+| Twee tests gebruikten `count()` op een ladende pagina; één werd daardoor groen zonder iets te bekijken | `e2e/vragenlijsten.spec.ts` |
+| Zoektests leunden op kolomposities; met de selectiekolom erbij keek er één naar het KvK-nummer i.p.v. de plaats | `e2e/navigatie-en-zoeken.spec.ts` |
+
+**Nieuwe werkwijzeregel (§15c in `MCM2-CLAUDE.md`, PR #82).** Namen en paden opzoeken, niet reconstrueren. Aanleiding: zes van de negen correctierondes deze sessie waren vermijdbaar, en alle zes stonden in code die al gelezen was. Wat dat kost is niet de tijd maar het onderscheid tussen een rode test die iets betekent en een rode test die slordigheid is.
+
+<details>
+<summary>Vorige stand (2026-08-04, middag)</summary>
+
+**De productiedatabase is bijgewerkt van 9 naar 18 tabellen.** `clm-enterprise` stond sinds 27 juli stil op de Prisma-historie; de migraties 0003 t/m 0014 waren er nooit op toegepast. Daardoor miste de dagelijkse backup álle vragenlijsten, antwoorden, geüploade certificaten en het complete rechtenmodel — gevonden bij een routinecontrole diezelfde ochtend, toen bleek dat alle dumps exact 21.683 bytes waren. Migratiestand geïnitialiseerd (#25), UUID-defaults en tenant-indexen rechtgezet (#29), backup weer compleet en herstelbaar bewezen. Beide issues gesloten.
+
+</details>
 
 <details>
 <summary>Vorige stand (2026-08-04, ochtend)</summary>
@@ -943,11 +973,12 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 2. ~~**Issue #25 — de migratiestand van `clm-enterprise` bijwerken**~~ — **gedaan op 2026-08-04.** 9 tabellen werden er 18, #25 en #29 gesloten.
 
-**Nu: fase A uit `docs/superpowers/plans/2026-08-03-surveybeheer.md`** — het menu-item **Vragenlijsten** met de twee Transdev-lijsten uit de database. Die staan er sinds vanmiddag ook werkelijk in productie.
+**Nu: fase C uit `docs/superpowers/plans/2026-08-03-surveybeheer.md`** — voortgang volgen, antwoorden lezen en beoordelen. Fase A en B zijn op 2026-08-04 afgerond en gemerged.
 
-**Twee restpunten uit deze sessie**, geen van beide blokkerend:
+**Drie restpunten**, geen van drieën blokkerend:
 - **#78** — het besluit over welke rol de backup maakt. Nu feitelijk de `postgres`-rol met `BYPASSRLS`, zonder dat dat ergens als besluit staat.
 - **#19** — de hersteltest moet over. Die van 30 juli draaide tegen negen tabellen en bewees dus het herstelpad, niet de compleetheid. De backupcontrole doet dit inmiddels wekelijks, wat het issue grotendeels afdekt.
+- **#83** — gearchiveerde testrondes stapelen op in de demo-database. De e2e-suite archiveert ze (verwijderen kan niet en hoort ook niet te kunnen), maar ze blijven in de lijst staan. Logisch moment om aan te pakken is fase C, want dan wordt het rondeoverzicht toch herzien.
 
 <details>
 <summary>Vorige eerstvolgende stap (2026-07-31, inmiddels uitgevoerd)</summary>
