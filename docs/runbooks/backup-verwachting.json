@@ -1,0 +1,38 @@
+{
+  "toelichting": [
+    "Wat er in een complete dump hoort te zitten. Dit bestand is een ONAFHANKELIJKE",
+    "bewering: het wordt bewust niet afgeleid uit de migraties, want dan zou de controle",
+    "zichzelf verifieren. Op 2026-08-04 bleek waarom dat uitmaakt — clm-enterprise liep",
+    "achter op de migraties (Issue #25) en de dagelijkse dump miste negen van de achttien",
+    "tabellen, waaronder alle vragenlijsten, antwoorden en geuploade certificaten.",
+    "Een afgeleide lijst had precies die negen ook niet verwacht en dus niets gemeld.",
+    "",
+    "BIJWERKEN: elke migratie die een tabel toevoegt of hernoemt, werkt deze lijst bij.",
+    "Dat hoort in de definition of done. Staat een tabel wel in de dump maar niet hier,",
+    "dan meldt de controle dat als 'onbekende tabel' — vervelend, maar zichtbaar.",
+    "",
+    "Zie docs/superpowers/specs/2026-08-04-backupcontrole-en-signalering.md, paragraaf 4."
+  ],
+  "bijgewerkt": "2026-08-04",
+  "migratiestand": "0013_actor_context",
+  "tabellen": [
+    "audit.audit_event",
+    "clm.sessie",
+    "clm.survey_answer",
+    "clm.survey_attachment",
+    "clm.survey_category",
+    "clm.survey_question",
+    "clm.survey_response",
+    "clm.survey_run",
+    "clm.survey_template",
+    "clm.tenant",
+    "clm.tenant_membership",
+    "clm.user",
+    "clm.vendor",
+    "clm.vendor_contact",
+    "clm.vendor_tag",
+    "ref.business_criticality",
+    "ref.compliance_status",
+    "ref.vendor_category"
+  ]
+}

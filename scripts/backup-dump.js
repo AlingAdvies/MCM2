@@ -142,9 +142,22 @@ console.log(
   `Bewaard: ${resterend} dump(s)${verwijderd ? `, ${verwijderd} ouder dan ${BEWAARDAGEN} dagen verwijderd` : ''}.`,
 );
 
-console.log(
-  `
+// Deze regel klopte tot 2026-07-30, toen BACKUP_DIR nog de projectmap was.
+// Sindsdien schrijft backup-taak.cmd naar OneDrive en synct de dump weg. De
+// oude tekst bleef staan en zette daarmee op het verkeerde been — vandaar
+// dat hij nu de werkelijke bestemming benoemt.
+if (backupDir.includes('OneDrive')) {
+  console.log(
+    `
+Deze dump staat in OneDrive en synchroniseert dus weg van deze machine.
+Wat hij NIET bewijst: dat de inhoud compleet is. Dat controleert
+\`npm run backup:controle\` — zie docs/runbooks/backupcontrole.md.`,
+  );
+} else {
+  console.log(
+    `
 LET OP: deze dump staat op dezelfde machine als waar hij gemaakt is.
 Dat beschermt tegen "de database valt om", niet tegen "de laptop valt om".
 Zorg voor een tweede locatie — zie ADR-011, risico-acceptatie Free Plan.`,
-);
+  );
+}
