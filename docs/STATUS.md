@@ -520,6 +520,16 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Aantoonbaar werkend
 
+- **Omgevingsdrift wordt gemeten (2026-08-04, `verify:volledig` stap 5).** De doorloop toetst read-only of de omgevingen uit `.env` het schema hebben dat de code verwacht. Bewust **niet rood**: een omgeving die achterloopt is een bevinding, geen bewijs dat de code stuk is — en het commando draait ook op machines zonder productietoegang.
+
+  **Waarom dit er is.** Alle 269 e2e-tests draaien tegen een verse wegwerpdatabase die vanaf niets met de migraties is opgebouwd. Dat is de juiste keuze, maar het bewijst dat de migraties correct *zijn*, niet dat ze ergens zijn *toegepast*. Precies dat gat liet `clm-enterprise` vijf dagen op negen tabellen staan. Zie MCM2-CLAUDE.md §15b, vierde les.
+
+  **Tegenproef geslaagd:** een container met de oude 9-tabellendump wordt aantoonbaar als afwijkend gemeld (`DRIFT_TOETS_LOKAAL=1` heft het localhost-filter op).
+
+  **En de stap legde meteen een fout in zichzelf bloot.** Bij de eerste volledige doorloop meldde hij "niet ingesteld — overgeslagen" terwijl `.env` wel een `DATABASE_URL` heeft: `verify-volledig.js` laadt bewust geen `dotenv`. Een controle die stil overslaat wekt de indruk dat er iets gemeten is — hij zou in die vorm nooit drift hebben gevonden. Opgelost met `processEnv: {}`, geverifieerd dat er niets doorlekt naar stap 1.
+
+  **Volledige doorloop daarna groen**, inclusief 25 browsertests tegen de stack ná de migraties van vanmiddag.
+
 - **De backupcontrole (2026-08-04, branch `feat/backupcontrole-en-signalering`).** Drie lagen: is er een dump jonger dan 36 uur (A), zit alles erin wat erin hoort (B), komt het er na een echte restore ook weer uit (C). Draait als aparte taak, los van de backup zelf — als de backup helemaal niet draait, waarschuwt die ook niet.
 
   **Getest tegen de werkelijke situatie, niet tegen een fixture:**
@@ -857,13 +867,19 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 | Repo | Branch | Werkboom | Gepusht |
 |---|---|---|---|
-| MCM2 | `feat/baseline-convergentie` | 3 commits vóór `main` | ja |
+| MCM2 | `main` | schoon, op `c87c7a6` | ja |
 | MCM2 | `docs/beheermenu-tenantinstellingen` | 1 commit vóór `main` | **nee** |
 
-**Twee openstaande branches:**
+**Eén openstaande branch:**
 
-- **`feat/baseline-convergentie`** — migratie 0014, het vergelijkings- en baselinescript, het runbook en de backupfix uit #78. Tegen productie uitgevoerd.
 - **`docs/beheermenu-tenantinstellingen`** (`de00294`) — ontwerp voor het beheermenu (gebruikers en rechten, SMTP per tenant, uitnodigingen versturen). Alleen documentatie, backlog: #75, #76, #77. Nog niet gepusht.
+
+**Gemerged op 2026-08-04**, alle drie daarna lokaal én op GitHub verwijderd:
+
+- `docs/actorgrens-en-testaantallen` → `c088bf9`
+- `feat/backupcontrole-en-signalering` → `34c807a`
+- `feat/baseline-convergentie` → `415e069` (migratie 0014, runbook, backupfix #78)
+- `chore/omgevingsdrift-in-verify` → `c87c7a6` (stap 5 in `verify:volledig`)
 
 **Gemerged op 2026-08-04, beide daarna lokaal én op GitHub verwijderd:**
 
