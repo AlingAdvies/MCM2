@@ -1,9 +1,16 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-08-04, ochtend (**de backup bleek de helft van de database te missen**. Bij een routinecontrole gemeten: de dagelijkse dump bevat 9 van de 18 tabellen. Ontbrekend zijn álle vragenlijsten, antwoorden, geüploade certificaten, `tenant_membership` en `sessie` — het bewijsmateriaal waar het product om draait plus het complete rechtenmodel. Dat was er altijd al zo geweest; alle dumps waren exact 21.683 bytes en niemand had daar betekenis aan gehecht. Oorzaak is **Issue #25**: `clm-enterprise` heeft de migraties vanaf 0003 nooit gekregen. De dump is een correcte kopie van een database die achterloopt. Er is een controle gebouwd die dit meldt — zie hieronder.)
+2026-08-04, middag (**de productiedatabase is bijgewerkt van 9 naar 18 tabellen**. `clm-enterprise` stond sinds 27 juli stil op de Prisma-historie; de migraties 0003 t/m 0014 waren er nooit op toegepast. Daardoor miste de dagelijkse backup álle vragenlijsten, antwoorden, geüploade certificaten en het complete rechtenmodel — gevonden bij een routinecontrole diezelfde ochtend, toen bleek dat alle dumps exact 21.683 bytes waren. Migratiestand geïnitialiseerd (#25), UUID-defaults en tenant-indexen rechtgezet (#29), backup weer compleet en herstelbaar bewezen. Beide issues gesloten.)
 
-**Volgende stap:** Issue #25 — de migratiestand van `clm-enterprise` bijwerken. Zolang dat open staat, is er geen herstelbare kopie van vragenlijsten, antwoorden of certificaten. Dáárna fase A uit `docs/superpowers/plans/2026-08-03-surveybeheer.md` — het menu-item **Vragenlijsten** met de twee Transdev-lijsten uit de database.
+**Volgende stap:** fase A uit `docs/superpowers/plans/2026-08-03-surveybeheer.md` — het menu-item **Vragenlijsten** met de twee Transdev-lijsten uit de database. Die staan er nu ook werkelijk.
+
+<details>
+<summary>Vorige stand (2026-08-04, ochtend)</summary>
+
+**De backup bleek de helft van de database te missen.** Bij een routinecontrole gemeten: de dagelijkse dump bevat 9 van de 18 tabellen. Ontbrekend zijn álle vragenlijsten, antwoorden, geüploade certificaten, `tenant_membership` en `sessie`. Dat was er altijd al zo geweest; alle dumps waren exact 21.683 bytes en niemand had daar betekenis aan gehecht. Oorzaak is Issue #25: `clm-enterprise` heeft de migraties vanaf 0003 nooit gekregen.
+
+</details>
 
 <details>
 <summary>Vorige stand (2026-08-03, avond)</summary>
@@ -428,7 +435,14 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Actieve blokkades
 
-- **NIEUW 2026-08-04 — de backup mist negen van de achttien tabellen.** Gemeten tegen `mcm2-2026-08-04_05-38-43.dump` met `pg_restore --list`: aanwezig zijn alleen de negen tabellen uit migratie 0000. **Ontbrekend:** `survey_template`, `survey_run`, `survey_response`, `survey_answer`, `survey_attachment`, `survey_category`, `survey_question`, `tenant_membership` en `sessie`.
+- **OPGELOST 2026-08-04, middag — de backup mist negen van de achttien tabellen.** De migratiestand is geïnitialiseerd en de keten 0002 t/m 0014 toegepast: 9 tabellen werden er 18, schema-conformiteit GOEDGEKEURD (17/17), backupcontrole 0 problemen, dump van 21,2 kB naar 77,7 kB. Issues #25 en #29 gesloten. Procedure in `docs/runbooks/baseline-migratiestand.md`.
+
+  **Twee dingen die daarbij bleken.** `clm_migrator` had geen `CREATE`-recht op de database, terwijl `db/roles/bootstrap-roles.sql` regel 67–68 dat al voorschrijft — nooit op Supabase toegepast, dezelfde onafgemaakte overstap als #25 zelf. En direct ná de migraties was de backup stuk: migratie 0011 zet `FORCE ROW LEVEL SECURITY`, waardoor `pg_dump` als `clm_migrator` faalt. Dat is #78, opgelost met een aparte `BACKUP_DATABASE_URL`; het onderliggende besluit staat nog open.
+
+  <details>
+  <summary>De oorspronkelijke bevinding</summary>
+
+  **NIEUW 2026-08-04 — de backup mist negen van de achttien tabellen.** Gemeten tegen `mcm2-2026-08-04_05-38-43.dump` met `pg_restore --list`: aanwezig zijn alleen de negen tabellen uit migratie 0000. **Ontbrekend:** `survey_template`, `survey_run`, `survey_response`, `survey_answer`, `survey_attachment`, `survey_category`, `survey_question`, `tenant_membership` en `sessie`.
 
   Dat is álle vragenlijsten, álle antwoorden, álle geüploade certificaten en het complete rechtenmodel. De dumps van 30 juli, 31 juli en 4 augustus bevatten alle drie exact dezelfde negen tabellen en zijn alle drie exact 21.683 bytes. **Dit is niet nieuw ontstaan — het is er altijd zo geweest**; de identieke bestandsgrootte was het zichtbare symptoom.
 
@@ -436,7 +450,15 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
   **Gevolg voor de hersteltest van 30 juli** ("dump → restore → 20 van 20 e2e-tests groen"): die draaide tegen negen tabellen en bewees het herstelpád, niet de compleetheid. Faalpatroon §15b — de afwezigheid van een fout is niet de aanwezigheid van een grens.
 
-- **NIEUW 2026-08-04 — `FORCE ROW LEVEL SECURITY` blokkeert `pg_dump` voor `clm_migrator`.** Bij het maken van een testdump tegen de demo-database: `ERROR: query would be affected by row-level security policy for table "audit_event"`. Migratie 0011 zette `FORCE RLS` op alle tabellen, wat ook voor de tabeleigenaar geldt. De productiedump werkt omdat die via de Supabase-`postgres`-rol loopt (met `BYPASSRLS`). Raakt **Issue #65** (aparte eigenaarsrol voor `SECURITY DEFINER`-functies). Niet dringend zolang de dump draait, maar het betekent dat de backup afhangt van een rol die elders juist vermeden wordt.
+  </details>
+
+- **ACTIEF (Issue #78) — `FORCE ROW LEVEL SECURITY` blokkeert `pg_dump` voor `clm_migrator`.** Vanochtend nog theoretisch, 's middags acuut: zodra migratie 0011 op productie stond, faalde de dagelijkse backup met `ERROR: query would be affected by row-level security policy for table "audit_event"`. `FORCE` geldt ook voor de tabeleigenaar — dat is de bedoeling ervan, maar `pg_dump` leest zonder tenantcontext.
+
+  **Tijdelijk opgelost** met een eigen `BACKUP_DATABASE_URL` die naar de Supabase-`postgres`-rol wijst (de enige met `BYPASSRLS`). Bewust een aparte variabele: de keuze voor een ruimere rol hoort zichtbaar te zijn in `.env`, niet verstopt in een script.
+
+  **Het besluit staat nog open** (#78): een aparte dumprol, de dump via de eigenaarsrol met een gerichte uitzondering, of dit vastleggen als geaccepteerd restrisico in ADR-011. Nu is het feitelijk het laatste, maar zonder dat het ergens als besluit staat.
+
+  **Twee dingen die dit verscherpt.** De backup hangt nu aan het wachtwoord van de `postgres`-rol — hetzelfde dat in de git-historie van `mvm-api-pilot` staat (#1). Roteren zonder `.env` bij te werken legt de backup stil. En: een halve dump ziet er normaal uit. `backup-dump.js` beschouwt alleen 0 bytes als mislukt; de gefaalde dumps waren 78 kB en dus op het oog prima. De backupcontrole ving dit wél, want die telt tabellen in plaats van bytes — de eerste keer dat hij een echt probleem aantoonde dat anders onopgemerkt was gebleven.
 
 - **2026-08-03/04 — de dagelijkse backup heeft vier dagen stilgelegen** (niet drie, zoals hier eerder stond). Op 1, 2 en 3 augustus faalde de geplande taak, telkens omdat **Docker Desktop niet draaide** om 07:00. De handmatige inhaalpoging van 3 augustus **mislukte eveneens** (`MISLUKT, code 1` in het log). De feitelijke reeks in OneDrive is 31 juli → 4 augustus.
 
@@ -835,11 +857,12 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 | Repo | Branch | Werkboom | Gepusht |
 |---|---|---|---|
-| MCM2 | `main` | schoon, op `34c807a` | ja |
+| MCM2 | `feat/baseline-convergentie` | 3 commits vóór `main` | ja |
 | MCM2 | `docs/beheermenu-tenantinstellingen` | 1 commit vóór `main` | **nee** |
 
-**Eén openstaande branch:**
+**Twee openstaande branches:**
 
+- **`feat/baseline-convergentie`** — migratie 0014, het vergelijkings- en baselinescript, het runbook en de backupfix uit #78. Tegen productie uitgevoerd.
 - **`docs/beheermenu-tenantinstellingen`** (`de00294`) — ontwerp voor het beheermenu (gebruikers en rechten, SMTP per tenant, uitnodigingen versturen). Alleen documentatie, backlog: #75, #76, #77. Nog niet gepusht.
 
 **Gemerged op 2026-08-04, beide daarna lokaal én op GitHub verwijderd:**
@@ -900,11 +923,15 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 **Stand 2026-08-04.** Twee dingen, in deze volgorde:
 
-1. ~~**De backupcontrole inrichten**~~ — **gedaan op 2026-08-04.** Credentials, beide taken, testbericht aangekomen, beide taken via Taakplanner gedraaid. Zie "Aantoonbaar werkend".
+1. ~~**De backupcontrole inrichten**~~ — **gedaan op 2026-08-04.** Credentials, beide taken, testbericht aangekomen, beide taken via Taakplanner gedraaid.
 
-2. **Issue #25 — de migratiestand van `clm-enterprise` bijwerken.** Dit is de oorzaak van de incomplete backup. Zolang het open staat, bestaat er geen herstelbare kopie van vragenlijsten, antwoorden of certificaten, en blijft de controle daar terecht dagelijks over klagen.
+2. ~~**Issue #25 — de migratiestand van `clm-enterprise` bijwerken**~~ — **gedaan op 2026-08-04.** 9 tabellen werden er 18, #25 en #29 gesloten.
 
-Daarna: fase A uit `docs/superpowers/plans/2026-08-03-surveybeheer.md` — het menu-item **Vragenlijsten** met de twee Transdev-lijsten uit de database.
+**Nu: fase A uit `docs/superpowers/plans/2026-08-03-surveybeheer.md`** — het menu-item **Vragenlijsten** met de twee Transdev-lijsten uit de database. Die staan er sinds vanmiddag ook werkelijk in productie.
+
+**Twee restpunten uit deze sessie**, geen van beide blokkerend:
+- **#78** — het besluit over welke rol de backup maakt. Nu feitelijk de `postgres`-rol met `BYPASSRLS`, zonder dat dat ergens als besluit staat.
+- **#19** — de hersteltest moet over. Die van 30 juli draaide tegen negen tabellen en bewees dus het herstelpad, niet de compleetheid. De backupcontrole doet dit inmiddels wekelijks, wat het issue grotendeels afdekt.
 
 <details>
 <summary>Vorige eerstvolgende stap (2026-07-31, inmiddels uitgevoerd)</summary>
