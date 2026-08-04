@@ -428,6 +428,39 @@ function maakSessie() {
     }
   }
 
+  // De Transdev-vragenlijst inlezen, zodat het scherm Vragenlijsten iets te
+  // tonen heeft. Zonder dit is de browsertest van fase A een lege pagina die
+  // groen blijft — precies het soort test dat niets bewijst.
+  //
+  // Bewust via seed-vragenlijsten.js en niet met eigen INSERTs: dat script
+  // gebruikt hetzelfde importpad als de applicatie, inclusief validatie. Een
+  // tweede waarheid hier zou stilzwijgend uit de pas kunnen lopen.
+  //
+  // Alleen deze ene lijst: de andere in db/seeds/ is de interne
+  // leveranciersbeoordeling (UC2), en die wordt in deze ronde niet gebouwd.
+  const vragenlijst = draai(
+    'node',
+    [
+      'scripts/seed-vragenlijsten.js',
+      TENANT_ID,
+      'transdev-annual-vendor-it-risk-v1.json',
+    ],
+    {
+      stil: true,
+      env: {
+        DATABASE_URL:
+          'postgresql://clm_api_runtime:otap_pw@localhost:55500/postgres',
+      },
+    },
+  );
+
+  if (!vragenlijst.ok) {
+    return {
+      ok: false,
+      reden: `vragenlijst inlezen mislukte: ${vragenlijst.uitvoer.trim()}`,
+    };
+  }
+
   const token = randomBytes(32).toString('base64url');
   const hash = createHash('sha256').update(token, 'utf8').digest('hex');
 
@@ -555,6 +588,30 @@ function controleerOmgevingsdrift() {
   return bevindingen;
 }
 
+/**
+ * Stopt met een foutcode, maar laat `finally` eerst zijn werk doen.
+ *
+ * ── Waarom dit bestaat ───────────────────────────────────────────────────────
+ *
+ * `process.exit()` beëindigt Node onmiddellijk. Een `finally`-blok dat nog moet
+ * draaien komt niet meer aan de beurt — en dat is precies wat er op 2026-08-04
+ * gebeurde: de browsertest viel om, het script stopte, en de hele doorloopstack
+ * bleef draaien op poort 5001 en 3000.
+ *
+ * Gevolg: de volgende poging strandde meteen op "poorten zijn bezet", met een
+ * melding die naar een dev-server wees terwijl het de vorige doorloop zelf was.
+ *
+ * Een exitcode zetten in plaats van afsluiten laat main() netjes terugkeren,
+ * waarna `finally` opruimt en Node vanzelf eindigt met de juiste code.
+ */
+function stopMetFout() {
+  process.exitCode = 1;
+  throw new DoorloopGestopt();
+}
+
+/** Onderscheidt een gecontroleerde stop van een echte programmeerfout. */
+class DoorloopGestopt extends Error {}
+
 function main() {
   const stappen = 6;
   let gestart = false;
@@ -601,7 +658,7 @@ function main() {
 
     if (!testDb.ok) {
       console.error(`\nROOD: geen testdatabase kunnen starten.\n${testDb.reden}`);
-      process.exit(1);
+      stopMetFout();
     }
 
     const verify = draai('npm', ['run', 'verify'], {
@@ -612,14 +669,14 @@ function main() {
 
     if (!verify.ok) {
       console.error('\nROOD op stap 1. De rest is niet gedraaid.');
-      process.exit(1);
+      stopMetFout();
     }
 
     kop(2, stappen, 'Stack bouwen en starten (productie-images)');
 
     if (!draai('docker', [...COMPOSE, 'up', '--build', '-d']).ok) {
       console.error('\nROOD: de stack kon niet gestart worden.');
-      process.exit(1);
+      stopMetFout();
     }
 
     gestart = true;
@@ -630,7 +687,7 @@ function main() {
 
     if (!opgebouwd.ok) {
       console.error(`\nROOD: de database opbouwen mislukte.\n${opgebouwd.reden}`);
-      process.exit(1);
+      stopMetFout();
     }
 
     const gereed = wachtOpStack();
@@ -638,14 +695,14 @@ function main() {
     if (!gereed.ok) {
       console.error(`\nROOD: de stack antwoordt niet (${gereed.reden}).`);
       console.error('Logs: docker compose -f docker-compose.otap.yml logs');
-      process.exit(1);
+      stopMetFout();
     }
 
     const sessie = maakSessie();
 
     if (!sessie.ok) {
       console.error(`\nROOD: geen sessie kunnen maken.\n${sessie.reden}`);
-      process.exit(1);
+      stopMetFout();
     }
 
     console.log('  Sessie aangemaakt via clm.sessie_aanmaken().');
@@ -666,7 +723,7 @@ function main() {
         'Playwright bewaart een trace bij een mislukte test:\n' +
           '  cd ../MCM2-frontend && npx playwright show-trace test-results/**/trace.zip',
       );
-      process.exit(1);
+      stopMetFout();
     }
 
     kop(5, stappen, 'Draaien de echte omgevingen op dit schema? (read-only)');
@@ -702,9 +759,20 @@ function main() {
       console.log('  Migraties toepassen: docs/runbooks/baseline-migratiestand.md');
       console.log('');
     }
+  } catch (fout) {
+    // Een gecontroleerde stop is al gemeld met de reden erbij; die hoeft hier
+    // geen tweede keer langs te komen. Alles anders is een programmeerfout en
+    // hoort wél zichtbaar te zijn.
+    if (!(fout instanceof DoorloopGestopt)) {
+      throw fout;
+    }
   } finally {
     // Ook bij een afgebroken run: een achtergebleven container blokkeert de
     // volgende doorloop op een poort die al bezet is.
+    //
+    // Dit blok werd tot 2026-08-04 overgeslagen zodra een stap faalde, omdat
+    // die stappen `process.exit(1)` aanriepen — dat beëindigt Node meteen en
+    // slaat `finally` over. Zie stopMetFout().
     stopTestDatabase();
 
     if (gestart) {
