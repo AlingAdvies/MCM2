@@ -465,6 +465,7 @@ Een wijziging is pas “klaar” wanneer:
 [ ] Lokaal getest in de Docker-werkwijze, waar van toepassing
 [ ] `npm run verify:volledig` groen — NIET losse commando's, zie §15a
 [ ] Tegenproef gedaan op wat er aan beveiliging is toegevoegd, zie §15b
+[ ] Namen en paden opgezocht, niet gereconstrueerd, zie §15c
 [ ] RLS read/write-isolatietest toegevoegd bij tenantdata
 [ ] Migratie getest op lege database, indien schema gewijzigd
 [ ] Docker production build geslaagd
@@ -622,6 +623,53 @@ bij tekstwijzigingen, opmaak of documentatie.
 **Vastleggen waar het thuishoort.** De uitkomst hoort in de commit-boodschap en
 in `docs/STATUS.md`, niet alleen in het gesprek waarin het gebeurde — anders is
 de kennis weg zodra de sessie afloopt.
+
+---
+
+### 15c. Namen opzoeken, niet reconstrueren
+
+**De regel.** Elke methodenaam, elk routepad, elke veldnaam en elk id dat je in
+een test of aanroep gebruikt: opzoeken in de code vóór je het opschrijft. Niet
+erna, wanneer de test rood wordt.
+
+**Waarom dit een regel is en geen aanbeveling.** Op 2026-08-04 moest een nieuwe
+testsuite zes keer opnieuw draaien, en alle zes de fouten waren op te zoeken
+geweest:
+
+| Aanname | Werkelijkheid | Waar het stond |
+|---|---|---|
+| `sessies.maakAan(...)` | `aanmaken(...)` | `src/auth/sessie.service.ts` |
+| `/admin/survey/vragenlijsten` | `/admin/survey/templates` | de controller, vijf minuten eerder gelezen |
+| `GET /vendors?zoek=` | geen queryparameter; filteren gebeurt in de frontend | `vendor.controller.ts` |
+| token als `X-Survey-Token` | `?t=` | `survey-token.guard.ts` regel 84 |
+| test-id's `ca` en `cb` vrij | al vergeven aan `antwoord-indienen` | `test/test-ids.ts` |
+| hash uitlezen zonder tenantcontext | RLS filtert alles weg, tabel lijkt leeg | §6, deze eigen regels |
+
+**Wat het kost.** Niet veel tijd — die correctierondes duren seconden. Wat het
+wél kost is het onderscheid tussen een rode test die iets betekent en een rode
+test die slordigheid is. Diezelfde sessie leverde drie echte bevindingen op (een
+CORS-controle die blind was, een test die groen bleef om de verkeerde reden, een
+opruimgat in de e2e-suites). Die verdwijnen in de ruis van zes vermijdbare.
+
+**Werkwijze.**
+
+1. **Grep vóór je typt.** Een naam die je "weet" uit een bestand dat je eerder
+   in dezelfde sessie las, is nog steeds een aanname.
+2. **Eerst één test draaien, dan de rest schrijven.** Een skelet met de opzet
+   en één simpele test vangt de hele klasse fouten — verkeerde methodenaam,
+   verkeerd pad, ontbrekende import — voordat er 27 tests bovenop staan.
+3. **Meet in plaats van af te leiden.** Twijfel je wat een route teruggeeft?
+   Roep hem aan tegen de demo-stack (`npm run demo`) en kijk. Dat is sneller
+   dan de service, de controller en het type doorlezen.
+
+**Wat dit níét raakt.** Tegenproeven (§15b) blijven duur en blijven verplicht.
+Die leveren op: op 2026-08-04 lieten ze zien dat een zelfcontrole met `curl`
+blind was voor CORS-fouten. Rood van een tegenproef is bedoeld; rood van een
+verkeerd overgetypte methodenaam is dat niet.
+
+**Melden naar evenredigheid.** Een correctie op een eigen fout is geen
+bevinding. Die krijgt hooguit een regel — geen alinea met uitleg waarom het
+misging, want dan leest slordigheid als inzicht.
 
 ---
 
