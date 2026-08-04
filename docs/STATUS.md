@@ -1,9 +1,16 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-08-03, avond (**`app.current_actor` toegevoegd en gemerged**, PR #73: de database kan sinds migratie 0013 onderscheid maken tussen een medewerker en een leverancier. Dat kon hij niet — `withTenant()` zette alleen de tenant, en beide paden riepen hem identiek aan. Nodig voor de beoordelingstabel uit het surveybeheerplan, waar "zelfde tenant = mag het zien" voor het eerst níét opgaat. 269 e2e-tests en 25 browsertests groen, CI groen op `main`, geen open branches. Drie tegenproeven gedaan; de derde bleef groen en leverde een nieuwe les op — zie hieronder.)
+2026-08-04, ochtend (**de backup bleek de helft van de database te missen**. Bij een routinecontrole gemeten: de dagelijkse dump bevat 9 van de 18 tabellen. Ontbrekend zijn álle vragenlijsten, antwoorden, geüploade certificaten, `tenant_membership` en `sessie` — het bewijsmateriaal waar het product om draait plus het complete rechtenmodel. Dat was er altijd al zo geweest; alle dumps waren exact 21.683 bytes en niemand had daar betekenis aan gehecht. Oorzaak is **Issue #25**: `clm-enterprise` heeft de migraties vanaf 0003 nooit gekregen. De dump is een correcte kopie van een database die achterloopt. Er is een controle gebouwd die dit meldt — zie hieronder.)
 
-**Volgende stap:** fase A uit `docs/superpowers/plans/2026-08-03-surveybeheer.md` — het menu-item **Vragenlijsten** met de twee Transdev-lijsten uit de database.
+**Volgende stap:** Issue #25 — de migratiestand van `clm-enterprise` bijwerken. Zolang dat open staat, is er geen herstelbare kopie van vragenlijsten, antwoorden of certificaten. Dáárna fase A uit `docs/superpowers/plans/2026-08-03-surveybeheer.md` — het menu-item **Vragenlijsten** met de twee Transdev-lijsten uit de database.
+
+<details>
+<summary>Vorige stand (2026-08-03, avond)</summary>
+
+**`app.current_actor` toegevoegd en gemerged**, PR #73: de database kan sinds migratie 0013 onderscheid maken tussen een medewerker en een leverancier. Dat kon hij niet — `withTenant()` zette alleen de tenant, en beide paden riepen hem identiek aan. Nodig voor de beoordelingstabel uit het surveybeheerplan, waar "zelfde tenant = mag het zien" voor het eerst níét opgaat. 269 e2e-tests en 25 browsertests groen, CI groen op `main`, geen open branches. Drie tegenproeven gedaan; de derde bleef groen en leverde een nieuwe les op — zie hieronder.
+
+</details>
 
 <details>
 <summary>Vorige stand (2026-08-03, middag)</summary>
@@ -421,11 +428,21 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Actieve blokkades
 
-- **NIEUW 2026-08-03 — de dagelijkse backup heeft drie dagen stilgelegen.** Op 1, 2 en 3 augustus faalde de geplande taak, telkens met dezelfde oorzaak: **Docker Desktop draaide niet** om 07:00. De laatste geslaagde automatische dump is die van 31 juli; handmatig ingehaald op 3 augustus (21,2 kB in 4,7s).
+- **NIEUW 2026-08-04 — de backup mist negen van de achttien tabellen.** Gemeten tegen `mcm2-2026-08-04_05-38-43.dump` met `pg_restore --list`: aanwezig zijn alleen de negen tabellen uit migratie 0000. **Ontbrekend:** `survey_template`, `survey_run`, `survey_response`, `survey_answer`, `survey_attachment`, `survey_category`, `survey_question`, `tenant_membership` en `sessie`.
 
-  Dit is Issue #58, maar met een andere oorzaak dan daar beschreven. Het issue gaat uit van "de laptop staat uit"; hier stónd de laptop aan en was Docker simpelweg nog niet opgestart. Het script waarschuwt keurig in het log — **maar niemand leest dat log.** Een mislukte backup is stil, en dat is het eigenlijke probleem: drie dagen geen backup zonder dat iemand het merkte, terwijl deze dump op Supabase Free de énige backup is.
+  Dat is álle vragenlijsten, álle antwoorden, álle geüploade certificaten en het complete rechtenmodel. De dumps van 30 juli, 31 juli en 4 augustus bevatten alle drie exact dezelfde negen tabellen en zijn alle drie exact 21.683 bytes. **Dit is niet nieuw ontstaan — het is er altijd zo geweest**; de identieke bestandsgrootte was het zichtbare symptoom.
 
-  Vóór de pilotstart (rond 1 september) hoort hier een signaal op dat níét afhangt van iemand die een logbestand openslaat.
+  **Oorzaak: Issue #25.** Niet de schemaselectie (`--schema=clm --schema=ref --schema=audit` is correct), maar de migratiestand: `clm-enterprise` heeft de migraties vanaf 0003 nooit gekregen. De dump is een correcte kopie van een database die achterloopt.
+
+  **Gevolg voor de hersteltest van 30 juli** ("dump → restore → 20 van 20 e2e-tests groen"): die draaide tegen negen tabellen en bewees het herstelpád, niet de compleetheid. Faalpatroon §15b — de afwezigheid van een fout is niet de aanwezigheid van een grens.
+
+- **NIEUW 2026-08-04 — `FORCE ROW LEVEL SECURITY` blokkeert `pg_dump` voor `clm_migrator`.** Bij het maken van een testdump tegen de demo-database: `ERROR: query would be affected by row-level security policy for table "audit_event"`. Migratie 0011 zette `FORCE RLS` op alle tabellen, wat ook voor de tabeleigenaar geldt. De productiedump werkt omdat die via de Supabase-`postgres`-rol loopt (met `BYPASSRLS`). Raakt **Issue #65** (aparte eigenaarsrol voor `SECURITY DEFINER`-functies). Niet dringend zolang de dump draait, maar het betekent dat de backup afhangt van een rol die elders juist vermeden wordt.
+
+- **2026-08-03/04 — de dagelijkse backup heeft vier dagen stilgelegen** (niet drie, zoals hier eerder stond). Op 1, 2 en 3 augustus faalde de geplande taak, telkens omdat **Docker Desktop niet draaide** om 07:00. De handmatige inhaalpoging van 3 augustus **mislukte eveneens** (`MISLUKT, code 1` in het log). De feitelijke reeks in OneDrive is 31 juli → 4 augustus.
+
+  Dit is Issue #58, maar met een andere oorzaak dan daar beschreven. Het issue gaat uit van "de laptop staat uit"; hier stónd de laptop aan en was Docker nog niet opgestart. Het script waarschuwde keurig in het log — **maar niemand leest dat log.** Vier dagen geen backup zonder dat iemand het merkte.
+
+  **Opgelost op 2026-08-04**, branch `feat/backupcontrole-en-signalering`: een controle die dagelijks draait, vergelijkt met een handgeschreven verwachtingslijst, en via Telegram meldt. Zie hieronder.
 
 - **NIEUW 2026-08-03 — een productiewachtwoord staat in de git-historie van `mvm-api-pilot`.** Gevonden bij het bekijken van `Database/import-mock-data.ts` voor de demo-data: host, gebruiker en wachtwoord van `clm-enterprise` staan daar hardgecodeerd (regels 21-28), en het bestand staat in git. Dat is dezelfde database als waar MCM2 op draait.
 
@@ -440,9 +457,11 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
   - **Externe leverancier (spoor 2)** — tokengebaseerde, accountloze survey-linktoegang. **Gebouwd op 2026-07-28, CI groen, gemerged op 2026-07-29 (PR #32).** Zie het blok "Aantoonbaar werkend" hieronder voor wat precies bewezen is.
 
   Het tijdelijke AWS-account `727732213368` is niet langer nodig voor identity.
-- **ZWAARSTE BLOKKADE (Issue #30): er zijn géén backups van de productiedatabase.** Op 2026-07-28 in het dashboard vastgesteld: `clm-enterprise` draait op het **Supabase Free Plan**, dat letterlijk meldt *"Free Plan does not include project backups"*. Niet "beperkte backups" — **geen**. Bij verlies van het project is alles weg. Free-projecten worden bovendien na circa **7 dagen inactiviteit gepauzeerd**, met verwijdering na langere inactiviteit; voor een surveylink die 30 dagen geldig moet zijn is dat op zichzelf al onwerkbaar.
+- **Issue #30 — de provider levert geen backups.** *(Was tot 2026-07-30 de zwaarste blokkade; sindsdien is er een eigen dump. Op 2026-08-04 bleek die dump onvolledig — zie de bevinding bovenaan dit blok.)* Op 2026-07-28 in het dashboard vastgesteld: `clm-enterprise` draait op het **Supabase Free Plan**, dat letterlijk meldt *"Free Plan does not include project backups"*. Niet "beperkte backups" — **geen**. Free-projecten worden bovendien na circa **7 dagen inactiviteit gepauzeerd**, met verwijdering na langere inactiviteit; voor een surveylink die 30 dagen geldig moet zijn is dat op zichzelf al onwerkbaar.
 
-  **Blokkeert #19, #25 en #29** — die wijzigen alle drie de productiedatabase, en dat zonder enig vangnet doen is onverantwoord.
+  **Stand 2026-08-04:** er is een eigen dagelijkse dump naar OneDrive én een controle die dagelijks vaststelt of hij actueel en compleet is (`npm run backup:controle`). Wat er níét is: een complete dump, zolang **Issue #25** open staat. De negen tabellen die ontbreken zijn juist de tabellen met het bewijsmateriaal.
+
+  **Blokkeerde #19, #25 en #29** — die wijzigen alle drie de productiedatabase. Sinds er een dump ís, kunnen die heroverwogen worden; #25 is nu juist de eerstvolgende stap, omdat de backup zonder die migraties incompleet blijft.
 
   **Kostenafweging, met cijfers uit het dashboard:** Supabase Pro (~$25/mnd) geeft dagelijkse backups — te grof voor de pilotnorm van 1 uur uit ADR-011. Point-in-Time Recovery is daar een add-on van **$100/mnd bovenop Pro**. Op 2026-07-28 is gemeten dat **Neon** hetzelfde biedt voor ~$10–20/mnd (7-daags PITR-venster binnen het plan). Zie het volgende punt.
 
@@ -478,6 +497,19 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
   Ook nieuw vastgelegd: de vragenlijst is **alleen Engels**. Geen vertaallaag.
 
 ## Aantoonbaar werkend
+
+- **De backupcontrole (2026-08-04, branch `feat/backupcontrole-en-signalering`).** Drie lagen: is er een dump jonger dan 36 uur (A), zit alles erin wat erin hoort (B), komt het er na een echte restore ook weer uit (C). Draait als aparte taak, los van de backup zelf — als de backup helemaal niet draait, waarschuwt die ook niet.
+
+  **Getest tegen de werkelijke situatie, niet tegen een fixture:**
+  - Laag B vindt exact de negen ontbrekende tabellen in de productiedump.
+  - Laag C bevestigt dat onafhankelijk via een echte `pg_restore`: 9 van 18 teruggezet.
+  - Groene pad geverifieerd tegen een complete dump van de demo-database (89 kB tegenover 21 kB): 18/18 compleet én herstelbaar.
+  - Demping getest: tweede run binnen 48 uur stuurt niets. Escalatie na 48 uur geeft één laatste bericht. Herstelbericht ruimt het statusbestand op.
+  - "Onbekende tabel"-melding getest door een tabel uit de verwachtingslijst te halen.
+
+  **De verwachtingslijst is handgeschreven** (`docs/runbooks/backup-verwachting.json`) en wordt bewust níét uit de migraties afgeleid. Zou hij dat wel zijn, dan verifieert de controle zichzelf: bij een achterlopende migratiestand verwacht hij precies de verkeerde dingen en meldt hij niets. Dat is exact hoe de fout van 4 augustus onzichtbaar bleef.
+
+  **Nog niet ingericht:** de Telegram-bot en de twee Windows-taken. Zie `docs/runbooks/backupcontrole.md` stap 1 t/m 5 — dat is handwerk van de eigenaar (een token hoort niet in git).
 
 - **De actor-grens (2026-08-03, migratie 0013, PR #73).** De database kan onderscheid maken tussen een medewerker en een leverancier van dezelfde tenant. `withTenant()` zet naast de tenant nu ook `app.current_actor`, gelezen via `clm.current_actor()`; niet gezet betekent `onbekend`, de striktste stand.
 
@@ -790,12 +822,30 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 ## Huidige branch en Git-status
 
-**Stand op 2026-07-30, einde tweede sessie:**
+**Stand op 2026-08-04, ochtend** (geverifieerd met `git status` en `git branch -a`):
+
+| Repo | Branch | Werkboom | Gepusht |
+|---|---|---|---|
+| MCM2 | `feat/backupcontrole-en-signalering` | 1 commit vóór `main` | **nee** |
+| MCM2 | `docs/beheermenu-tenantinstellingen` | 1 commit vóór `main` | **nee** |
+| MCM2 | `main` | schoon, op `c088bf9` | ja |
+
+**Twee openstaande branches, beide nog niet gepusht:**
+
+- **`feat/backupcontrole-en-signalering`** (`3eaaf36`) — de backupcontrole uit de bevinding hierboven: drie lagen, Telegram-melding, runbook. Getest tegen de echte dumps.
+- **`docs/beheermenu-tenantinstellingen`** (`de00294`) — ontwerp voor het beheermenu (gebruikers en rechten, SMTP per tenant, uitnodigingen versturen). Alleen documentatie, backlog: #75, #76, #77.
+
+`docs/actorgrens-en-testaantallen` is op 2026-08-04 gemerged naar `main` (merge-commit `c088bf9`) en daarna lokaal én op GitHub verwijderd.
+
+<details>
+<summary>Vorige stand (2026-07-30, einde tweede sessie)</summary>
 
 | Repo | Branch | Werkboom | Openstaande PR's |
 |---|---|---|---|
 | MCM2 | `feat/identiteit-en-membership` | schoon, 3 commits vóór `main` | geen — nog niet gepusht |
 | MCM2-frontend | `main` | schoon | geen |
+
+</details>
 
 **Openstaande branch `feat/identiteit-en-membership`** (fase 1 van het plan, zie hieronder). Vijf commits, alle geverifieerd, **nog niet gepusht** en nog niet gemerged:
 
@@ -838,6 +888,17 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 ## Eerstvolgende goedgekeurde stap
 
+**Stand 2026-08-04.** Twee dingen, in deze volgorde:
+
+1. **De backupcontrole inrichten** — `docs/runbooks/backupcontrole.md` stap 1 t/m 5: Telegram-bot aanmaken, token in `.env`, melding testen, twee Windows-taken inplannen. Handwerk van de eigenaar; de code staat klaar op `feat/backupcontrole-en-signalering`.
+
+2. **Issue #25 — de migratiestand van `clm-enterprise` bijwerken.** Dit is de oorzaak van de incomplete backup. Zolang het open staat, bestaat er geen herstelbare kopie van vragenlijsten, antwoorden of certificaten, en blijft de controle daar terecht dagelijks over klagen.
+
+Daarna: fase A uit `docs/superpowers/plans/2026-08-03-surveybeheer.md` — het menu-item **Vragenlijsten** met de twee Transdev-lijsten uit de database.
+
+<details>
+<summary>Vorige eerstvolgende stap (2026-07-31, inmiddels uitgevoerd)</summary>
+
 **De leverancierskant is klaar en in de browser bewezen.** UC1 is van tokenlink tot bevestiging afrondbaar (zie het frontend-blok hierboven). Daarmee is er voor het eerst iets demonstreerbaars voor de klant.
 
 **Het nieuwe spoor sinds 2026-07-30: leveranciersbeheer.** De opdrachtgever wil leveranciers kunnen aanmaken en importeren. Startpunt is Excel/CSV, daarna handinvoer; PC-only; het gaat mee in de pilot.
@@ -858,6 +919,8 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 **De claims zijn nog steeds niet gemeten.** De PoC-bevindingen noemen `email`, `sub`, `oid` en `tid` als verwáchting. De code koppelt bewust op `oid` (stabiel per tenant) en niet op `sub` (in Entra per applicatie verschillend) of `email` (verandert). Dat is de juiste keuze op basis van Microsoft-documentatie, maar **bevestig het bij de eerste echte login**.
 
 **Wat de eigenaar nog moet aanleveren:** de OIDC-waarden in `.env` (zie `.env.example`, sectie Identity) — issuer, endpoints, client-ID en het client secret van de backend-app-registratie. **Zonder die waarden werkt alles behalve inloggen**: `/auth/login` geeft dan een 500 die precies opsomt welke variabelen ontbreken. Dat is een bewuste wijziging van 2026-07-31 — eerder zou de hele backend niet starten, en dat blokkeerde de e2e-suite en de leverancierskant, die geen identity nodig hebben.
+
+</details>
 
 ### De vier stappen van het vendorspoor, in deze volgorde
 
