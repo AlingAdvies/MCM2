@@ -5,6 +5,11 @@
 **Laatste update:** 2026-08-04
 **Vereiste toegang:** deze PC, Docker Desktop, een Telegram-account
 
+> **Status: ingericht en werkend op 2026-08-04.** Beide taken staan in Taakplanner en zijn
+> aantoonbaar via Taakplanner gedraaid (niet alleen handmatig). Het testbericht is in Telegram
+> aangekomen. De stappen hieronder zijn de herhaalbare procedure — voor een nieuwe machine,
+> na een herinstallatie, of om te controleren of het nog klopt.
+
 > Ontwerp en onderbouwing: `docs/superpowers/specs/2026-08-04-backupcontrole-en-signalering.md`
 
 ---
@@ -170,12 +175,57 @@ marge is ruim, ook als Docker traag opstart.
 2026-07-30 daadwerkelijk gebeurd bij de backuptaak. Het `.cmd`-bestand geeft de echte exitcode
 door en logt altijd.
 
-**Verificatie na het inplannen:**
+### Aanmaken via PowerShell
+
+Zoals gebruikt op 2026-08-04:
+
+```powershell
+# Dagelijkse controle
+$actie = New-ScheduledTaskAction -Execute "C:\DEV\Work\MCM2\scripts\backup-controle-taak.cmd" -WorkingDirectory "C:\DEV\Work\MCM2"
+$trigger = New-ScheduledTaskTrigger -Daily -At "07:30"
+$principal = New-ScheduledTaskPrincipal -UserId "cmali" -LogonType Interactive -RunLevel Limited
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
+Register-ScheduledTask -TaskName "MCM2 backupcontrole" -Action $actie -Trigger $trigger -Principal $principal -Settings $settings
+
+# Wekelijkse herstelproef: idem, met -Argument "--volledig",
+# -Weekly -DaysOfWeek Monday -At "07:45" en 30 minuten tijdslimiet.
+```
+
+**`-StartWhenAvailable` is niet optioneel.** Zonder dat wordt een gemiste run (laptop uit om
+07:30) stilzwijgend overgeslagen in plaats van ingehaald — precies de faalvorm die dit runbook
+moet voorkomen.
+
+**`-AllowStartIfOnBatteries` bewust anders dan bij de backuptaak.** Die staat op
+`DisallowStartIfOnBatteries = True`; een dump maken op accu is te zwaar. Een controle is dat
+niet, en op accu draaien is juist het moment waarop je wilt weten of er iets mis is.
+
+> Let op: de parameter heet `-AllowStartIfOnBatteries`, niet `-DisallowStartIfOnBatteries:$false`.
+> Die tweede vorm bestaat niet en geeft een foutmelding.
+
+### Verificatie na het inplannen
+
+**Niet alleen de exitcode controleren.** `LastTaskResult = 0` betekent dat `cmd.exe` kon
+starten, niet dat de controle iets deed — dat is de valkuil uit §"Waarom via een `.cmd`".
+Kijk altijd in het log:
 
 ```powershell
 Get-ScheduledTaskInfo -TaskName "MCM2 backupcontrole"
 Get-Content "$env:USERPROFILE\OneDrive - Aling Advies\MCM2-backups\backup-controle.log" -Tail 20
 ```
+
+**Verwacht in het log** (stand 2026-08-04, zolang Issue #25 open staat):
+
+```
+===== di 04-08-2026 11:15:43 - start
+2026-08-04T09:15:45.455Z — 1 probleem(en)
+  Laatste dump: mcm2-2026-08-04_05-38-43.dump (3 uur oud)
+  PROBLEEM: De dump mist 9 van de 18 tabellen:
+===== di 04-08-2026 11:15:45 - PROBLEEM GEMELD, code 1
+```
+
+`PROBLEEM GEMELD, code 1` is hier een geldige uitkomst: de controle werkte en heeft gemeld.
+Het `.cmd` geeft zelf altijd exitcode 0 terug, zodat Taakplanner de taak niet als kapot
+markeert terwijl hij juist deed wat hij moest doen.
 
 ---
 

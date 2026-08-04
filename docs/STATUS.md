@@ -509,7 +509,16 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
   **De verwachtingslijst is handgeschreven** (`docs/runbooks/backup-verwachting.json`) en wordt bewust níét uit de migraties afgeleid. Zou hij dat wel zijn, dan verifieert de controle zichzelf: bij een achterlopende migratiestand verwacht hij precies de verkeerde dingen en meldt hij niets. Dat is exact hoe de fout van 4 augustus onzichtbaar bleef.
 
-  **Nog niet ingericht:** de Telegram-bot en de twee Windows-taken. Zie `docs/runbooks/backupcontrole.md` stap 1 t/m 5 — dat is handwerk van de eigenaar (een token hoort niet in git).
+  **Ingericht en werkend op 2026-08-04.** Beide taken staan in Taakplanner en zijn aantoonbaar *via Taakplanner* gedraaid — niet alleen handmatig:
+
+  | Taak | Trigger | Bewijs |
+  |---|---|---|
+  | `MCM2 backupcontrole` | dagelijks 07:30 | log 11:15:43, "PROBLEEM GEMELD, code 1" |
+  | `MCM2 backupcontrole volledig` | maandag 07:45 | log 11:16:17, restore uitgevoerd, 9 van 18 |
+
+  Het testbericht is in Telegram aangekomen (bevestigd door de eigenaar). De credentials komen uit `~/saxo/.env` op `192.168.3.200` — bestaande Saxo-bot, geen aparte MCM2-bot, want dit gaat uiteindelijk naar Slack.
+
+  **Let op bij het controleren:** `LastTaskResult = 0` bewijst niets — dat betekent alleen dat `cmd.exe` kon starten. Het log is het bewijs. Dat is dezelfde valkuil die op 2026-07-30 bij de backuptaak toesloeg.
 
 - **De actor-grens (2026-08-03, migratie 0013, PR #73).** De database kan onderscheid maken tussen een medewerker en een leverancier van dezelfde tenant. `withTenant()` zet naast de tenant nu ook `app.current_actor`, gelezen via `clm.current_actor()`; niet gezet betekent `onbekend`, de striktste stand.
 
@@ -890,7 +899,7 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 **Stand 2026-08-04.** Twee dingen, in deze volgorde:
 
-1. **De backupcontrole inrichten** — `docs/runbooks/backupcontrole.md` stap 1 t/m 5: Telegram-bot aanmaken, token in `.env`, melding testen, twee Windows-taken inplannen. Handwerk van de eigenaar; de code staat klaar op `feat/backupcontrole-en-signalering`.
+1. ~~**De backupcontrole inrichten**~~ — **gedaan op 2026-08-04.** Credentials, beide taken, testbericht aangekomen, beide taken via Taakplanner gedraaid. Zie "Aantoonbaar werkend".
 
 2. **Issue #25 — de migratiestand van `clm-enterprise` bijwerken.** Dit is de oorzaak van de incomplete backup. Zolang het open staat, bestaat er geen herstelbare kopie van vragenlijsten, antwoorden of certificaten, en blijft de controle daar terecht dagelijks over klagen.
 
