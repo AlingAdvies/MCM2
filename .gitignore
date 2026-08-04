@@ -62,3 +62,6 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # het zijn compliance-bewijsstukken van leveranciers. Let op — deze map valt
 # ook buiten `npm run backup:dump`, zie Issue #30.
 /var/uploads/
+
+# Werkmap van de demo-stack (logs, PID's) — zie scripts/demo-stack.js
+.demo/
