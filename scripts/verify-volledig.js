@@ -488,8 +488,22 @@ function maakSessie() {
  * Dat is precies wat er vijf dagen ontbrak.
  */
 function controleerOmgevingsdrift() {
+  // .env hier inlezen en niet bovenaan het script.
+  //
+  // Dit is de enige stap die de échte omgeving nodig heeft; alle andere bouwen
+  // bewust hun eigen wegwerpwereld op. Zou dotenv bovenaan staan, dan zou een
+  // DATABASE_URL uit .env kunnen doorlekken naar stap 1 — en dan draaien de
+  // e2e-tests tegen productie in plaats van tegen de testcontainer. Precies wat
+  // dit script overal vermijdt door DATABASE_URL expliciet mee te geven.
+  //
+  // Gemeten op 2026-08-04: zonder deze regel meldde de stap "niet ingesteld"
+  // en sloeg hij stil over. Een controle die stil overslaat is erger dan geen
+  // controle, want hij wekt de indruk dat er iets gemeten is (§15b).
+  const dotenv = require('dotenv');
+  const { parsed } = dotenv.config({ processEnv: {} });
+
   const omgevingen = [
-    { naam: 'productie (DATABASE_URL)', url: process.env.DATABASE_URL },
+    { naam: 'productie (DATABASE_URL)', url: parsed?.DATABASE_URL },
   ];
 
   const bevindingen = [];
@@ -532,7 +546,10 @@ function controleerOmgevingsdrift() {
   if (gemeten === 0) {
     console.log('');
     console.log('  Geen externe omgeving gemeten. Op een machine zonder');
-    console.log('  productietoegang is dat normaal.');
+    console.log('  productietoegang (CI, een verse kloon) is dat normaal.');
+    console.log('');
+    console.log('  Verwacht je hier wél een meting, controleer dan of .env een');
+    console.log('  DATABASE_URL bevat die niet naar localhost wijst.');
   }
 
   return bevindingen;
