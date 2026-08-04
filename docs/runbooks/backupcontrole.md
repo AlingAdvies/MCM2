@@ -37,32 +37,31 @@ de controle zichzelf verifiëren, en precies dat maakte de fout van 4 augustus o
 
 ---
 
-## Stap 1 — Telegram-bot aanmaken
+## Stap 1 — Credentials overnemen uit de Saxo-app
 
-**Actie:** maak een eigen bot voor MCM2. Niet die van een privéproject hergebruiken — een
-klantomgeving hoort niet in hetzelfde kanaal.
+**Besluit eigenaar 2026-08-04: gebruik de bestaande Telegram-bot van de Saxo-app.** Geen aparte
+MCM2-bot aanmaken — dit gaat uiteindelijk naar Slack, dus een tweede bot is moeite voor iets
+dat toch vervangen wordt.
 
-1. Open Telegram, zoek **@BotFather**, stuur `/newbot`.
-2. Kies een naam (bijv. `MCM2 backupwacht`) en een gebruikersnaam eindigend op `bot`.
-3. BotFather geeft een token terug: een lange tekenreeks met een dubbele punt erin.
-4. Start een gesprek met je nieuwe bot en stuur hem één bericht (anders mag hij jou niet
-   aanschrijven).
-5. Zoek **@userinfobot** en stuur `/start` — die geeft je chat-id, een getal.
+**Gevolg:** MCM2-meldingen komen in hetzelfde gesprek als de Saxo-meldingen. De berichten
+beginnen met "MCM2 backup", dus verwarring is er niet. Zodra iemand anders moet meekijken, is
+dat het moment voor Slack — niet voor een tweede Telegram-bot.
 
-**Verwacht resultaat:** een token en een chat-id.
-
-**Bij afwijking:** krijgt de bot geen berichten door, controleer dan of je hem zelf éérst een
-bericht hebt gestuurd. Telegram staat niet toe dat een bot een onbekende aanschrijft.
-
----
-
-## Stap 2 — Credentials in `.env` zetten
-
-**Actie:** voeg in `C:\DEV\Work\MCM2\.env` toe:
+**Actie:** haal de twee waarden op uit de `.env` van de Saxo-app. Die staat **op de server**,
+niet op deze PC:
 
 ```
-TELEGRAM_BOT_TOKEN=<het token van BotFather>
-TELEGRAM_CHAT_ID=<het getal van userinfobot>
+~/saxo/.env
+```
+
+De lokale kopie in `C:\DEV\prive\Saxo\.env` bevat alleen de Saxo-API-sleutels, niet de
+Telegram-regels.
+
+Zet ze daarna in `C:\DEV\Work\MCM2\.env`:
+
+```
+TELEGRAM_BOT_TOKEN=<zelfde waarde als in ~/saxo/.env>
+TELEGRAM_CHAT_ID=<idem>
 ```
 
 **Let op:** `.env` staat in `.gitignore` en hoort daar te blijven. Committeer deze waarden
@@ -70,9 +69,21 @@ nooit.
 
 **Verwacht resultaat:** twee regels in `.env`.
 
+<details>
+<summary>Als je later alsnog een eigen bot wilt (vijf minuten)</summary>
+
+1. Open Telegram, zoek **@BotFather**, stuur `/newbot`.
+2. Kies een naam en een gebruikersnaam eindigend op `bot`.
+3. BotFather geeft een token terug.
+4. Start een gesprek met je nieuwe bot en stuur hem één bericht — anders mag hij jou niet
+   aanschrijven.
+5. Zoek **@userinfobot** en stuur `/start` voor je chat-id.
+
+</details>
+
 ---
 
-## Stap 3 — De melding testen
+## Stap 2 — De melding testen
 
 **Actie:**
 
@@ -84,17 +95,17 @@ npm run backup:controle:test
 *"🔔 Testbericht van de MCM2-backupcontrole..."*
 
 **Bij afwijking:**
-- *"TELEGRAM_BOT_TOKEN en/of TELEGRAM_CHAT_ID ontbreken"* → stap 2 niet gelukt.
-- *"Telegram-bericht mislukt: 401"* → het token klopt niet.
-- *"Telegram-bericht mislukt: 400"* → de chat-id klopt niet, of je hebt de bot nog geen
-  bericht gestuurd (zie stap 1, punt 4).
+- *"TELEGRAM_BOT_TOKEN en/of TELEGRAM_CHAT_ID ontbreken"* → stap 1 niet gelukt.
+- *"Telegram-bericht mislukt: 401"* → het token klopt niet; controleer of je het volledig hebt
+  overgenomen uit `~/saxo/.env` (er zit een dubbele punt in, die hoort erbij).
+- *"Telegram-bericht mislukt: 400"* → de chat-id klopt niet.
 
 **Dit is geen optionele stap.** Zonder deze test weet je pas of de melding werkt op het moment
 dat je hem het hardst nodig hebt.
 
 ---
 
-## Stap 4 — De controle handmatig draaien
+## Stap 3 — De controle handmatig draaien
 
 **Actie:**
 
@@ -126,7 +137,7 @@ Die duurt ongeveer een halve minuut en heeft Docker nodig.
 
 ---
 
-## Stap 5 — De taken inplannen
+## Stap 4 — De taken inplannen
 
 Twee taken in Taakplanner, ná de bestaande taak `MCM2 databasebackup` (die draait om 07:00).
 
@@ -201,6 +212,14 @@ demping en het bericht blijven ongewijzigd.
 
 Laag A (draait hij?) kan dan vervallen — een managed service bewaakt zichzelf. Laag B en C
 blijven: geen enkele provider garandeert dat er in je backup staat wát jij denkt.
+
+**Bij de overstap naar Slack:** alleen `verstuur()` in `scripts/telegram.js` hoeft vervangen te
+worden door een webhook-POST. De demping, de statusbestanden, het levensteken en de
+berichtteksten blijven ongewijzigd — die logica is niet aan Telegram gebonden.
+
+Eén ding verandert dan wél inhoudelijk: een Slack-kanaal heeft meerdere lezers, en dan wordt
+"wie kijkt hiernaar" een echte vraag. Die staat open als Issue #48. Met één lezer is het
+antwoord triviaal; met een team niet meer.
 
 ---
 

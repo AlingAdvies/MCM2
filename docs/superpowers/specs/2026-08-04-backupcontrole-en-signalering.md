@@ -238,7 +238,39 @@ gelden ongeacht de leverancier.
 
 ---
 
-## 6. Het signaal — Telegram, volgens het Saxo-patroon
+## 6. Het signaal — Telegram nu, Slack later
+
+**Besluit eigenaar 2026-08-04: dit gaat uiteindelijk naar Slack.** Telegram is de tijdelijke
+vorm, gekozen omdat de bot uit de Saxo-app er al is en bewezen werkt — geen aanmaakstap, meteen
+een werkend signaal. Er wordt bewust géén aparte MCM2-bot aangemaakt: dat zou moeite zijn voor
+iets dat toch vervangen wordt.
+
+**Gevolg:** MCM2-meldingen komen in hetzelfde Telegram-gesprek als de Saxo-meldingen. De
+berichten beginnen met "MCM2 backup", dus verwarring is er niet. Wat je opgeeft is de
+mogelijkheid om deze meldingen met iemand anders te delen zonder ook je privé-handelsapp mee te
+sturen. Zolang de eigenaar de enige lezer is, is dat geen probleem — en zodra iemand anders moet
+meekijken, is dat precies het moment voor Slack, niet voor een tweede Telegram-bot.
+
+**Wat dit betekent voor de code.** De knip in `scripts/telegram.js` is belangrijker dan de
+inhoud ervan:
+
+| Onderdeel | Kanaalgebonden? |
+|---|---|
+| `verstuur()` | ✅ het enige Telegram-specifieke — één `fetch` |
+| `meldProbleem()` — demping en escalatie | ❌ blijft |
+| `meldHerstel()` | ❌ blijft |
+| `levenstekenNodig()` | ❌ blijft |
+
+Bij de overstap wordt `verstuur()` een webhook-POST naar Slack. De demping, de statusbestanden
+en het levensteken blijven ongewijzigd. Dat is dezelfde soort grens als `haalNieuwsteBackup()`
+in §7: één functie vervangen, de rest ongemoeid.
+
+**Bij Slack verandert één ding wél inhoudelijk:** een Slack-kanaal heeft meerdere lezers. Dan
+wordt de vraag "wie kijkt hiernaar" relevant, en die staat al open als Issue #48 (pilot-runbook
+en alerting: wie kijkt wanneer naar welk signaal). Dit ontwerp lost dat niet op en hoeft dat
+niet — met één lezer is het antwoord triviaal.
+
+### Het Saxo-patroon
 
 Overgenomen uit `C:\DEV\prive\Saxo\scripts\server-health-check.sh` en
 `src/core/telegram-notifier.js`, omdat dat patroon zich daar bewezen heeft.
@@ -397,9 +429,10 @@ dat is het dringendste. Stap 2 kan een week later.
 2. **Na hoeveel tijd escaleert een aanhoudend probleem naar het tweede bericht?** Saxo gebruikt
    6 uur. Voor een dagelijkse backup ligt 48 uur meer voor de hand — dan is het tweede bericht
    "dit is nu twee dagen mis" en niet een herhaling van vanochtend.
-3. **Dezelfde Telegram-bot als Saxo, of een aparte voor MCM2?** Een aparte bot scheidt privé
-   van werk, en een klantomgeving hoort niet in hetzelfde kanaal als een privéproject. Kost
-   vijf minuten om aan te maken. Voorstel: apart.
+3. ~~**Dezelfde Telegram-bot als Saxo, of een aparte voor MCM2?**~~ — **beantwoord 2026-08-04:
+   dezelfde bot als Saxo.** Reden: het gaat uiteindelijk toch naar Slack, dus een aparte
+   Telegram-bot aanmaken is moeite voor iets dat vervangen wordt. Zie §6 voor wat dit opgeeft
+   en wanneer het alsnog moet splitsen.
 4. **Wanneer valt het besluit over de managed service?** Dit ontwerp is bewust klein gehouden
    omdat die overstap komt. Duurt het nog maanden, dan is laag C vaker draaien te
    rechtvaardigen; is het weken, dan niet.

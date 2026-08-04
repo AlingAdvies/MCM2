@@ -10,6 +10,28 @@
 // vijf keer melden — dan leer je het bericht negeren, en dan is de melding net
 // zo stil als het logbestand dat niemand opende.
 //
+// ── Telegram is tijdelijk; Slack is de bestemming ──────────────────────────
+//
+// Besluit eigenaar 2026-08-04: dit gaat uiteindelijk naar Slack. Telegram is
+// gekozen omdat de bot uit de Saxo-app er al is en bewezen werkt — geen
+// aanmaakstap, meteen een werkend signaal.
+//
+// Dat maakt de knip in dit bestand belangrijker dan de inhoud ervan:
+//
+//   verstuur()          ← het ENIGE dat Telegram-specifiek is (één fetch)
+//   meldProbleem()      ← demping: kanaal-onafhankelijk
+//   meldHerstel()       ← idem
+//   levenstekenNodig()  ← idem
+//
+// Bij de overstap naar Slack wordt verstuur() vervangen door een webhook-POST.
+// De demping, de statusbestanden en het levensteken blijven ongewijzigd — dat
+// is de logica die er werkelijk toe doet, en die is niet aan Telegram gebonden.
+//
+// Gevolg voor nu: MCM2-meldingen komen in hetzelfde gesprek als de
+// Saxo-meldingen. Bewuste keuze, acceptabel zolang de eigenaar de enige lezer
+// is. Zodra iemand anders moet meekijken, is dat het moment voor Slack —
+// niet voor een tweede Telegram-bot.
+//
 // Zie docs/superpowers/specs/2026-08-04-backupcontrole-en-signalering.md §6.
 
 const fs = require('fs');
