@@ -125,6 +125,13 @@ export const TEST_IDS = {
     userA: id('7c'),
     userB: id('7d'),
   },
+  'vragenlijst-beheer-routes': {
+    tenantA: id('8a'),
+    tenantB: id('8b'),
+    userA: id('8c'),
+    userB: id('8d'),
+    reviewerA: id('8e'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */

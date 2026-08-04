@@ -161,4 +161,38 @@ describe('Actor-context (e2e)', () => {
       });
     }
   });
+
+  /**
+   * De andere kant van dezelfde afspraak, toegevoegd bij fase A (2026-08-04).
+   *
+   * Bij het bouwen van de beheerroutes bleek dat de actor weglaten géén enkele
+   * test omver haalde — 18 van 18 bleven groen. Dat is hetzelfde venster dat
+   * hierboven beschreven staat, maar dan aan de medewerkerskant: er is nog geen
+   * policy die `clm.current_actor()` afdwingt, dus een vergeten actor is
+   * vandaag onzichtbaar.
+   *
+   * Zonder deze test zou een beheerpad dat de actor mist pas opvallen wanneer
+   * migratie 0014 er is — en dan als "de beheerder ziet geen beoordelingen",
+   * een symptoom dat ver van de oorzaak ligt.
+   */
+  it('kondigt elk medewerkerspad aan als medewerker', () => {
+    // Paden die een ingelogde medewerker bereikt, achter TenantContextGuard.
+    const medewerkerspaden = [
+      'src/survey/vragenlijst-beheer.service.ts',
+      'src/vendor/vendor.service.ts',
+    ];
+
+    for (const pad of medewerkerspaden) {
+      const bron = readFileSync(join(__dirname, '..', pad), 'utf8');
+
+      expect({ pad, leverancier: bron.includes("'leverancier'") }).toEqual({
+        pad,
+        leverancier: false,
+      });
+      expect({ pad, medewerker: bron.includes("'medewerker'") }).toEqual({
+        pad,
+        medewerker: true,
+      });
+    }
+  });
 });
