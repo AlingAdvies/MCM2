@@ -137,6 +137,25 @@ export const TEST_IDS = {
     vendorA: '00000000-0000-0000-0000-0000000000ba',
     responseA: '00000000-0000-0000-0000-0000000000bc',
   },
+  'ronde-beheer-routes': {
+    tenantA: id('c3'),
+    tenantB: id('c4'),
+    adminA: id('c5'),
+    reviewerA: id('c6'),
+    adminB: id('c7'),
+    templateA: '00000000-0000-0000-0000-0000000000c8',
+    templateLeeg: '00000000-0000-0000-0000-0000000000c9',
+    // Niet ...ca en ...cb: die zijn al vergeven via id('ca') en id('cb') in
+    // het blok 'antwoord-indienen'. De bewakingstest ving dat, en dat is
+    // precies waarvoor hij bestaat — twee suites op dezelfde tenant leverden
+    // op 2026-07-31 een onregelmatig falende run op.
+    templateB: '00000000-0000-0000-0000-0000000000cc',
+    vendor1: '00000000-0000-0000-0000-0000000000cd',
+    vendor2: '00000000-0000-0000-0000-0000000000ce',
+    vendor3: '00000000-0000-0000-0000-0000000000cf',
+    vendorB: '00000000-0000-0000-0000-0000000000d4',
+    vendorWeg: '00000000-0000-0000-0000-0000000000d5',
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */
