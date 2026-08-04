@@ -8,6 +8,7 @@ import { SurveyTokenService } from './survey-token.service';
 import { AntwoordIndienService } from './antwoord-indienen.service';
 import { BestandOpslagService } from './bestand-opslag.service';
 import { BijlageService } from './bijlage.service';
+import { RondeBeheerService } from './ronde-beheer.service';
 import { VragenlijstBeheerController } from './vragenlijst-beheer.controller';
 import { VragenlijstBeheerService } from './vragenlijst-beheer.service';
 import { VragenlijstImportService } from './vragenlijst-import.service';
@@ -36,6 +37,7 @@ import { VragenlijstLeesService } from './vragenlijst-lezen.service';
     SurveyTokenService,
     SurveyTokenGuard,
     VragenlijstBeheerService,
+    RondeBeheerService,
     VragenlijstImportService,
     VragenlijstLeesService,
     AntwoordIndienService,
@@ -47,6 +49,7 @@ import { VragenlijstLeesService } from './vragenlijst-lezen.service';
     SurveyTokenService,
     SurveyTokenGuard,
     VragenlijstBeheerService,
+    RondeBeheerService,
     VragenlijstImportService,
     VragenlijstLeesService,
     AntwoordIndienService,

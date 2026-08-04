@@ -157,7 +157,17 @@ describe('Demo-seed (e2e)', () => {
     // rijen maakt, blokkeert precies het opnieuw opzetten van een omgeving
     // waar hij voor bedoeld is.
     expect(na).toEqual(voor);
-  });
+
+    // 20 seconden, net als de twee andere tests in deze suite die het
+    // seed-script starten.
+    //
+    // Deze test start het als apart Node-proces (~1,6 s gemeten) en telt
+    // twee keer. Binnen 5 seconden past dat alleen wanneer de machine verder
+    // niets doet; in de volledige suite doet hij dat wel. Dat is geen
+    // regressie maar een testopzet die van de belasting van de machine
+    // afhangt — precies de faalvorm die STATUS.md al beschreef voor deze
+    // suite, en die op 2026-08-04 opnieuw toesloeg.
+  }, 20_000);
 
   // ── De drie stadia ────────────────────────────────────────────────────────
 
