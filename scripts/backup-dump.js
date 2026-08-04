@@ -28,11 +28,41 @@ const PG_IMAGE = 'postgres:17.6';
 // is vanaf vóór dat probleem.
 const BEWAARDAGEN = Number(process.env.BACKUP_RETENTION_DAYS || 14);
 
-const url = process.env.MIGRATION_DATABASE_URL;
+// ── Welke rol de dump maakt, en waarom dat een eigen variabele is ───────────
+//
+// Sinds migratie 0011 staat FORCE ROW LEVEL SECURITY op alle tabellen. Dat
+// geldt ook voor de tabeleigenaar — dat is precies wat FORCE betekent, en het
+// is de juiste stand voor de runtime.
+//
+// Gevolg: pg_dump leest alle rijen zonder tenantcontext en krijgt er nul, of
+// een harde fout. Op 2026-08-04 gemeten, direct nadat 0011 op productie
+// terechtkwam:
+//
+//   pg_dump: error: query would be affected by row-level security policy
+//            for table "audit_event"
+//
+// clm_migrator kan de database dus NIET dumpen. Alleen een rol met BYPASSRLS
+// kan dat, en dat is bij Supabase de postgres-rol.
+//
+// Dat is ongemakkelijk: ADR-008 en DatabaseService.onModuleInit() zijn er
+// juist streng over dat de applicatie nooit een BYPASSRLS-rol gebruikt. Voor
+// een backup is het onvermijdelijk — een dump die de helft van de rijen mist
+// is geen backup.
+//
+// Daarom een EIGEN variabele in plaats van stilletjes MIGRATION_DATABASE_URL
+// hergebruiken: de keuze voor een ruimere rol hoort zichtbaar te zijn in .env,
+// niet verstopt in een script. Zie Issue #78 voor het openstaande besluit over
+// een aparte dumprol.
+//
+// Valt BACKUP_DATABASE_URL weg, dan wordt MIGRATION_DATABASE_URL geprobeerd —
+// dat werkt op omgevingen zonder FORCE RLS (verse containers, CI).
+const url = process.env.BACKUP_DATABASE_URL || process.env.MIGRATION_DATABASE_URL;
 
 if (!url) {
   console.error(
-    'MIGRATION_DATABASE_URL ontbreekt. De dump draait via clm_migrator: die ziet alle rijen, de runtime-rol niet (RLS).',
+    'BACKUP_DATABASE_URL en MIGRATION_DATABASE_URL ontbreken beide.\n' +
+      'De dump vraagt een rol die alle rijen ziet. Sinds FORCE ROW LEVEL SECURITY\n' +
+      '(migratie 0011) is dat een rol met BYPASSRLS — zie .env.example en Issue #78.',
   );
   process.exit(1);
 }
@@ -102,7 +132,9 @@ if (resultaat.status !== 0) {
   console.error('\nBackup MISLUKT.');
   console.error((resultaat.stderr || resultaat.error?.message || '').trim());
   console.error(
-    '\nControleer of Docker draait en of MIGRATION_DATABASE_URL klopt.',
+    '\nControleer of Docker draait en of BACKUP_DATABASE_URL klopt.' +
+      '\nMeldt de fout iets over "row-level security policy", dan draait de dump' +
+      '\nals een rol zonder BYPASSRLS — zie de toelichting bovenaan dit bestand.',
   );
   process.exit(1);
 }

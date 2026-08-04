@@ -59,6 +59,56 @@ twee `INSERT`-statements:
 
 ---
 
+## Uitgevoerd op 2026-08-04 — twee dingen die het runbook nog niet wist
+
+De procedure is op 2026-08-04 tegen `clm-enterprise` uitgevoerd. Uitkomst: 9 tabellen werden
+er 18, schema-conformiteit 17 van 17, backupcontrole groen op alle drie de lagen.
+
+Twee dingen liepen anders dan hier beschreven. Beide staan hieronder als stap 0 en stap 7,
+zodat een volgende omgeving er niet opnieuw op stuit.
+
+**1. `clm_migrator` had geen `CREATE`-recht op de database.** Stap 4 brak af op
+`permission denied for database postgres`. De transactie draaide terug; er was niets gewijzigd.
+
+`db/roles/bootstrap-roles.sql` regel 67–68 schrijft die grants al voor — ze waren alleen nooit
+op Supabase toegepast. Dezelfde onafgemaakte overstap als Issue #25 zelf. Zie **stap 0**.
+
+**2. Na de migraties was de backup stuk.** Migratie 0011 zet `FORCE ROW LEVEL SECURITY`, en
+dat geldt ook voor de tabeleigenaar. `pg_dump` als `clm_migrator` faalt sindsdien op
+`query would be affected by row-level security policy for table "audit_event"`.
+
+Dat is Issue #78, die vanochtend nog een open vraag was en door deze migratie acuut werd. Zie
+**stap 7**.
+
+---
+
+## Stap 0 — Rechten van de migratierol controleren
+
+**Waarom:** zonder `CREATE` op de database kan `clm_migrator` het schema `drizzle` niet
+aanmaken, en breekt stap 4 af.
+
+**Actie:**
+
+```powershell
+node -e "require('dotenv').config();const{Client}=require('pg');const c=new Client({connectionString:process.env.MIGRATION_DATABASE_URL});c.connect().then(()=>c.query(\"SELECT has_database_privilege(current_user,'postgres','CREATE') AS mag_create\")).then(r=>{console.log(r.rows[0]);return c.end()})"
+```
+
+**Verwacht:** `{ mag_create: true }`
+
+**Bij `false`:** zet de grants die `db/roles/bootstrap-roles.sql` al voorschrijft. Dit vraagt
+een rol met meer rechten — bij Supabase is dat `postgres`:
+
+```sql
+GRANT CREATE ON DATABASE postgres TO clm_migrator;
+GRANT CREATE ON SCHEMA public TO clm_migrator;
+```
+
+Dit is geen uitbreiding van wat het project toestaat; het brengt de database in lijn met wat
+er al gedocumenteerd staat. `CREATE ON DATABASE` betekent "mag schema's aanmaken", niet "mag
+alles".
+
+---
+
 ## Vooraf — controleer dit eerst
 
 ```powershell
@@ -262,8 +312,56 @@ Dat laatste is de bevestiging dat het echte probleem is opgelost: er bestaat nu 
 kopie van vragenlijsten, antwoorden en certificaten.
 
 **Let op de dumpgrootte.** Die was 21,2 kB met negen tabellen. Na deze operatie hoort hij
-groter te zijn — bij de demo-database met alle tabellen was dat 89 kB. Blijft hij exact 21.683
-bytes, dan is er iets niet goed gegaan.
+groter te zijn — op 2026-08-04 werd dat 77,7 kB. Blijft hij exact 21.683 bytes, dan is er iets
+niet goed gegaan.
+
+**Faalt de dump op "row-level security policy"?** Dan is stap 7 nog niet gedaan.
+
+---
+
+## Stap 7 — De backup laten draaien als een rol met BYPASSRLS
+
+**Waarom:** migratie 0011 zet `FORCE ROW LEVEL SECURITY` op alle tabellen. Dat geldt ook voor
+de tabeleigenaar — dat is precies wat `FORCE` betekent, en het is de juiste stand voor de
+runtime. Maar `pg_dump` leest alle rijen zonder tenantcontext en krijgt er dan nul, of een
+harde fout:
+
+```
+pg_dump: error: query would be affected by row-level security policy for table "audit_event"
+```
+
+**Op een database die deze migratie nog niet had, valt dit niet op.** Zodra 0011 erop staat,
+is de backup stuk — en dat merk je pas bij de eerstvolgende dump.
+
+**Let op:** het script beschouwt alleen een dump van 0 bytes als mislukt. Een dump die
+halverwege afbreekt levert een bestand op dat er normaal uitziet. Op 2026-08-04 waren dat twee
+bestanden van 78 kB die niet compleet waren; die zijn handmatig verwijderd. De backupcontrole
+(`npm run backup:controle`) vangt dit wel — dat is precies waarvoor die bestaat.
+
+**Actie:** zet `BACKUP_DATABASE_URL` in `.env`, wijzend naar een rol met `BYPASSRLS`. Bij
+Supabase is dat de `postgres`-rol:
+
+```
+BACKUP_DATABASE_URL=postgresql://postgres.<project>:<wachtwoord>@<host>:5432/postgres
+```
+
+`backup-dump.js` gebruikt die als hij bestaat, en valt anders terug op
+`MIGRATION_DATABASE_URL` — wat blijft werken op omgevingen zonder `FORCE RLS` (verse
+containers, CI).
+
+**Verificatie:**
+
+```powershell
+npm run backup:dump
+npm run backup:controle --volledig
+```
+
+**Verwacht:** een dump van ongeveer 78 kB en `0 probleem(en)` met 18 tabellen compleet én
+herstelbaar.
+
+**Openstaand besluit:** dat de backup een `BYPASSRLS`-rol gebruikt terwijl de applicatie dat
+juist nooit mag (ADR-008), is een spanningsveld dat een expliciete keuze verdient — een aparte
+dumprol, of dit vastleggen als geaccepteerd restrisico. Dat is **Issue #78**.
 
 ---
 
