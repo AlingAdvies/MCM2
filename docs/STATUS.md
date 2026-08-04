@@ -835,16 +835,17 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 | Repo | Branch | Werkboom | Gepusht |
 |---|---|---|---|
-| MCM2 | `feat/backupcontrole-en-signalering` | 1 commit vóór `main` | **nee** |
+| MCM2 | `main` | schoon, op `34c807a` | ja |
 | MCM2 | `docs/beheermenu-tenantinstellingen` | 1 commit vóór `main` | **nee** |
-| MCM2 | `main` | schoon, op `c088bf9` | ja |
 
-**Twee openstaande branches, beide nog niet gepusht:**
+**Eén openstaande branch:**
 
-- **`feat/backupcontrole-en-signalering`** (`3eaaf36`) — de backupcontrole uit de bevinding hierboven: drie lagen, Telegram-melding, runbook. Getest tegen de echte dumps.
-- **`docs/beheermenu-tenantinstellingen`** (`de00294`) — ontwerp voor het beheermenu (gebruikers en rechten, SMTP per tenant, uitnodigingen versturen). Alleen documentatie, backlog: #75, #76, #77.
+- **`docs/beheermenu-tenantinstellingen`** (`de00294`) — ontwerp voor het beheermenu (gebruikers en rechten, SMTP per tenant, uitnodigingen versturen). Alleen documentatie, backlog: #75, #76, #77. Nog niet gepusht.
 
-`docs/actorgrens-en-testaantallen` is op 2026-08-04 gemerged naar `main` (merge-commit `c088bf9`) en daarna lokaal én op GitHub verwijderd.
+**Gemerged op 2026-08-04, beide daarna lokaal én op GitHub verwijderd:**
+
+- `docs/actorgrens-en-testaantallen` → merge-commit `c088bf9`
+- `feat/backupcontrole-en-signalering` → merge-commit `34c807a`, vier commits (controle, STATUS-correcties, Slack-besluit, inrichtingsbewijs)
 
 <details>
 <summary>Vorige stand (2026-07-30, einde tweede sessie)</summary>
