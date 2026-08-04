@@ -428,6 +428,39 @@ function maakSessie() {
     }
   }
 
+  // De Transdev-vragenlijst inlezen, zodat het scherm Vragenlijsten iets te
+  // tonen heeft. Zonder dit is de browsertest van fase A een lege pagina die
+  // groen blijft — precies het soort test dat niets bewijst.
+  //
+  // Bewust via seed-vragenlijsten.js en niet met eigen INSERTs: dat script
+  // gebruikt hetzelfde importpad als de applicatie, inclusief validatie. Een
+  // tweede waarheid hier zou stilzwijgend uit de pas kunnen lopen.
+  //
+  // Alleen deze ene lijst: de andere in db/seeds/ is de interne
+  // leveranciersbeoordeling (UC2), en die wordt in deze ronde niet gebouwd.
+  const vragenlijst = draai(
+    'node',
+    [
+      'scripts/seed-vragenlijsten.js',
+      TENANT_ID,
+      'transdev-annual-vendor-it-risk-v1.json',
+    ],
+    {
+      stil: true,
+      env: {
+        DATABASE_URL:
+          'postgresql://clm_api_runtime:otap_pw@localhost:55500/postgres',
+      },
+    },
+  );
+
+  if (!vragenlijst.ok) {
+    return {
+      ok: false,
+      reden: `vragenlijst inlezen mislukte: ${vragenlijst.uitvoer.trim()}`,
+    };
+  }
+
   const token = randomBytes(32).toString('base64url');
   const hash = createHash('sha256').update(token, 'utf8').digest('hex');
 

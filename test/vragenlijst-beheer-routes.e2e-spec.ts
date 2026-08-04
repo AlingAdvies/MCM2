@@ -26,18 +26,22 @@ import { TEST_IDS } from './test-ids';
  * klopt de belofte niet — en dat merk je pas bij de eerste echte ronde.
  */
 
-const { tenantA, tenantB, userA, userB, reviewerA } =
-  TEST_IDS['vragenlijst-beheer-routes'];
+const {
+  tenantA,
+  tenantB,
+  userA,
+  userB,
+  reviewerA,
+  templateA: TEMPLATE_A,
+  templateB: TEMPLATE_B,
+  runA: RUN_A,
+  vendorA: VENDOR_A,
+  responseA: RESPONSE_A,
+} = TEST_IDS['vragenlijst-beheer-routes'];
 
 const SUBJECT_A = `oid-vlb-a-${Date.now()}`;
 const SUBJECT_B = `oid-vlb-b-${Date.now()}`;
 const SUBJECT_REVIEWER = `oid-vlb-r-${Date.now()}`;
-
-const TEMPLATE_A = '00000000-0000-0000-0000-0000000008f1';
-const TEMPLATE_B = '00000000-0000-0000-0000-0000000008f2';
-const RUN_A = '00000000-0000-0000-0000-0000000008f3';
-const VENDOR_A = '00000000-0000-0000-0000-0000000008f4';
-const RESPONSE_A = '00000000-0000-0000-0000-0000000008f5';
 
 /**
  * 64 hex-tekens, conform de CHECK-constraint op `token_hash` (migratie 0003).

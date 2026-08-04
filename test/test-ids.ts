@@ -126,11 +126,16 @@ export const TEST_IDS = {
     userB: id('7d'),
   },
   'vragenlijst-beheer-routes': {
-    tenantA: id('8a'),
-    tenantB: id('8b'),
-    userA: id('8c'),
-    userB: id('8d'),
-    reviewerA: id('8e'),
+    tenantA: id('b2'),
+    tenantB: id('b3'),
+    userA: id('b4'),
+    userB: id('b5'),
+    reviewerA: id('b6'),
+    templateA: '00000000-0000-0000-0000-0000000000b7',
+    templateB: '00000000-0000-0000-0000-0000000000b8',
+    runA: '00000000-0000-0000-0000-0000000000b9',
+    vendorA: '00000000-0000-0000-0000-0000000000ba',
+    responseA: '00000000-0000-0000-0000-0000000000bc',
   },
 } as const;
 
