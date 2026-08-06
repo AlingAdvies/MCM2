@@ -3,7 +3,8 @@
 **Type:** levend document — geen besluit
 **Eigenaar:** de eigenaar (Chris)
 **Laatste update:** 2026-08-06
-**Status:** AWS is de waarschijnlijke bestemming, maar staat niet vast (ADR-012)
+**Status:** AWS is de waarschijnlijke bestemming, maar staat niet vast (ADR-012). Bizaline
+draait al op AWS; Azure alleen bij zwaarwegende redenen (eigenaar, 2026-08-06).
 
 > **Waarvoor dit document bestaat.** Niet om te kiezen. Wel om op elk moment te kunnen
 > beantwoorden: *hoe vast zitten we nu, wat zou een verhuizing kosten, en welke keuze van
@@ -100,6 +101,11 @@ Postgres 17.
 De kolom die ertoe doet is de laatste. "Los" betekent: configuratie wisselen. "Vast" betekent:
 code of data verplaatsen.
 
+De Azure-kolom staat er **niet omdat Azure waarschijnlijk is** — dat is het sinds 2026-08-06
+minder dan eerder gedacht (§8). Hij staat er als toetssteen: een component met een makkelijke
+tegenhanger in twee clouds is aantoonbaar niet vastgeklonken. Blijkt een rij moeilijk te
+vullen, dan is dát de plek waar de lock-in zit.
+
 | Component | AWS-tegenhanger | Azure-tegenhanger | Hoe vast |
 |---|---|---|---|
 | Backend-container | App Runner (ADR-012 voorkeur), ECS Fargate | Container Apps | **Los** — image draait overal |
@@ -172,6 +178,12 @@ voor een bulkronde van 500 uitnodigingen een echte beperking (mailkanaal-ontwerp
 eerder een reden om naar Resend Pro te gaan dan naar SES — tenzij de rest al op AWS staat, en
 dan is SES de logische bijvangst.
 
+Dat laatste is sinds 2026-08-06 waarschijnlijker geworden (§8), maar het maakt de afweging
+niet vanzelf. Resend draait, is bewezen, en de webhook-constructie uit het mailkanaal-ontwerp
+§4 is erop gebouwd. Overstappen kost DNS-werk, reputatieopbouw en het herschrijven van de
+ontvangstkant naar SNS — voor een besparing die bij dit volume in centen loopt. **De reden om
+naar SES te gaan zou beheereenvoud zijn (één leverancier, één factuur), niet de prijs.**
+
 > **Niet nu beslissen.** Deze paragraaf bestaat om de afweging vast te leggen, niet om hem te
 > maken. Herzien wanneer de bulkfeature gebouwd wordt of het volume boven 3.000/maand komt.
 
@@ -222,14 +234,29 @@ wél weegt is beheerlast, en dat is een vraag waar dit document geen antwoord op
 
 ---
 
-## 8. Wat de richting zou kunnen veranderen
+## 8. Wat de richting bepaalt
 
-Vier dingen die dit document doen herzien:
+Eén ding dat de richting **bevestigt**, en drie die hem alsnog kunnen omgooien.
 
-**De Bizaline-context wijst de andere kant op.** De legacy-stack migreert juist *ván* AWS
-*náár* Azure. Gaat MCM2 naar AWS, dan draaien er twee clouds naast elkaar. Dat is te
-verdedigen — MCM2 is een apart product — maar het is een bewuste afwijking en geen
-vanzelfsprekendheid.
+### Wat hem bevestigt
+
+**De Azure-beweging is geen gegeven meer.** Bizaline draait op AWS, en dat blijkt de meest
+praktische oplossing. Er was eerder een richting naar Azure — die staat nog in oudere
+Bizaline-documentatie — maar de eigenaar twijfelt daar inmiddels aan (2026-08-06). **Azure
+is nog aan de orde als er zwaarwegende redenen voor zijn, niet als vanzelfsprekende
+bestemming.**
+
+Dat maakt AWS voor MCM2 sterker dan ADR-012 destijds kon vastleggen: niet alleen de
+waarschijnlijke keuze, maar ook de keuze die aansluit bij waar de rest al draait — dezelfde
+account­structuur, dezelfde IAM-praktijk, dezelfde facturatie.
+
+**Waarom dit document AWS tóch niet vastlegt.** Het is nog steeds geen besluit, en de
+Azure-kolom in §3 blijft staan. Niet omdat Azure waarschijnlijk is, maar omdat de kolom laat
+zien *hoe los* elke component zit. Een component met een makkelijke tegenhanger in beide
+clouds is aantoonbaar niet vastgeklonken — en dat is wat dit document moet bewaken. Verdwijnt
+de kolom, dan verdwijnt ook het zicht op waar de lock-in werkelijk zit.
+
+### Wat hem alsnog kan omgooien
 
 **Een MSP.** Als er beheer wordt uitbesteed, kiest die partij mogelijk de omgeving. Dan is dit
 document input voor het gesprek in plaats van een plan.
