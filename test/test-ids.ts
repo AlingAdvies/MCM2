@@ -178,6 +178,32 @@ export const TEST_IDS = {
      */
     vendorOpen: '00000000-0000-0000-0000-0000000000e3',
   },
+  // Fase C3 — beoordelaar koppelen. Staarten e4 t/m ec; e5 is al vergeven via
+  // id(), vandaar de sprong. Gecontroleerd tegen alleTestIds().
+  'beoordelaar-koppelen': {
+    tenantA: '00000000-0000-0000-0000-0000000000e4',
+    tenantB: '00000000-0000-0000-0000-0000000000e6',
+    adminA: '00000000-0000-0000-0000-0000000000e7',
+    /** Gekoppeld aan de vragenlijst — ziet hem in zijn werkvoorraad. */
+    reviewerGekoppeld: '00000000-0000-0000-0000-0000000000e8',
+    /** Niet gekoppeld — mag wél beoordelen, ziet hem níét in zijn voorraad. */
+    reviewerLos: '00000000-0000-0000-0000-0000000000e9',
+    adminB: '00000000-0000-0000-0000-0000000000ea',
+    templateA: '00000000-0000-0000-0000-0000000000eb',
+    templateB: '00000000-0000-0000-0000-0000000000ec',
+    runA: '00000000-0000-0000-0000-0000000000ed',
+    vendorA: '00000000-0000-0000-0000-0000000000ee',
+    responseIngediend: '00000000-0000-0000-0000-0000000000ef',
+    /**
+     * Bestaat met opzet NIET in de database — voor de 404-tests.
+     *
+     * Staat hier omdat de bewakingstest elke letterlijke test-UUID in een
+     * e2e-suite in dit register wil zien. Andere suites gebruiken dezelfde
+     * waarde binnen een template-string in een URL, en die vorm herkent het
+     * patroon niet; als losse waarde wordt hij wél gevangen.
+     */
+    bestaatNiet: '00000000-0000-0000-0000-00000000dead',
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */

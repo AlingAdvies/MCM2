@@ -327,3 +327,15 @@ export function leesNieuweBeoordeling(body: unknown): NieuweBeoordelingInvoer {
 
   return { verdict, toelichting };
 }
+
+/**
+ * Leest wie er als beoordelaar gekoppeld wordt (fase C3).
+ *
+ * Alleen een user-id. De vragenlijst komt uit het pad en de tenant uit de
+ * sessie — die horen niet in een body waar een client ze kan verzinnen.
+ */
+export function leesBeoordelaar(body: unknown): string {
+  const invoer = leesObject(body);
+
+  return leesUuid(invoer.userId, 'userId');
+}

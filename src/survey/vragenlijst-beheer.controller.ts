@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -20,12 +21,14 @@ import {
 import { RondeBeheerService } from './ronde-beheer.service';
 import {
   InvoerFout,
+  leesBeoordelaar,
   leesNieuweBeoordeling,
   type NieuweBeoordelingInvoer,
   leesNieuweRonde,
   leesStatus,
   leesUitnodigingen,
 } from './ronde-invoer';
+import { BeoordelaarService } from './beoordelaar.service';
 import { BeoordelingService } from './beoordeling.service';
 import { VragenlijstBeheerService } from './vragenlijst-beheer.service';
 
@@ -76,6 +79,7 @@ export class VragenlijstBeheerController {
     private readonly verzender: UitnodigingVerzender,
     // Onderstreept omdat `beoordelingen` al de naam van een routemethode is.
     private readonly beoordelingen_: BeoordelingService,
+    private readonly beoordelaars: BeoordelaarService,
   ) {}
 
   /** Alle vragenlijsten van deze tenant, met aantallen vragen en rondes. */
@@ -190,6 +194,89 @@ export class VragenlijstBeheerController {
     );
 
     return { beoordeling };
+  }
+
+  /**
+   * Wat er op de ingelogde gebruiker wacht: ingediende responses op
+   * vragenlijsten waaraan hij als beoordelaar gekoppeld is.
+   *
+   * Bewust een eigen route en geen filter op de rondelijst (ADR-013). "Wat
+   * wacht er op mij" betekent voor een contractmanager iets wezenlijk anders
+   * dan voor een beoordelaar: de CISO wil niet zien wie er nog moet invullen,
+   * de contractmanager niet de beoordeelstapel van de hele organisatie.
+   *
+   * Geen `@VereistRol`: iedereen mag zijn eigen werkvoorraad zien. Is hij
+   * nergens aan gekoppeld, dan is de lijst leeg — dat is een geldig antwoord,
+   * geen fout.
+   */
+  @Get('mijn-beoordelingen')
+  async mijnBeoordelingen(@Req() request: RequestMetSessie) {
+    const sessie = request.sessie!;
+
+    const werkvoorraad = await this.beoordelaars.werkvoorraad(
+      sessie.tenantId,
+      sessie.userId,
+    );
+
+    return { werkvoorraad };
+  }
+
+  /** Wie er aan deze vragenlijst gekoppeld zijn als beoordelaar. */
+  @Get('templates/:id/reviewers')
+  async reviewers(@Req() request: RequestMetSessie, @Param('id') id: string) {
+    const sessie = request.sessie!;
+
+    const beoordelaars = await this.beoordelaars.lijst(sessie.tenantId, id);
+
+    return { beoordelaars };
+  }
+
+  /**
+   * Koppelt een beoordelaar aan een vragenlijst.
+   *
+   * **`@VereistRol('admin')`, anders dan bij beoordelen zelf.** Beoordelen is
+   * de rol van een reviewer; bepalen wíé er beoordeelt is beheer. Zonder die
+   * grens kan een reviewer zichzelf aan elke lijst hangen, en dan zegt de
+   * koppeling niets meer over hoe de organisatie het bedoeld heeft.
+   *
+   * Let op: dit beperkt níét wie er mag beoordelen (ADR-013 besluit 3). Elke
+   * reviewer mag elke inzending beoordelen; deze koppeling bepaalt alleen wat
+   * er in iemands werkvoorraad verschijnt.
+   *
+   * Idempotent: twee keer koppelen is geen fout.
+   */
+  @Post('templates/:id/reviewers')
+  @VereistRol('admin')
+  @HttpCode(204)
+  async koppelReviewer(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const sessie = request.sessie!;
+
+    let userId: string;
+    try {
+      userId = leesBeoordelaar(body);
+    } catch (err) {
+      throw this.naarHttpFout(err);
+    }
+
+    await this.beoordelaars.koppel(sessie.tenantId, id, userId, sessie.userId);
+  }
+
+  /** Haalt een koppeling weg. 204 ook als hij er niet was. */
+  @Delete('templates/:id/reviewers/:userId')
+  @VereistRol('admin')
+  @HttpCode(204)
+  async ontkoppelReviewer(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Param('userId') userId: string,
+  ) {
+    const sessie = request.sessie!;
+
+    await this.beoordelaars.ontkoppel(sessie.tenantId, id, userId);
   }
 
   // ── Fase B: schrijven ──────────────────────────────────────────────────────
