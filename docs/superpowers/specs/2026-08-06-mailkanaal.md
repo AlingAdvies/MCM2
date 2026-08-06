@@ -76,8 +76,8 @@ JCM doet dat laatste met `${organisatieNaam} via JouwContractmanager`. Dat is pr
 oplossing voor Issue #13 zonder per klant het SPF-record van de klant nodig te hebben — het
 enige echte ontwerpidee dat daar te halen viel.
 
-JCM heeft géén `Reply-To`; dat is hier toegevoegd (§3) en het haalt het grootste deel van het
-ontvangstprobleem weg.
+JCM heeft géén `Reply-To`; dat is hier toegevoegd (§3), zodat vragen van leveranciers bij de
+klant terechtkomen in plaats van bij ons.
 
 ### Wat we bewust anders doen
 
@@ -185,7 +185,7 @@ deze mail, en mag deze afzender daar iets mee?*
 | Niveau | Wat er binnenkomt | Complexiteit | Advies |
 |---|---|---|---|
 | **1. Bounces en autoreplies** | "Adres bestaat niet", out-of-office | Laag | **Nu bouwen** |
-| **2. Leveranciers die antwoorden** | "Wie zijn jullie?", "ik heb geen ISO 27001" | Midden | **Voorzien, later bouwen** |
+| **2. Leveranciers die antwoorden** | "Wie zijn jullie?", "ik heb geen ISO 27001" | Midden | **Doorsturen naar de tenant** (`Reply-To`) |
 | **3. Antwoorden per mail inleveren** | Ingevulde vragenlijst + certificaat als bijlage | Hoog | **Niet doen** |
 
 **Waarom niveau 3 niet.** De portal met token is de veilige weg: het token bewijst wie er
@@ -199,10 +199,63 @@ stuurt, niet een tweede verwerkingsroute.
 toont "verstuurd", de leverancier heeft niets, en dat blijkt pas als de deadline verstrijkt.
 Een bounce afvangen is de goedkoopste betrouwbaarheidswinst in de hele keten.
 
-**Wat `Reply-To` uit §3 hiervan afhaalt.** Antwoorden van leveranciers gaan naar de klant, niet
-naar ons. Daarmee verdwijnt het grootste deel van niveau 2 uit onze scope: die berichten hoeven
-wij niet te koppelen, te bewaren of te tonen. Wat overblijft voor niveau 1 is smal en scherp —
-bounces en afleverstatussen, machineleesbaar, van één afzender die we vertrouwen (Resend).
+### Drie kanalen die elkaar niet raken
+
+Voordat `Reply-To` ter sprake komt, moet één misverstand uit de weg: **de vragenlijst wordt
+nooit per mail ingevuld.** Het token geeft toegang tot MCM2, en daar gebeurt het invullen en
+uploaden. Mail is uitsluitend het vervoermiddel voor de link.
+
+| Wat | Kanaal | Wie verwerkt het |
+|---|---|---|
+| Vragenlijst invullen, certificaat uploaden | **MCM2, via token** | het systeem |
+| Bounce, afleverstatus | **Webhook van Resend** | het systeem |
+| Verhelderingsvraag, opmerking, afmelding | **`Reply-To` naar de tenant** | een mens bij de klant |
+
+Drie doelen, drie kanalen, geen overlap. Dat niveau 3 hierboven afvalt is precies om deze
+scheiding intact te houden: antwoorden per mail zou kanaal 1 en 3 door elkaar halen.
+
+**Wat `Reply-To` uit §3 precies doet — en wat niet.** Het lost niveau 2 niet op; het verplaatst
+het naar de partij die het kan afhandelen. Vragen als "wie zijn jullie?", "geldt deze norm wel
+voor ons?" of "mijn collega gaat hierover" kunnen wij niet beantwoorden — alleen de tenant weet
+of die leverancier nog een contract heeft en wie de juiste contactpersoon is.
+
+Die berichten worden dus nog steeds gestuurd. Ze komen alleen ergens terecht waar iemand
+antwoord heeft, en niet bij ons waar niemand dat heeft. Voor MCM2 betekent het dat we ze niet
+hoeven te koppelen, bewaren of tonen; voor de tenant betekent het extra mail in een gedeelde
+postbus. Dat is de juiste verdeling, maar het is een verschuiving en geen oplossing.
+
+### Het gat dat `Reply-To` achterlaat
+
+Antwoordt een leverancier naar de tenant, dan **weet MCM2 daar niets van**. De ronde blijft
+"uitnodiging verstuurd, nog niet ingevuld" tonen terwijl er in werkelijkheid een gesprek loopt.
+
+Meestal onschuldig. Maar bij een leverancier die per mail meldt "wij vallen hier niet onder" of
+"wij leveren niet meer aan u", staat er een openstaande deadline in het systeem terwijl de zaak
+feitelijk is afgehandeld. Dan gaat er een herinnering uit naar iemand die al antwoord heeft
+gegeven — precies het soort automatisering dat een leverancier leert de mail te negeren.
+
+**Besluit eigenaar 2026-08-06: de deelnemer krijgt een handmatige status "afgehandeld buiten
+het systeem", met een verplicht notitieveld.**
+
+Drie eisen daaraan:
+
+1. **Zet de deelnemer buiten de herinneringen.** Dat is het hele doel: geen rappel naar iemand
+   die al gereageerd heeft.
+2. **De notitie is verplicht, niet optioneel.** "Afgehandeld" zonder reden is over een half
+   jaar onleesbaar, en dit is een compliancedossier — waaróm iemand buiten de ronde valt is
+   precies wat een auditor vraagt.
+3. **Vastleggen in `audit.audit_event`**: wie, wanneer, welke deelnemer. Dit is een handmatige
+   ingreep in een geautomatiseerd proces; die hoort traceerbaar te zijn.
+
+De status maakt de discrepantie **zichtbaar in plaats van onzichtbaar**. Dat is het punt: het
+systeem weet niet wat er in de mailbox van de klant gebeurt, en die grens moet in het scherm te
+zien zijn — niet weggepoetst.
+
+Dit is een klein stuk UI en het hoort bij fase C (het rondescherm), niet bij het mailkanaal
+zelf. Genoteerd in §9 stap 6.
+
+**Wat overblijft voor niveau 1** is daarmee smal en scherp: bounces en afleverstatussen,
+machineleesbaar, van één afzender die we vertrouwen (Resend).
 
 ### Bounces bij Resend: webhooks, geen postbus
 
@@ -427,7 +480,12 @@ Conform `MCM2-CLAUDE.md` §15b: deze horen te falen vóórdat de code bestaat.
    verzoek met een verkeerde handtekening en controleer dat er niets in de database verandert.
    Slaagt hij, dan kan iedereen op internet ons vertellen dat een mail gebounced is.
 
-8. **Een `+`-adres wordt door onze eigen validatie geaccepteerd.** Anders blokkeert de
+8. **Een deelnemer op "afgehandeld buiten het systeem" krijgt geen herinnering meer.** Zet de
+   status, laat de herinneringsronde lopen en controleer dat er niets naar die deelnemer gaat.
+   Dit is het hele doel van die status (§4); werkt hij niet, dan krijgt iemand die al
+   geantwoord heeft alsnog een rappel.
+
+9. **Een `+`-adres wordt door onze eigen validatie geaccepteerd.** Anders blokkeert de
    testopzet uit §6 zichzelf. Klein, maar het is de eerste test die moet draaien.
 
 ---
@@ -465,7 +523,7 @@ even stil als een verkeerde SMTP-poort.
 
 ## 9. Volgorde
 
-1. **`MailKanaal` + `LogMailKanaal`** — de knip uit §5, met tegenproefs 5 en 8. Geen provider
+1. **`MailKanaal` + `LogMailKanaal`** — de knip uit §5, met tegenproeven 5 en 9. Geen provider
    nodig, dus dit kan meteen en los van alles.
 2. **Domein registreren, aan Resend toevoegen, DNS verifiëren** (§6). Doorlooptijd, geen werk.
 3. **`ResendMailKanaal`** + de afzenderconstructie uit §3. Vanaf hier gaat er echt mail uit.
@@ -473,7 +531,11 @@ even stil als een verkeerde SMTP-poort.
 5. **Webhook-endpoint** met handtekeningverificatie — tegenproeven 1, 2 en 7. Hier zit de
    waarde van niveau 1.
 6. **Tenantinstellingen** (afzendernaam, `Reply-To`) — het restant van Issue #76 uit §8.
-7. **Niveau 2 (echte antwoorden)** — alleen als `Reply-To` in de praktijk onvoldoende blijkt.
+   Hoort samen met de status **"afgehandeld buiten het systeem"** uit §4: die is nodig zodra
+   `Reply-To` live is, want vanaf dat moment ontstaan er gesprekken die MCM2 niet ziet.
+   De status zelf is UI en hoort bij fase C; de eis komt hiervandaan.
+7. **Niveau 2 (echte antwoorden bij ons ontvangen)** — alleen als `Reply-To` plus de handmatige
+   status in de praktijk onvoldoende blijken. Verwachting: dat gebeurt niet.
 
 Stap 1 kan nu beginnen: geen domein, geen sleutel, geen besluit meer nodig. Stap 2 heeft
 doorlooptijd en is de enige echte wachttijd in de reeks.
