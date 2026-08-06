@@ -93,6 +93,9 @@ async function verwijderTestdata(client: Client): Promise<void> {
     await client.query('BEGIN');
     await client.query(`SET LOCAL app.current_tenant_id = '${tenant}'`);
     for (const tabel of [
+      // Antwoorden vóór de respons: survey_answer heeft een FK naar
+      // survey_response, dus andersom weigert Postgres de DELETE.
+      'clm.survey_answer',
       'clm.survey_response',
       'clm.survey_run',
       'clm.survey_question',
@@ -212,6 +215,21 @@ describe('Vragenlijst-beheerroutes (e2e)', () => {
           token_hash, status, expires_at)
        VALUES ($1, $2, $3, $4, $4, $5, 'pending', now() + interval '30 days')`,
       [RESPONSE_A, tenantA, RUN_A, VENDOR_A, TOKEN_HASH],
+    );
+
+    // Precies één van de twee echte vragen beantwoorden. Dat is bewust een
+    // halve respons: de antwoordenroute moet de onbeantwoorde vraag tónen en
+    // niet weglaten, en dat is met twee beantwoorde vragen niet te bewijzen.
+    await client.query(
+      // 'confirmed' en niet 'ja': de vormconstraint uit migratie 0005 staat bij
+      // answer_type 'confirmation' alleen confirmed/not_confirmed/
+      // not_applicable/cannot_upload toe.
+      `INSERT INTO clm.survey_answer
+         (tenant_id, response_id, question_id, answer_type, answer_code, comment)
+       SELECT $1, $2, q.question_id, 'confirmation', 'confirmed', 'Toelichting bij v1'
+         FROM clm.survey_question q
+        WHERE q.template_id = $3 AND q.question_key = 'v1'`,
+      [tenantA, RESPONSE_A, TEMPLATE_A],
     );
     await client.query('COMMIT');
 
@@ -406,6 +424,141 @@ describe('Vragenlijst-beheerroutes (e2e)', () => {
         .get(`/admin/survey/templates/${TEMPLATE_A}`)
         .set('Cookie', cookieReviewer)
         .expect(200);
+    });
+  });
+
+  describe('de antwoorden van één respons (fase C)', () => {
+    interface AntwoordenBody {
+      responseId: string;
+      vendorNaam: string | null;
+      templateNaam: string;
+      aantalVragen: number;
+      aantalBeantwoord: number;
+      antwoorden: Array<{
+        questionKey: string;
+        answerType: string;
+        position: number;
+        antwoord: {
+          answerCode: string | null;
+          comment: string | null;
+        } | null;
+        bijlagen: unknown[];
+      }>;
+    }
+
+    async function haalAntwoorden(cookie: string) {
+      const antwoord = await request(server)
+        .get(`/admin/survey/responses/${RESPONSE_A}/answers`)
+        .set('Cookie', cookie)
+        .expect(200);
+      return antwoord.body as AntwoordenBody;
+    }
+
+    it('toont de respons met leverancier en vragenlijst erbij', async () => {
+      const body = await haalAntwoorden(cookieA);
+
+      expect(body.responseId).toBe(RESPONSE_A);
+      expect(body.vendorNaam).toBe('Leverancier van A');
+      expect(body.templateNaam).toBe('beheer-test-lijst');
+    });
+
+    // Dit is de kern van de route. Een respons waarvan één vraag open staat
+    // moet die vraag tónen; zouden we vanaf survey_answer joinen, dan
+    // verdwijnt hij en lijkt een halve respons compleet.
+    it('toont ook de vraag die NIET beantwoord is', async () => {
+      const body = await haalAntwoorden(cookieA);
+
+      const v2 = body.antwoorden.find((a) => a.questionKey === 'v2');
+
+      expect(v2).toBeDefined();
+      expect(v2!.antwoord).toBeNull();
+    });
+
+    it('geeft het antwoord terug op de vraag die wél beantwoord is', async () => {
+      const body = await haalAntwoorden(cookieA);
+
+      const v1 = body.antwoorden.find((a) => a.questionKey === 'v1');
+
+      expect(v1!.antwoord).not.toBeNull();
+      expect(v1!.antwoord!.answerCode).toBe('confirmed');
+      expect(v1!.antwoord!.comment).toBe('Toelichting bij v1');
+    });
+
+    it('telt 1 van 2 beantwoord, zonder het instructiescherm mee te rekenen', async () => {
+      const body = await haalAntwoorden(cookieA);
+
+      // Drie items, waarvan één instructie: dat zijn twee echte vragen.
+      // Dezelfde afbakening als de lijst- en detailroute hierboven.
+      expect(body.aantalVragen).toBe(2);
+      expect(body.aantalBeantwoord).toBe(1);
+    });
+
+    it('houdt het instructiescherm in de lijst, op volgorde', async () => {
+      const body = await haalAntwoorden(cookieA);
+
+      // De leverancier zág dat scherm. Laat je het weg, dan loopt de
+      // nummering niet meer gelijk met wat hij voor zich had.
+      expect(body.antwoorden.map((a) => a.questionKey)).toEqual([
+        'intro',
+        'v1',
+        'v2',
+      ]);
+      expect(body.antwoorden[0].answerType).toBe('instruction');
+    });
+
+    it('geeft de token_hash ook hier NOOIT terug', async () => {
+      const antwoord = await request(server)
+        .get(`/admin/survey/responses/${RESPONSE_A}/answers`)
+        .set('Cookie', cookieA)
+        .expect(200);
+
+      const alsTekst = JSON.stringify(antwoord.body);
+
+      expect(alsTekst).not.toContain(TOKEN_HASH);
+      expect(alsTekst).not.toContain('deadbeefcafe1234');
+      expect(alsTekst).not.toContain('token_hash');
+      expect(alsTekst).not.toContain('tokenHash');
+    });
+
+    it('geeft de storage_key van een bijlage nooit terug', async () => {
+      // Het interne pad hoort niet uit een overzichtsroute te komen;
+      // downloaden loopt via een eigen route met eigen controle.
+      const antwoord = await request(server)
+        .get(`/admin/survey/responses/${RESPONSE_A}/answers`)
+        .set('Cookie', cookieA)
+        .expect(200);
+
+      const alsTekst = JSON.stringify(antwoord.body);
+
+      expect(alsTekst).not.toContain('storage_key');
+      expect(alsTekst).not.toContain('storageKey');
+    });
+
+    it('laat een reviewer de antwoorden lezen', async () => {
+      // Voor een reviewer is dit de kernroute: beoordelen kan niet zonder de
+      // antwoorden te zien.
+      await request(server)
+        .get(`/admin/survey/responses/${RESPONSE_A}/answers`)
+        .set('Cookie', cookieReviewer)
+        .expect(200);
+    });
+
+    it('geeft tenant B een 404 op de respons van A', async () => {
+      // Niet 403: het verschil tussen "bestaat niet" en "mag je niet zien"
+      // hoort niet naar buiten te lekken. RLS maakt de rij onzichtbaar.
+      await request(server)
+        .get(`/admin/survey/responses/${RESPONSE_A}/answers`)
+        .set('Cookie', cookieB)
+        .expect(404);
+    });
+
+    it('geeft 404 op een niet-bestaande respons', async () => {
+      await request(server)
+        .get(
+          '/admin/survey/responses/00000000-0000-0000-0000-00000000dead/answers',
+        )
+        .set('Cookie', cookieA)
+        .expect(404);
     });
   });
 

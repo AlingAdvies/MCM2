@@ -111,6 +111,27 @@ export class VragenlijstBeheerController {
     return this.beheer.ronde(sessie.tenantId, id);
   }
 
+  /**
+   * De antwoorden van één respons — wat de leverancier feitelijk heeft
+   * ingevuld, in de volgorde van de vragenlijst.
+   *
+   * Geen `@VereistRol`: lezen mag ook een reviewer, net als de andere
+   * GET-routes hierboven. Voor hem is dit zelfs de kernroute — beoordelen kan
+   * niet zonder de antwoorden te zien.
+   *
+   * 404 als de respons niet bestaat binnen deze tenant. Dat "binnen deze
+   * tenant" doet RLS, niet deze route: een respons van een andere tenant is
+   * onzichtbaar en levert dezelfde 404 op als een verzonnen id. Het verschil
+   * tussen "bestaat niet" en "mag je niet zien" hoort niet naar buiten te
+   * lekken.
+   */
+  @Get('responses/:id/answers')
+  async antwoorden(@Req() request: RequestMetSessie, @Param('id') id: string) {
+    const sessie = request.sessie!;
+
+    return this.beheer.antwoorden(sessie.tenantId, id);
+  }
+
   // ── Fase B: schrijven ──────────────────────────────────────────────────────
   //
   // Vanaf hier staat op elke route `@VereistRol('admin')`. Een reviewer mag

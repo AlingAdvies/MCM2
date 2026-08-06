@@ -105,6 +105,70 @@ export interface RondeDetail extends RondeSamenvatting {
   deelnemers: DeelnemerSamenvatting[];
 }
 
+/** Eén bijlage bij een antwoord. */
+export interface BijlageSamenvatting {
+  attachmentId: string;
+  /** Zoals de leverancier hem aanleverde — nooit als pad gebruiken. */
+  originalName: string;
+  contentType: string;
+  byteSize: number;
+  createdAt: string;
+}
+
+/**
+ * Eén vraag met het antwoord dat erop gegeven is.
+ *
+ * De vraag staat er altijd, het antwoord kan ontbreken. Dat onderscheid is het
+ * hele punt van dit scherm: een niet-beantwoorde vraag is informatie, en die
+ * zou verdwijnen als we alleen de rijen uit `survey_answer` zouden tonen.
+ *
+ * De waarde staat in aparte velden per soort, precies zoals de database hem
+ * bewaart (schema.ts regel 480 e.v.). Ze hier samenvoegen tot één `waarde`-veld
+ * zou de beheerkant laten gokken wat er in staat, en een rating die als tekst
+ * aankomt is niet meer te sorteren.
+ */
+export interface AntwoordDetail {
+  questionId: string;
+  questionKey: string;
+  position: number;
+  title: string;
+  body: string;
+  answerType: string;
+  isRequired: boolean;
+  categoryId: string | null;
+  categorieNaam: string | null;
+  /** Null wanneer deze vraag niet is beantwoord. */
+  antwoord: {
+    answerId: string;
+    answerCode: string | null;
+    answerCodes: string[] | null;
+    answerText: string | null;
+    /** NUMERIC komt als string uit pg; hier als getal, of null. */
+    answerNumber: number | null;
+    comment: string | null;
+    createdAt: string;
+    updatedAt: string | null;
+  } | null;
+  bijlagen: BijlageSamenvatting[];
+}
+
+/** Alle antwoorden van één respons, in de volgorde van de vragenlijst. */
+export interface AntwoordenDetail {
+  responseId: string;
+  runId: string;
+  templateId: string;
+  templateNaam: string;
+  vendorId: string | null;
+  vendorNaam: string | null;
+  status: string;
+  submittedAt: string | null;
+  expiresAt: string | null;
+  /** Echte vragen, dus zonder `instruction`. */
+  aantalVragen: number;
+  aantalBeantwoord: number;
+  antwoorden: AntwoordDetail[];
+}
+
 interface TemplateRij extends Record<string, unknown> {
   template_id: string;
   name: string;
@@ -150,6 +214,47 @@ interface RondeRij extends Record<string, unknown> {
   revoked_at: Date | string | null;
   aantal_deelnemers: string | number;
   aantal_ingediend: string | number;
+}
+
+interface AntwoordRij extends Record<string, unknown> {
+  question_id: string;
+  question_key: string;
+  position: number;
+  title: string;
+  body: string;
+  answer_type: string;
+  is_required: boolean;
+  category_id: string | null;
+  categorie_naam: string | null;
+  answer_id: string | null;
+  answer_code: string | null;
+  answer_codes: string[] | null;
+  answer_text: string | null;
+  answer_number: string | number | null;
+  comment: string | null;
+  antwoord_created_at: Date | string | null;
+  antwoord_updated_at: Date | string | null;
+}
+
+interface BijlageRij extends Record<string, unknown> {
+  attachment_id: string;
+  question_id: string;
+  original_name: string;
+  content_type: string;
+  byte_size: number;
+  created_at: Date | string;
+}
+
+interface ResponsRij extends Record<string, unknown> {
+  response_id: string;
+  run_id: string;
+  template_id: string;
+  template_naam: string;
+  vendor_id: string | null;
+  vendor_naam: string | null;
+  status: string;
+  submitted_at: Date | string | null;
+  expires_at: Date | string | null;
 }
 
 interface DeelnemerRij extends Record<string, unknown> {
@@ -409,6 +514,166 @@ export class VragenlijstBeheerService {
             expiresAt: iso(d.expires_at),
             submittedAt: iso(d.submitted_at),
           })),
+        };
+      },
+      'medewerker',
+    );
+  }
+
+  /**
+   * De antwoorden van één respons, in de volgorde van de vragenlijst.
+   *
+   * ── Waarom een LEFT JOIN vanaf de vraag ────────────────────────────────────
+   *
+   * De vragen zijn leidend, niet de antwoorden. Een respons die half is
+   * ingevuld hoort de openstaande vragen te tonen, niet weg te laten: "vraag 7
+   * is niet beantwoord" is precies wat een beoordelaar moet zien. Zouden we
+   * vanaf `survey_answer` joinen, dan verdwijnt die informatie stilzwijgend en
+   * lijkt een halve respons compleet.
+   *
+   * `instruction`-items blijven staan. Ze horen bij de lijst zoals de
+   * leverancier hem zag, en zonder die schermen loopt de nummering niet meer
+   * gelijk met wat hij voor zich had.
+   *
+   * ── Bijlagen apart ─────────────────────────────────────────────────────────
+   *
+   * Eén vraag kan meerdere bijlagen hebben (`max_files`). In dezelfde query
+   * zouden de antwoordvelden zich per bijlage herhalen, en dan moet de
+   * aanroeper gaan ontdubbelen. Twee queries binnen dezelfde transactie is hier
+   * eenvoudiger dan één slimme.
+   *
+   * Nadrukkelijk géén `storage_key`: dat is een intern pad. Downloaden loopt
+   * via een eigen route met eigen controle, niet via dit overzicht.
+   */
+  async antwoorden(
+    tenantId: string,
+    responseId: string,
+  ): Promise<AntwoordenDetail> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const responses = await tx.execute<ResponsRij>(
+          sql`SELECT s.response_id,
+                     s.run_id,
+                     r.template_id,
+                     t.name AS template_naam,
+                     s.vendor_id,
+                     v.name AS vendor_naam,
+                     s.status,
+                     s.submitted_at,
+                     s.expires_at
+                FROM clm.survey_response s
+                JOIN clm.survey_run r      ON r.run_id = s.run_id
+                JOIN clm.survey_template t ON t.template_id = r.template_id
+                LEFT JOIN clm.vendor v     ON v.vendor_id = s.vendor_id
+               WHERE s.response_id = ${responseId}`,
+        );
+
+        const respons = responses.rows[0];
+        if (!respons) {
+          throw new NotFoundException('Deze respons bestaat niet.');
+        }
+
+        const rijen = await tx.execute<AntwoordRij>(
+          sql`SELECT q.question_id,
+                     q.question_key,
+                     q.position,
+                     q.title,
+                     q.body,
+                     q.answer_type,
+                     q.is_required,
+                     q.category_id,
+                     c.name AS categorie_naam,
+                     a.answer_id,
+                     a.answer_code,
+                     a.answer_codes,
+                     a.answer_text,
+                     a.answer_number,
+                     a.comment,
+                     a.created_at AS antwoord_created_at,
+                     a.updated_at AS antwoord_updated_at
+                FROM clm.survey_question q
+                LEFT JOIN clm.survey_category c ON c.category_id = q.category_id
+                LEFT JOIN clm.survey_answer a
+                       ON a.question_id = q.question_id
+                      AND a.response_id = ${responseId}
+               WHERE q.template_id = ${respons.template_id}
+               ORDER BY q.position`,
+        );
+
+        const bijlagen = await tx.execute<BijlageRij>(
+          sql`SELECT attachment_id,
+                     question_id,
+                     original_name,
+                     content_type,
+                     byte_size,
+                     created_at
+                FROM clm.survey_attachment
+               WHERE response_id = ${responseId}
+               ORDER BY created_at`,
+        );
+
+        const perVraag = new Map<string, BijlageSamenvatting[]>();
+        for (const b of bijlagen.rows) {
+          const lijst = perVraag.get(b.question_id) ?? [];
+          lijst.push({
+            attachmentId: b.attachment_id,
+            originalName: b.original_name,
+            contentType: b.content_type,
+            byteSize: b.byte_size,
+            createdAt: iso(b.created_at) ?? '',
+          });
+          perVraag.set(b.question_id, lijst);
+        }
+
+        const antwoorden = rijen.rows.map((r) => ({
+          questionId: r.question_id,
+          questionKey: r.question_key,
+          position: r.position,
+          title: r.title,
+          body: r.body,
+          answerType: r.answer_type,
+          isRequired: r.is_required,
+          categoryId: r.category_id,
+          categorieNaam: r.categorie_naam,
+          antwoord: r.answer_id
+            ? {
+                answerId: r.answer_id,
+                answerCode: r.answer_code,
+                answerCodes: r.answer_codes,
+                answerText: r.answer_text,
+                // NUMERIC komt als string uit de pg-driver; Number(null) is 0
+                // en dat zou een leeg antwoord als een nul tonen.
+                answerNumber:
+                  r.answer_number === null ? null : Number(r.answer_number),
+                comment: r.comment,
+                createdAt: iso(r.antwoord_created_at) ?? '',
+                updatedAt: iso(r.antwoord_updated_at),
+              }
+            : null,
+          bijlagen: perVraag.get(r.question_id) ?? [],
+        }));
+
+        // Instructieschermen tellen niet mee: daar valt niets te beantwoorden.
+        // Dezelfde afbakening als aantalVragen in lijst() en detail().
+        const echteVragen = antwoorden.filter(
+          (a) => a.answerType !== 'instruction',
+        );
+
+        return {
+          responseId: respons.response_id,
+          runId: respons.run_id,
+          templateId: respons.template_id,
+          templateNaam: respons.template_naam,
+          vendorId: respons.vendor_id,
+          vendorNaam: respons.vendor_naam,
+          status: respons.status,
+          submittedAt: iso(respons.submitted_at),
+          expiresAt: iso(respons.expires_at),
+          aantalVragen: echteVragen.length,
+          aantalBeantwoord: echteVragen.filter((a) => a.antwoord !== null)
+            .length,
+          antwoorden,
         };
       },
       'medewerker',
