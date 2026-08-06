@@ -317,6 +317,32 @@ de volgorde in §6.
 - Beoordelen mag alleen op een ingediende respons. Dat is een controle in de service, niet
   in een constraint: de foutmelding moet uitleggen waaróm het niet kan.
 
+*Migratie 3 — `template_reviewer`.* Toegevoegd op 2026-08-06 na de domeincontext van de
+eigenaar; onderbouwing in **ADR-013**.
+
+```
+clm.template_reviewer
+  ├── tenant_id      (RLS, zoals alles)
+  ├── template_id    welke vragenlijst
+  ├── user_id        wie hem beoordeelt
+  └── created_at / created_by
+```
+
+- **De beoordelaar hangt aan de vragenlijst, niet aan de vendor of de ronde.** Beoordelen is
+  vakinhoud, geen eigenaarschap: de CISO kan IT-compliance beoordelen voor élke vendor, de
+  contractmanager van vendor X voor géén enkele.
+- **Geen unieke sleutel op `template_id`** — meerdere beoordelaars zijn toegestaan. Bij
+  Transdev is het er waarschijnlijk één, maar die gaat met vakantie.
+- Zelfde RLS-behandeling als hierboven, inclusief de actor-eis in `USING` én `WITH CHECK`.
+- **De koppeling is een hulpmiddel, geen guard.** Elke reviewer mag elke inzending
+  beoordelen; de koppeling bepaalt wat je in je werkvoorraad ziet. Zie ADR-013 besluit 3 —
+  een harde grens zou het proces stilleggen zodra de gekoppelde beoordelaar afwezig is, en
+  de fallback is de contractmanager die dat intern regelt.
+
+*Wat hier géén migratie voor nodig is:* de contractmanager. `clm.vendor.owner_user_id`
+bestaat al sinds migratie 0000 en staat in `src/db/schema.ts`, maar wordt nergens gebruikt.
+Fase C neemt hem in gebruik (ADR-013 besluit 1).
+
 **Backend**
 
 ```
@@ -325,6 +351,11 @@ GET  /admin/survey/responses/:id/answers   de antwoorden van één respons, incl
 GET  /admin/survey/responses/:id/reviews   alle oordelen, nieuwste eerst
 POST /admin/survey/responses/:id/reviews   nieuw oordeel vastleggen
 ```
+
+Daarbij komt sinds ADR-013 dat de leesroutes **meeleveren van wie iets is** — de beheerder
+van de vendor en of de ingelogde gebruiker aan de vragenlijst gekoppeld is. Zonder die
+velden moet het scherm een tweede uitvraag doen om te kunnen sorteren, en dan kan die
+tussentijds iets anders zien.
 
 **Alle vier mogen door een reviewer** (besluit eigenaar 2026-08-03). Beoordelen ís de rol
 van een reviewer; hem dat ontzeggen maakt de rol betekenisloos en maakt de admin een
@@ -341,6 +372,21 @@ admin adviseren.
 Een voortgangsscherm per ronde (ingediend / open / verlopen), een leesscherm per respons,
 en onder de antwoorden het beoordeelblok: drie knoppen plus een toelichtingsveld, met
 daaronder de eerdere oordelen op datum.
+
+**Twee werkvoorraden, geen twee filters op dezelfde lijst** (ADR-013). "Wat wacht er op
+mij" betekent voor de twee rollen iets wezenlijk anders:
+
+| Rol | Wat hij ziet |
+|---|---|
+| Contractmanager (`vendor.owner_user_id`) | rondes op vendors die ik beheer: wie moet nog invullen, wie is te laat, welke uitnodiging kwam niet aan |
+| Beoordelaar (`template_reviewer`) | ingediende antwoorden op vragenlijsten waaraan ik gekoppeld ben, over alle vendors heen |
+
+De CISO wil niet zien wie er nog moet invullen — daar gaat hij niet over. De
+contractmanager wil niet de beoordeelstapel van de hele organisatie. Eén lijst met een
+filter erop bedient allebei half.
+
+Met een schakelaar **"van mij" / "hele organisatie"**: ADR-013 besluit 3 zegt dat de rest
+zichtbaar moet blijven, want de koppeling is een hulpmiddel en geen grens.
 
 Twee dingen in dat scherm die geen detail zijn:
 
@@ -364,10 +410,19 @@ Twee dingen in dat scherm die geen detail zijn:
   gebouwd te worden, want dit is de eerste plek waar iemand een route zou kunnen bouwen
   die op `subject_vendor_id` filtert in plaats van op `response_id`.
 
+**Twee tegenproeven die bij ADR-013 horen** en die als paar gelezen moeten worden:
+
+- **Een reviewer die niet aan de vragenlijst gekoppeld is, kan wél beoordelen.** Slaagt dit
+  niet, dan is er per ongeluk een harde grens gebouwd en ligt het proces stil zodra de
+  gekoppelde beoordelaar ziek is.
+- **Diezelfde reviewer ziet die inzending níét in zijn eigen werkvoorraad.** De keerzijde:
+  zonder deze tweede test kan de koppeling decoratie zijn zonder dat iets dat merkt.
+
 **Klaar wanneer:** je ziet per ronde wie heeft ingevuld, kunt een ingediende respons lezen
 inclusief de geüploade certificaten, en kunt hem beoordelen met Goed, Nadere vragen of Niet
 goed — waarna dat oordeel in de voortgangslijst staat en een tweede oordeel het eerste niet
-wist.
+wist. En: een contractmanager ziet zijn eigen rondes, een beoordelaar zijn eigen stapel,
+allebei met de mogelijkheid de rest van de organisatie erbij te halen.
 
 ---
 
@@ -437,6 +492,12 @@ een uitrolvraag geworden in plaats van een bouwblokkade.
 - **Geen herinneringen.** Issue #16 raakt dit (export- en reminder-acties met expliciete
   tenantId) maar hangt aan fase D.
 - **Geen export.** OV-4 (exportformaat) is nog open bij de klant.
+- **Geen contractlaag.** In het domein hangt een complianceverplichting aan het contract,
+  niet aan de vendor (domeincontext eigenaar 2026-08-06). Voor de pilot verandert dat
+  niets: alle Transdev-vendors hebben dezelfde verplichting en er is één vragenlijst, dus
+  een contractlaag zou vandaag voor iedereen hetzelfde antwoord geven. Wat er verschuift
+  zodra contracten er wél zijn, staat in ADR-013 besluit 4 — zodat dit een bewuste
+  beperking blijft en geen vergeten laag.
 
 ---
 
