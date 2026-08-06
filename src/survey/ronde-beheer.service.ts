@@ -62,6 +62,31 @@ export interface Uitnodiging {
    */
   token: string;
   expiresAt: string;
+  /**
+   * Het adres van de primaire contactpersoon, als die er is.
+   *
+   * Kan ontbreken: niet elke leverancier heeft een contactpersoon met een
+   * e-mailadres. Dat is geen fout hier — het token bestaat en de link werkt.
+   * Wel iets dat zichtbaar moet zijn bij het versturen, anders is die
+   * leverancier stilzwijgend overgeslagen.
+   */
+  contactEmail?: string;
+}
+
+/**
+ * Wat er nodig is om de uitnodigingsmails te kunnen samenstellen.
+ *
+ * Komt uit dezelfde transactie als de tokens, zodat er geen tweede query nodig
+ * is die tussentijds iets anders kan zien.
+ */
+export interface UitnodigingContext {
+  tenantNaam: string;
+  vragenlijstNaam: string;
+}
+
+export interface UitnodigingResultaat {
+  uitnodigingen: Uitnodiging[];
+  context: UitnodigingContext;
 }
 
 export interface RondeGestart {
@@ -87,6 +112,8 @@ interface RunRij extends Record<string, unknown> {
 interface VendorRij extends Record<string, unknown> {
   vendor_id: string;
   name: string;
+  /** `null` als de leverancier geen contactpersoon met e-mailadres heeft. */
+  contact_email: string | null;
 }
 
 function iso(waarde: Date | string | null): string | null {
@@ -272,12 +299,24 @@ export class RondeBeheerService {
     tenantId: string,
     runId: string,
     invoer: Uitnodigingen,
-  ): Promise<Uitnodiging[]> {
+  ): Promise<UitnodigingResultaat> {
     return this.db.withTenant(
       tenantId,
       async (tx) => {
-        const rondes = await tx.execute<{ status: string }>(
-          sql`SELECT status FROM clm.survey_run WHERE run_id = ${runId}`,
+        // Naast de status ook de namen ophalen die de uitnodigingsmail nodig
+        // heeft. In dezelfde query en dus dezelfde transactie: een tweede
+        // uitvraag achteraf kan een gewijzigde tenantnaam zien, en dan staat er
+        // in de mail iets anders dan wat er op het scherm stond.
+        const rondes = await tx.execute<{
+          status: string;
+          template_naam: string;
+          tenant_naam: string;
+        }>(
+          sql`SELECT r.status, t.name AS template_naam, tn.name AS tenant_naam
+                FROM clm.survey_run r
+                JOIN clm.survey_template t ON t.template_id = r.template_id
+                JOIN clm.tenant tn ON tn.tenant_id = r.tenant_id
+               WHERE r.run_id = ${runId}`,
         );
 
         const ronde = rondes.rows[0];
@@ -299,11 +338,30 @@ export class RondeBeheerService {
         // Alle opgegeven leveranciers in één keer opzoeken. RLS filtert
         // vanzelf wat van een andere tenant is; die id's ontbreken dan
         // gewoon in het resultaat en worden hieronder gemeld als onbekend.
+        // Het adres van de primaire contactpersoon komt hier meteen mee.
+        //
+        // DISTINCT ON met een expliciete volgorde: een leverancier kan meerdere
+        // contactpersonen hebben, en zonder die volgorde is het willekeurig wie
+        // de uitnodiging krijgt. `is_primary` eerst, daarna de oudste — dat is
+        // voorspelbaar en herhaalbaar.
+        //
+        // LEFT JOIN, geen INNER: een leverancier zonder contactpersoon hoort
+        // gewoon in de lijst te staan. Het token wordt aangemaakt en de link
+        // werkt; alleen het versturen lukt niet, en dat meldt de verzender.
         const gevonden = await tx.execute<VendorRij>(
-          sql`SELECT vendor_id, name
-                FROM clm.vendor
-               WHERE vendor_id = ANY(${sql.param(invoer.vendorIds)}::uuid[])
-                 AND deleted_at IS NULL`,
+          sql`SELECT v.vendor_id, v.name, c.email AS contact_email
+                FROM clm.vendor v
+                LEFT JOIN LATERAL (
+                       SELECT email
+                         FROM clm.vendor_contact
+                        WHERE vendor_id = v.vendor_id
+                          AND deleted_at IS NULL
+                          AND email IS NOT NULL
+                        ORDER BY is_primary DESC, created_at ASC
+                        LIMIT 1
+                     ) c ON true
+               WHERE v.vendor_id = ANY(${sql.param(invoer.vendorIds)}::uuid[])
+                 AND v.deleted_at IS NULL`,
         );
 
         const perId = new Map(
@@ -380,10 +438,17 @@ export class RondeBeheerService {
             vendorNaam: vendor.name,
             token,
             expiresAt: verloopt.toISOString(),
+            contactEmail: vendor.contact_email ?? undefined,
           });
         }
 
-        return uitnodigingen;
+        return {
+          uitnodigingen,
+          context: {
+            tenantNaam: ronde.tenant_naam,
+            vragenlijstNaam: ronde.template_naam,
+          },
+        };
       },
       'medewerker',
     );

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { AuthModule } from '../auth/auth.module';
+import { MailModule } from '../mail/mail.module';
 import { SurveyAuditService } from './survey-audit.service';
 import { SurveyResponseController } from './survey-response.controller';
 import { SurveyTokenGuard } from './survey-token.guard';
@@ -28,9 +29,13 @@ import { VragenlijstLeesService } from './vragenlijst-lezen.service';
  * vandaan en heeft `SessieService` nodig. Zonder die import faalt het opstarten
  * met "Nest can't resolve dependencies of the TenantContextGuard" — zichtbaar,
  * niet stil. Zelfde reden als in VendorModule.
+ *
+ * `MailModule` levert `UitnodigingVerzender`, waarmee de uitnodigingsroute de
+ * tokenlinks daadwerkelijk verstuurt. Zonder die module bestaan de tokens wel
+ * maar krijgt niemand ze — dat was de stand tot 2026-08-06.
  */
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, MailModule],
   controllers: [SurveyResponseController, VragenlijstBeheerController],
   providers: [
     SurveyAuditService,
