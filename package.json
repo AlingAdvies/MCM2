@@ -20,6 +20,7 @@
     "backup:controle": "node scripts/backup-controle.js",
     "backup:controle:volledig": "node scripts/backup-controle.js --volledig",
     "backup:controle:test": "node scripts/backup-controle.js --test",
+    "mail:test": "node scripts/mail-test.js",
     "db:generate": "drizzle-kit generate",
     "db:check": "drizzle-kit check",
     "migrate:deploy": "node scripts/migrate.js",
