@@ -4,6 +4,7 @@ import { LogMailKanaal } from './log-mail-kanaal';
 import { MailKanaal } from './mail-kanaal';
 import { leesMailConfig } from './mail.config';
 import { ResendMailKanaal } from './resend-mail-kanaal';
+import { UitnodigingVerzender } from './uitnodiging-verzender.service';
 
 /**
  * Het mailkanaal, met een keuze op basis van configuratie.
@@ -37,6 +38,7 @@ import { ResendMailKanaal } from './resend-mail-kanaal';
 @Module({
   providers: [
     LogMailKanaal,
+    UitnodigingVerzender,
     {
       provide: MailKanaal,
       inject: [LogMailKanaal],
@@ -61,6 +63,6 @@ import { ResendMailKanaal } from './resend-mail-kanaal';
       },
     },
   ],
-  exports: [MailKanaal, LogMailKanaal],
+  exports: [MailKanaal, LogMailKanaal, UitnodigingVerzender],
 })
 export class MailModule {}

@@ -63,10 +63,14 @@ interface Uitnodiging {
   vendorNaam: string;
   token: string;
   expiresAt: string;
+  verstuurd: boolean;
+  verzendFout?: string;
 }
 
 interface UitnodigingAntwoord {
   uitnodigingen: Uitnodiging[];
+  verzonden: number;
+  mislukt: number;
 }
 
 interface RondeAntwoord {
@@ -203,6 +207,17 @@ describe('Ronde-beheerroutes (e2e)', () => {
         [id, tenantA, naam, kvk],
       );
     }
+
+    // Alleen VENDOR_1 krijgt een contactpersoon met e-mailadres. Dat verschil
+    // is opzettelijk: de uitnodigingsroute moet beide gevallen aankunnen, en
+    // een leverancier zonder adres hoort zichtbaar te mislukken in plaats van
+    // stilzwijgend overgeslagen te worden.
+    await client.query(
+      `INSERT INTO clm.vendor_contact
+              (vendor_id, tenant_id, full_name, email, is_primary)
+       VALUES ($1, $2, 'Contact Eerste', 'contact+vendor1@example.test', true)`,
+      [VENDOR_1, tenantA],
+    );
 
     // Zacht verwijderd: hij bestaat nog als rij maar mag niet uitgenodigd.
     await client.query(
@@ -355,6 +370,73 @@ describe('Ronde-beheerroutes (e2e)', () => {
   });
 
   // ── Uitnodigen ────────────────────────────────────────────────────────────
+
+  it('verstuurt de uitnodiging en meldt per leverancier wat er gebeurd is', async () => {
+    // In de e2e-omgeving staat geen RESEND_API_KEY, dus draait het logkanaal:
+    // er gaat niets over het netwerk. Wat hier bewezen wordt is de keten
+    // eromheen — dat de route verstuurt, en dat de uitkomst per leverancier
+    // terugkomt in plaats van in een logregel te verdwijnen.
+    //
+    // VENDOR_1 heeft een contactpersoon, VENDOR_2 niet. Beide horen in het
+    // antwoord te staan met hun eigen uitkomst.
+    const runId = await nieuweRonde();
+
+    const antwoord = await request(server)
+      .post(`/admin/survey/runs/${runId}/participants`)
+      .set('Cookie', cookieAdminA)
+      .send({ vendorIds: [VENDOR_1, VENDOR_2] })
+      .expect(201);
+
+    const body = antwoord.body as UitnodigingAntwoord;
+
+    expect(body.verzonden).toBe(1);
+    expect(body.mislukt).toBe(1);
+
+    const eerste = body.uitnodigingen.find((u) => u.vendorId === VENDOR_1);
+    const tweede = body.uitnodigingen.find((u) => u.vendorId === VENDOR_2);
+
+    expect(eerste?.verstuurd).toBe(true);
+    expect(eerste?.verzendFout).toBeUndefined();
+
+    // Zonder e-mailadres geen uitnodiging — en dat staat er met reden bij.
+    expect(tweede?.verstuurd).toBe(false);
+    expect(tweede?.verzendFout).toMatch(/geen e-mailadres/i);
+
+    // Het token blijft in het antwoord staan, ook voor wie geen mail kreeg.
+    // Dit is het enige moment waarop het bestaat; voor die leverancier is dit
+    // de enige manier om de link alsnog door te geven.
+    expect(tweede?.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  });
+
+  it('maakt de tokens ook aan als de mail niet verstuurd kan worden', async () => {
+    // Versturen gebeurt ná de transactie. Een mislukte mail mag de tokens niet
+    // terugdraaien: vier leveranciers die de uitnodiging wél kregen zouden dan
+    // op een dode link klikken.
+    const runId = await nieuweRonde();
+
+    const antwoord = await request(server)
+      .post(`/admin/survey/runs/${runId}/participants`)
+      .set('Cookie', cookieAdminA)
+      .send({ vendorIds: [VENDOR_2] })
+      .expect(201);
+
+    const body = antwoord.body as UitnodigingAntwoord;
+
+    expect(body.mislukt).toBe(1);
+
+    // Tenantcontext expliciet zetten, anders filtert RLS elke rij weg en lijkt
+    // de tabel leeg — zelfde patroon als de hash-test hieronder.
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL app.current_tenant_id = '${tenantA}'`);
+    const rijen = await client.query(
+      'SELECT response_id FROM clm.survey_response WHERE run_id = $1',
+      [runId],
+    );
+    await client.query('COMMIT');
+
+    // De deelnemer staat er, ondanks de mislukte verzending.
+    expect(rijen.rows).toHaveLength(1);
+  });
 
   it('geeft een bruikbaar token terug en bewaart alleen de hash', async () => {
     const runId = await nieuweRonde();

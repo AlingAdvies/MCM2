@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 
+import { UitnodigingVerzender } from '../mail/uitnodiging-verzender.service';
 import { RolGuard, VereistRol } from '../auth/rol.guard';
 import {
   TenantContextGuard,
@@ -69,6 +70,7 @@ export class VragenlijstBeheerController {
   constructor(
     private readonly beheer: VragenlijstBeheerService,
     private readonly rondes: RondeBeheerService,
+    private readonly verzender: UitnodigingVerzender,
   ) {}
 
   /** Alle vragenlijsten van deze tenant, met aantallen vragen en rondes. */
@@ -186,13 +188,63 @@ export class VragenlijstBeheerController {
       throw this.naarHttpFout(err);
     }
 
-    const uitnodigingen = await this.rondes.uitnodigen(
+    const { uitnodigingen, context } = await this.rondes.uitnodigen(
       sessie.tenantId,
       id,
       invoer,
     );
 
-    return { uitnodigingen };
+    // Versturen gebeurt ná de transactie, nooit erin.
+    //
+    // Een verstuurde mail is niet terug te draaien. Zat de verzending in de
+    // transactie en faalde de laatste invoeging, dan waren de tokens weg maar
+    // de uitnodigingen verstuurd — leveranciers met een link naar niets. Eerst
+    // vastleggen, dan versturen, is de enige volgorde die dat uitsluit.
+    const verzending = await this.verzender.verstuurAllemaal(
+      uitnodigingen.map((u) => ({
+        responseId: u.responseId,
+        vendorNaam: u.vendorNaam,
+        ontvanger: u.contactEmail,
+        link: this.portaalLink(u.token),
+        verlooptOp: u.expiresAt,
+      })),
+      context,
+    );
+
+    const perResponse = new Map(verzending.map((v) => [v.responseId, v]));
+
+    return {
+      // De tokens blijven in het antwoord staan, óók als de mail geslaagd is.
+      // Dit is het enige moment waarop ze bestaan; er is geen route die ze
+      // opnieuw kan tonen. Gaat de mail alsnog verloren, dan is dit de laatste
+      // kans om de link handmatig door te geven.
+      uitnodigingen: uitnodigingen.map((u) => {
+        const uitkomst = perResponse.get(u.responseId);
+        return {
+          ...u,
+          verstuurd: uitkomst?.verstuurd ?? false,
+          verzendFout: uitkomst?.fout,
+        };
+      }),
+      verzonden: verzending.filter((v) => v.verstuurd).length,
+      mislukt: verzending.filter((v) => !v.verstuurd).length,
+    };
+  }
+
+  /**
+   * De URL die de leverancier in de mail krijgt.
+   *
+   * `PORTAAL_BASIS_URL` en niet de API-URL: het portaal is een pagina in de
+   * frontend, niet een route op deze backend. Ontbreekt de variabele, dan valt
+   * dit terug op de lokale ontwikkelpoort — zichtbaar fout in een mail, in
+   * plaats van een lege link waar niemand iets van merkt.
+   */
+  private portaalLink(token: string): string {
+    const basis = (
+      process.env.PORTAAL_BASIS_URL ?? 'http://localhost:3000'
+    ).replace(/\/+$/, '');
+
+    return `${basis}/portal/survey/${token}`;
   }
 
   private leesRonde(body: unknown) {
