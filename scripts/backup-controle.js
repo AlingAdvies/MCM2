@@ -90,6 +90,27 @@ function haalNieuwsteBackup() {
   return { dump: dumps[0], aantal: dumps.length };
 }
 
+// ── Draait Docker? ──────────────────────────────────────────────────────────
+//
+// Laag B en C hebben allebei een container nodig. Staat Docker uit, dan falen
+// ze — maar met een melding die iets heel anders suggereert dan er aan de hand
+// is. Op 2026-08-06 gebeurde dat: "De inhoudsopgave is niet leesbaar. Dat wijst
+// op een beschadigde of afgebroken dump." De dump was volstrekt in orde; alleen
+// Docker Desktop stond uit.
+//
+// Dat is de gevaarlijkste soort melding. Hij liegt niet over dát er iets mis is,
+// maar wel over wát — en een bericht dat je twee keer voor niets laat schrikken,
+// leer je negeren. Dan is de melding net zo stil als het logbestand.
+//
+// Dit is bovendien de waarschijnlijkste storing van allemaal: Docker Desktop
+// start niet mee met Windows, dus elke herstart zonder handmatige start levert
+// een dag zonder backup op. Precies daarom verdient hij een eigen, eerlijke
+// melding in plaats van een afgeleide.
+function dockerDraait() {
+  const res = spawnSync('docker', ['info'], { encoding: 'utf8' });
+  return res.status === 0;
+}
+
 /** Draait een commando in de postgres-container tegen de backupmap. */
 function inContainer(commando) {
   return spawnSync(
@@ -263,13 +284,15 @@ async function main() {
     );
     if (!gelukt && telegram.geconfigureerd) {
       console.error('MISLUKT — zie de foutmelding hierboven.');
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     if (!telegram.geconfigureerd) {
       console.error(
         '\nTELEGRAM_BOT_TOKEN en/of TELEGRAM_CHAT_ID ontbreken in .env.\nZonder die twee is er geen melding — zie het runbook.',
       );
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     console.log('OK — testbericht verstuurd.');
     return;
@@ -284,7 +307,8 @@ async function main() {
   if (fout) {
     await telegram.meldProbleem('geen_backup', `MCM2 backup\n\n${fout}`);
     console.error(fout);
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   const actualiteit = controleerActualiteit(dump);
@@ -295,28 +319,50 @@ async function main() {
     regels.push(`Laatste dump: ${dump.naam} (${actualiteit.leeftijd} oud)`);
   }
 
-  // Laag B — de kern
-  const compleetheid = controleerCompleetheid(dump);
-  if (!compleetheid.goed) {
-    problemen.push({ sleutel: 'incompleet', bericht: compleetheid.bericht });
+  // Draait Docker? Zonder container geen laag B en geen laag C. Dan is één
+  // eerlijke melding beter dan twee afgeleide die de verkeerde kant op wijzen.
+  //
+  // Bewust GEEN herstelmelding voor de andere sleutels hier: we weten niets
+  // over de compleetheid, en "hersteld" beweren op grond van onwetendheid is
+  // erger dan zwijgen. Die statussen blijven staan tot een run die het
+  // werkelijk kon vaststellen.
+  if (!dockerDraait()) {
+    problemen.push({
+      sleutel: 'docker_uit',
+      bericht:
+        'Docker draait niet, dus de inhoud van de backup is niet gecontroleerd.\n' +
+        'Over de dump zelf is hiermee niets gezegd — niet goed en niet fout.\n\n' +
+        'Start Docker Desktop en draai daarna:\n' +
+        '  npm run backup:controle\n\n' +
+        'Let op: de backup van vanochtend is dan waarschijnlijk ook mislukt,\n' +
+        'want die heeft dezelfde container nodig.',
+    });
   } else {
-    await telegram.meldHerstel('incompleet', 'de dump is weer compleet');
-    regels.push(`Compleet: ${compleetheid.aantalGevonden} tabellen`);
-    if (compleetheid.waarschuwing) {
-      problemen.push({ sleutel: 'lijst_verouderd', bericht: compleetheid.waarschuwing });
-    } else {
-      await telegram.meldHerstel('lijst_verouderd', 'de verwachtingslijst is weer bij');
-    }
-  }
+    await telegram.meldHerstel('docker_uit', 'Docker draait weer');
 
-  // Laag C — alleen bij --volledig
-  if (modus === '--volledig') {
-    const herstel = controleerHerstelbaarheid(dump);
-    if (!herstel.goed) {
-      problemen.push({ sleutel: 'onherstelbaar', bericht: herstel.bericht });
+    // Laag B — de kern
+    const compleetheid = controleerCompleetheid(dump);
+    if (!compleetheid.goed) {
+      problemen.push({ sleutel: 'incompleet', bericht: compleetheid.bericht });
     } else {
-      await telegram.meldHerstel('onherstelbaar', 'de dump is weer herstelbaar');
-      regels.push(`Herstelproef: ${herstel.aantal} tabellen teruggezet`);
+      await telegram.meldHerstel('incompleet', 'de dump is weer compleet');
+      regels.push(`Compleet: ${compleetheid.aantalGevonden} tabellen`);
+      if (compleetheid.waarschuwing) {
+        problemen.push({ sleutel: 'lijst_verouderd', bericht: compleetheid.waarschuwing });
+      } else {
+        await telegram.meldHerstel('lijst_verouderd', 'de verwachtingslijst is weer bij');
+      }
+    }
+
+    // Laag C — alleen bij --volledig
+    if (modus === '--volledig') {
+      const herstel = controleerHerstelbaarheid(dump);
+      if (!herstel.goed) {
+        problemen.push({ sleutel: 'onherstelbaar', bericht: herstel.bericht });
+      } else {
+        await telegram.meldHerstel('onherstelbaar', 'de dump is weer herstelbaar');
+        regels.push(`Herstelproef: ${herstel.aantal} tabellen teruggezet`);
+      }
     }
   }
 
@@ -345,10 +391,24 @@ async function main() {
   for (const regel of regels) console.log(`  ${regel}`);
   for (const probleem of problemen) console.log(`  PROBLEEM: ${probleem.bericht.split('\n')[0]}`);
 
-  process.exit(problemen.length > 0 ? 1 : 0);
+  // Bewust process.exitCode en niet process.exit().
+  //
+  // process.exit() kapt af terwijl libuv de HTTPS-verbinding naar Telegram nog
+  // aan het opruimen is. Op Windows crasht Node daar sinds v24 op:
+  //
+  //   Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), src\win\async.c
+  //
+  // Dat gebeurde op 2026-08-06 en gaf exitcode -1073740791 in plaats van 1.
+  // De berichten wáren al verstuurd, dus er ging niets verloren — maar het log
+  // eindigde met een crash, en een controle die zelf crasht is er precies één
+  // die je niet vertrouwt op het moment dat het ertoe doet.
+  //
+  // Met exitCode rondt Node de verbinding netjes af en eindigt daarna vanzelf.
+  // Gemeten: binnen 0,6 seconde, want fetch houdt geen sockets open.
+  process.exitCode = problemen.length > 0 ? 1 : 0;
 }
 
 main().catch((err) => {
   console.error(`Onverwachte fout in de backupcontrole: ${err.message}`);
-  process.exit(1);
+  process.exitCode = 1;
 });
