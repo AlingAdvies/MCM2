@@ -36,6 +36,10 @@ Dit runbook richt de controle in die beide gevallen wél zou hebben gemeld.
 | B | Zit alles erin wat erin hoort? | dagelijks |
 | C | Komt het er na een echte restore ook weer uit? | wekelijks |
 
+Laag B en C hebben allebei Docker nodig. Staat Docker uit, dan worden ze **overgeslagen**
+met één eigen melding — zie "Docker draait niet" hieronder. Laag A werkt zonder Docker en
+blijft dus altijd doorlopen.
+
 Laag B vergelijkt de dump met `docs/runbooks/backup-verwachting.json` — een handgeschreven
 lijst van wat erin hoort. Die lijst wordt bewust **niet** uit de migraties afgeleid: dan zou
 de controle zichzelf verifiëren, en precies dat maakte de fout van 4 augustus onzichtbaar.
@@ -238,6 +242,33 @@ Dat is opzet: een probleem dat vijf dagen duurt moet niet vijf keer melden, want
 het bericht negeren — en dan is de melding net zo stil als het logbestand.
 
 **Bij herstel:** `✅ Hersteld na 4d 2u: de dump is weer compleet`
+
+**Als Docker niet draait:**
+
+```
+🔴 MCM2 backup — 06-08, 08:12
+
+Docker draait niet, dus de inhoud van de backup is niet gecontroleerd.
+Over de dump zelf is hiermee niets gezegd — niet goed en niet fout.
+```
+
+Dit is de waarschijnlijkste storing van allemaal: Docker Desktop start niet mee met Windows,
+dus elke herstart zonder handmatige start levert een dag zonder backup op. Waarschijnlijk staat
+er dan óók een `MISLUKT` in `backup-taak.log` — de dump heeft dezelfde container nodig.
+
+**Oplossen:** start Docker Desktop (die staat in
+`%LOCALAPPDATA%\Programs\DockerDesktop`, niet in Program Files), draai dan:
+
+```powershell
+npm run backup:dump        # de gemiste dump alsnog maken
+npm run backup:controle    # en controleren
+```
+
+> **Waarom dit een eigen melding heeft.** Tot 2026-08-06 meldde de controle in dit geval
+> *"De inhoudsopgave is niet leesbaar. Dat wijst op een beschadigde of afgebroken dump."*
+> Dat klopte niet: de dump was in orde, alleen Docker stond uit. Zo'n bericht is gevaarlijker
+> dan geen bericht — het laat je schrikken voor iets anders dan er aan de hand is, en dat is
+> precies hoe je leert meldingen te negeren.
 
 **Als alles goed gaat:** één keer per week een levensteken met de stand van zaken. Dit is het
 belangrijkste onderdeel van de hele opzet: zonder levensteken weet je bij uitblijvende
