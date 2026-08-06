@@ -1,9 +1,30 @@
 # Implementatieplan — surveybeheer voor de tenant
 
-**Datum:** 2026-08-03 (bijgewerkt 2026-08-03 na vier besluiten van de eigenaar)
-**Status:** TER BEOORDELING — nog niet goedgekeurd, nog geen code
+**Datum:** 2026-08-03 (bijgewerkt 2026-08-06 met de voortgang)
+**Status:** GOEDGEKEURD — in uitvoering
 **Aanleiding:** de beheerkant kan leveranciers beheren maar geen enkele vragenlijst uitzetten
 **Raakt:** ontwerp `2026-07-28-vragenlijst-ontwerp.md` §7 (stap 10 van de bouwvolgorde), Issue #13, #15, #16
+
+## Voortgang
+
+| Fase | Backend | Frontend | PR's |
+|---|---|---|---|
+| **A** — vragenlijsten en rondes bekijken | ✅ gemerged | ✅ gemerged | #79, frontend #5 |
+| **B** — ronde starten en uitnodigen | ✅ gemerged | ✅ gemerged | #81, frontend #6 |
+| **C1** — antwoorden lezen | ✅ gebouwd, **PR open** | ❌ nog niet | #94 |
+| **C2** — beoordelen (migratie 0015) | ✅ gebouwd, **PR open** | ❌ nog niet | #95 |
+| **C3** — beoordelaar koppelen (migratie 0016) | ✅ gebouwd, **PR open** | ❌ nog niet | #97 |
+| **D** — uitnodigingen mailen | ✅ gemerged | n.v.t. | #87, #88, #89 |
+
+**Fase D is vóór C gebouwd**, op verzoek van de eigenaar (2026-08-06): eerst een leverancier
+echt kunnen uitnodigen, dan de antwoorden kunnen lezen. Er gaat sindsdien aantoonbaar mail uit
+via Resend.
+
+**Fase C is in drie PR's geknipt** (besluit eigenaar 2026-08-06): lezen → beoordelen →
+koppelen. Elke stap is los te beoordelen en los terug te draaien; C1 heeft geen migratie nodig
+en dicht op zichzelf al het grootste gat.
+
+**Wat er nog niet is: alle schermen van fase C.** Zie §Fase C, "Frontend".
 
 > **Let op bij het lezen naast het ontwerp van 28 juli:** §1b daarvan wijst "request
 > revisions" af. Dit plan gaat daar niet tegenin — het legt een oordeel vast zonder de

@@ -1,11 +1,130 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-08-04, avond (**fase A én B van het surveybeheerplan zijn af en gemerged.** De tenant kan nu een leverancier aanvinken, een ronde starten en werkende uitnodigingslinks krijgen — de eerste productiecode die `genereerToken()` aanroept. Daarnaast: `npm run demo` zet de hele stack in één commando neer, en de browsertests ruimen op wat ze aanmaken. Vier PR's gemerged: #79, #80, #81, #82 plus frontend #5 en #6. `verify:volledig` groen: 316 backend, 39 browser.)
+2026-08-06, avond (**er gaat echte mail uit én fase C is backend-compleet.** Een uitnodiging bereikte aantoonbaar een externe inbox via Resend. Daarna de hele beoordeelketen gebouwd: antwoorden lezen, oordelen vastleggen, beoordelaars koppelen. 358 e2e-tests groen. **Vijf PR's staan open en zijn niet gemerged — GitHub Actions lag de hele middag plat.**)
 
-**Volgende stap:** fase C uit `docs/superpowers/plans/2026-08-03-surveybeheer.md` — voortgang volgen, antwoorden lezen en beoordelen. Je kunt nu wel uitnodigen, maar niet zien wát een leverancier heeft ingevuld: het rondescherm toont alleen wie ingediend heeft.
+---
 
-### Wat er vandaag bijkwam
+## 🔴 MORGEN BEGINNEN: vijf openstaande PR's, in deze volgorde
+
+**Stap 1 — kijk of GitHub Actions weer werkt.**
+
+```powershell
+curl -s https://www.githubstatus.com/api/v2/components.json | ConvertFrom-Json |
+  Select-Object -ExpandProperty components | Where-Object name -eq 'Actions'
+```
+
+Op 2026-08-06 stond die op `major_outage`, vanaf 15:22 UTC, en dat duurde de hele middag.
+Gevolg: **geen enkele van de vijf PR's heeft CI gedraaid.**
+
+**Stap 2 — merge in deze volgorde.** De laatste drie zijn geketend; door elkaar mergen levert
+conflicten op.
+
+| Volgorde | PR | Wat | Gericht op |
+|---|---|---|---|
+| 1 | **#92** | `workflow_dispatch` + bijgewerkte documenten | `main` |
+| 2 | **#93** | Issue #86 — scripts noemen hun doelwit | `main` |
+| 3 | **#94** | Fase C1 — antwoorden lezen | `main` |
+| 4 | **#95** | Fase C2 — beoordelen (migratie 0015) | #94 |
+| 5 | **#97** | Fase C3 — beoordelaar koppelen (migratie 0016) | #95 |
+
+> **Let op bij #95 en #97:** die zijn gericht op de branch eronder, niet op `main`. Merge je #94
+> eerst, dan verspringt de basis van #95 vanzelf naar `main`. Controleer dat vóór het mergen.
+
+**Stap 3 — dicht het CI-gat.** Zodra #92 in `main` staat werkt handmatig starten:
+
+```powershell
+gh workflow run ci.yml --ref main
+```
+
+De Docker-productiebuild en de RLS tenant-isolatietest hebben `main` sinds 14:50 UTC niet meer
+gecontroleerd. Doe dit vóórdat je verder bouwt — er zitten twee migraties in de stapel.
+
+**Stap 4 — dan pas verder.** De schermen voor fase C (zie hieronder).
+
+---
+
+**Daarna: de frontend van fase C.** De backend is compleet en getest; er is nog geen enkel
+scherm. Drie stuks volgens het plan (§Fase C, "Frontend"):
+
+1. **Voortgang per ronde** — ingediend / open / verlopen
+2. **Antwoorden lezen** per respons, met het beoordeelblok eronder: drie knoppen plus een
+   toelichtingsveld, en daaronder de eerdere oordelen op datum
+3. **Twee werkvoorraden**, geen twee filters op dezelfde lijst (ADR-013) — met een schakelaar
+   "van mij" / "hele organisatie"
+
+Twee dingen die daarbij geen detail zijn:
+- **Het huidige oordeel hoort in de voortgangslijst**, niet alleen op het detailscherm. Anders
+  moet je zeventien schermen openen om te zien wie er nog openstaat.
+- **`nadere_vragen` leest als een openstaande actie, geen eindoordeel.** Het scherm moet zeggen
+  dat de leverancier hier niets van merkt en dat de beheerder zelf contact opneemt. Een knop die
+  suggereert dat er iets verstuurd wordt terwijl dat niet gebeurt, is erger dan geen knop.
+
+Ook nog open: het **vragenlijst-overzichtscherm** ("levert nu nauwelijks zinvolle informatie",
+eigenaar 2026-08-06).
+
+---
+
+### Wat er op 2026-08-06 bijkwam
+
+**Het mailkanaal** (#87, #88). Eén platformverstuurder via Resend op `send.myvendormanager.nl`,
+geen eigen SMTP per tenant. De klant is herkenbaar aan de afzendernaam ("Transdev via MCM2"),
+het adres blijft van het platform — zo hoeft er geen SPF-record van de klant te zijn voordat er
+mail uit kan. Zonder sleutel valt alles terug op een logkanaal; half ingesteld faalt bewust hard
+bij opstarten.
+
+**Uitnodigingen worden echt verstuurd** (#89). Mislukt één adres, dan gaan de overige door en
+rapporteert de response per deelnemer. Serieel, niet parallel — voorspelbaar onder de dagcap van
+100 mails. Aantoonbaar: een echte mail kwam aan, een ongeldig adres werd geweigerd.
+
+**Een contactpersoon is te bewerken** (frontend). Voorheen alleen weggooien en opnieuw invoeren.
+
+**ADR-013 — het rolmodel** (#90). Beheerder aan de vendor, beoordelaar aan de vragenlijst. De
+koppeling is **een hulpmiddel, geen autorisatiegrens**.
+
+**De exit-route** (#91). `docs/architectuur/exit-route-hosting.md`, een levend document. Valkey
+eruit — er bleek geen enkele regel code mee te praten.
+
+**Fase C, backend compleet** (#94, #95, #97 — nog niet gemerged):
+
+| PR | Wat | Migratie |
+|---|---|---|
+| #94 | `GET /admin/survey/responses/:id/answers` | geen |
+| #95 | `clm.survey_review` + twee routes | 0015 |
+| #97 | `clm.template_reviewer` + vier routes | 0016 |
+
+Drie dingen daaruit die het onthouden waard zijn:
+
+- **C1 joint vanaf de vraag, niet vanaf het antwoord.** Een half ingevulde respons moet de
+  openstaande vragen tónen; joinen vanaf `survey_answer` laat ze verdwijnen en doet een halve
+  respons compleet lijken.
+- **`survey_review` is de eerste tabel waar de tenantgrens niet volstaat.** Een leverancier zit
+  in dezelfde tenant als de medewerker die hem beoordeelt, maar mag het oordeel nooit lezen.
+  Eerste policy die `clm.current_actor()` gebruikt — de functie stond sinds 0013 ongebruikt.
+- **`BeoordelingService` kent `template_reviewer` niet** (nul verwijzingen, geverifieerd). Dat is
+  ADR-013 besluit 3: de koppeling bepaalt wat je ziet, niet wat je mag. Wie hier later iets
+  bouwt dat op de koppeling wéigert, gaat daartegen in.
+
+### Wat er onderweg boven kwam (2026-08-06)
+
+| Bevinding | Waar |
+|---|---|
+| **Een tegenproef die niets bewees.** Een heredoc at de backslashes op; sabotage nooit toegepast, 22 tests groen tegen ónveranderde code. Sabotage gaat nu via een bestand en faalt hard als het patroon ontbreekt | werkwijze |
+| `migrate:deploy` gedraaid met alleen `DATABASE_URL` gezet; het script leest `MIGRATION_DATABASE_URL` en die wees naar **productie**. Meldde "Migraties voltooid" tegen de verkeerde database. Geen schade (no-op) → **Issue #86**, opgelost in #93 | `scripts/` |
+| **`db:generate` is onbruikbaar** — snapshots lopen tot 0007 terwijl er 16 migraties zijn. Het genereerde een migratie die `sessie`, `tenant_membership` en een `user`-kolom opnieuw wilde aanmaken → **Issue #96** | `drizzle/meta/` |
+| De bewakingstest op test-id's kijkt alleen naar UUID's tussen **enkele** aanhalingstekens; dezelfde waarde binnen een template-string glipt erdoor. Nog geen issue | `test/test-ids.spec.ts` |
+| Verouderde context uit een automatisch geladen skill stelde dat Bizaline naar Azure migreert; als feit overgenomen in een architectuurdocument. Bron opgespoord, vier bestanden geactualiseerd met een gedateerd "Stand per"-kopje | buiten dit project |
+| Een geldig gevormd maar niet-bestaand mailadres levert "Geslaagd" op. Geen fout, wel het bewijs dat de bounce-webhook nodig is | mailkanaal |
+
+<details>
+<summary>Vorige stand (2026-08-04, avond)</summary>
+
+**Fase A én B van het surveybeheerplan zijn af en gemerged.** De tenant kan een leverancier
+aanvinken, een ronde starten en werkende uitnodigingslinks krijgen — de eerste productiecode die
+`genereerToken()` aanroept. Vier PR's gemerged: #79, #80, #81, #82 plus frontend #5 en #6.
+`verify:volledig` groen: 316 backend, 39 browser.
+
+### Wat er toen bijkwam
 
 **Fase A — vragenlijsten bekijken** (#79, frontend #5). Vier leesroutes onder `/admin/survey`, plus de schermen. Bewust alleen lezen.
 
@@ -27,6 +146,8 @@
 | Zoektests leunden op kolomposities; met de selectiekolom erbij keek er één naar het KvK-nummer i.p.v. de plaats | `e2e/navigatie-en-zoeken.spec.ts` |
 
 **Nieuwe werkwijzeregel (§15c in `MCM2-CLAUDE.md`, PR #82).** Namen en paden opzoeken, niet reconstrueren. Aanleiding: zes van de negen correctierondes deze sessie waren vermijdbaar, en alle zes stonden in code die al gelezen was. Wat dat kost is niet de tijd maar het onderscheid tussen een rode test die iets betekent en een rode test die slordigheid is.
+
+</details>
 
 <details>
 <summary>Vorige stand (2026-08-04, middag)</summary>
@@ -95,13 +216,22 @@ Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in
    Wie wil begrijpen **waarom** de tenantgrens is zoals hij is, en hoe elke laag ervan bewezen wordt: `docs/architectuur-en-verificatie.md`. Dat document beschrijft de architectuur, het principe achter de testopzet (elke beveiligingstest krijgt een tegenproef) en — het belangrijkste hoofdstuk — wat er nog **niet** bewezen is. Het veroudert zodra de code verandert, dus werk het bij wanneer je de tenantgrens of de testopzet raakt.
 3. Verifieer git-status zelf (`git status`, `git branch -a`) tegen wat hieronder staat — vertrouw niet blind op deze snapshot. **Doe dat in beide repositories.**
 4. Check de open GitHub Issues (`gh issue list --repo AlingAdvies/MCM2 --state open`) voor de actuele backlog — dit document verwijst naar issue-nummers, maar de Issues zelf zijn de bron van waarheid over wat daadwerkelijk nog open staat.
-5. **Werk verder volgens het plan** (`docs/superpowers/plans/2026-07-30-beheerkant-en-demo-tenant.md`), niet volgens losse ingevingen. Het plan heeft bovenaan een voortgangstabel. Uitdrukkelijke wens van de eigenaar op 2026-07-30: **de vier fases in volgorde afwerken.** De eerstvolgende concrete stap staat hieronder onder punt 6.
+5. **Werk verder volgens het plan** — sinds 2026-08-03 is dat
+   `docs/superpowers/plans/2026-08-03-surveybeheer.md`. Niet volgens losse ingevingen.
+   Uitdrukkelijke wens van de eigenaar: **de fases in volgorde afwerken.**
+
+   > **Stand 2026-08-06:** fase A, B en C zijn gebouwd; C staat nog in vijf ongemergede PR's.
+   > **Begin bij het rode blok bovenaan dit document**, niet bij punt 6 hieronder — dat
+   > beschrijft de situatie van vóór fase A.
 
    Twee dingen die daarbij horen en makkelijk wegzakken:
    - **Issue #59 — `npm audit` meldt 29 kwetsbaarheden.** Niet vergeten, maar ook niet nu oplossen: `npm audit --omit=dev` geeft **0**, dus er zit niets van in het productie-image. De voorgestelde automatische fix zet eslint jaren terug en breekt de lint-configuratie. Hoort bij de eerste major-onderhoudsronde op devDependencies, samen met Dependabot (#22). **Controleer wel bij elke sessie dat `npm audit --omit=dev` nul blijft** — wordt dat meer dan nul, dan is het geen onderhoudspunt meer maar een blocker.
    - **Issue #58 — de backup hangt af van deze laptop.** Draait dagelijks, maar niet als de machine uitstaat. Vóór de pilotstart (rond 1 september) naar iets onafhankelijks.
 
-6. **Eerste concrete vervolgstap: surveybeheer, dan fase 4.** Fase 1 en 2 zijn op 2026-07-31 afgerond, fase 2b, 2c en 3 op 2026-08-03.
+6. **Historisch — de situatie van 2026-08-03.** Dit punt beschrijft waaróm het surveybeheerplan
+   er kwam. Voor de actuele vervolgstap: zie het rode blok bovenaan.
+
+   Fase 1 en 2 zijn op 2026-07-31 afgerond, fase 2b, 2c en 3 op 2026-08-03.
 
    **Advies over de volgorde (2026-08-03):** eerst functionaliteit, dan fase 4. De doorloop test wat er ís; elke functie die er daarna bij komt, moet er alsnog in. Fase 4 later doen betekent niet dat het werk verdwijnt — het voorkomt dat het twee keer gebeurt. Voorwaarde is wel dat elke fase blijft eindigen met `verify:volledig` groen plus een tegenproef (§15, §15b), anders wordt fase 4 een opruimactie in plaats van een uitbreiding.
 
@@ -464,6 +594,23 @@ Raakt **#12** (acceptatieomgeving — wordt zwaarder: twee containers), **#18** 
 Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Actieve blokkades
+
+- **ACTIEF 2026-08-06 — `main` is sinds 14:50 UTC niet door CI gecontroleerd, en er staan vijf
+  PR's te wachten.** GitHub Actions had die middag een storing met de officiële status
+  `major_outage` (incident gestart 15:22 UTC): *"Workflow runs are failing or delayed in
+  starting, and some queued jobs may time out."*
+
+  **Het onderscheid dat anders verloren gaat:** de rode run op `main` na PR #90 heeft drie
+  `cancelled` jobs zonder één falende stap. Er is niets uitgevoerd, dus niets gezakt. Een
+  `failure` noemt de stap die zakte; een `cancelled` betekent dat de klus is afgebroken vóór er
+  iets gebeurde. `main` is niet stuk.
+
+  **Waarom dit een blokkade is:** de Docker-productiebuild en de RLS tenant-isolatietest hebben
+  `main` sinds de merge van PR #89 niet meer gezien. In de wachtende stapel zitten **twee
+  migraties** (0015 en 0016). Lokaal is alles groen bevonden — 358 e2e-tests, ook tegen een
+  database die vanaf leeg is opgebouwd — maar lokaal is niet CI.
+
+  **Oplossen:** zie het blok bovenaan dit document, stap 1 t/m 3.
 
 - **OPGELOST 2026-08-04, middag — de backup mist negen van de achttien tabellen.** De migratiestand is geïnitialiseerd en de keten 0002 t/m 0014 toegepast: 9 tabellen werden er 18, schema-conformiteit GOEDGEKEURD (17/17), backupcontrole 0 problemen, dump van 21,2 kB naar 77,7 kB. Issues #25 en #29 gesloten. Procedure in `docs/runbooks/baseline-migratiestand.md`.
 
