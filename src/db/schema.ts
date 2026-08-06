@@ -539,6 +539,58 @@ export const surveyAttachment = clm.table(
   ],
 );
 
+/**
+ * Het oordeel van een medewerker over één ingediende respons.
+ *
+ * ── Waarom een eigen tabel en niet een kolom op survey_response ─────────────
+ *
+ * Omdat er meerdere oordelen mogen zijn. Elk oordeel staat met naam en datum
+ * vast en wordt nooit overschreven (plan §2a). Dat is precies waarom een
+ * reviewer mag beoordelen zonder admin te zijn: hij kan niets stilletjes
+ * wijzigen, alleen iets toevoegen dat zichtbaar van hem is. Een kolom op de
+ * respons zou het vorige oordeel wissen en die redenering ondergraven.
+ *
+ * ── De eerste tabel waar de tenantgrens niet genoeg is ──────────────────────
+ *
+ * Overal elders geldt "zelfde tenant = mag het zien". Hier niet: een
+ * leverancier zit in dezelfde tenant als de medewerker die hem beoordeelt,
+ * maar mag dat oordeel niet lezen. Daarvoor is `app.current_actor` gemaakt
+ * (migratie 0013). De policy eist naast de tenant dus ook actor
+ * `medewerker` — zie migratie 0015.
+ */
+export const surveyReview = clm.table(
+  'survey_review',
+  {
+    reviewId: uuid('review_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    responseId: uuid('response_id')
+      .notNull()
+      .references(() => surveyResponse.responseId, { onDelete: 'restrict' }),
+    // goed | nadere_vragen | niet_goed. Als CHECK in de database, zodat een
+    // typefout in code een databasefout wordt en geen rij met onzin.
+    verdict: text('verdict').notNull(),
+    // NOT NULL met '' als lege waarde, net als survey_question.body: dan hoeft
+    // de aanroeper nergens onderscheid te maken tussen null en leeg.
+    toelichting: text('toelichting').notNull().default(''),
+    // Wie het oordeel gaf. Bewust geen onDelete: 'set null' — een oordeel
+    // zonder naam is waardeloos in een compliance-dossier.
+    reviewerUserId: uuid('reviewer_user_id')
+      .notNull()
+      .references(() => user.userId, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    // Intrekken kan wel, wissen niet: de historie blijft leesbaar.
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('survey_review_tenant_id_idx').on(t.tenantId),
+    index('survey_review_response_id_idx').on(t.responseId),
+  ],
+);
+
 // ─── audit schema ──────────────────────────────────────────────────────────
 
 export const auditEvent = audit.table(

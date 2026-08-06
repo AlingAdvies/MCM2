@@ -20,10 +20,13 @@ import {
 import { RondeBeheerService } from './ronde-beheer.service';
 import {
   InvoerFout,
+  leesNieuweBeoordeling,
+  type NieuweBeoordelingInvoer,
   leesNieuweRonde,
   leesStatus,
   leesUitnodigingen,
 } from './ronde-invoer';
+import { BeoordelingService } from './beoordeling.service';
 import { VragenlijstBeheerService } from './vragenlijst-beheer.service';
 
 /**
@@ -71,6 +74,8 @@ export class VragenlijstBeheerController {
     private readonly beheer: VragenlijstBeheerService,
     private readonly rondes: RondeBeheerService,
     private readonly verzender: UitnodigingVerzender,
+    // Onderstreept omdat `beoordelingen` al de naam van een routemethode is.
+    private readonly beoordelingen_: BeoordelingService,
   ) {}
 
   /** Alle vragenlijsten van deze tenant, met aantallen vragen en rondes. */
@@ -130,6 +135,61 @@ export class VragenlijstBeheerController {
     const sessie = request.sessie!;
 
     return this.beheer.antwoorden(sessie.tenantId, id);
+  }
+
+  /** Alle oordelen over één respons, nieuwste eerst. */
+  @Get('responses/:id/reviews')
+  async beoordelingen(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+  ) {
+    const sessie = request.sessie!;
+
+    const beoordelingen = await this.beoordelingen_.lijst(sessie.tenantId, id);
+
+    return { beoordelingen };
+  }
+
+  /**
+   * Legt een nieuw oordeel vast over een ingediende respons.
+   *
+   * **Geen `@VereistRol('admin')`, en dat is een besluit** (plan §2a, eigenaar
+   * 2026-08-03). Beoordelen ís de rol van een reviewer; hem dat ontzeggen maakt
+   * de rol betekenisloos en de admin een flessenhals.
+   *
+   * Dat dit verantwoord is hangt aan één ding: elk oordeel staat met naam en
+   * datum vast en wordt nooit overschreven. Een reviewer kan dus niets
+   * stilletjes veranderen — alleen iets toevoegen dat zichtbaar van hem is.
+   * Zou de tabel updates toestaan, dan hoorde hier admin te staan.
+   *
+   * 201 met het oordeel erbij. 404 als de respons niet bestaat binnen deze
+   * tenant, 400 als er nog niet is ingediend of de invoer niet deugt.
+   */
+  @Post('responses/:id/reviews')
+  async beoordeel(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const sessie = request.sessie!;
+
+    let invoer: NieuweBeoordelingInvoer;
+    try {
+      invoer = leesNieuweBeoordeling(body);
+    } catch (err) {
+      throw this.naarHttpFout(err);
+    }
+
+    // De reviewer komt uit de sessie, nooit uit de body: anders kan iemand een
+    // oordeel op naam van een collega vastleggen (§6).
+    const beoordeling = await this.beoordelingen_.voegToe(
+      sessie.tenantId,
+      id,
+      sessie.userId,
+      invoer,
+    );
+
+    return { beoordeling };
   }
 
   // ── Fase B: schrijven ──────────────────────────────────────────────────────

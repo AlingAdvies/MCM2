@@ -156,6 +156,28 @@ export const TEST_IDS = {
     vendorB: '00000000-0000-0000-0000-0000000000d4',
     vendorWeg: '00000000-0000-0000-0000-0000000000d5',
   },
+  // Fase C2 — beoordelen. Staarten d6 t/m db; da is al vergeven, vandaar de
+  // sprong. Gecontroleerd tegen alleTestIds(), niet gegokt.
+  beoordeling: {
+    tenantA: '00000000-0000-0000-0000-0000000000d6',
+    tenantB: '00000000-0000-0000-0000-0000000000d7',
+    adminA: '00000000-0000-0000-0000-0000000000d8',
+    reviewerA: '00000000-0000-0000-0000-0000000000d9',
+    templateA: '00000000-0000-0000-0000-0000000000db',
+    runA: '00000000-0000-0000-0000-0000000000dc',
+    vendorA: '00000000-0000-0000-0000-0000000000dd',
+    /** Ingediend — hierop mag beoordeeld worden. */
+    responseIngediend: '00000000-0000-0000-0000-0000000000de',
+    /** Nog niet ingediend — hierop juist niet. */
+    responseOpen: '00000000-0000-0000-0000-0000000000df',
+    adminB: '00000000-0000-0000-0000-0000000000e0',
+    /**
+     * Tweede leverancier. Nodig omdat survey_response_run_vendor_key één
+     * respons per vendor per ronde toestaat — de open en de ingediende respons
+     * kunnen dus niet dezelfde vendor hebben.
+     */
+    vendorOpen: '00000000-0000-0000-0000-0000000000e3',
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */
