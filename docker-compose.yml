@@ -10,8 +10,6 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-    depends_on:
-      - valkey
 
   minio:
     image: minio/minio:latest
@@ -25,10 +23,18 @@ services:
     volumes:
       - minio-data:/data
 
-  valkey:
-    image: valkey/valkey:8.1-alpine
-    ports:
-      - "6379:6379"
+# Valkey stond hier tot 2026-08-06 als queue voor BullMQ (ADR-004). Verwijderd
+# omdat er geen enkele dependency en geen enkele regel code was die hem
+# aanriep: geen bullmq, geen ioredis. Een container die in elke omgeving
+# draait en een REDIS_URL die een afhankelijkheid suggereert die er niet is,
+# kosten meer dan ze opleveren.
+#
+# ADR-004 blijft geldig als "besluit genomen, nog niet toegepast": komt er een
+# queue voor bulkmail, herinneringen of exports, dan is het Valkey.
+#
+# MinIO staat er wél nog, en dat is een ander geval: die is nodig voor Issue
+# #46 (objectopslag voor uploads), het enige onderdeel dat nu nog op de
+# containerschijf staat. Zie docs/architectuur/exit-route-hosting.md §4.
 
 volumes:
   minio-data:
