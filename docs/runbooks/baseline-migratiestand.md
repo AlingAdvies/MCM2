@@ -216,7 +216,8 @@ PROEF — er is niets geschreven.
 - *"AFGEBROKEN — er staan al N migratie(s) vastgelegd"* → deze database is al gebaselined. Sla
   stap 4 over en ga door naar stap 5.
 - *"AFGEBROKEN — er staat geen enkele tabel"* → verkeerde database. Op een lege database draai
-  je gewoon `npm run migrate:deploy`.
+  je gewoon `npm run migrate:deploy` (met `-- --extern` als die database niet op deze machine
+  staat).
 
 ---
 
@@ -254,15 +255,32 @@ convergentie uit 0014.
 **Actie:**
 
 ```powershell
-npm run migrate:deploy
+npm run migrate:deploy -- --extern
 ```
+
+> **Waarom hier `--extern` staat.** Sinds Issue #86 weigert `migrate:deploy` te draaien tegen
+> een database die niet op deze machine staat, tenzij je dat expliciet meegeeft. Deze runbook
+> richt zich op een replica of op productie — dus niet-lokaal, dus de vlag is nodig.
+>
+> Dat is precies de bedoeling: op 2026-08-06 draaide dit commando per ongeluk tegen productie
+> omdat `.env` daarheen wees, en het meldde gewoon "Migraties voltooid". De vlag maakt van die
+> vergissing een bewuste handeling.
+>
+> Draai je tegen een lokale wegwerpcontainer, laat de vlag dan weg.
 
 **Verwacht resultaat:**
 
 ```
-Migraties draaien als rol 'clm_migrator'.
+Migraties: <host>:5432/postgres als rol 'clm_migrator' [NIET-LOKAAL]
+Doelwit is niet-lokaal, maar --extern is meegegeven. Doorgaan.
+
+Verbonden als rol 'clm_migrator'.
 Migraties voltooid.
 ```
+
+**Lees de eerste regel voordat je verdergaat.** Daar staat tegen welke database je werkelijk
+draait. Staat daar een andere host dan je bedoelde, breek dan af — er is op dat moment nog
+niets gewijzigd.
 
 Dit duurt op de replica enkele seconden.
 
