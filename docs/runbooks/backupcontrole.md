@@ -231,6 +231,12 @@ Get-Content "$env:USERPROFILE\OneDrive - Aling Advies\MCM2-backups\backup-contro
 Het `.cmd` geeft zelf altijd exitcode 0 terug, zodat Taakplanner de taak niet als kapot
 markeert terwijl hij juist deed wat hij moest doen.
 
+**Een andere code dan 0 of 1 hoort er niet te staan.** Zie je bijvoorbeeld
+`code -1073740791` met daarboven een regel `Assertion failed: !(handle->flags & ...)`, dan is
+Node zelf gecrasht na het versturen. De meldingen zijn dan wél verstuurd — maar de controle
+eindigde niet netjes. Dat is opgelost op 2026-08-06 (`process.exitCode` in plaats van
+`process.exit()`); komt het terug, dan is er iets anders aan de hand.
+
 ---
 
 ## Wat je van de melding mag verwachten

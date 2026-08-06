@@ -284,13 +284,15 @@ async function main() {
     );
     if (!gelukt && telegram.geconfigureerd) {
       console.error('MISLUKT — zie de foutmelding hierboven.');
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     if (!telegram.geconfigureerd) {
       console.error(
         '\nTELEGRAM_BOT_TOKEN en/of TELEGRAM_CHAT_ID ontbreken in .env.\nZonder die twee is er geen melding — zie het runbook.',
       );
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
     console.log('OK — testbericht verstuurd.');
     return;
@@ -305,7 +307,8 @@ async function main() {
   if (fout) {
     await telegram.meldProbleem('geen_backup', `MCM2 backup\n\n${fout}`);
     console.error(fout);
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
 
   const actualiteit = controleerActualiteit(dump);
@@ -388,10 +391,24 @@ async function main() {
   for (const regel of regels) console.log(`  ${regel}`);
   for (const probleem of problemen) console.log(`  PROBLEEM: ${probleem.bericht.split('\n')[0]}`);
 
-  process.exit(problemen.length > 0 ? 1 : 0);
+  // Bewust process.exitCode en niet process.exit().
+  //
+  // process.exit() kapt af terwijl libuv de HTTPS-verbinding naar Telegram nog
+  // aan het opruimen is. Op Windows crasht Node daar sinds v24 op:
+  //
+  //   Assertion failed: !(handle->flags & UV_HANDLE_CLOSING), src\win\async.c
+  //
+  // Dat gebeurde op 2026-08-06 en gaf exitcode -1073740791 in plaats van 1.
+  // De berichten wáren al verstuurd, dus er ging niets verloren — maar het log
+  // eindigde met een crash, en een controle die zelf crasht is er precies één
+  // die je niet vertrouwt op het moment dat het ertoe doet.
+  //
+  // Met exitCode rondt Node de verbinding netjes af en eindigt daarna vanzelf.
+  // Gemeten: binnen 0,6 seconde, want fetch houdt geen sockets open.
+  process.exitCode = problemen.length > 0 ? 1 : 0;
 }
 
 main().catch((err) => {
   console.error(`Onverwachte fout in de backupcontrole: ${err.message}`);
-  process.exit(1);
+  process.exitCode = 1;
 });
