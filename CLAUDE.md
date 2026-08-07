@@ -53,6 +53,12 @@ Lees het resultaat terug uit de database. "Migraties voltooid" betekende op
 2026-08-07 dat er niets was gebeurd, en in Issue #86 dat het op de verkeerde
 database was gebeurd.
 
+**5. Schrijf je een e2e-suite? Lees dan eerst §"Een nieuwe e2e-suite schrijven".**
+Alle suites delen één database. Vier unieke sleutels hebben géén `tenant_id`
+erin — je eigen tenant beschermt je dus niet. Een suite die los groen draait
+kan de volledige run alsnog rood maken, en welke suite dan omvalt hangt af van
+de volgorde. Draai altijd `npx jest test-ids` én de volledige e2e-run.
+
 ---
 
 ## Groen is alleen groen via verify

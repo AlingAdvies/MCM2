@@ -305,6 +305,128 @@ taskkill /PID <pid> /F
 
 ---
 
+## Een nieuwe e2e-suite schrijven
+
+Alle e2e-suites delen één database. Een suite die los groen draait kan de
+volledige run alsnog rood maken — en welke suite dan omvalt, hangt af van de
+volgorde. Dat is de vervelendste faalvorm in dit project: hij ziet eruit als
+toeval en is het niet.
+
+### Vier waarden moeten uniek zijn over ALLE suites heen
+
+Deze unieke sleutels hebben **geen `tenant_id` erin**. Je eigen tenant beschermt
+je dus niet:
+
+| Sleutel | Op | Hoe je het oplost |
+|---|---|---|
+| `survey_response_token_hash_key` | `survey_response.token_hash` | Eigen herhaald teken per suite |
+| `tenant_name_key` | `tenant.name` | Suitenaam in de tenantnaam |
+| `user_external_subject_key` | `user.external_subject` | Suiteprefix **plus** `Date.now()` |
+| `survey_attachment_storage_key_key` | `survey_attachment.storage_key` | Eigen prefix per suite |
+| `sessie_token_hash_key` | `sessie.token_hash` | Komt uit `SessieService`, dus vanzelf uniek |
+
+**De beproefde vormen**, zoals de bestaande suites het doen:
+
+```ts
+// token_hash — 64 hex-tekens (CHECK uit migratie 0003).
+// Het herhaalde teken is je claim; kies er een die nog vrij is.
+const HASH_INGEDIEND = `${'6'.repeat(48)}60ed6e0e60ed6e0e`;
+
+// external_subject — prefix én tijdstempel. Dubbel beveiligd, want twee
+// suites met dezelfde prefix zouden nog steeds botsen.
+const SUBJECT_ADMIN = `oid-gk-a-${Date.now()}`;
+
+// tenantnaam — noem de suite erin.
+'Tenant A (goedkeuren)'
+```
+
+Welke tekens al vergeven zijn:
+```powershell
+Select-String -Path test\*.e2e-spec.ts -Pattern "repeat\(48\)"
+```
+
+**Er staat een bewakingstest op** (`test/test-ids.spec.ts`): die vangt een
+botsende `token_hash` en noemt beide suites bij naam. Draai hem vóór je een
+volledige e2e-run start — hij kost een seconde en heeft geen database nodig:
+
+```powershell
+npx jest test-ids
+```
+
+### Test-id's: kijk naar BEIDE uitdeelvormen
+
+`test/test-ids.ts` deelt UUID's op twee manieren uit: letterlijk, én via de
+`id()`-helper bovenaan. Zoek je alleen op de letterlijke vorm, dan lijken
+staarten vrij die het niet zijn.
+
+```powershell
+# Beide vormen, samengevoegd. Schrijf de UUID voluit — met koppeltekens.
+# Een verkort patroon als '0{20}([0-9a-f]{2})' vindt NUL treffers en ziet er
+# toch uit alsof het werkt; het geeft dan een lijst vrije staarten die allemaal
+# bezet zijn.
+$viaId = Select-String -Path test\test-ids.ts -Pattern "id\('([0-9a-f]{2})'\)" -AllMatches |
+  ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value }
+$letterlijk = Select-String -Path test\test-ids.ts -Pattern "'00000000-0000-0000-0000-0000000000([0-9a-f]{2})'" -AllMatches |
+  ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value }
+$vergeven = ($viaId + $letterlijk) | Sort-Object -Unique
+"$($vergeven.Count) vergeven"
+
+# Wat is er vrij in een bereik?
+0x92..0xa4 | ForEach-Object { $h='{0:x2}' -f $_; if ($vergeven -notcontains $h) { $h } }
+```
+
+**Controleer de uitkomst op plausibiliteit.** Krijg je opeens veel minder
+vergeven staarten dan de vorige keer, dan matcht je patroon niet — niet dat er
+ruimte is vrijgekomen.
+
+Verzin nooit een UUID in een testbestand: er staat een bewakingstest op die elke
+letterlijke test-UUID in het register wil zien.
+
+### Geef elke test die een script start een timeout mee
+
+Jest hanteert standaard **5 seconden**. Een test die `draaiSeed()` of een ander
+Node-proces start haalt dat alleen op een verder onbelaste machine. In de
+volledige run valt hij dan om — niet omdat er iets stuk is, maar omdat het even
+duurde.
+
+```ts
+it('vult een lege database…', async () => {
+  draaiSeed();
+  // …
+}, 20_000);
+```
+
+Dit is twee keer misgegaan: op 2026-08-04 en, in de tests die toen waren
+overgeslagen, opnieuw op 2026-08-07.
+
+### Voordat je een suite als klaar beschouwt
+
+```powershell
+# 1. Bewakingstests (snel, geen database)
+npx jest test-ids
+
+# 2. Je eigen suite
+$env:DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres"
+npx jest --config test/jest-e2e.json <naam> --forceExit
+
+# 3. ALLE suites samen — dit is de stap die botsingen vindt
+npx jest --config test/jest-e2e.json --forceExit
+```
+
+**Stap 3 is niet optioneel.** Stap 2 groen zegt niets over botsingen; dat is
+precies wat het op 2026-08-07 twee runs lang verborg.
+
+Zakt er iets, zoek dan eerst naar de databasefout in plaats van naar de
+falende assertie:
+```powershell
+npx jest --config test/jest-e2e.json --forceExit 2>&1 |
+  Select-String -Pattern "duplicate key|violates|deadlock|Exceeded timeout"
+```
+`duplicate key` betekent een botsing tussen suites, `Exceeded timeout` een
+ontbrekende timeout. Beide staan hierboven.
+
+---
+
 ## Wat CI werkelijk draait
 
 Drie jobs in `.github/workflows/ci.yml`:
