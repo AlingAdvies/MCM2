@@ -267,6 +267,40 @@ export const TEST_IDS = {
     /** Bestaat met opzet NIET — voor de 404 bij intrekken. */
     notitieBestaatNiet: '00000000-0000-0000-0000-000000000fee',
   },
+  // Werkvoorraad contractmanager. Staarten 10 t/m 1b, aaneengesloten.
+  //
+  // Bewust laag in het bereik: de a0–bf-zone is grotendeels vergeven, en een
+  // eerste poging daar leverde drie botsingen op (ac, b1, b2) die de
+  // bewakingstest hieronder ving. Onder 0x20 is nog alles vrij.
+  //
+  // Zie docs/runbooks/commandos-en-omgeving.md, §"Een nieuwe e2e-suite
+  // schrijven" — en let op dat staarten op TWEE manieren worden uitgedeeld:
+  // letterlijk zoals hier, én via de id()-helper bovenaan.
+  'werkvoorraad-contractmanager': {
+    tenantA: '00000000-0000-0000-0000-000000000010',
+    tenantB: '00000000-0000-0000-0000-000000000011',
+    /** Contractmanager van vendorVanMij. */
+    managerA: '00000000-0000-0000-0000-000000000012',
+    /** Collega-contractmanager: beheert een andere vendor. */
+    collegaA: '00000000-0000-0000-0000-000000000013',
+    templateA: '00000000-0000-0000-0000-000000000014',
+    runA: '00000000-0000-0000-0000-000000000015',
+    /** Vendor van managerA — ingediend. */
+    vendorVanMij: '00000000-0000-0000-0000-000000000016',
+    /** Vendor van collegaA — hoort niet in 'van mij'. */
+    vendorVanCollega: '00000000-0000-0000-0000-000000000017',
+    /**
+     * Vendor zónder contractmanager. owner_user_id is nullable met ON DELETE
+     * set null, dus die situatie ontstaat vanzelf na het vertrek van een
+     * collega — en dan moet hij juist zichtbaar blijven in het organisatiebrede
+     * overzicht.
+     */
+    vendorZonderEigenaar: '00000000-0000-0000-0000-000000000018',
+    responseVanMij: '00000000-0000-0000-0000-000000000019',
+    responseVanCollega: '00000000-0000-0000-0000-00000000001a',
+    responseZonderEigenaar: '00000000-0000-0000-0000-00000000001b',
+    adminB: '00000000-0000-0000-0000-00000000001c',
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */
