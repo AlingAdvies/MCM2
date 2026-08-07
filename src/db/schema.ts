@@ -591,6 +591,67 @@ export const surveyReview = clm.table(
   ],
 );
 
+/**
+ * Wie een vragenlijst beoordeelt (ADR-013, besluit 2).
+ *
+ * ── Aan de vragenlijst, niet aan de vendor of de ronde ──────────────────────
+ *
+ * Beoordelen is vakinhoud, geen eigenaarschap. Wie een IT-compliancelijst kan
+ * beoordelen — bij Transdev de CISO — kan dat voor élke vendor. De
+ * contractmanager van vendor X kan dat voor géén enkele, ook niet voor zijn
+ * eigen vendor.
+ *
+ * Dat onderscheid is de kern van ADR-013: beheren is eigenaarschap, beoordelen
+ * is expertise. Die twee horen niet aan hetzelfde object.
+ *
+ * ── Een hulpmiddel, geen autorisatiegrens ───────────────────────────────────
+ *
+ * Deze koppeling bepaalt wat iemand in zijn werkvoorraad ziet, **niet wat hij
+ * mag** (ADR-013 besluit 3). Elke reviewer binnen de tenant mag elke inzending
+ * beoordelen. Een harde grens zou het proces stilleggen zodra de gekoppelde
+ * beoordelaar ziek is, en dan wijzigt iemand met databasetoegang de koppeling —
+ * een noodgreep buiten de app om, zonder spoor.
+ *
+ * De fallback is de contractmanager, die intern regelt dat een bevoegd persoon
+ * beoordeelt. Dat werkt alleen als de app het niet blokkeert.
+ *
+ * ── Geen unieke sleutel op template_id ──────────────────────────────────────
+ *
+ * Meerdere beoordelaars zijn toegestaan. Bij Transdev is het er waarschijnlijk
+ * één, maar die ene gaat met vakantie. Nu toestaan kost niets; later verruimen
+ * is een migratie op productiedata.
+ */
+export const templateReviewer = clm.table(
+  'template_reviewer',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    templateId: uuid('template_id')
+      .notNull()
+      .references(() => surveyTemplate.templateId, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => user.userId, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    // Wie de koppeling legde. Anders dan bij survey_review geen restrict:
+    // dit is administratie, geen oordeel — een koppeling blijft bruikbaar
+    // als degene die hem legde is vertrokken.
+    createdBy: uuid('created_by').references(() => user.userId, {
+      onDelete: 'set null',
+    }),
+  },
+  (t) => [
+    // Samengestelde primaire sleutel: dezelfde persoon twee keer aan dezelfde
+    // lijst koppelen is geen fout die stil hoort te slagen.
+    primaryKey({ columns: [t.templateId, t.userId] }),
+    index('template_reviewer_tenant_id_idx').on(t.tenantId),
+    index('template_reviewer_user_id_idx').on(t.userId),
+  ],
+);
+
 // ─── audit schema ──────────────────────────────────────────────────────────
 
 export const auditEvent = audit.table(
