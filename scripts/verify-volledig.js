@@ -316,6 +316,24 @@ function startTestDatabase() {
         return { ok: false, reden: migraties.uitvoer.trim() };
       }
 
+      // Deze container is per definitie wegwerp: hij is hierboven aangemaakt
+      // en wordt in stap 6 weer weggegooid. Zonder deze markering weigeren de
+      // e2e-tests te draaien (migratie 0019, test/jest-e2e.setup.ts).
+      const markering = draai(
+        'node',
+        ['scripts/markeer-wegwerp.js', 'verify:volledig — wegwerpcontainer'],
+        {
+          stil: true,
+          env: {
+            MIGRATION_DATABASE_URL: `postgresql://clm_migrator:pw@localhost:${TESTDB_POORT}/postgres`,
+          },
+        },
+      );
+
+      if (!markering.ok) {
+        return { ok: false, reden: markering.uitvoer.trim() };
+      }
+
       return {
         ok: true,
         url: `postgresql://clm_api_runtime:pw@localhost:${TESTDB_POORT}/postgres`,

@@ -31,6 +31,43 @@ Verzin nooit een commando. Staat het hier niet, dan bestaat het niet — kijk in
 
 ---
 
+## Twee soorten database, en de database zegt zelf welke
+
+Sinds migratie 0019 draagt elke database een markering in `clm.omgeving`:
+
+| Soort | Wat het betekent |
+|---|---|
+| `beschermd` | Met rust laten. Productie, de demo, of die van een collega. **Dit is de standaard.** |
+| `wegwerp` | Mag leeggegooid worden. Een container die je zelf opzet en weer weggooit. |
+
+**De e2e-suites weigeren te draaien tegen een beschermde database.** Ze maken
+tenants aan en voeren `DELETE` uit; dat is op alles behalve wegwerp
+gegevensverlies.
+
+**Waarom `beschermd` de standaard is:** een database die vergeet zich te
+benoemen wordt behandeld als productie. Andersom zou precies de database die
+niemand heeft ingericht — de nieuwe, de vergetene — vogelvrij zijn.
+
+**Aanleiding.** Op 2026-08-07 draaiden de e2e-suites tegen de demo-database
+(poort 55450 in plaats van 55440). De demo-tenant verdween, 400
+testleveranciers bleven achter. Er sloeg niets aan: de bestaande bescherming
+kijkt alleen of de host lokaal is, en binnen `localhost` was de demo niet te
+onderscheiden van een wegwerpcontainer.
+
+Een eigen wegwerpdatabase markeren, ná het draaien van de migraties:
+```powershell
+$env:MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres"
+node scripts/markeer-wegwerp.js "korte omschrijving"
+```
+
+Markeren gaat via `clm_migrator`, niet via de runtime-rol: een database omkatten
+hoort een beheerhandeling te zijn, geen iets wat de applicatie kan.
+
+`verify:volledig` en CI markeren hun eigen container automatisch — daar hoef je
+niets voor te doen.
+
+---
+
 ## ⚠ Het belangrijkste: `.env` wijst naar Supabase
 
 ```
@@ -217,6 +254,22 @@ MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres" n
 
 **Controleer de melding die het script afdrukt.** Hij noemt het doelwit. Staat
 daar `supabase.com`, dan is de variabele niet doorgekomen — stop.
+
+### Markeren als wegwerp (verplicht vóór de e2e-tests)
+
+```powershell
+node scripts/markeer-wegwerp.js "wegwerp voor <waar je aan werkt>"
+```
+
+Zonder deze stap weigeren de e2e-suites te draaien: elke database komt uit
+migratie 0019 als `beschermd`. Dat is opzet — zie de sectie bovenaan.
+
+De melding die je krijgt als je het vergeet noemt het doelwit, de status en dit
+commando, dus je kunt hem niet mislezen.
+
+> **Markeer nooit de demo-database (55450) of iets op Supabase als wegwerp.**
+> Het script weigert een niet-lokale host zonder `--extern`, maar tegen de demo
+> op localhost is er geen technische rem — alleen deze regel.
 
 Zie je twijfel over wat er nu gezet staat:
 ```powershell
@@ -412,6 +465,12 @@ npx jest --config test/jest-e2e.json <naam> --forceExit
 # 3. ALLE suites samen — dit is de stap die botsingen vindt
 npx jest --config test/jest-e2e.json --forceExit
 ```
+
+Krijg je bij stap 2 of 3 **"E2E GESTOPT — deze database is geen
+wegwerpdatabase"**, dan wijst `DATABASE_URL` naar iets dat met rust gelaten
+moet worden. Kijk naar het doelwit in die melding vóór je iets anders doet:
+staat daar poort 55450, dan is dat de demo, en dan moet je `DATABASE_URL`
+corrigeren — niet de demo markeren.
 
 **Stap 3 is niet optioneel.** Stap 2 groen zegt niets over botsingen; dat is
 precies wat het op 2026-08-07 twee runs lang verborg.

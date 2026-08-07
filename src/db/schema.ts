@@ -594,6 +594,37 @@ export const surveyReview = clm.table(
 );
 
 /**
+ * Wat voor database is dit (migratie 0019).
+ *
+ * ── De enige tabel zonder tenant_id, en dat is opzet ────────────────────────
+ *
+ * Dit gaat niet over een klant maar over de database als geheel: is hij
+ * wegwerp, of moet hij met rust gelaten worden. Eén rij, afgedwongen door een
+ * boolean als primaire sleutel.
+ *
+ * ── Waarom hier en niet in een script ───────────────────────────────────────
+ *
+ * Een poortnummer of containerlabel zit náást de database en klopt niet meer
+ * zodra iets verhuist. Dit reist mee: een dump neemt hem over, en een kopie van
+ * productie draagt zichtbaar 'beschermd' met zich mee.
+ *
+ * Gelezen door test/jest-e2e.setup.ts, die weigert te draaien tegen een
+ * beschermde database. Standaard is 'beschermd' — een database die zich niet
+ * meldt, wordt als productie behandeld.
+ */
+export const omgeving = clm.table('omgeving', {
+  // Boolean als primaire sleutel met DEFAULT true: een tweede INSERT loopt op
+  // de sleutel stuk, dus er is altijd precies één rij.
+  id: boolean('id').primaryKey().default(true),
+  // wegwerp | beschermd. CHECK in de database (migratie 0019).
+  soort: text('soort').notNull(),
+  toelichting: text('toelichting').notNull().default(''),
+  gemarkeerdOp: timestamp('gemarkeerd_op', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
  * Een notitie bij een inzending, voor collega's onderling (migratie 0018).
  *
  * ── Waarom dit geen survey_review is ────────────────────────────────────────

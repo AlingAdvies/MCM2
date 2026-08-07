@@ -115,6 +115,16 @@ jobs:
       - name: Migraties toepassen (via clm_migrator)
         run: npm run migrate:deploy
 
+      # De e2e-suites weigeren te draaien tegen een database die niet als
+      # wegwerp is gemarkeerd (migratie 0019, test/jest-e2e.setup.ts). Deze
+      # service-container leeft één job lang, dus dat is hij per definitie.
+      #
+      # Zonder deze stap loopt de RLS-isolatietest hierna vast met de melding
+      # dat de database beschermd is — de guard werkt dan, alleen tegen de
+      # verkeerde database.
+      - name: Database markeren als wegwerp
+        run: node scripts/markeer-wegwerp.js "CI — service-container"
+
       # Poort tegen een tenantgebonden tabel zonder RLS. drizzle-kit genereert
       # geen RLS (ADR-010), dus een nieuwe tabel met tenant_id krijgt niet
       # automatisch een policy. De verwachting komt uit src/db/schema.ts, niet

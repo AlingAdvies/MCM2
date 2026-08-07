@@ -35,6 +35,13 @@ wegwerpcontainer op (`-p 127.0.0.1:55440:5432`, niet `0.0.0.0`) en overschrijf
 `MIGRATION_DATABASE_URL` / `DATABASE_URL` binnen het commando. Nooit `.env`
 aanpassen.
 
+**1b. Elke database is `beschermd` tot hij zich als wegwerp meldt.**
+Sinds migratie 0019 staat dat in `clm.omgeving`, en de e2e-suites weigeren te
+draaien tegen alles wat niet `wegwerp` is. Na het opzetten van je eigen
+container: `node scripts/markeer-wegwerp.js "waarvoor"`. **Markeer nooit de
+demo (poort 55450) of Supabase.** Aanleiding: op 2026-08-07 wisten de e2e-tests
+de demo-database leeg omdat `DATABASE_URL` naar 55450 wees.
+
 **2. Verzin nooit een commando.**
 Staat het niet in `package.json`, dan bestaat het niet:
 ```powershell
