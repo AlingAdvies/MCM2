@@ -1,7 +1,25 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-08-07, ochtend (**de PR-stapel is weggewerkt en fase C is backend-compleet in `main`.** De Actions-storing van 06-08 is voorbij; alle PR's zijn met groene CI gemerged. Daarmee staat de hele beoordeelketen in `main`: antwoorden lezen, oordelen vastleggen, beoordelaars koppelen. **Er is nog geen enkel scherm** — dat is het werk dat nu volgt.)
+2026-08-07, avond (**de statusketen is backend-compleet en het eerste scherm staat er.** Vier PR's gemerged: goedkeuren (0017), notities (0018), werkvoorraad contractmanager, en een bescherming die voorkomt dat de tests een database leegmaken die niet wegwerp is (0019). Het statusoverzicht per vendor is gebouwd en met echte data bekeken. **Het responsscherm ontbreekt nog** — oordelen en notities zijn wel te tellen, niet te lezen.)
+
+> ### ⚠ Wat er op 2026-08-07 misging, en wat eraan is gedaan
+>
+> De e2e-suites draaiden tegen de **demo-database**: `DATABASE_URL` wees naar
+> poort 55450 in plaats van naar een wegwerpcontainer op 55440. De demo-tenant
+> verdween, 400 testleveranciers bleven achter. Er sloeg niets aan.
+>
+> De bestaande bescherming (`scripts/db-doelwit.js`) kent één criterium — is de
+> host lokaal — en zat bovendien alleen in vier scripts. Binnen `localhost` was
+> de demo niet te onderscheiden van een wegwerpcontainer.
+>
+> **Migratie 0019** zet `clm.omgeving` neer: elke database is `beschermd` tot
+> hij zichzelf als `wegwerp` meldt. De e2e-suites weigeren te starten tegen
+> alles wat niet wegwerp is, en `seed:demo --verwijder` ook. Zie
+> `docs/runbooks/commandos-en-omgeving.md`.
+>
+> Productie is niet geraakt: die loopt zelfs achter (0017–0019 staan er nog
+> niet op).
 
 ---
 
@@ -28,14 +46,19 @@ Alle vijf zijn gemerged, elk met een groene CI-run — de Actions-storing was vo
 
 ---
 
-**Nu aan de beurt: de frontend van fase C.** De backend is compleet en getest; er is nog geen enkel
-scherm. Drie stuks volgens het plan (§Fase C, "Frontend"):
+**Nu aan de beurt: de frontend van fase C.** De backend is compleet en getest. Van de drie
+schermen uit het plan (§Fase C, "Frontend") staat er één:
 
-1. **Voortgang per ronde** — ingediend / open / verlopen
+1. ~~**Voortgang per ronde**~~ — vervangen door het **statusoverzicht per vendor**
+   (`/beheer/status`), gebouwd 2026-08-07. Toont de vijf statussen uit
+   `docs/superpowers/plans/2026-08-07-statuswaarheid-per-vendor.md`, met de schakelaar
+   "van mij" / "hele organisatie" erin verwerkt. Daarmee dekt dit scherm ook punt 3.
 2. **Antwoorden lezen** per respons, met het beoordeelblok eronder: drie knoppen plus een
-   toelichtingsveld, en daaronder de eerdere oordelen op datum
-3. **Twee werkvoorraden**, geen twee filters op dezelfde lijst (ADR-013) — met een schakelaar
-   "van mij" / "hele organisatie"
+   toelichtingsveld, en daaronder de eerdere oordelen op datum — **ontbreekt nog, en dat is
+   het grootste gat.** Het statusoverzicht telt oordelen en notities, maar je kunt ze nergens
+   lézen: de toelichting bij een oordeel en de notities van collega's zijn onbereikbaar.
+3. **Twee werkvoorraden** (ADR-013) — de contractmanagerkant zit in het statusoverzicht;
+   `GET /admin/survey/mijn-beoordelingen` heeft nog geen eigen scherm.
 
 Twee dingen die daarbij geen detail zijn:
 - **Het huidige oordeel hoort in de voortgangslijst**, niet alleen op het detailscherm. Anders
@@ -95,10 +118,20 @@ Drie dingen daaruit die het onthouden waard zijn:
 |---|---|
 | **Een tegenproef die niets bewees.** Een heredoc at de backslashes op; sabotage nooit toegepast, 22 tests groen tegen ónveranderde code. Sabotage gaat nu via een bestand en faalt hard als het patroon ontbreekt | werkwijze |
 | `migrate:deploy` gedraaid met alleen `DATABASE_URL` gezet; het script leest `MIGRATION_DATABASE_URL` en die wees naar **productie**. Meldde "Migraties voltooid" tegen de verkeerde database. Geen schade (no-op) → **Issue #86**, opgelost in #93 | `scripts/` |
-| **`db:generate` is onbruikbaar** — snapshots lopen tot 0007 terwijl er 16 migraties zijn. Het genereerde een migratie die `sessie`, `tenant_membership` en een `user`-kolom opnieuw wilde aanmaken → **Issue #96** | `drizzle/meta/` |
+| **`db:generate` is onbruikbaar** — snapshots lopen tot 0007 terwijl er 19 migraties zijn. Het genereerde een migratie die `sessie`, `tenant_membership` en een `user`-kolom opnieuw wilde aanmaken → **Issue #96** | `drizzle/meta/` |
 | De bewakingstest op test-id's kijkt alleen naar UUID's tussen **enkele** aanhalingstekens; dezelfde waarde binnen een template-string glipt erdoor. Nog geen issue | `test/test-ids.spec.ts` |
 | Verouderde context uit een automatisch geladen skill stelde dat Bizaline naar Azure migreert; als feit overgenomen in een architectuurdocument. Bron opgespoord, vier bestanden geactualiseerd met een gedateerd "Stand per"-kopje | buiten dit project |
 | Een geldig gevormd maar niet-bestaand mailadres levert "Geslaagd" op. Geen fout, wel het bewijs dat de bounce-webhook nodig is | mailkanaal |
+
+### Wat er op 2026-08-07 boven kwam
+
+| Bevinding | Waar |
+|---|---|
+| **De e2e-suites wisten de demo-database leeg.** Geen enkele bescherming sloeg aan: de hostcontrole kent `localhost` als veilig, en de tests hadden hem sowieso niet. Opgelost met migratie 0019 (`clm.omgeving`) | `test/`, `scripts/` |
+| **Een handgeschreven migratie wordt stil overgeslagen** als hij niet in `drizzle/meta/_journal.json` staat — `migrate:deploy` meldt dan gewoon "Migraties voltooid". Gevonden doordat het plan voorschreef de constraint terug te lezen uit de database | `drizzle/` |
+| **Twee suites deelden dezelfde `token_hash`.** `survey_response_token_hash_key` is uniek over álle tenants heen, dus de tenantscheiding hielp niet. Los draaide elke suite groen; alleen in de volledige run viel er willekeurig een om. Bewakingstest toegevoegd | `test/test-ids.spec.ts` |
+| Twee tests in `demo-seed` startten een script zonder timeout en vielen terug op Jests 5s. Bij de reparatie van 2026-08-04 waren juist deze twee overgeslagen | `test/demo-seed.e2e-spec.ts` |
+| De opruimstap van `seed:demo --verwijder` kende `survey_review` en `response_note` niet, en zette geen actor `medewerker` — waardoor de policy elke rij weigerde en de fout naar een foreign key wees | `scripts/` |
 
 <details>
 <summary>Vorige stand (2026-08-04, avond)</summary>

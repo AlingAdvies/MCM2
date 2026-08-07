@@ -54,6 +54,9 @@ testleveranciers bleven achter. Er sloeg niets aan: de bestaande bescherming
 kijkt alleen of de host lokaal is, en binnen `localhost` was de demo niet te
 onderscheiden van een wegwerpcontainer.
 
+Het besluit erachter — inclusief de afgevallen alternatieven en wat dit níét
+oplost — staat in **ADR-014**.
+
 Een eigen wegwerpdatabase markeren, ná het draaien van de migraties:
 ```powershell
 $env:MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres"

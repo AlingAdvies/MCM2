@@ -41,6 +41,31 @@ Twee opties zijn overwogen om deze test automatisch te laten draaien:
 - CI faalt nu zichtbaar als een toekomstige codewijziging de tenant-isolatie breekt (bijv. een per ongeluk verwijderde policy of ingetrokken grant) — dit was vóór deze ADR niet het geval.
 - `test/jest-e2e.setup.ts` (`import 'dotenv/config'`) toegevoegd aan `test/jest-e2e.json` zodat `.env` ook voor e2e-tests wordt geladen — dit ontbrak volledig, ook voor de al bestaande tests.
 
+## Bijgewerkt 2026-08-07 — twee dingen uit deze ADR zijn achterhaald
+
+De ADR zelf blijft staan zoals hij is: hij legt het besluit vast zoals het toen
+genomen werd. Twee verwijzingen kloppen inmiddels niet meer.
+
+**`prisma/roles/bootstrap-roles.sql` heet nu `db/roles/bootstrap-roles.sql`.**
+De ORM-keuze viel op Drizzle (ADR-010) en het migratiecommando is
+`npm run migrate:deploy`, niet `prisma migrate deploy`. Het script zelf en zijn
+rol als enige bron van waarheid voor de databaserollen zijn onveranderd.
+
+**`test/jest-e2e.setup.ts` doet meer dan dotenv laden.** De regel hierboven —
+"`import 'dotenv/config'` toegevoegd" — beschreef de hele inhoud van dat
+bestand. Sinds migratie 0019 hangt daarnaast `test/jest-e2e.guard.ts` in
+`setupFilesAfterEnv`: die weigert de suites te draaien tegen een database die
+niet als wegwerp is gemarkeerd.
+
+Aanleiding: op 2026-08-07 draaiden de e2e-suites tegen de demo-database en
+wisten die leeg. De bescherming uit déze ADR ving dat niet — die gaat over
+rollen en rechten binnen een database, niet over de vraag *welke* database.
+Beide zijn nodig. Zie `docs/runbooks/commandos-en-omgeving.md`.
+
+**Gevolg voor CI:** de `rls-isolation`-job heeft een extra stap gekregen die de
+service-container als wegwerp markeert. Zonder die stap blokkeert de guard zijn
+eigen tests.
+
 ## Openstaand controlepunt
 
 - De `quality`- en `rls-isolation`-jobs zijn niet verplicht gesteld via branch-protection (zie `docs/STATUS.md` — branch-protection is geblokkeerd door het GitHub-plan van de organisatie, niet door deze wijziging).

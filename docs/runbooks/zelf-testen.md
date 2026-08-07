@@ -2,7 +2,7 @@
 
 **Type:** D — routineoperatie
 **Eigenaar:** Kees Maling
-**Laatste update:** 2026-08-04
+**Laatste update:** 2026-08-07
 **Vereiste toegang:** Docker Desktop draaiend, deze repository, `MCM2-frontend` als buurmap
 
 ---
@@ -96,15 +96,41 @@ of er een backend is. In zowel demo als productie staat daar LIVE.
 
 ```
 21 leveranciers    uit MVM_V2, eenmalig geëxtraheerd
- 4 gebruikers      1 admin (Sophie van der Berg), de rest reviewer
+ 3 gebruikers      1 admin (Sophie van der Berg), de rest reviewer
  2 vragenlijsten   transdev-annual-vendor-it-risk (8 vragen + 1 instructie)
                    transdev-leveranciersbeoordeling (29 vragen, interne UC2)
- 1 ronde           3 deelnemers: open, half ingevuld, ingediend
+ 2 rondes          één lopende, één met een gepasseerde sluitdatum
+ 6 responses       samen élke status uit het overzicht
 ```
 
 De tweede vragenlijst is de interne beoordelingslijst die nog niet gebouwd is.
 Hij staat in de demo omdat `seed-demo-tenant.js` alles uit `db/seeds/` inleest;
 `verify:volledig` seedt bewust alleen de eerste.
+
+### De zes responses, en waarom het er zes zijn
+
+| Leverancier | Status op `/beheer/status` |
+|---|---|
+| Alstom | Nog niet terug |
+| Siemens | Nog niet terug |
+| Thales | **Te laat** — plus één notitie |
+| Capgemini | Wacht op beoordeling |
+| Strukton | Beoordeeld — twee tegenstrijdige oordelen, twee notities |
+| Microsoft | Goedgekeurd |
+
+Bijgewerkt op 2026-08-07. Daarvóór waren het er drie, en dan toonde het
+statusoverzicht maar twee van de vijf statussen: de rest was visueel nooit
+beoordeeld.
+
+Twee dingen die daarbij bewust zo zijn:
+
+- **De tweede ronde heeft een sluitdatum in het verleden.** "Te laat" is
+  `closes_at < now()` bij een actieve ronde, en één ronde kan niet tegelijk
+  open en verlopen zijn.
+- **De uitnodigingen liggen 5 tot 40 dagen terug.** Stonden ze allemaal op
+  vandaag, dan zegt de kolom "Uitgestuurd" niets — het verschil tussen
+  gisteren en zes weken geleden is juist wat een lege "terug ontvangen"
+  betekenis geeft.
 
 ---
 
@@ -117,6 +143,31 @@ npm run demo:test        de browsertests tegen de draaiende demo
 npm run demo:af          backend en frontend stoppen, database laten staan
 npm run demo:stop        ook de database weggooien
 ```
+
+### Deze data in een echte omgeving zetten
+
+De seed draait ongewijzigd tegen een andere database — de enige invoer is
+`DATABASE_URL`. Eén ding moet dan anders:
+
+```
+DATABASE_URL=... node scripts/seed-demo-tenant.js --echte-tokens
+```
+
+Zonder die vlag krijgen de zes responses vaste tokens die **in de broncode
+staan**. Op een wegwerpdatabase is dat prima — de link moet ná het seeden nog
+bruikbaar zijn om een scherm te tonen. In een echte omgeving betekent het dat
+iedereen die het script leest die surveys kan openen; ook al wijzen ze naar
+verzonnen data, dat is een verschil met een klant dat er niet hoort te zijn.
+
+Met `--echte-tokens` worden ze gegenereerd zoals bij een echte uitnodiging en
+**één keer afgedrukt**. Daarna bestaan ze alleen nog als hash: er is geen route
+die een token opnieuw kan tonen. Bewaar wat je nodig hebt.
+
+> **Inloggen vraagt nog een handeling.** De demo-gebruikers krijgen een
+> herkenbaar nep-identiteitskenmerk (`demo:…`), juist om te voorkomen dat een
+> verzonnen account botst met een echte Entra-identiteit — `external_subject`
+> is uniek. Om zelf in te loggen moet een echte `oid` aan één van die
+> gebruikers gekoppeld worden; zie `docs/STATUS.md`, "Demo-tenant".
 
 `demo:test` draait dezelfde Playwright-suites als de doorloop, maar tegen
 `next dev` en tegen de gevulde demo-database. Nuttig wanneer je iets met de hand
