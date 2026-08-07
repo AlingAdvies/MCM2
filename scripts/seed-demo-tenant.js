@@ -35,6 +35,8 @@ const { sql } = require('drizzle-orm');
 const { drizzle } = require('drizzle-orm/node-postgres');
 const { Pool } = require('pg');
 
+const { meldDoelwit, eisToestemmingBuitenLokaal } = require('./db-doelwit.js');
+
 // Vast UUID, zodat het script idempotent is en `--verwijder` precies weet wat
 // het weghaalt. Bewust niet 1111.../2222..., die zijn in gebruik bij
 // otap-doorloop.js en de e2e-suites.
@@ -363,8 +365,18 @@ async function rondeAanmaken(db, vendors) {
       );
 
       const stadia = [
-        { sleutel: 'open', mockId: vendors[0], status: 'pending', antwoorden: 0 },
-        { sleutel: 'concept', mockId: vendors[1], status: 'pending', antwoorden: 3 },
+        {
+          sleutel: 'open',
+          mockId: vendors[0],
+          status: 'pending',
+          antwoorden: 0,
+        },
+        {
+          sleutel: 'concept',
+          mockId: vendors[1],
+          status: 'pending',
+          antwoorden: 3,
+        },
         {
           sleutel: 'ingediend',
           mockId: vendors[2],
@@ -419,7 +431,8 @@ async function rondeAanmaken(db, vendors) {
           // leeg blijven, en dat houden we ook zo — anders toont de demo een
           // toelichting waar een echte invuller er geen hoeft te geven.
           const toelichting =
-            vraag.answer_type === 'confirmation' && antwoord.code === 'confirmed'
+            vraag.answer_type === 'confirmation' &&
+            antwoord.code === 'confirmed'
               ? null
               : 'Voorbeeldantwoord uit de demo-seed.';
 
@@ -577,6 +590,15 @@ async function main() {
     process.exit(1);
   }
 
+  // Vóór de eerste schrijfactie. Dit script schrijft niet alleen, het kan met
+  // --verwijder ook opruimen — op de verkeerde database is dat onherstelbaar
+  // zonder backup (Issue #86).
+  meldDoelwit(url, 'Seed demo-tenant');
+
+  if (!eisToestemmingBuitenLokaal(url, { wat: 'Seed demo-tenant' })) {
+    process.exit(1);
+  }
+
   const moetVerwijderen = process.argv.includes('--verwijder');
   const pool = new Pool({ connectionString: url });
   const db = drizzle(pool);
@@ -654,9 +676,7 @@ async function main() {
       `'${DEMO_SUBJECT_PREFIX}' en is geen echte Entra-oid. Koppel een echte oid`,
       '\nom in te loggen — zie docs/STATUS.md.',
     );
-    console.log(
-      `Opruimen: node scripts/seed-demo-tenant.js --verwijder`,
-    );
+    console.log(`Opruimen: node scripts/seed-demo-tenant.js --verwijder`);
   } finally {
     await pool.end();
   }
