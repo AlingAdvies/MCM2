@@ -161,9 +161,19 @@ ongemoeid.
 
 ### Een verse wegwerpdatabase opzetten
 
+> **Bind op localhost, niet op alle interfaces.** `-p 55440:5432` luistert op
+> `0.0.0.0` — dan is de testdatabase bereikbaar vanaf het hele netwerk, met een
+> wachtwoord van twee letters. Op een kantoor- of hotelnetwerk is dat een open
+> database. Schrijf `-p 127.0.0.1:55440:5432`; alles hieronder werkt onveranderd,
+> want migraties en tests verbinden via `localhost`.
+>
+> Controleren waar hij luistert: `docker port <container>`. Staat er `0.0.0.0`,
+> dan is de binding te ruim.
+
 ```powershell
 # De containernaam moet minstens twee tekens hebben — Docker 29 weigert één teken.
-docker run -d --name mcm2test -e POSTGRES_PASSWORD=pw -p 55440:5432 postgres:17.6
+# 127.0.0.1 ervoor: anders luistert de database op alle netwerkinterfaces.
+docker run -d --name mcm2test -e POSTGRES_PASSWORD=pw -p 127.0.0.1:55440:5432 postgres:17.6
 
 # Wachten tot hij luistert; direct erna verbinden faalt met "the database system is starting up".
 docker exec mcm2test pg_isready -U postgres
@@ -188,16 +198,31 @@ PowerShell (deze machine):
 ```powershell
 $env:MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres"
 npm run migrate:deploy
-Remove-Item Env:\MIGRATION_DATABASE_URL
+Remove-Item Env:\MIGRATION_DATABASE_URL     # niet overslaan, zie hieronder
 ```
 
-Bash:
+Bash — veiliger, want de variabele geldt alleen voor dít commando:
 ```bash
 MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres" npm run migrate:deploy
 ```
 
+> **`Remove-Item` is geen opruimnetheid maar een veiligheidsmaatregel.**
+> In PowerShell blijft `$env:X` staan voor de hele sessie. Vergeet je hem, dan
+> draait een uur later een backup-, seed- of migratiescript stilzwijgend tegen
+> `localhost:55440` in plaats van tegen de database die je dan bedoelt — of
+> andersom, als je de variabele naar productie hebt gezet.
+>
+> Dit is dezelfde klasse fout als Issue #86, alleen met de omgekeerde richting.
+> Wil je dat risico helemaal niet: gebruik de bash-vorm.
+
 **Controleer de melding die het script afdrukt.** Hij noemt het doelwit. Staat
 daar `supabase.com`, dan is de variabele niet doorgekomen — stop.
+
+Zie je twijfel over wat er nu gezet staat:
+```powershell
+Get-ChildItem Env: | Where-Object Name -match 'DATABASE_URL' |
+  ForEach-Object { "{0} = {1}" -f $_.Name, ($_.Value -replace ':[^:@]+@',':***@') }
+```
 
 ### E2e-tests erop draaien
 
@@ -215,6 +240,44 @@ waardoor Jest anders blijft hangen zónder foutmelding.
 ```powershell
 docker rm -f mcm2test
 ```
+
+**Ruim de container op als je klaar bent.** Een blijvende testdatabase met
+wachtwoord `pw` is precies het soort ding dat maanden vergeten blijft draaien.
+`docker ps` laat zien wat er nog staat.
+
+---
+
+## Wat dit runbook bewust NIET verzwakt
+
+Nagelopen op 2026-08-07. Deze werkwijze mag geen enkele bestaande bescherming
+omzeilen, en doet dat ook niet:
+
+| Bescherming | Blijft gelden? |
+|---|---|
+| `migrate:deploy` weigert buiten lokaal zonder `--extern` of `MCM2_EXTERNE_DB=ja` | **Ja** — de wegwerpdatabase is lokaal, dus de bescherming hoeft nooit uitgezet |
+| `verify.js` weigert een niet-lokale `DATABASE_URL` | **Ja** — onaangeroerd |
+| Rolscheiding `clm_migrator` (DDL) / `clm_api_runtime` (runtime) / aparte backuprol | **Ja** — de opzet reproduceert alle drie via `bootstrap-roles.sql` |
+| Geen `BYPASSRLS`, geen superuser op de app-rollen | **Ja** — geverifieerd op de wegwerpdatabase: beide `f` |
+| `FORCE ROW LEVEL SECURITY` (migratie 0011) | **Ja** — komt mee via de migratieketen |
+| `.env` buiten git | **Ja** — staat in `.gitignore`, niet getrackt |
+
+**Drie dingen die nooit in dit runbook mogen sluipen:**
+
+1. **Geen `--extern` of `MCM2_EXTERNE_DB=ja` als standaardstap.** Die vlag hoort
+   een bewuste, zichtbare uitzondering te zijn — hij staat in de
+   terminalhistorie zodat later terug te zien is dat iemand het deed. Zet hem
+   nooit in een `.env`, script of alias.
+2. **Nooit een echte connectiestring in een commandovoorbeeld.** Voorbeelden
+   gebruiken `clm_migrator:pw@localhost`. Een commando met een echt wachtwoord
+   belandt in terminalhistorie, CI-logs en schermafdrukken.
+3. **Nooit `pw` buiten een wegwerpcontainer.** Het is een wegwerpwachtwoord voor
+   een database die je binnen een uur weggooit — geen patroon om elders te
+   hergebruiken.
+
+**Eén ding dat wél zwakker is dan productie, en dat mag:** de wegwerpdatabase
+heeft een triviaal wachtwoord en geen TLS. Dat is verdedigbaar omdat hij op
+`127.0.0.1` luistert, geen echte gegevens bevat en binnen een sessie verdwijnt.
+Zodra een van die drie niet meer klopt, is het geen wegwerpdatabase meer.
 
 ---
 
