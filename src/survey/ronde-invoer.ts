@@ -277,3 +277,53 @@ export function leesStatus(body: unknown): string {
 export function mogelijkeOvergangen(van: string): readonly string[] {
   return OVERGANGEN[van] ?? [];
 }
+
+/** De drie oordelen uit migratie 0015. */
+const OORDELEN = ['goed', 'nadere_vragen', 'niet_goed'] as const;
+
+export interface NieuweBeoordelingInvoer {
+  verdict: (typeof OORDELEN)[number];
+  toelichting: string;
+}
+
+/**
+ * Leest de invoer voor een nieuw oordeel (fase C).
+ *
+ * De toelichting mag leeg zijn bij `goed` — daar valt vaak niets toe te
+ * lichten. Bij de andere twee is hij verplicht: "niet goed" zonder reden is
+ * voor de leverancier én voor een latere lezer onbruikbaar, en juist in een
+ * compliance-dossier is de onderbouwing het punt.
+ */
+export function leesNieuweBeoordeling(body: unknown): NieuweBeoordelingInvoer {
+  const invoer = leesObject(body);
+
+  if (
+    typeof invoer.verdict !== 'string' ||
+    !(OORDELEN as readonly string[]).includes(invoer.verdict)
+  ) {
+    throw new InvoerFout(
+      'verdict',
+      `Onbekend oordeel. Toegestaan: ${OORDELEN.join(', ')}.`,
+    );
+  }
+
+  const verdict = invoer.verdict as (typeof OORDELEN)[number];
+
+  if (
+    invoer.toelichting !== undefined &&
+    typeof invoer.toelichting !== 'string'
+  ) {
+    throw new InvoerFout('toelichting', 'De toelichting moet tekst zijn.');
+  }
+
+  const toelichting = (invoer.toelichting ?? '').trim();
+
+  if (verdict !== 'goed' && toelichting === '') {
+    throw new InvoerFout(
+      'toelichting',
+      'Licht toe waarom. Zonder onderbouwing is dit oordeel later niet te herleiden.',
+    );
+  }
+
+  return { verdict, toelichting };
+}
