@@ -407,6 +407,12 @@ Zet nooit een branchnaam, blocker-status of "aantoonbaar werkend"-claim in STATU
 
 Begin iedere nieuwe sessie als volgt:
 
+0. **Lees `docs/runbooks/commandos-en-omgeving.md`.** Welk commando bestaat er
+   werkelijk, waar praat het naartoe, en wat mag nooit. Dit gaat vóór dit
+   bestand: `.env` wijst naar de Supabase-productiedatabase, dus het eerste
+   verkeerde databasecommando is al raak. Toegevoegd 2026-08-07 nadat er in één
+   sessie vier niet-bestaande commando's waren aangeroepen en een migratie
+   bijna tegen productie liep.
 1. Lees dit bestand volledig.
 2. Lees `docs/STATUS.md`.
 3. Verifieer STATUS.md tegen de werkelijke repository-status vóórdat je erop vertrouwt: `git status`, `git branch -a`. Wijkt de vermelde branch of git-status af van de realiteit? Corrigeer STATUS.md direct en meld dit expliciet aan de gebruiker — ga niet stilzwijgend uit van het document.
@@ -426,10 +432,11 @@ Bij conflicten geldt deze prioriteit:
 
 ```text
 Security en expliciete actuele blokkades
-  -> dit MCM2-CLAUDE.md
-    -> actuele ADR's en STATUS.md
-      -> projectdocumentatie
-        -> oude plannen, pilots en sessiehistorie
+  -> docs/runbooks/commandos-en-omgeving.md   (wat technisch kan en mag)
+    -> dit MCM2-CLAUDE.md                      (hoe we werken)
+      -> actuele ADR's en STATUS.md
+        -> projectdocumentatie
+          -> oude plannen, pilots en sessiehistorie
 ```
 
 ---
