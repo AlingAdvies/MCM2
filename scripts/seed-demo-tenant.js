@@ -508,6 +508,16 @@ async function rondeAanmaken(db, vendors) {
           oordelen: [],
           dagenGeleden: 9,
           ingediendDagenGeleden: 2,
+          // Eén afwijking, zodat het beoordeelscherm iets te tonen heeft: dat
+          // toont standaard alléén wat afwijkt. Alles bevestigd betekent daar
+          // een leeg scherm.
+          afwijkingen: {
+            2: {
+              code: 'cannot_upload',
+              toelichting:
+                'Certificaat verloopt volgende maand; hercertificering loopt. Nieuw certificaat volgt in september.',
+            },
+          },
         },
         {
           // Status 'te laat': niet ingediend, en de ronde is gesloten. Krijgt
@@ -547,6 +557,20 @@ async function rondeAanmaken(db, vendors) {
             'Mail gestuurd met de vraag over onderaannemers. Nog geen antwoord.',
             'Gesproken op de kwartaalmeeting; sturen deze week aanvulling.',
           ],
+          // Twee afwijkingen: dit is het geval waar de notities en het
+          // meningsverschil over gaan.
+          afwijkingen: {
+            5: {
+              code: 'not_confirmed',
+              toelichting:
+                'In maart is er een phishingincident geweest. Gemeld op dag 4 in plaats van binnen 48 uur; procedure is inmiddels aangepast.',
+            },
+            9: {
+              code: 'not_confirmed',
+              toelichting:
+                'Eén onderaannemer voldoet nog niet aan alle eisen; contract wordt dit kwartaal herzien.',
+            },
+          },
         },
         {
           sleutel: 'goedgekeurd',
@@ -606,7 +630,15 @@ async function rondeAanmaken(db, vendors) {
             continue;
           }
 
-          const antwoord = antwoordVoor(vraag.answer_type, vraag.config);
+          // Afwijkingen zijn per positie opgegeven; `position` telt vanaf 1 en
+          // is wat de leverancier als vraagnummer ziet.
+          const afwijking = stadium.afwijkingen?.[vraag.position];
+
+          const antwoord = antwoordVoor(
+            vraag.answer_type,
+            vraag.config,
+            afwijking?.code,
+          );
 
           // Geen plausibel antwoord te maken (keuzevraag zonder opties in de
           // config): overslaan in plaats van iets verzinnen dat de
@@ -620,9 +652,13 @@ async function rondeAanmaken(db, vendors) {
           // survey_answer_comment_required_check). Bij 'confirmed' mag het
           // leeg blijven, en dat houden we ook zo — anders toont de demo een
           // toelichting waar een echte invuller er geen hoeft te geven.
-          const toelichting =
-            vraag.answer_type === 'confirmation' &&
-            antwoord.code === 'confirmed'
+          const toelichting = afwijking
+            ? // Bij een afwijking is de toelichting het antwoord op "waarom",
+              // en dus het enige wat de beoordelaar echt leest. Een generieke
+              // zin zou het scherm vullen zonder iets te zeggen.
+              afwijking.toelichting
+            : vraag.answer_type === 'confirmation' &&
+                antwoord.code === 'confirmed'
               ? null
               : 'Voorbeeldantwoord uit de demo-seed.';
 
@@ -732,14 +768,20 @@ async function rondeAanmaken(db, vendors) {
  * vormconstraint (die alleen NOT NULL eist) maar levert een demo op met
  * antwoorden die in geen enkele keuzelijst voorkomen.
  */
-function antwoordVoor(type, config) {
+/**
+ * @param afwijkendeCode Alternatief voor 'confirmed' bij een bevestigingsvraag.
+ *   Bedoeld om een inzending mét afwijking te kunnen tonen: het beoordeelscherm
+ *   laat standaard alléén de afwijkingen zien, en zonder deze mogelijkheid was
+ *   dat scherm altijd leeg.
+ */
+function antwoordVoor(type, config, afwijkendeCode) {
   const opties = (config?.options ?? config?.choices ?? [])
     .map((optie) => (typeof optie === 'string' ? optie : optie?.code))
     .filter(Boolean);
 
   switch (type) {
     case 'confirmation':
-      return { code: 'confirmed' };
+      return { code: afwijkendeCode ?? 'confirmed' };
     case 'yes_no':
       return { code: 'yes' };
     case 'single_choice':
