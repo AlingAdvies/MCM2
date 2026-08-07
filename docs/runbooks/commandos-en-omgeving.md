@@ -66,6 +66,24 @@ hoort een beheerhandeling te zijn, geen iets wat de applicatie kan.
 `verify:volledig` en CI markeren hun eigen container automatisch — daar hoef je
 niets voor te doen.
 
+### Waar de controle overal geldt
+
+| Wat | Controle |
+|---|---|
+| e2e-suites (alle 27) | Weigeren te starten tegen `beschermd` |
+| `seed:demo -- --verwijder` | Weigert op `beschermd` |
+| `migrate:deploy` | Alleen de hostcontrole — migreren mág op productie |
+| `seed:vragenlijsten`, `seed:demo` (zonder `--verwijder`) | Alleen de hostcontrole — toevoegen mag |
+
+**Toevoegen mag op een beschermde database, verwijderen niet.** Dat onderscheid
+is opzet: anders kun je een demo-tenant in productie nooit inrichten. De eis
+geldt waar iets onherstelbaar is.
+
+`otap-doorloop.js` en `provider-migratietest.js` verwijderen ook, maar hebben de
+controle niet nodig: de eerste praat naar een vast adres binnen zijn eigen
+container, de tweede werkt in een eigen wegwerpschema dat hij zelf aanmaakt en
+weggooit.
+
 ---
 
 ## ⚠ Het belangrijkste: `.env` wijst naar Supabase

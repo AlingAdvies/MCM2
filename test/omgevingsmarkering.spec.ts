@@ -75,6 +75,23 @@ describe('omgevingsmarkering: de guard staat aan', () => {
     expect(migratie).toMatch(/INSERT INTO "clm"\."omgeving"[\s\S]*'beschermd'/);
   });
 
+  it('eist een wegwerpdatabase voordat de demo-seed opruimt', () => {
+    const seed = lees('scripts/seed-demo-tenant.js');
+
+    // 13 DELETE-statements. De hostcontrole kent 'localhost' als veilig, en
+    // juist daar draait de demo-database.
+    expect(seed).toContain('eisWegwerpdatabase');
+  });
+
+  it('biedt eisWegwerpdatabase aan vanuit db-doelwit', () => {
+    const doelwit = lees('scripts/db-doelwit.js');
+
+    // Eén plek waar de controle staat: elk schrijvend script hoort dezelfde
+    // te gebruiken, niet zijn eigen variant.
+    expect(doelwit).toContain('async function eisWegwerpdatabase');
+    expect(doelwit).toMatch(/module\.exports[\s\S]*eisWegwerpdatabase/);
+  });
+
   it('staat de migratie in het journal', () => {
     const journal = JSON.parse(lees('drizzle/meta/_journal.json')) as {
       entries: { tag: string }[];
