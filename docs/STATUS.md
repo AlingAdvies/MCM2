@@ -1,11 +1,58 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-08-04, avond (**fase A én B van het surveybeheerplan zijn af en gemerged.** De tenant kan nu een leverancier aanvinken, een ronde starten en werkende uitnodigingslinks krijgen — de eerste productiecode die `genereerToken()` aanroept. Daarnaast: `npm run demo` zet de hele stack in één commando neer, en de browsertests ruimen op wat ze aanmaken. Vier PR's gemerged: #79, #80, #81, #82 plus frontend #5 en #6. `verify:volledig` groen: 316 backend, 39 browser.)
+2026-08-06, avond (**er gaat echte mail uit.** Een uitnodiging bereikte aantoonbaar een externe inbox, verstuurd via Resend op het eigen domein `myvendormanager.nl`. Daarnaast: een contactpersoon is nu te bewerken, ADR-013 legt het rolmodel vast, en `docs/architectuur/exit-route-hosting.md` houdt bij hoe het platform naar een andere leverancier zou kunnen. PR's #87 t/m #91 gemerged. **Let op: GitHub Actions had die middag een grote storing — zie de waarschuwing hieronder.**)
 
-**Volgende stap:** fase C uit `docs/superpowers/plans/2026-08-03-surveybeheer.md` — voortgang volgen, antwoorden lezen en beoordelen. Je kunt nu wel uitnodigen, maar niet zien wát een leverancier heeft ingevuld: het rondescherm toont alleen wie ingediend heeft.
+**Volgende stap:** fase C uit `docs/superpowers/plans/2026-08-03-surveybeheer.md` — voortgang volgen, antwoorden lezen en beoordelen. Je kunt nu uitnodigen én de leverancier krijgt de mail, maar je kunt nog niet zien wát er is ingevuld.
+
+> ### ⚠ Openstaand: `main` is sinds 14:50 niet meer door CI gecontroleerd
+>
+> GitHub Actions had op 2026-08-06 vanaf 15:22 UTC een storing met status
+> `major_outage` ("Workflow runs are failing or delayed in starting"). Gevolg voor dit project:
+>
+> - De run op `main` na PR #90 staat **rood, maar er is niets stuk**: alle drie de jobs zijn
+>   `cancelled` zonder één falende stap. Er is niets uitgevoerd, dus niets gezakt.
+> - PR #91 en #92 kregen **helemaal geen run**.
+> - **PR #92 staat nog open** — die voegt `workflow_dispatch` toe zodat CI handmatig te starten is.
+>
+> **Wat dat betekent:** de Docker-productiebuild en de RLS tenant-isolatietest hebben `main`
+> sinds de merge van PR #89 (14:50 UTC) niet meer gecontroleerd. Wat er sindsdien bij kwam is
+> alleen documentatie en lokale ontwikkelconfiguratie, en alles is lokaal groen bevonden
+> (266 unittests, lint, typecheck, `docker compose config`) — maar lokaal is niet CI.
+>
+> **Eerste actie in een volgende sessie:** kijk of Actions weer werkt, merge PR #92, en start
+> dan een run op `main` (`gh workflow run ci.yml --ref main`) om dat gat te dichten. Doe dat
+> vóór fase C: die brengt migraties mee, en dan wil je de RLS-isolatietest gedraaid hebben.
 
 ### Wat er vandaag bijkwam
+
+**Het mailkanaal** (#87, #88). Eén platformverstuurder via Resend, geen eigen SMTP per tenant — de klant is herkenbaar aan de afzendernaam ("Transdev via MCM2"), het adres blijft van het platform. Zo hoeft er geen SPF-record van de klant te zijn voordat er mail uit kan. `MailKanaal` is een abstracte klasse met één methode; zonder sleutel valt hij terug op een logkanaal, wat de veilige toestand is voor CI en de demo. Half ingestelde configuratie faalt bewust hard bij opstarten: stil terugvallen zou betekenen dat je denkt dat er mail uitgaat terwijl er niets gebeurt.
+
+**Uitnodigingen worden echt verstuurd** (#89). De kern van het ontwerp: mislukt één adres, dan gaan de overige gewoon door en rapporteert de response per deelnemer. Serieel, niet parallel — voorspelbaar onder de dagcap van 100 mails. Verzending gebeurt ná de transactie. Aantoonbaar: een echte mail kwam aan op een externe inbox, en een ongeldig adres werd geweigerd met de juiste foutcode.
+
+**Een contactpersoon is te bewerken** (frontend). Voorheen kon je alleen weggooien en opnieuw invoeren.
+
+**ADR-013 — het rolmodel** (#90). Vier besluiten: de beheerder hangt aan de leverancier (`vendor.owner_user_id`, bestond al ongebruikt), de beoordelaar aan de vragenlijst (nieuw: `template_reviewer`). De koppeling is **een hulpmiddel, geen autorisatiegrens** — de terugval is altijd de contractmanager, die intern buiten de app kan regelen dat de beoordeling door een bevoegd persoon gebeurt. Nog geen contractlaag.
+
+**De exit-route** (#91). `docs/architectuur/exit-route-hosting.md` — bewust geen besluitdocument maar een levend document: per onderdeel wat er draait, hoe vast het zit en wat het alternatief zou zijn. AWS is de waarschijnlijke richting, maar staat niet vast.
+
+**Valkey eruit** (#91). Er bleek geen enkele regel code mee te praten: geen `bullmq`, geen `ioredis`, geen dependency. Container en `REDIS_URL` verwijderd. ADR-004 blijft staan met een noot — komt er een queue, dan is het Valkey; alleen de aanname dát er snel een queue zou zijn klopte niet.
+
+### Wat er onderweg boven kwam
+
+| Bevinding | Waar |
+|---|---|
+| **Een tegenproef die niets bewees.** Een heredoc at de backslashes op, waardoor de sabotage nooit werd toegepast — 22 tests groen tegen ónveranderde code, bijna gelezen als geslaagd bewijs. Sabotage gaat nu via een bestand en faalt hard als het patroon niet gevonden wordt | werkwijze |
+| Een sabotage die de build brak gaf "0 total" — bijna gelezen als "geen falende tests" | werkwijze |
+| Een dagcap-test slaagde om de verkeerde reden: met het hele `error`-veld genegeerd viel hij door naar de "geen id"-controle en gooide alsnog | `resend-mail-kanaal.spec.ts` |
+| `migrate:deploy` gedraaid met alleen `DATABASE_URL` gezet; het script leest `MIGRATION_DATABASE_URL` en die wees naar **productie**. Meldde "Migraties voltooid" tegen de verkeerde database. Geen schade (no-op), wel Issue #86 | `scripts/` |
+| Een geldig gevormd maar niet-bestaand adres levert "Geslaagd" op. Geen fout, wel het bewijs dat de bounce-webhook nodig is | mailkanaal |
+| Verouderde context uit een automatisch geladen skill stelde dat Bizaline naar Azure migreert. Dat is als feit overgenomen in een architectuurdocument. Bron opgespoord en de vier bestanden geactualiseerd; ze dragen nu een gedateerd "Stand per"-kopje | buiten dit project |
+
+<details>
+<summary>Vorige stand (2026-08-04, avond)</summary>
+
+**Fase A én B van het surveybeheerplan zijn af en gemerged.** De tenant kan een leverancier aanvinken, een ronde starten en werkende uitnodigingslinks krijgen — de eerste productiecode die `genereerToken()` aanroept. Daarnaast: `npm run demo` zet de hele stack in één commando neer, en de browsertests ruimen op wat ze aanmaken. Vier PR's gemerged: #79, #80, #81, #82 plus frontend #5 en #6. `verify:volledig` groen: 316 backend, 39 browser.
 
 **Fase A — vragenlijsten bekijken** (#79, frontend #5). Vier leesroutes onder `/admin/survey`, plus de schermen. Bewust alleen lezen.
 
@@ -14,8 +61,6 @@
 **`npm run demo`** — database, backend, frontend, sessie en een zelfcontrole in één commando. Aanleiding: het handmatig opstarten ging drie keer mis, en alle vier de oorzaken (ontbrekende `NEXT_PUBLIC_API_URL`, geen backend, `CORS_ORIGIN`, `SESSIE_COOKIE_INSECURE`) zien er in het scherm hetzelfde uit. Runbook: `docs/runbooks/zelf-testen.md`.
 
 **Een oranje balk** bovenin zolang je niet in een klantomgeving zit, met de tenantnaam erin. Leest uit de sessie en niet uit een omgevingsvariabele — die kan per ongeluk meegaan naar productie of ontbreken in de demo.
-
-### Wat er onderweg boven kwam
 
 | Bevinding | Waar |
 |---|---|
@@ -27,6 +72,8 @@
 | Zoektests leunden op kolomposities; met de selectiekolom erbij keek er één naar het KvK-nummer i.p.v. de plaats | `e2e/navigatie-en-zoeken.spec.ts` |
 
 **Nieuwe werkwijzeregel (§15c in `MCM2-CLAUDE.md`, PR #82).** Namen en paden opzoeken, niet reconstrueren. Aanleiding: zes van de negen correctierondes deze sessie waren vermijdbaar, en alle zes stonden in code die al gelezen was. Wat dat kost is niet de tijd maar het onderscheid tussen een rode test die iets betekent en een rode test die slordigheid is.
+
+</details>
 
 <details>
 <summary>Vorige stand (2026-08-04, middag)</summary>
@@ -464,6 +511,29 @@ Raakt **#12** (acceptatieomgeving — wordt zwaarder: twee containers), **#18** 
 Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Actieve blokkades
+
+- **ACTIEF 2026-08-06 — `main` is sinds 14:50 UTC niet meer door CI gecontroleerd.** GitHub Actions
+  had die middag vanaf 15:22 UTC een storing met de officiële status `major_outage`
+  ("Workflow runs are failing or delayed in starting, and some queued jobs may time out").
+
+  **Wat er zichtbaar is.** De run op `main` na PR #90 staat rood, maar alle drie de jobs zijn
+  `cancelled` zonder één falende stap — er is niets uitgevoerd, dus niets gezakt. PR #91 en #92
+  kregen helemaal geen run. Het onderscheid is belangrijk: een `failure` noemt de stap die zakte,
+  een `cancelled` betekent dat de klus is afgebroken vóór er iets gebeurde.
+
+  **Waarom dit een blokkade is en geen voetnoot.** De Docker-productiebuild en de RLS
+  tenant-isolatietest hebben `main` sinds de merge van PR #89 niet meer gezien. Wat er sindsdien
+  bij kwam is alleen documentatie en lokale ontwikkelconfiguratie, en dat is lokaal groen bevonden
+  (266 unittests, lint, typecheck, `docker compose config` geldig) — maar lokaal draait de
+  RLS-isolatietest tegen een andere database dan CI, en de productiebuild helemaal niet.
+
+  **PR #92 staat open** en voegt `workflow_dispatch` toe, zodat CI voortaan handmatig te starten
+  is. Die trigger werkt pas ná de merge: GitHub leest de beschikbare handmatige triggers uit de
+  standaardbranch.
+
+  **Volgorde bij oppakken:** (1) kijk op githubstatus.com of Actions weer werkt, (2) merge PR #92
+  zodra CI daar groen is, (3) `gh workflow run ci.yml --ref main` om het gat te dichten. Doe dit
+  vóór fase C — die brengt migraties mee, en juist dan wil je de RLS-isolatietest gedraaid hebben.
 
 - **OPGELOST 2026-08-04, middag — de backup mist negen van de achttien tabellen.** De migratiestand is geïnitialiseerd en de keten 0002 t/m 0014 toegepast: 9 tabellen werden er 18, schema-conformiteit GOEDGEKEURD (17/17), backupcontrole 0 problemen, dump van 21,2 kB naar 77,7 kB. Issues #25 en #29 gesloten. Procedure in `docs/runbooks/baseline-migratiestand.md`.
 
