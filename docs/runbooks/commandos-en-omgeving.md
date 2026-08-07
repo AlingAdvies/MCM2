@@ -6,6 +6,18 @@
 **Aanleiding:** te vaak begonnen met een commando dat niet bestaat, of dat tegen
 de verkeerde database zou hebben gedraaid.
 
+**Geverifieerd op deze machine, 2026-08-07:** Docker 29.6.2, gh 2.89.0,
+Node/npm-scripts uit `package.json`, `netstat`/`taskkill`/`findstr` in
+`C:\Windows\system32`, image `postgres:17.6` lokaal aanwezig.
+
+> **`psql` staat NIET op deze machine.** Er is geen PostgreSQL-client op de host
+> geïnstalleerd. Elke `psql`-aanroep hieronder loopt daarom via
+> `docker exec <container> psql …`. Een kaal `psql ...` faalt met
+> "The term 'psql' is not recognized".
+>
+> **De Supabase CLI staat er ook niet.** Supabase wordt in dit project alleen
+> benaderd via de connectiestrings in `.env` — er is geen `supabase`-commando.
+
 ---
 
 ## Waarvoor dit bestaat
@@ -81,10 +93,42 @@ CI draait `lint:check` en `format:check`. Gebruik nooit de schrijvende variant o
 | `npm run db:check` | — | Drizzle-consistentie, raakt geen database |
 
 **`npm run db:generate` is onbruikbaar** (Issue #96). De snapshots in
-`drizzle/meta` lopen tot `0007` terwijl er 16 migraties zijn; het genereert een
+`drizzle/meta` lopen tot `0007` terwijl er 17 migraties zijn; het genereert een
 migratie die `sessie`, `tenant_membership` en een `user`-kolom opnieuw wil
 aanmaken. **Schrijf migraties met de hand**, in de stijl van
 `drizzle/0015_survey_review.sql`.
+
+### ⚠ Een handgeschreven migratie moet in `_journal.json`
+
+Drizzle's `migrate()` leest **`drizzle/meta/_journal.json`**, niet de inhoud van
+de map. Een `.sql`-bestand zonder journal-entry bestaat voor het script niet — en
+`migrate:deploy` meldt dan gewoon **"Migraties voltooid"** zonder iets te doen.
+
+Dat is dezelfde valkuil als Issue #86: een geruststellende melding over iets dat
+niet gebeurd is. Overkwam ons op 2026-08-07 bij migratie 0017.
+
+Voeg na het schrijven van `NNNN_naam.sql` een entry toe, met `idx` gelijk aan het
+migratienummer:
+
+```json
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1786435200000,
+      "tag": "0017_goedkeuren",
+      "breakpoints": true
+    }
+```
+
+`tag` is de bestandsnaam **zonder** `.sql`. `when` is een epoch in milliseconden;
+hoger dan de vorige entry.
+
+**Controleer daarna in de database of het echt is gebeurd** — vertrouw de melding
+niet:
+
+```powershell
+docker exec <container> psql -U postgres -d postgres -t -c "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = '<naam>';"
+```
 
 ### Demo-omgeving (om zelf te kijken)
 
@@ -120,8 +164,19 @@ ongemoeid.
 ```powershell
 # De containernaam moet minstens twee tekens hebben — Docker 29 weigert één teken.
 docker run -d --name mcm2test -e POSTGRES_PASSWORD=pw -p 55440:5432 postgres:17.6
-docker exec -i mcm2test psql -U postgres -q < db/roles/bootstrap-roles.sql
+
+# Wachten tot hij luistert; direct erna verbinden faalt met "the database system is starting up".
+docker exec mcm2test pg_isready -U postgres
+
+# LET OP: `< bestand.sql` werkt NIET in PowerShell. Gebruik een pipe.
+Get-Content db\roles\bootstrap-roles.sql | docker exec -i mcm2test psql -U postgres -q
+
 docker exec mcm2test psql -U postgres -d postgres -c "ALTER ROLE clm_migrator WITH PASSWORD 'pw'; ALTER ROLE clm_api_runtime WITH PASSWORD 'pw';"
+```
+
+In bash mag de redirect wél:
+```bash
+docker exec -i mcm2test psql -U postgres -q < db/roles/bootstrap-roles.sql
 ```
 
 `-d postgres` is niet optioneel: psql neemt anders de rolnaam als databasenaam
@@ -261,4 +316,27 @@ Select-String -Path .env -Pattern '^(MIGRATION_)?DATABASE_URL' |
 
 # Wat draait er nu in Docker?
 docker ps --format "{{.Names}} {{.Ports}}"
+
+# Bestaat een extern commando überhaupt op deze machine?
+Get-Command psql, supabase, gh, docker -ErrorAction SilentlyContinue |
+  Select-Object Name, Source
 ```
+
+---
+
+## Dit document actueel houden
+
+Elk commando hierin is **uitgevoerd of opgezocht**, niet uit het hoofd
+opgeschreven. Houd dat zo. Bij twijfel over een externe tool:
+
+| Vraag | Hoe je het vaststelt |
+|---|---|
+| Bestaat het npm-script? | `(Get-Content package.json \| ConvertFrom-Json).scripts` |
+| Bestaat de tool op deze machine? | `Get-Command <naam> -ErrorAction SilentlyContinue` |
+| Bestaat de vlag? | `<tool> --help` en zoek de vlag op |
+| Bestaat het script-argument? | `Select-String -Path scripts\<naam>.js -Pattern "'--<vlag>'"` |
+| Deed de migratie wat er staat? | terugleze uit de database, niet de melding geloven |
+
+Een commando dat plausibel klinkt maar niet bestaat, kost meer tijd dan het
+opzoeken ervan. `npm run migrate`, `migrate:status`, `verify:migratieketen` en
+`node scripts/db-doelwit.js` zijn alle vier zo ontstaan — geen ervan bestaat.

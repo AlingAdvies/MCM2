@@ -136,19 +136,29 @@ Deze migratie raakt alleen een CHECK-constraint en geen tabelstructuur, dus `src
 
 - [ ] **Stap 5: Bewijs dat de constraint echt vier waarden toestaat**
 
-Lees de constraint terug uit de database zelf, in plaats van te vertrouwen dat de migratie deed wat er staat:
+Lees de constraint terug uit de database zelf, in plaats van te vertrouwen dat de migratie deed wat er staat. **`psql` staat niet op deze machine** — het loopt via de container:
 
 ```powershell
-psql $env:MIGRATION_DATABASE_URL -c "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'survey_review_verdict_check';"
+docker exec mcm2test0017 psql -U postgres -d postgres -t -c "SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'survey_review_verdict_check';"
 ```
 
-Expected: de definitie noemt alle vier de waarden, inclusief `goedgekeurd`.
+Expected: alle vier de waarden, inclusief `goedgekeurd`.
 
-Werkt `psql` niet vanaf de commandregel, gebruik dan het bestaande hulpscript:
-```powershell
-node scripts/db-doelwit.js
+**Staan er nog drie waarden, dan is de migratie overgeslagen** — ook al meldde `migrate:deploy` "Migraties voltooid". Drizzle leest `drizzle/meta/_journal.json`, niet de map. Voeg een entry toe (zie stap 2b) en draai opnieuw.
+
+- [ ] **Stap 2b: Registreer de migratie in het journal**
+
+Zonder deze stap bestaat het `.sql`-bestand niet voor Drizzle. Voeg toe aan `drizzle/meta/_journal.json`, ná de entry van `0016_template_reviewer`:
+
+```json
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1786435200000,
+      "tag": "0017_goedkeuren",
+      "breakpoints": true
+    }
 ```
-en voer de query via de daar getoonde verbinding uit.
 
 - [ ] **Stap 6: Commit**
 
