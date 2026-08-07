@@ -1,7 +1,47 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-08-07, avond (**de statusketen is backend-compleet en het eerste scherm staat er.** Vier PR's gemerged: goedkeuren (0017), notities (0018), werkvoorraad contractmanager, en een bescherming die voorkomt dat de tests een database leegmaken die niet wegwerp is (0019). Het statusoverzicht per vendor is gebouwd en met echte data bekeken. **Het responsscherm ontbreekt nog** — oordelen en notities zijn wel te tellen, niet te lezen.)
+2026-08-07, avond (**de statusketen werkt van database tot scherm.** Vier PR's gemerged — goedkeuren (0017), notities (0018), werkvoorraad contractmanager, en de wegwerpmarkering (0019). Beide schermen zijn gebouwd en met echte data bekeken. **Twee PR's staan open, allebei groen, en die zijn het startpunt voor morgen.**)
+
+## 🔵 MORGEN BEGINNEN: twee open PR's, in deze volgorde
+
+Allebei groen op CI, allebei wachtend op akkoord van de eigenaar.
+
+| Volgorde | PR | Repo | Wat |
+|---|---|---|---|
+| 1 | **#104** | `MCM2` | Demo-seed toont élke status, plus de documentatie van 07-08 |
+| 2 | **#8** | `MCM2-frontend` | Statusoverzicht + beoordeelscherm |
+
+> **De volgorde is niet vrijblijvend.** #104 bevat de seed die de schermen data
+> geeft. Merge je #8 eerst, dan staat het beoordeelscherm leeg bij een demo:
+> het toont alleen afwijkingen, en zonder die seed is alles bevestigd.
+
+Na het mergen:
+
+```powershell
+gh workflow run ci.yml --ref main          # in MCM2
+npm run demo -- --vers                     # verse demo met alle statussen
+```
+
+Daarna is `/beheer/status` het scherm om te bekijken.
+
+> ### ⚠ Wat er op 2026-08-07 misging, en wat eraan is gedaan
+>
+> De e2e-suites draaiden tegen de **demo-database**: `DATABASE_URL` wees naar
+> poort 55450 in plaats van naar een wegwerpcontainer op 55440. De demo-tenant
+> verdween, 400 testleveranciers bleven achter. Er sloeg niets aan.
+>
+> De bestaande bescherming (`scripts/db-doelwit.js`) kent één criterium — is de
+> host lokaal — en zat bovendien alleen in vier scripts. Binnen `localhost` was
+> de demo niet te onderscheiden van een wegwerpcontainer.
+>
+> **Migratie 0019** zet `clm.omgeving` neer: elke database is `beschermd` tot
+> hij zichzelf als `wegwerp` meldt. De e2e-suites weigeren te starten tegen
+> alles wat niet wegwerp is, en `seed:demo --verwijder` ook. Zie
+> `docs/runbooks/commandos-en-omgeving.md` en **ADR-014**.
+>
+> Productie is niet geraakt: die loopt zelfs achter (0017–0019 staan er nog
+> niet op).
 
 > ### ⚠ Wat er op 2026-08-07 misging, en wat eraan is gedaan
 >
@@ -46,26 +86,51 @@ Alle vijf zijn gemerged, elk met een groene CI-run — de Actions-storing was vo
 
 ---
 
-**Nu aan de beurt: de frontend van fase C.** De backend is compleet en getest. Van de drie
-schermen uit het plan (§Fase C, "Frontend") staat er één:
+**De frontend van fase C.** Twee van de drie schermen uit het plan (§Fase C, "Frontend")
+staan er; beide zitten in **MCM2-frontend PR #8**.
 
-1. ~~**Voortgang per ronde**~~ — vervangen door het **statusoverzicht per vendor**
-   (`/beheer/status`), gebouwd 2026-08-07. Toont de vijf statussen uit
-   `docs/superpowers/plans/2026-08-07-statuswaarheid-per-vendor.md`, met de schakelaar
-   "van mij" / "hele organisatie" erin verwerkt. Daarmee dekt dit scherm ook punt 3.
-2. **Antwoorden lezen** per respons, met het beoordeelblok eronder: drie knoppen plus een
-   toelichtingsveld, en daaronder de eerdere oordelen op datum — **ontbreekt nog, en dat is
-   het grootste gat.** Het statusoverzicht telt oordelen en notities, maar je kunt ze nergens
-   lézen: de toelichting bij een oordeel en de notities van collega's zijn onbereikbaar.
-3. **Twee werkvoorraden** (ADR-013) — de contractmanagerkant zit in het statusoverzicht;
-   `GET /admin/survey/mijn-beoordelingen` heeft nog geen eigen scherm.
+1. ~~**Voortgang per ronde**~~ → **statusoverzicht per vendor** (`/beheer/status`).
+   De vijf statussen uit `docs/superpowers/plans/2026-08-07-statuswaarheid-per-vendor.md`,
+   een samenvatting bovenaan, en de tijdlijn *uitgestuurd → terug ontvangen → sluit op*.
+   Met de schakelaar "van mij" / "hele organisatie", standaard de eigen stapel.
+2. **De inzending zelf** (`/beheer/status/[responseId]`). **Opent op de afwijkingen**, niet
+   op alle antwoorden — acht keer "Bevestigd" lezen is verspilde aandacht (besluit eigenaar
+   2026-08-07). De bevestigde vragen zitten achter een schakelaar. Notities staan boven de
+   eerdere oordelen: ze gaan meestal over de afwijking. Goedkeuren staat apart van de drie
+   oordelen.
+3. **Werkvoorraad van de beoordelaar** — **ontbreekt nog.** De contractmanagerkant zit in
+   het statusoverzicht; `GET /admin/survey/mijn-beoordelingen` bestaat maar heeft geen eigen
+   scherm. Dat is een aparte lijst en geen filter (ADR-013).
 
-Twee dingen die daarbij geen detail zijn:
-- **Het huidige oordeel hoort in de voortgangslijst**, niet alleen op het detailscherm. Anders
-  moet je zeventien schermen openen om te zien wie er nog openstaat.
-- **`nadere_vragen` leest als een openstaande actie, geen eindoordeel.** Het scherm moet zeggen
-  dat de leverancier hier niets van merkt en dat de beheerder zelf contact opneemt. Een knop die
-  suggereert dat er iets verstuurd wordt terwijl dat niet gebeurt, is erger dan geen knop.
+**Wat een "afwijking" is, is geen nieuwe definitie.** De database eist al een toelichting van
+minstens tien tekens bij alles behalve `confirmed`
+(`survey_answer_comment_required_check`, migratie 0005). Die regel bestond; hij was alleen
+nergens zichtbaar. Een onbeantwoorde verplichte vraag telt óók mee.
+
+Twee dingen die daarbij geen detail waren, en die nu gebouwd zijn:
+- ✅ **Het huidige oordeel staat in de lijst**, met "(van 2)" wanneer er meer oordelen zijn —
+  anders verdwijnt een meningsverschil uit beeld.
+- ✅ **`nadere_vragen` leest als een openstaande actie.** Onder de knoppen staat expliciet dat
+  de leverancier hier niets van merkt en dat u zelf contact opneemt.
+
+---
+
+## Wat er ná de twee open PR's ligt
+
+**Voor de eigenaar, in volgorde van wat het meest oplevert:**
+
+1. **De DEMO-tenant in productie.** Voorstel van de eigenaar (2026-08-07): een tenant náást
+   de echte klanten, waar hij zelf admin is, om ná uitrol te toetsen. Dat maakt de lokale
+   demo als tussencategorie overbodig — en die tussencategorie is waar het vandaag misging.
+   De seed kan het al (`--echte-tokens`), maar **inloggen vraagt een echte Entra-koppeling**,
+   en dat pad is nog niet volledig doorlopen. Waarschijnlijk het meeste werk van wat er ligt.
+2. **Werkvoorraad van de beoordelaar** — het derde scherm.
+3. **Hulp bij het juiste mailadres.** De backend kiest al bewust een contactpersoon *met*
+   adres (`ronde-beheer.service.ts`), maar je merkt pas bij het verzenden dat er niemand te
+   mailen is. Dat hoort in het uitnodigingsscherm zichtbaar te zijn vóór je op verzenden
+   drukt. Restrisico blijft een adres dat is ingevuld maar verkeerd → bounce-webhook.
+4. **Heads-up bij tijdsoverschrijding.** Het zichtbare deel is er ("Te laat" in het
+   overzicht); een seintje sturen hangt aan e-mail (fase D) en Issue #16.
 
 Ook nog open: het **vragenlijst-overzichtscherm** ("levert nu nauwelijks zinvolle informatie",
 eigenaar 2026-08-06).
