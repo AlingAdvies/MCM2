@@ -278,8 +278,28 @@ export function mogelijkeOvergangen(van: string): readonly string[] {
   return OVERGANGEN[van] ?? [];
 }
 
-/** De drie oordelen uit migratie 0015. */
-const OORDELEN = ['goed', 'nadere_vragen', 'niet_goed'] as const;
+/**
+ * De vier oordelen uit migratie 0017.
+ *
+ * Bewust hier herhaald en niet geïmporteerd: dit bestand valideert wat een
+ * browser opstuurt en staat daarvoor los van de servicelaag, net als
+ * `vendor-invoer.ts`. De koppeling met `beoordeling.service.ts` is een
+ * typecontrole verderop in dit bestand — lopen de twee lijsten uiteen, dan
+ * faalt de build en niet pas een test.
+ */
+const OORDELEN = ['goed', 'nadere_vragen', 'niet_goed', 'goedgekeurd'] as const;
+
+/**
+ * Oordelen die een onderbouwing vereisen.
+ *
+ * Expliciet opgesomd en niet als "alles behalve goed": bij het toevoegen van
+ * `goedgekeurd` (migratie 0017) zou die uitzonderingsvorm er stilzwijgend een
+ * verplichte toelichting van hebben gemaakt.
+ */
+const VEREIST_TOELICHTING: readonly (typeof OORDELEN)[number][] = [
+  'nadere_vragen',
+  'niet_goed',
+];
 
 export interface NieuweBeoordelingInvoer {
   verdict: (typeof OORDELEN)[number];
@@ -289,10 +309,12 @@ export interface NieuweBeoordelingInvoer {
 /**
  * Leest de invoer voor een nieuw oordeel (fase C).
  *
- * De toelichting mag leeg zijn bij `goed` — daar valt vaak niets toe te
- * lichten. Bij de andere twee is hij verplicht: "niet goed" zonder reden is
- * voor de leverancier én voor een latere lezer onbruikbaar, en juist in een
- * compliance-dossier is de onderbouwing het punt.
+ * De toelichting is verplicht bij `nadere_vragen` en `niet_goed`: zonder reden
+ * is zo'n oordeel voor de leverancier én voor een latere lezer onbruikbaar, en
+ * juist in een compliance-dossier is de onderbouwing het punt.
+ *
+ * Bij `goed` valt er vaak niets toe te lichten, en bij `goedgekeurd` is de
+ * handtekening de inhoud — wie en wanneer, en dat legt de tabel zelf vast.
  */
 export function leesNieuweBeoordeling(body: unknown): NieuweBeoordelingInvoer {
   const invoer = leesObject(body);
@@ -318,7 +340,11 @@ export function leesNieuweBeoordeling(body: unknown): NieuweBeoordelingInvoer {
 
   const toelichting = (invoer.toelichting ?? '').trim();
 
-  if (verdict !== 'goed' && toelichting === '') {
+  // Alleen de inhoudelijke afwijzingen. Zou hier `verdict !== 'goed'` staan,
+  // dan zou een goedkeuring een verplichte onderbouwing krijgen — en dat is
+  // precies de reden dat deze lijst expliciet is en niet als uitzondering
+  // geschreven.
+  if (VEREIST_TOELICHTING.includes(verdict) && toelichting === '') {
     throw new InvoerFout(
       'toelichting',
       'Licht toe waarom. Zonder onderbouwing is dit oordeel later niet te herleiden.',

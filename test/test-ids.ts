@@ -204,6 +204,41 @@ export const TEST_IDS = {
      */
     bestaatNiet: '00000000-0000-0000-0000-00000000dead',
   },
+  // Goedkeuren (migratie 0017). Staarten f9 t/m ff, plus 90 en 91.
+  //
+  // Let op bij het kiezen van vrije staarten: ze worden in dit bestand op TWEE
+  // manieren uitgedeeld — letterlijk zoals hieronder, én via de id()-helper
+  // bovenaan. Zoek je alleen op de letterlijke vorm, dan lijken f0-f8 vrij
+  // terwijl ze via id() al vergeven zijn. Beide vormen tellen:
+  //
+  //   Select-String test\test-ids.ts -Pattern "id\('([0-9a-f]{2})'\)"
+  //   Select-String test\test-ids.ts -Pattern "'0{20}([0-9a-f]{2})'"
+  //
+  // De f-reeks was bijna op (f8 was de hoogste), vandaar de sprong naar 90.
+  goedkeuren: {
+    tenantA: '00000000-0000-0000-0000-0000000000f9',
+    tenantB: '00000000-0000-0000-0000-0000000000fa',
+    adminA: '00000000-0000-0000-0000-0000000000fb',
+    /**
+     * Tweede medewerker in A. Bestaat alleen om te bewijzen dat een
+     * reviewerUserId uit de body genegeerd wordt: zonder een tweede echte
+     * gebruiker zou die test ook slagen op een niet-bestaand id, en dan
+     * bewijst hij niets.
+     */
+    collegaA: '00000000-0000-0000-0000-0000000000fc',
+    templateA: '00000000-0000-0000-0000-0000000000fd',
+    runA: '00000000-0000-0000-0000-0000000000fe',
+    vendorA: '00000000-0000-0000-0000-0000000000ff',
+    /** Ingediend — hierop mag goedgekeurd worden. */
+    responseIngediend: '00000000-0000-0000-0000-000000000090',
+    adminB: '00000000-0000-0000-0000-000000000091',
+    /**
+     * Bestaat met opzet NIET — voor de 404 bij intrekken. Eigen waarde en niet
+     * de `dead` uit beoordelaar-koppelen: twee suites die dezelfde id delen is
+     * precies de faalvorm die de bewakingstest hierboven afvangt.
+     */
+    reviewBestaatNiet: '00000000-0000-0000-0000-000000000bad',
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */

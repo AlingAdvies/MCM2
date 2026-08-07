@@ -197,6 +197,32 @@ export class VragenlijstBeheerController {
   }
 
   /**
+   * Trekt een oordeel in.
+   *
+   * Zet `deleted_at`; de rij blijft staan (besluit eigenaar 2026-08-07, V2).
+   * Een goedkeuring die spoorloos kan verdampen maakt de status onbetrouwbaar,
+   * en dit is juist de tabel waar "wat vond men er eerder van" de vraag is die
+   * je later stelt.
+   *
+   * **Geen `@VereistRol('admin')`, consequent met beoordelen zelf.** Elke
+   * handeling ligt met naam en datum vast; niemand kan iets stilletjes doen.
+   *
+   * 204 bij succes. 404 als de respons of het oordeel niet bestaat binnen deze
+   * tenant, of als het oordeel al is ingetrokken.
+   */
+  @Delete('responses/:id/reviews/:reviewId')
+  @HttpCode(204)
+  async trekBeoordelingIn(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Param('reviewId') reviewId: string,
+  ): Promise<void> {
+    const sessie = request.sessie!;
+
+    await this.beoordelingen_.trekIn(sessie.tenantId, id, reviewId);
+  }
+
+  /**
    * Wat er op de ingelogde gebruiker wacht: ingediende responses op
    * vragenlijsten waaraan hij als beoordelaar gekoppeld is.
    *

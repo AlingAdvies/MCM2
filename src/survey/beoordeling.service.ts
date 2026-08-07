@@ -38,9 +38,33 @@ import { DatabaseService } from '../db/database.service';
  * erger dan geen knop.
  */
 
-/** De drie toegestane oordelen. Gelijk aan de CHECK uit migratie 0015. */
-export const OORDELEN = ['goed', 'nadere_vragen', 'niet_goed'] as const;
+/**
+ * De vier toegestane oordelen. Gelijk aan de CHECK uit migratie 0017.
+ *
+ * De eerste drie zijn inhoudelijk: wat vindt de beoordelaar van de inzending.
+ * `goedgekeurd` is een processtap die de inzending afsluit — dezelfde vorm
+ * (naam, datum, nooit overschreven), maar een andere betekenis. Het scherm zet
+ * ze daarom niet als vier gelijkwaardige knoppen naast elkaar.
+ */
+export const OORDELEN = [
+  'goed',
+  'nadere_vragen',
+  'niet_goed',
+  'goedgekeurd',
+] as const;
 export type Oordeel = (typeof OORDELEN)[number];
+
+/**
+ * Oordelen die een onderbouwing vereisen.
+ *
+ * `goed` en `goedgekeurd` niet: bij een goedkeuring is de handtekening de
+ * inhoud — wie en wanneer, en dat legt de tabel zelf vast. De eis bestaat
+ * omdat "niet goed" zonder reden later niet te herleiden is.
+ */
+export const OORDELEN_MET_TOELICHTING: readonly Oordeel[] = [
+  'nadere_vragen',
+  'niet_goed',
+];
 
 export interface NieuweBeoordeling {
   verdict: Oordeel;
@@ -175,6 +199,50 @@ export class BeoordelingService {
         }
 
         return this.naarBeoordeling(rij);
+      },
+      'medewerker',
+    );
+  }
+
+  /**
+   * Trekt een oordeel in.
+   *
+   * Zet `deleted_at` en verwijdert niets. De tabel is append-only: wissen zou
+   * de historie kapotmaken die deze tabel juist bewaart, en een goedkeuring die
+   * spoorloos kan verdampen maakt de status onbetrouwbaar (besluit eigenaar
+   * 2026-08-07, V2).
+   *
+   * Wie mag intrekken is niet beperkt, consequent met beoordelen zelf: elke
+   * handeling ligt met naam en datum vast, dus niemand kan iets stilletjes
+   * doen. Wél zichtbaar in het scherm dát er is ingetrokken.
+   *
+   * De `response_id` in de WHERE is geen overbodige controle: zonder die eis
+   * zou een geldig review-id uit een ándere respons van dezelfde tenant hier
+   * ingetrokken kunnen worden via een verzonnen pad.
+   */
+  async trekIn(
+    tenantId: string,
+    responseId: string,
+    reviewId: string,
+  ): Promise<void> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        await this.eisBestaandeRespons(tx, responseId);
+
+        const geraakt = await tx.execute(
+          sql`UPDATE clm.survey_review
+                 SET deleted_at = now()
+               WHERE review_id = ${reviewId}
+                 AND response_id = ${responseId}
+                 AND deleted_at IS NULL`,
+        );
+
+        if (geraakt.rowCount === 0) {
+          throw new NotFoundException(
+            'Dit oordeel bestaat niet, of is al ingetrokken.',
+          );
+        }
       },
       'medewerker',
     );
