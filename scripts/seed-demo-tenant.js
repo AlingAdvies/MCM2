@@ -35,7 +35,11 @@ const { sql } = require('drizzle-orm');
 const { drizzle } = require('drizzle-orm/node-postgres');
 const { Pool } = require('pg');
 
-const { meldDoelwit, eisToestemmingBuitenLokaal } = require('./db-doelwit.js');
+const {
+  meldDoelwit,
+  eisToestemmingBuitenLokaal,
+  eisWegwerpdatabase,
+} = require('./db-doelwit.js');
 
 // Vast UUID, zodat het script idempotent is en `--verwijder` precies weet wat
 // het weghaalt. Bewust niet 1111.../2222..., die zijn in gebruik bij
@@ -600,6 +604,19 @@ async function main() {
   }
 
   const moetVerwijderen = process.argv.includes('--verwijder');
+
+  // Alleen bij --verwijder de wegwerpeis, en dat onderscheid is opzet.
+  //
+  // Seeden voegt toe: dat mag op een beschermde database, en moet ook — anders
+  // is een demo-tenant in productie niet in te richten. Verwijderen is
+  // onherstelbaar, en de hostcontrole hierboven kent 'localhost' als veilig
+  // terwijl juist de demo-database daar draait (2026-08-07).
+  if (
+    moetVerwijderen &&
+    !(await eisWegwerpdatabase(url, { wat: 'Opruimen demo-tenant' }))
+  ) {
+    process.exit(1);
+  }
   const pool = new Pool({ connectionString: url });
   const db = drizzle(pool);
 
