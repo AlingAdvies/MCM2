@@ -5,6 +5,15 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Handmatig starten vanaf een willekeurige branch: `gh workflow run ci.yml
+  # --ref <branch>`, of via de Actions-tab op GitHub.
+  #
+  # Toegevoegd op 2026-08-06. Aanleiding: GitHub maakte die dag herhaaldelijk
+  # geen run aan (PR #91 kreeg er geen, de run na PR #90 werd afgebroken met
+  # drie `cancelled` jobs zonder één falende stap). Zonder deze trigger is er
+  # geen enkele manier om een controle af te dwingen; je kunt dan alleen een
+  # lege commit maken en hopen dat het de tweede keer wel lukt.
+  workflow_dispatch:
 
 permissions:
   contents: read
