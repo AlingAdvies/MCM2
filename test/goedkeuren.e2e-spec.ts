@@ -45,8 +45,19 @@ const SUBJECT_ADMIN = `oid-gk-a-${Date.now()}`;
 const SUBJECT_COLLEGA = `oid-gk-c-${Date.now()}`;
 const SUBJECT_B = `oid-gk-b-${Date.now()}`;
 
-/** 64 hex-tekens, conform de CHECK op token_hash (migratie 0003). */
-const HASH_INGEDIEND = `${'3'.repeat(48)}cccccccccccccccc`;
+/**
+ * 64 hex-tekens, conform de CHECK op token_hash (migratie 0003).
+ *
+ * **Moet uniek zijn over ALLE suites heen.** `survey_response_token_hash_key`
+ * is een unieke index zonder tenant_id erin — twee suites met dezelfde hash
+ * botsen dus, ook al zitten ze in verschillende tenants. Dat gebeurde op
+ * 2026-08-07: deze suite deelde zijn hash met beoordelaar-koppelen, wat een
+ * onregelmatig falende run opleverde die eerst onverklaarbaar leek.
+ *
+ * Bezet: 0=vragenlijst-beheer-routes, 1+2=beoordeling, 3=beoordelaar-koppelen,
+ * 4+5=notities, 6=hier.
+ */
+const HASH_INGEDIEND = `${'6'.repeat(48)}60ed6e0e60ed6e0e`;
 
 interface BeoordelingBody {
   beoordeling: {

@@ -18,11 +18,13 @@ import {
   TenantContextGuard,
   type RequestMetSessie,
 } from '../auth/tenant-context.guard';
+import { NotitieService } from './notitie.service';
 import { RondeBeheerService } from './ronde-beheer.service';
 import {
   InvoerFout,
   leesBeoordelaar,
   leesNieuweBeoordeling,
+  leesNotitie,
   type NieuweBeoordelingInvoer,
   leesNieuweRonde,
   leesStatus,
@@ -80,6 +82,8 @@ export class VragenlijstBeheerController {
     // Onderstreept omdat `beoordelingen` al de naam van een routemethode is.
     private readonly beoordelingen_: BeoordelingService,
     private readonly beoordelaars: BeoordelaarService,
+    // Onderstreept om dezelfde reden als beoordelingen_.
+    private readonly notities_: NotitieService,
   ) {}
 
   /** Alle vragenlijsten van deze tenant, met aantallen vragen en rondes. */
@@ -220,6 +224,71 @@ export class VragenlijstBeheerController {
     const sessie = request.sessie!;
 
     await this.beoordelingen_.trekIn(sessie.tenantId, id, reviewId);
+  }
+
+  /** Alle notities bij één respons, nieuwste eerst. */
+  @Get('responses/:id/notes')
+  async notities(@Req() request: RequestMetSessie, @Param('id') id: string) {
+    const sessie = request.sessie!;
+
+    const notities = await this.notities_.lijst(sessie.tenantId, id);
+
+    return { notities };
+  }
+
+  /**
+   * Plaatst een notitie bij een respons.
+   *
+   * **Ook vóór het indienen toegestaan**, anders dan bij beoordelen (besluit
+   * eigenaar 2026-08-07). "Gebeld, komt volgende week" gaat juist over een
+   * leverancier die nog niet heeft ingediend.
+   *
+   * De schrijver komt uit de sessie, nooit uit de body (§6). 201 met de
+   * notitie erbij, inclusief naam en datum — een notitie zonder afzender en
+   * tijdstip is in een dossier waardeloos.
+   */
+  @Post('responses/:id/notes')
+  async plaatsNotitie(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const sessie = request.sessie!;
+
+    let tekst: string;
+    try {
+      tekst = leesNotitie(body);
+    } catch (err) {
+      throw this.naarHttpFout(err);
+    }
+
+    const notitie = await this.notities_.voegToe(
+      sessie.tenantId,
+      id,
+      sessie.userId,
+      tekst,
+    );
+
+    return { notitie };
+  }
+
+  /**
+   * Trekt een notitie in.
+   *
+   * Zet `deleted_at`; de rij blijft staan, net als bij een oordeel. 204 bij
+   * succes, 404 als de notitie niet bestaat binnen deze tenant of al is
+   * ingetrokken.
+   */
+  @Delete('responses/:id/notes/:noteId')
+  @HttpCode(204)
+  async trekNotitieIn(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Param('noteId') noteId: string,
+  ): Promise<void> {
+    const sessie = request.sessie!;
+
+    await this.notities_.trekIn(sessie.tenantId, id, noteId);
   }
 
   /**

@@ -239,6 +239,34 @@ export const TEST_IDS = {
      */
     reviewBestaatNiet: '00000000-0000-0000-0000-000000000bad',
   },
+  // Notities (migratie 0018). Staarten 92 t/m 99; de f-reeks was op.
+  // Gecontroleerd tegen BEIDE uitdeelvormen — zie de opmerking bij
+  // `goedkeuren` hierboven.
+  notities: {
+    tenantA: '00000000-0000-0000-0000-000000000092',
+    tenantB: '00000000-0000-0000-0000-000000000093',
+    adminA: '00000000-0000-0000-0000-000000000094',
+    templateA: '00000000-0000-0000-0000-000000000095',
+    runA: '00000000-0000-0000-0000-000000000096',
+    vendorA: '00000000-0000-0000-0000-000000000097',
+    /** Ingediend. */
+    responseIngediend: '00000000-0000-0000-0000-000000000098',
+    /**
+     * Nog niet ingediend. Hierop mag WEL een notitie — anders dan bij
+     * beoordelen (besluit eigenaar 2026-08-07): "gebeld, komt volgende week"
+     * gaat juist over een leverancier die nog niet heeft ingediend.
+     */
+    responseOpen: '00000000-0000-0000-0000-000000000099',
+    /**
+     * Tweede leverancier: survey_response_run_vendor_key staat één respons per
+     * vendor per ronde toe, dus de open en de ingediende respons kunnen niet
+     * dezelfde vendor hebben.
+     */
+    vendorOpen: '00000000-0000-0000-0000-00000000009f',
+    adminB: '00000000-0000-0000-0000-0000000000a0',
+    /** Bestaat met opzet NIET — voor de 404 bij intrekken. */
+    notitieBestaatNiet: '00000000-0000-0000-0000-000000000fee',
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */

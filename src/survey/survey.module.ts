@@ -11,6 +11,7 @@ import { BestandOpslagService } from './bestand-opslag.service';
 import { BijlageService } from './bijlage.service';
 import { BeoordelaarService } from './beoordelaar.service';
 import { BeoordelingService } from './beoordeling.service';
+import { NotitieService } from './notitie.service';
 import { RondeBeheerService } from './ronde-beheer.service';
 import { VragenlijstBeheerController } from './vragenlijst-beheer.controller';
 import { VragenlijstBeheerService } from './vragenlijst-beheer.service';
@@ -47,6 +48,7 @@ import { VragenlijstLeesService } from './vragenlijst-lezen.service';
     RondeBeheerService,
     BeoordelingService,
     BeoordelaarService,
+    NotitieService,
     VragenlijstImportService,
     VragenlijstLeesService,
     AntwoordIndienService,
@@ -61,6 +63,7 @@ import { VragenlijstLeesService } from './vragenlijst-lezen.service';
     RondeBeheerService,
     BeoordelingService,
     BeoordelaarService,
+    NotitieService,
     VragenlijstImportService,
     VragenlijstLeesService,
     AntwoordIndienService,

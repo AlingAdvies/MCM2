@@ -365,3 +365,42 @@ export function leesBeoordelaar(body: unknown): string {
 
   return leesUuid(invoer.userId, 'userId');
 }
+
+/**
+ * Hoe lang een notitie mag zijn.
+ *
+ * Ruim: het gaat om "gebeld, komt volgende week", niet om een rapport. De
+ * grens bestaat om te voorkomen dat iemand per ongeluk een heel document in
+ * een notitieveld plakt — dan is de lijst onleesbaar en hoort de inhoud
+ * ergens anders thuis.
+ */
+export const NOTITIE_MAX_TEKENS = 4000;
+
+/**
+ * Leest de tekst van een notitie (migratie 0018).
+ *
+ * Alleen de tekst. De schrijver komt uit de sessie en de respons uit het pad —
+ * die horen niet in een body waar een client ze kan verzinnen (§6).
+ */
+export function leesNotitie(body: unknown): string {
+  const invoer = leesObject(body);
+
+  if (typeof invoer.tekst !== 'string') {
+    throw new InvoerFout('tekst', 'De notitie moet tekst zijn.');
+  }
+
+  const tekst = invoer.tekst.trim();
+
+  if (tekst === '') {
+    throw new InvoerFout('tekst', 'Een lege notitie heeft geen zin.');
+  }
+
+  if (tekst.length > NOTITIE_MAX_TEKENS) {
+    throw new InvoerFout(
+      'tekst',
+      `Een notitie is maximaal ${NOTITIE_MAX_TEKENS} tekens. Hoort dit ergens anders thuis?`,
+    );
+  }
+
+  return tekst;
+}
