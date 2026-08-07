@@ -122,6 +122,23 @@ vullen, dan is dát de plek waar de lock-in zit.
 variabelen in plaats van `ENTRA_*`. Entra draait bij Microsoft; welke cloud de applicatie
 host, raakt dat niet.
 
+### Wat deze tabel níét meet: beschikbaarheid
+
+De kolom "hoe vast" gaat over verhuizen. Dat is niet hetzelfde als: wat gebeurt er als deze
+leverancier het even niet doet?
+
+Op 2026-08-06 lag GitHub Actions een middag plat (officiële status `major_outage`, incident
+gestart 15:22 UTC). CI staat hierboven als **Los** — en dat klopt: de workflow is één
+YAML-bestand en draait op een andere aanbieder net zo goed. Maar tijdens die storing was er
+geen enkele manier om te bewijzen dat `main` gezond was. Twee merges gingen erdoorheen zonder
+dat de Docker-productiebuild of de RLS-isolatietest ze zag.
+
+**Makkelijk te vervangen is niet hetzelfde als beschikbaar.** Voor elke rij hierboven geldt
+die tweede vraag apart, en dit document beantwoordt hem niet. Wat het wél oplevert: waar een
+storing alleen het *aantonen* raakt (CI, meldingen) is de schade uitgesteld werk. Waar hij de
+*applicatie* raakt (database, identity, bestanden) staat de dienst stil. Dat onderscheid is
+belangrijker dan de verhuisbaarheid, en er is nog geen document dat het bijhoudt.
+
 ---
 
 ## 4. De enige echte blokkade: bestandsopslag
