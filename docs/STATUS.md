@@ -286,6 +286,11 @@ Blijken ze over een half jaar nog steeds ongebruikt, dan kunnen ze weg — de ke
 
 ### Snel weer op gang komen
 
+> **Welk commando bestaat er, en waar praat het naartoe?**
+> `docs/runbooks/commandos-en-omgeving.md` — de volledige lijst, geverifieerd,
+> met de waarschuwing dat `.env` naar Supabase wijst. Lees dat eerst wanneer je
+> iets wilt draaien dat de database raakt.
+
 **De hele keten in één commando** (aanbevolen — sinds 2026-07-31):
 
 ```bash
