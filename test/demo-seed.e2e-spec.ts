@@ -146,7 +146,11 @@ describe('Demo-seed (e2e)', () => {
     expect(stand.rondes).toBe(1);
     expect(stand.responses).toBe(3);
     expect(stand.antwoorden).toBeGreaterThan(0);
-  });
+    // Zelfde limiet en dezelfde reden als de test hieronder: deze start het
+    // seedscript als apart Node-proces. Bij die reparatie (2026-08-04) is
+    // uitgerekend deze eerste test overgeslagen, waardoor hij op 2026-08-07
+    // alsnog omviel in de volledige e2e-run — los bleef hij groen.
+  }, 20_000);
 
   it('geeft bij een tweede run exact dezelfde stand', async () => {
     const voor = await tel();
@@ -366,5 +370,7 @@ describe('Demo-seed (e2e)', () => {
     // afterAll draait --verwijder nog een keer en dat moet op een lege
     // tenant net zo goed werken.
     draaiSeed();
-  });
+    // Twee scriptaanroepen (--verwijder plus deze), dus dezelfde limiet als de
+    // andere tests die het seedscript starten.
+  }, 20_000);
 });

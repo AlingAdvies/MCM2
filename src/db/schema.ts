@@ -568,8 +568,10 @@ export const surveyReview = clm.table(
     responseId: uuid('response_id')
       .notNull()
       .references(() => surveyResponse.responseId, { onDelete: 'restrict' }),
-    // goed | nadere_vragen | niet_goed. Als CHECK in de database, zodat een
-    // typefout in code een databasefout wordt en geen rij met onzin.
+    // goed | nadere_vragen | niet_goed | goedgekeurd (migratie 0017). Als CHECK
+    // in de database, zodat een typefout in code een databasefout wordt en geen
+    // rij met onzin. De eerste drie zijn inhoudelijk; goedgekeurd is een
+    // processtap die de inzending afsluit.
     verdict: text('verdict').notNull(),
     // NOT NULL met '' als lege waarde, net als survey_question.body: dan hoeft
     // de aanroeper nergens onderscheid te maken tussen null en leeg.
@@ -588,6 +590,53 @@ export const surveyReview = clm.table(
   (t) => [
     index('survey_review_tenant_id_idx').on(t.tenantId),
     index('survey_review_response_id_idx').on(t.responseId),
+  ],
+);
+
+/**
+ * Een notitie bij een inzending, voor collega's onderling (migratie 0018).
+ *
+ * ── Waarom dit geen survey_review is ────────────────────────────────────────
+ *
+ * Een notitie is géén oordeel. "Gebeld, komt volgende week" past in geen van de
+ * vier verdicts, en hem daar toch in persen zou een verdict afdwingen dat er
+ * niet is.
+ *
+ * Het verschil is niet cosmetisch: een oordeel bepaalt de status van de
+ * inzending, een notitie niet. In één tabel zou elke statusquery de notities
+ * eruit moeten filteren — en die filter vergeten is een stille fout.
+ *
+ * De policy is wél letterlijk dezelfde: de leverancier zit in dezelfde tenant
+ * en mag niet meelezen wat er over hem geschreven wordt.
+ */
+export const responseNote = clm.table(
+  'response_note',
+  {
+    noteId: uuid('note_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    responseId: uuid('response_id')
+      .notNull()
+      .references(() => surveyResponse.responseId, { onDelete: 'restrict' }),
+    // Eén tekstveld, geen titel of categorie. De eigenaar was expliciet: het
+    // hoeft geen geautomatiseerde fabriek te worden. Een CHECK in de database
+    // weigert een lege notitie.
+    tekst: text('tekst').notNull(),
+    // ON DELETE restrict, zoals survey_review.reviewer_user_id: een notitie
+    // zonder afzender is in een dossier waardeloos. "Gebeld" — door wie?
+    authorUserId: uuid('author_user_id')
+      .notNull()
+      .references(() => user.userId, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    // Intrekken kan wel, wissen niet — net als bij een oordeel.
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('response_note_tenant_id_idx').on(t.tenantId),
+    index('response_note_response_id_idx').on(t.responseId),
   ],
 );
 

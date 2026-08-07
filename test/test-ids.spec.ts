@@ -64,4 +64,38 @@ describe("test-ids: geen botsende UUID's tussen suites", () => {
 
     expect(overtredingen).toEqual([]);
   });
+
+  it('deelt geen enkele token_hash tussen suites', () => {
+    // `survey_response_token_hash_key` (migratie 0003) is uniek over ALLE
+    // tenants heen — er zit geen tenant_id in. Twee suites met dezelfde hash
+    // botsen dus, ook al zitten ze keurig in hun eigen tenant.
+    //
+    // Dat is een gemene faalvorm: los draait elke suite groen, en pas in de
+    // volledige run valt er een om — welke hangt af van de volgorde. Op
+    // 2026-08-07 kostte dat twee onverklaarbare rode runs voordat de oorzaak
+    // boven kwam.
+    const testMap = __dirname;
+    // Vangt de vorm `${'3'.repeat(48)}cccccccccccccccc` die alle suites
+    // gebruiken: het herhaalde teken plus de staart.
+    const patroon = /\$\{'([0-9a-f])'\.repeat\(48\)\}([0-9a-f]{16})/g;
+
+    const perHash = new Map<string, string[]>();
+
+    for (const naam of readdirSync(testMap)) {
+      if (!naam.endsWith('.e2e-spec.ts')) continue;
+
+      const inhoud = readFileSync(join(testMap, naam), 'utf8');
+
+      for (const treffer of inhoud.matchAll(patroon)) {
+        const hash = treffer[1].repeat(48) + treffer[2];
+        perHash.set(hash, [...(perHash.get(hash) ?? []), naam]);
+      }
+    }
+
+    const botsingen = [...perHash.entries()]
+      .filter(([, suites]) => new Set(suites).size > 1)
+      .map(([hash, suites]) => `${hash.slice(0, 8)}…: ${suites.join(', ')}`);
+
+    expect(botsingen).toEqual([]);
+  });
 });
