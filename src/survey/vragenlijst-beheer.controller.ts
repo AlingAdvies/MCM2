@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -18,6 +19,7 @@ import {
   TenantContextGuard,
   type RequestMetSessie,
 } from '../auth/tenant-context.guard';
+import { ContractmanagerService } from './contractmanager.service';
 import { NotitieService } from './notitie.service';
 import { RondeBeheerService } from './ronde-beheer.service';
 import {
@@ -84,6 +86,7 @@ export class VragenlijstBeheerController {
     private readonly beoordelaars: BeoordelaarService,
     // Onderstreept om dezelfde reden als beoordelingen_.
     private readonly notities_: NotitieService,
+    private readonly contractmanagers: ContractmanagerService,
   ) {}
 
   /** Alle vragenlijsten van deze tenant, met aantallen vragen en rondes. */
@@ -314,6 +317,39 @@ export class VragenlijstBeheerController {
     );
 
     return { werkvoorraad };
+  }
+
+  /**
+   * De werkvoorraad van de contractmanager: rondes op vendors die hij beheert.
+   *
+   * Bewust een andere lijst dan `mijn-beoordelingen` en geen filter erop
+   * (ADR-013). De contractmanager wil weten wie er nog moet invullen en wie te
+   * laat is; de beoordelaar wil dat juist niet zien. Deze lijst bevat daarom
+   * óók responses die nog niet zijn ingediend.
+   *
+   * `?scope=organisatie` toont alles binnen de tenant. Dat is de schakelaar
+   * "van mij / hele organisatie": de koppeling stuurt wat je standaard ziet,
+   * niet wat je mag (ADR-013 besluit 3). Zonder die uitweg ligt het proces
+   * stil zodra een contractmanager op vakantie is.
+   *
+   * Geen `@VereistRol`: iedereen mag zijn eigen werkvoorraad zien, en beheert
+   * hij geen enkele vendor dan is de lijst leeg — een geldig antwoord, geen
+   * fout.
+   */
+  @Get('mijn-vendors')
+  async mijnVendors(
+    @Req() request: RequestMetSessie,
+    @Query('scope') scope?: string,
+  ) {
+    const sessie = request.sessie!;
+
+    const heleOrganisatie = scope === 'organisatie';
+
+    const werkvoorraad = heleOrganisatie
+      ? await this.contractmanagers.alles(sessie.tenantId)
+      : await this.contractmanagers.vanMij(sessie.tenantId, sessie.userId);
+
+    return { werkvoorraad, scope: heleOrganisatie ? 'organisatie' : 'mij' };
   }
 
   /** Wie er aan deze vragenlijst gekoppeld zijn als beoordelaar. */
