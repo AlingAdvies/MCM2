@@ -11,6 +11,8 @@ const { drizzle } = require('drizzle-orm/node-postgres');
 const { migrate } = require('drizzle-orm/node-postgres/migrator');
 const { Pool } = require('pg');
 
+const { meldDoelwit, eisToestemmingBuitenLokaal } = require('./db-doelwit.js');
+
 const url = process.env.MIGRATION_DATABASE_URL;
 
 if (!url) {
@@ -20,14 +22,26 @@ if (!url) {
   process.exit(1);
 }
 
+// Vóór de verbinding, niet erna: zie Issue #86. Op 2026-08-06 draaide dit
+// script tegen productie terwijl een wegwerpcontainer bedoeld was, en meldde
+// alleen de rolnaam — die lokaal precies zo heet.
+meldDoelwit(url, 'Migraties');
+
+if (!eisToestemmingBuitenLokaal(url, { wat: 'Migraties' })) {
+  process.exit(1);
+}
+
 async function main() {
   const pool = new Pool({ connectionString: url });
 
   try {
+    // De rol staat al in de doelwitmelding hierboven; dit is de bevestiging
+    // dat de database hem ook werkelijk zo ziet — een URL kan iets anders
+    // beweren dan er na verbinden geldt.
     const { rows } = await pool.query(
       'SELECT current_user AS role, rolbypassrls FROM pg_roles WHERE rolname = current_user',
     );
-    console.log(`Migraties draaien als rol '${rows[0]?.role}'.`);
+    console.log(`Verbonden als rol '${rows[0]?.role}'.`);
 
     await migrate(drizzle(pool), { migrationsFolder: './drizzle' });
     console.log('Migraties voltooid.');

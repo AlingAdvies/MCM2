@@ -24,6 +24,8 @@ const { sql } = require('drizzle-orm');
 const { drizzle } = require('drizzle-orm/node-postgres');
 const { Pool } = require('pg');
 
+const { meldDoelwit, eisToestemmingBuitenLokaal } = require('./db-doelwit.js');
+
 const SEEDMAP = path.join(__dirname, '..', 'db', 'seeds');
 
 const UUID_REGEX =
@@ -38,14 +40,22 @@ const UUID_REGEX =
  * stilzwijgend niet gelden voor de seed.
  */
 function laadValidatie() {
-  const uitDist = path.join(__dirname, '..', 'dist', 'survey', 'vragenlijst-schema.js');
+  const uitDist = path.join(
+    __dirname,
+    '..',
+    'dist',
+    'survey',
+    'vragenlijst-schema.js',
+  );
 
   if (fs.existsSync(uitDist)) {
     return require(uitDist);
   }
 
   require('ts-node/register');
-  return require(path.join(__dirname, '..', 'src', 'survey', 'vragenlijst-schema.ts'));
+  return require(
+    path.join(__dirname, '..', 'src', 'survey', 'vragenlijst-schema.ts'),
+  );
 }
 
 function bestandenUitArgumenten(argumenten) {
@@ -161,6 +171,14 @@ async function main() {
     console.error(
       'DATABASE_URL ontbreekt. De seed draait via de runtime-rol clm_api_runtime, net als de applicatie.',
     );
+    process.exit(1);
+  }
+
+  // Vóór de eerste schrijfactie: deze seed schrijft vragenlijsten weg en kan
+  // dus productiedata raken (Issue #86).
+  meldDoelwit(url, 'Seed vragenlijsten');
+
+  if (!eisToestemmingBuitenLokaal(url, { wat: 'Seed vragenlijsten' })) {
     process.exit(1);
   }
 
