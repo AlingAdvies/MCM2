@@ -148,7 +148,40 @@ CI draait `lint:check` en `format:check`. Gebruik nooit de schrijvende variant o
 | `npm run migrate:deploy` | `MIGRATION_DATABASE_URL` | **Zonder overschrijven: Supabase.** |
 | `npm run seed:vragenlijsten -- <tenant-uuid>` | `DATABASE_URL` | Tenant moet bestaan |
 | `npm run seed:demo` | `DATABASE_URL` | Doet de vragenlijsten zelf ook |
+| `npm run platform:inrichten` | `MIGRATION_DATABASE_URL` | Vraagt één echte Entra-login. Zie hieronder |
 | `npm run db:check` | — | Drizzle-consistentie, raakt geen database |
+
+### De eerste platformbeheerder aanwijzen
+
+`clm.platform_admin` verwijst naar een gebruiker met een `external_subject` —
+de `oid` uit Entra. Die kan niemand verzinnen: hij ontstaat pas bij een echte
+login. Maar inloggen vraagt een membership, en tenants aanmaken vraagt
+platformbeheer. Zonder hulp komt die cirkel niet rond.
+
+```powershell
+npm run build                        # het script verifieert met dist/
+npm run platform:inrichten           # lokaal
+npm run platform:inrichten -- --extern   # tegen productie
+```
+
+Het script drukt een inloglink af, wacht, en schrijft de `oid` rechtstreeks
+naar de database. **De `oid` wordt nergens afgedrukt of gelogd** — dat is een
+persoonsgegeven; je ziet óf het werkte, niet wie je bent.
+
+Twee dingen die het bewust **niet** doet:
+
+- **Geen klant-tenant aanmaken.** Dat kan de applicatie zelf sinds
+  `POST /platform/tenants`, en dat is juist de route die beproefd moet worden.
+  Een script dat het eromheen doet, maakt die test zinloos.
+- **Niet via `DATABASE_URL`.** `clm_api_runtime` mag `clm.platform_admin`
+  alleen lezen (migratie 0020, met een expliciete `REVOKE` omdat
+  `ALTER DEFAULT PRIVILEGES` uit 0001 anders schrijfrechten geeft).
+
+> **Federatief account?** Gebruik op het inlogscherm de knop van je eigen
+> organisatie, niet het wachtwoordveld. `kees@alingadvies.nl` heeft in
+> `mcm2ciam` geen eigen wachtwoord; het invulveld geeft dan `AADSTS50056`
+> (*password does not exist in the directory*), wat eruitziet als een
+> onbekend account maar dat niet is.
 
 **`npm run db:generate` is onbruikbaar** (Issue #96). De snapshots in
 `drizzle/meta` lopen tot `0007` terwijl er 17 migraties zijn; het genereert een
