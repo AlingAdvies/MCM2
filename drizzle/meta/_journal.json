@@ -155,6 +155,13 @@
       "when": 1786636800000,
       "tag": "0021_tenantnaam_hoofdletterongevoelig",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1786723200000,
+      "tag": "0022_rechten_expliciet",
+      "breakpoints": true
     }
   ]
 }
