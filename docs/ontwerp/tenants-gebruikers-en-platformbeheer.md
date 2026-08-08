@@ -169,6 +169,56 @@ vandaag een van mijn eigen tegenproeven ongeldig.
 
 ---
 
+## 2c. Waarborgen die er al zijn
+
+Toegevoegd na de review van 2026-08-08. Twee van de drie bevindingen daar
+betroffen dingen die al geregeld waren maar nergens stonden — een reviewer neemt
+dan terecht aan dat ze ontbreken. Wat hier staat is geverifieerd tegen de
+productiedatabase, niet uit de migraties overgeschreven.
+
+### `SECURITY DEFINER` met een vaste `search_path`
+
+Een `SECURITY DEFINER`-functie zonder vaste `search_path` is een bekend
+escalatiepad: wie `CREATE`-recht heeft op een doorzocht schema kan een object
+schaduwen en zo code laten draaien met de rechten van de functie-eigenaar — dwars
+door RLS heen.
+
+Alle vijf de functies in `clm` hebben `SET search_path = clm, pg_temp`, en
+`EXECUTE` is overal ingetrokken van `PUBLIC`:
+
+| Functie | `search_path` | `EXECUTE` |
+|---|---|---|
+| `gebruiker_bij_subject` | `clm, pg_temp` | alleen `clm_api`, `clm_admin`, `clm_migrator` |
+| `sessie_aanmaken` | idem | idem |
+| `sessie_oplossen` | idem | idem |
+| `sessie_beeindigen` | idem | idem |
+| `resolve_survey_token` | idem | idem |
+
+Migratie 0009 legt de reden expliciet vast: *"`SET search_path` is niet
+optioneel bij SECURITY DEFINER."*
+
+**Wat wel ontbreekt: een test.** Vandaag is dit een eigenschap van vijf
+migraties die iemand bij een zesde kan vergeten. Zie stap 2 van §6.
+
+### De tenantgrens zelf
+
+- De applicatierol heeft géén `BYPASSRLS`. Een startcontrole in
+  `DatabaseService` weigert op te starten als dat toch zo is.
+- Geen enkele HTTP-route accepteert een tenant uit de invoer — behalve de
+  platformroutes, en die staan achter een guard (§5.1). Drie e2e-tests lokken
+  het tegendeel uit: een header, een query-parameter, en een ongeldig cookie
+  náást een header. Alle drie horen 401 te geven.
+- `clm.sessie` heeft een expliciete `REVOKE ALL` (0010): de sessie wordt
+  opgezocht vóórdat de tenantcontext bestaat, dus RLS kan hem niet beschermen.
+
+### Wat er al gerepareerd is
+
+De hoofdletterongevoelige tenantnaam uit §1 is **opgelost** in migratie 0021,
+gedraaid op productie en teruggelezen op 2026-08-08. Hij staat daarom niet in de
+reparatielijst van §6.
+
+---
+
 ## 2b. Use cases
 
 De vijf stromen die dit ontwerp moet dragen. UC-A tot en met UC-C zijn nieuw;
@@ -427,22 +477,69 @@ RLS-stand gelijk is over de hele database.
 
 **`clm.sessie` blijft ongemoeid** — die is bewust dichtgezet (0010).
 
-### Stap 2 — Een rechtencontrole die dit blijvend afdekt
+### Stap 2 — Een contract voor de databaserechten
 
-Een tabel in de testcode die per tabel vastlegt welke rechten de applicatierol
-hoort te hebben, plus een test die dat terugleest uit de database. Dan is een
-ontbrekende `GRANT` een rode test in plaats van een 500 in productie.
+De belangrijkste stap van dit document: hij verandert een klasse fouten van
+"ontdekt bij gebruik in productie" naar "ontdekt bij commit".
 
-Dit is de belangrijkste stap van dit hele document: hij verandert een klasse
-fouten van "ontdekt bij gebruik" naar "ontdekt bij commit".
+Eén bestand in de testcode legt vast wat de stand *hoort* te zijn; één test
+leest terug wat er werkelijk staat. Drie dingen, niet één — de review wees erop
+dat rechten op tabellen maar de helft van het verhaal zijn:
+
+| Wat | Waarom |
+|---|---|
+| **Tabelrechten** per rol | het gat van vandaag: `tenant_membership` had er geen |
+| **`search_path`** op elke `SECURITY DEFINER`-functie | vandaag goed, maar niets bewaakt dat de zesde functie het ook krijgt |
+| **`EXECUTE`-rechten** op die functies | `PUBLIC` moet eraf; nu staat dat alleen in tekst |
+
+Een nieuwe tabel of functie zonder regel in dat bestand hoort de test rood te
+maken. Anders groeit het contract niet mee.
 
 ### Stap 3 — De koppeling bij eerste login
 
-Volgens §5.2, met de vier voorwaarden. Plus tegenproeven: twee wachtende rijen
-met hetzelfde adres → weigeren; een bestaande koppeling → nooit overschrijven;
-een onbevestigd e-mailadres → weigeren.
+Volgens §5.2, met **vijf** voorwaarden (de vijfde kwam uit de review):
 
-### Stap 4 — `clm.platform_tenants()` voor het overzicht
+1. precies één wachtende rij met dat e-mailadres
+2. `external_subject` is nog `NULL`
+3. het e-mailadres komt uit een geverifieerde claim
+4. de koppeling gaat in `audit.audit_event`
+5. **de wachtende rij is niet verlopen** — zie hieronder
+
+Tegenproeven: twee wachtende rijen met hetzelfde adres → weigeren; een
+bestaande koppeling → nooit overschrijven; een onbevestigd e-mailadres →
+weigeren; een verlopen rij → weigeren.
+
+**Vervaltermijn op de wachtende rij.** Een gebruiker zonder `oid` is nu
+onbeperkt koppelbaar; dat venster hoort te sluiten. Voorstel: een kolom
+`koppelbaar_tot` op `clm."user"`, standaard 90 dagen. Verloopt hij, dan moet de
+platformbeheerder de uitnodiging opnieuw zetten — een handeling die zichtbaar
+is, in plaats van een deur die open blijft staan.
+
+Dit is goedkoper dan een uitnodigingstoken en dekt hetzelfde risico: het
+faalpatroon dat we willen vermijden is een account-overname door wie een
+e-mailadres kent en eerder inlogt dan de bedoelde persoon.
+
+### Stap 4 — Het verval van support-toegang, per verzoek
+
+De review stelde een vraag die ik niet had beantwoord: wordt `verloopt_op` bij
+**elk** verzoek getoetst, of alleen bij het aanmaken van de sessie?
+
+Het antwoord moet "elk verzoek" zijn. Anders overleeft een lopende sessie het
+verval van de toegang, en is "acht uur" een belofte die de eerste keer al niet
+klopt.
+
+Concreet: `TenantContextGuard` leest de sessie via `sessie_oplossen()`, en die
+functie moet een membership met een verstreken `verloopt_op` behandelen alsof
+het er niet is. Dat hoort in de functie thuis en niet in de applicatielaag —
+daar is het één vergeten filter van een lek verwijderd.
+
+Plus: de duur wordt een **instelbare** waarde, geen constante in een migratie.
+Bijstellen mag geen migratie kosten.
+
+### Stap 5 — `clm.platform_tenants()` voor het overzicht
+
+Met in de tegenproef: `search_path` gepind, `EXECUTE` ingetrokken van `PUBLIC`,
+en de controle dat de aanroeper in `platform_admin` staat.
 
 En dan pas het scherm.
 
@@ -459,6 +556,29 @@ En dan pas het scherm.
 - **Geen transparantiescherm voor de klant.** Uitgesteld tot er een tenant is
   die niet van onszelf is — maar het auditspoor wordt nu al geschreven, want
   dat is achteraf niet te herstellen.
+
+Toegevoegd na de review:
+
+- **Geen offboarding.** Er is geen beschreven pad voor het intrekken van een
+  `tenant_membership` of het loskoppelen van een `external_subject` als iemand
+  de klantorganisatie verlaat. De tabellen kunnen het (`deleted_at` staat er
+  overal), maar er is geen route en geen scherm.
+
+  **Dit is de zwakste uitstelbeslissing in dit document.** Bij één tenant van
+  onszelf is het onschuldig; zodra er een echte klant is, is "wie mocht hier
+  ooit werken en mag dat nog" een vraag die een auditor stelt. Het hoort in de
+  eerste ronde ná dit ontwerp, niet veel later.
+
+- **Geen escalatiepad vanuit `support`.** Een supportmedewerker die het
+  probleem ziet maar niet mag oplossen, heeft vandaag geen volgende stap
+  binnen de app — geen notitie voor de tenant-admin, geen verzoek om
+  schrijfrecht. Dat is aanvaardbaar zolang de eigenaar zelf de helpdesk is;
+  bij de eerste echte helpdeskcase is het het eerste wat opvalt.
+
+- **Geen tweede platformbeheerder via de app.** `clm.platform_admin` is
+  `SELECT`-only voor de applicatierol, dus iemand toevoegen kan alleen via
+  `npm run platform:inrichten` of rechtstreeks op de database. Voor één
+  eigenaar geen probleem, maar het is een schaalgrens en geen ontwerpprincipe.
 
 ---
 
@@ -479,6 +599,11 @@ dat een test in plaats van een aanname.
 
 ## 9. Vragen aan de reviewer
 
+> **Ronde 1 is beantwoord** (review van 2026-08-08, met de reactie in
+> `reactie-op-review.md`). Zes van de zeven punten zijn verwerkt in §2c, §6 en
+> §7. De vragen hieronder staan er nog omdat ze niet uitputtend beantwoord zijn
+> — waar een antwoord al ligt, staat dat erbij.
+
 Op volgorde van belang. Bij elke vraag staat waarom het antwoord uitmaakt.
 
 ### 9.1 De koppeling bij de eerste login (§5.2) — de zwaarste
@@ -493,6 +618,14 @@ vastgelegd in de audit trail.
 - **Specifiek:** is `email_verified` van de identity provider een voldoende
   waarborg? Bij federatie komt die claim van de organisatie van de gebruiker,
   niet van onze eigen tenant.
+
+> **Ronde 1:** verantwoord bevonden, mits er een vervaltermijn op de wachtende
+> rij komt — die is nu de vijfde voorwaarde (stap 3). Het risico dat overblijft
+> heet de *Non-Verifying IdP Attack*: het vertrouwen verschuift naar de
+> identity provider van de klant. Voor B2B-federatie klein, niet nul.
+>
+> **Open:** is die restrisico-afweging houdbaar zodra er klanten zijn met een
+> eigen IdP die wij niet kennen?
 
 ### 9.2 Is het rechtenprincipe (§3) het juiste antwoord?
 
