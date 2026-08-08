@@ -174,6 +174,19 @@ Oorzaak: een tabeltelling ziet niet wat migraties werkelijk doen. `0017` voegt
 geen tabel toe maar verruimt een **check-constraint**, en `0012` raakt alleen
 `ref.code`.
 
+**En `information_schema.tables` liegt afhankelijk van je rol.** Die view toont
+alleen tabellen waarop de bevragende rol rechten heeft. Via `DATABASE_URL`
+(`clm_api_runtime`) ontbreken daardoor onder meer `clm.sessie` en
+`clm.tenant_membership` — ze bestaan wel, je mag ze alleen niet zien. Dat gaf
+op 2026-08-08 een telling van 12 waar het er 14 waren, en dat verschil was de
+helft van de foute conclusie hierboven.
+
+Gebruik `pg_tables` of `to_regclass`; die kennen die beperking niet:
+
+```sql
+SELECT schemaname, tablename FROM pg_tables WHERE schemaname = 'clm' ORDER BY 2;
+```
+
 Toets in plaats daarvan per migratie één kenmerk dat *alleen* ná die migratie
 bestaat — en zoek de naam op in het `.sql`-bestand, reconstrueer hem niet:
 
