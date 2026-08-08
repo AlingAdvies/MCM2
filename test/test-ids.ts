@@ -309,6 +309,14 @@ export const TEST_IDS = {
     beheerder: id('72'),
     klantmedewerker: id('73'),
   },
+  'platform-routes': {
+    /** De tenant waar de platformbeheerder zelf in zit. */
+    tenantThuis: id('74'),
+    /** De tenant van een gewone gebruiker, zonder platformrechten. */
+    tenantVreemd: id('75'),
+    beheerder: id('76'),
+    gewoneGebruiker: id('77'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */

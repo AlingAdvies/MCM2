@@ -49,7 +49,15 @@ export const tenant = clm.table(
       .notNull()
       .defaultNow(),
   },
-  (t) => [uniqueIndex('tenant_name_key').on(t.name)],
+  (t) => [
+    uniqueIndex('tenant_name_key').on(t.name),
+    // Migratie 0021. tenant_name_key bewaakt de exacte schrijfwijze; deze
+    // vangt wat die doorlaat — 'AlingAdvies' naast 'alingadvies' is een
+    // vergissing, geen tweede klant. Hoort in de database en niet in de code,
+    // want de aanmaakroute draait in de context van de nieuwe tenant en RLS
+    // verbergt daar elke bestaande tenant.
+    uniqueIndex('tenant_name_ongeacht_hoofdletters').on(sql`lower(${t.name})`),
+  ],
 );
 
 export const user = clm.table(
