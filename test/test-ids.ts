@@ -301,6 +301,14 @@ export const TEST_IDS = {
     responseZonderEigenaar: '00000000-0000-0000-0000-00000000001b',
     adminB: '00000000-0000-0000-0000-00000000001c',
   },
+  platformbeheer: {
+    /** De tenant waar de platformbeheerder zelf lid van is. */
+    tenantKlant: id('70'),
+    /** De tenant waar hij tijdelijk support-toegang op krijgt. */
+    tenantAnder: id('71'),
+    beheerder: id('72'),
+    klantmedewerker: id('73'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */

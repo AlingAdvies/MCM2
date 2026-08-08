@@ -141,6 +141,13 @@
       "when": 1786464000000,
       "tag": "0019_omgevingsmarkering",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1786550400000,
+      "tag": "0020_platformbeheer",
+      "breakpoints": true
     }
   ]
 }

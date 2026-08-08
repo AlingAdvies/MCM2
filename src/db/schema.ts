@@ -96,25 +96,59 @@ export const tenantMembership = clm.table(
       .references(() => tenant.tenantId, { onDelete: 'restrict' }),
     // 'admin' beheert leveranciers, vragenlijsten en rondes.
     // 'reviewer' vult interne beoordelingen in en leest resultaten.
+    // 'support' kijkt mee vanuit het platform: lezen, tijdelijk, en
+    // herkenbaar als zodanig in de audit trail (ADR-015).
     role: text('role').notNull().default('reviewer'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    // Migratie 0020. NULL is een blijvend membership — de gewone situatie voor
+    // admin en reviewer. Een waarde hoort bij support-toegang, die verloopt.
+    verlooptOp: timestamp('verloopt_op', { withTimezone: true }),
+    reden: text('reden'),
+    toegekendDoor: uuid('toegekend_door').references(() => user.userId),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.tenantId] }),
     index('tenant_membership_tenant_id_idx').on(t.tenantId),
-    // Eén actieve tenant per gebruiker. Alleen platformbeheer heeft er meer
-    // nodig, en dat vraagt een eigen auditbaar mechanisme (Issue #57).
+    // Eén actieve tenant per gebruiker — behalve voor support. Migratie 0020
+    // maakte deze index nauwer in plaats van hem weg te halen (Issue #57): de
+    // bescherming blijft daarmee volledig gelden voor admin en reviewer.
     // Partieel op deleted_at: ingetrokken memberships blijven staan als
     // historie, maar tellen niet mee.
     uniqueIndex('tenant_membership_een_actief_per_gebruiker')
       .on(t.userId)
-      .where(sql`${t.deletedAt} IS NULL`),
+      .where(sql`${t.deletedAt} IS NULL AND ${t.role} <> 'support'`),
+    index('tenant_membership_support_idx')
+      .on(t.tenantId, t.verlooptOp)
+      .where(sql`${t.role} = 'support' AND ${t.deletedAt} IS NULL`),
   ],
 );
+
+/**
+ * Wie het platform beheert (migratie 0020, ADR-015).
+ *
+ * Geen tenant_id, en dat is het punt: platformbeheerder-zijn geldt tegenover
+ * het platform, niet tegenover een tenant. Daarmee is deze tabel automatisch
+ * niet-tenantgebonden voor de schema-inventaris, en valt hij buiten de
+ * RLS-eis — de afscherming loopt via GRANT.
+ *
+ * Meekijken in een tenant gebeurt niet vanuit deze tabel maar via een
+ * tijdelijk `support`-membership in tenant_membership. De tenantgrens blijft
+ * zo intact: ook een supportsessie doorloopt RLS.
+ */
+export const platformAdmin = clm.table('platform_admin', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => user.userId, { onDelete: 'cascade' }),
+  toegekendOp: timestamp('toegekend_op', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  toelichting: text('toelichting'),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+});
 
 // ─── clm schema: vendor-cluster ───────────────────────────────────────────
 
