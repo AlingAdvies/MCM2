@@ -156,6 +156,61 @@ migratie die `sessie`, `tenant_membership` en een `user`-kolom opnieuw wil
 aanmaken. **Schrijf migraties met de hand**, in de stijl van
 `drizzle/0015_survey_review.sql`.
 
+### ⚠ Vaststellen welke migraties er op een database staan
+
+Er is **geen commando** dat dit vertelt. Verzin er ook geen — lees het uit de
+database. Maar niet zomaar: de voor de hand liggende wegen geven allebei een
+verkeerd antwoord.
+
+**`drizzle.__drizzle_migrations` is de waarheid, maar `clm_api_runtime` mag er
+niet bij.** Een query via `DATABASE_URL` geeft `permission denied for schema
+drizzle`. Dat is opzet (ADR-009). Lees de tabel via `MIGRATION_DATABASE_URL`
+(`clm_migrator`) als je hem nodig hebt.
+
+**Tel nooit tabellen om de stand af te leiden.** Op 2026-08-08 leverde dat twee
+foute conclusies op in één sessie: "productie loopt tien migraties achter" (het
+waren er vijf) en "`tenant_membership` ontbreekt" (hij stond er al sinds 0009).
+Oorzaak: een tabeltelling ziet niet wat migraties werkelijk doen. `0017` voegt
+geen tabel toe maar verruimt een **check-constraint**, en `0012` raakt alleen
+`ref.code`.
+
+**En `information_schema.tables` liegt afhankelijk van je rol.** Die view toont
+alleen tabellen waarop de bevragende rol rechten heeft. Via `DATABASE_URL`
+(`clm_api_runtime`) ontbreken daardoor onder meer `clm.sessie` en
+`clm.tenant_membership` — ze bestaan wel, je mag ze alleen niet zien. Dat gaf
+op 2026-08-08 een telling van 12 waar het er 14 waren, en dat verschil was de
+helft van de foute conclusie hierboven.
+
+Gebruik `pg_tables` of `to_regclass`; die kennen die beperking niet:
+
+```sql
+SELECT schemaname, tablename FROM pg_tables WHERE schemaname = 'clm' ORDER BY 2;
+```
+
+Toets in plaats daarvan per migratie één kenmerk dat *alleen* ná die migratie
+bestaat — en zoek de naam op in het `.sql`-bestand, reconstrueer hem niet:
+
+```sql
+SELECT
+  to_regclass('clm.tenant_membership') IS NOT NULL AS m_0009,
+  to_regclass('clm.survey_review')     IS NOT NULL AS m_0015,
+  to_regclass('clm.response_note')     IS NOT NULL AS m_0018,
+  to_regclass('clm.omgeving')          IS NOT NULL AS m_0019;
+```
+
+Voor een migratie die geen tabel maakt, toets het echte gevolg:
+
+```sql
+-- 0017 verruimt de constraint naar vier oordelen
+SELECT pg_get_constraintdef(oid) FROM pg_constraint
+ WHERE conname = 'survey_review_verdict_check';
+```
+
+**Een eigen leesscript hoort in de projectmap**, niet in een tijdelijke map:
+`dotenv` en `pg` staan in `node_modules` hier. Geef het een `tmp-`voorvoegsel,
+laat het **uitsluitend `SELECT`** doen, en verwijder het direct na gebruik
+(`git status` moet daarna schoon zijn).
+
 ### ⚠ Een handgeschreven migratie moet in `_journal.json`
 
 Drizzle's `migrate()` leest **`drizzle/meta/_journal.json`**, niet de inhoud van
@@ -308,6 +363,47 @@ Remove-Item Env:\DATABASE_URL
 
 `--forceExit` is nodig sinds de sessiesuite: die houdt een pg-verbinding open,
 waardoor Jest anders blijft hangen zónder foutmelding.
+
+### Een inhaalslag toetsen vóór hij een echte database raakt
+
+Migraties draaien lokaal altijd **vanaf nul**. Een database die al op stand N
+staat is een ander pad, en dat pad is nooit gedraaid tot je het draait. Toets
+het eerst op een wegwerpcontainer.
+
+Twee dingen die het resultaat waardeloos maken als je ze overslaat:
+
+- **Gebruik dezelfde PostgreSQL-major als het doelwit.** Supabase draait 17.
+  Een test op `postgres:16` bewijst niets over syntax die per major verschilt.
+  Nagaan: `SHOW server_version` op beide.
+- **Boots de startstand na**, niet een lege database. Kort
+  `drizzle/meta/_journal.json` tijdelijk in tot de stand van het doelwit, draai
+  `migrate:deploy`, zet het journal terug, en draai dan pas de rest.
+
+```bash
+WEG="postgresql://clm_migrator:pw@127.0.0.1:55440/postgres"
+cp drizzle/meta/_journal.json /tmp/_journal.backup.json
+trap 'cp /tmp/_journal.backup.json drizzle/meta/_journal.json' EXIT   # ALTIJD terugzetten
+
+# 1. startstand nabootsen (hier: t/m 0014)
+node -e "const fs=require('fs'),p='drizzle/meta/_journal.json';
+  const j=JSON.parse(fs.readFileSync(p,'utf8'));
+  j.entries=j.entries.filter(e=>e.idx<=14);
+  fs.writeFileSync(p,JSON.stringify(j,null,2));"
+MIGRATION_DATABASE_URL="$WEG" node scripts/migrate.js
+
+# 2. journal terug, dan de inhaalslag zelf
+cp /tmp/_journal.backup.json drizzle/meta/_journal.json
+MIGRATION_DATABASE_URL="$WEG" node scripts/migrate.js
+```
+
+> **De `trap` is niet optioneel.** Blijft het journal ingekort achter, dan
+> "bestaan" de laatste migraties niet meer voor Drizzle en meldt een volgende
+> `migrate:deploy` doodleuk "Migraties voltooid" zonder iets te doen. Controleer
+> na afloop met `git status` dat het journal ongewijzigd is.
+
+Toets daarna in de database of elke migratie werkelijk landde — zie
+"Vaststellen welke migraties er op een database staan" hierboven. "Migraties
+voltooid" is geen bewijs.
 
 ### Opruimen
 
