@@ -10,6 +10,11 @@
 // Gebruik:
 //   DATABASE_URL=... node scripts/seed-demo-tenant.js
 //   DATABASE_URL=... node scripts/seed-demo-tenant.js --verwijder
+//   DATABASE_URL=... node scripts/seed-demo-tenant.js --echte-tokens
+//
+// `--echte-tokens` genereert willekeurige tokens in plaats van de vaste uit
+// dit bestand, en drukt ze één keer af. Bedoeld voor een echte omgeving: daar
+// hoort een demo-tenant niet te verschillen van een klant. Zie ECHTE_TOKENS.
 //
 // ── Drie dingen die dit script bewust NIET doet ──────────────────────────────
 //
@@ -102,11 +107,56 @@ function demoToken(naam) {
   return token;
 }
 
-const DEMO_TOKENS = {
-  open: demoToken('open'),
-  concept: demoToken('concept'),
-  ingediend: demoToken('ingediend'),
-};
+/**
+ * Een echt, willekeurig token — dezelfde weg als een echte uitnodiging.
+ *
+ * `randomBytes` is de veilige generator van Node, gelijk aan genereerToken()
+ * in src/survey/survey-token.ts. base64url omdat het token in een URL komt.
+ */
+function echtToken() {
+  return crypto.randomBytes(32).toString('base64url');
+}
+
+/**
+ * Met `--echte-tokens` krijgt elke respons een willekeurig token in plaats van
+ * de vaste demo-waarde.
+ *
+ * ── Waarom die keuze bestaat ────────────────────────────────────────────────
+ *
+ * De vaste tokens hieronder staan in de broncode, zodat een demo-link ná het
+ * seeden nog te gebruiken is om een scherm te tonen. Op een wegwerpdatabase is
+ * dat prima: ze geven toegang tot verzonnen data die binnen een uur weg is.
+ *
+ * In een echte omgeving ligt dat anders. Ook al wijzen ze naar nepdata, iedereen
+ * die het script leest kan die surveys openen — en dan is er een verschil met
+ * een echte klant dat er niet hoort te zijn.
+ *
+ * Met deze vlag is dat verschil weg: de tokens worden gegenereerd zoals bij een
+ * echte uitnodiging, en het script drukt ze één keer af. Daarna bestaan ze
+ * alleen nog als hash, precies zoals het ontwerp voorschrijft.
+ */
+const ECHTE_TOKENS = process.argv.includes('--echte-tokens');
+
+const DEMO_TOKENS = ECHTE_TOKENS
+  ? {
+      open: echtToken(),
+      concept: echtToken(),
+      ingediend: echtToken(),
+      telaat: echtToken(),
+      beoordeeld: echtToken(),
+      goedgekeurd: echtToken(),
+    }
+  : {
+      open: demoToken('open'),
+      concept: demoToken('concept'),
+      ingediend: demoToken('ingediend'),
+      // De laatste drie vullen het statusoverzicht (plan 2026-08-07). Zonder
+      // deze toonde het scherm alleen 'nog niet terug' en 'wacht op
+      // beoordeling' — de helft van de statussen was visueel nooit beoordeeld.
+      telaat: demoToken('telaat'),
+      beoordeeld: demoToken('beoordeeld'),
+      goedgekeurd: demoToken('goedgekeurd'),
+    };
 
 function hashToken(token) {
   return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
@@ -316,13 +366,31 @@ function vragenlijstenLaden() {
 }
 
 /**
- * Eén actieve ronde op de Transdev-vragenlijst, met drie responses die samen
- * de statusweergave vullen.
+ * Twee rondes op de Transdev-vragenlijst, met zes responses die samen élke
+ * status in het overzicht laten zien.
  *
- * De drie stadia zijn wat het datamodel kent, niet meer: status is
- * 'pending' | 'submitted' | 'revoked' (CHECK-constraint, migratie 0003). Een
- * "concept" is daarin een pending response die al enkele antwoorden heeft —
- * geen aparte status. Dat is bewust het model volgen in plaats van uitbreiden.
+ * ── Twee soorten status, en dat onderscheid is het ontwerp ──────────────────
+ *
+ * `survey_response.status` is de INVULstatus: 'pending' | 'submitted' |
+ * 'revoked' (migratie 0003). Een "concept" is daarin een pending response met
+ * enkele antwoorden — geen aparte waarde.
+ *
+ * Wat het scherm toont is iets anders: de berekende status uit
+ * src/survey/respons-status.ts, die daarnaast kijkt naar de sluitdatum en het
+ * laatste oordeel. Die twee lopen bewust niet gelijk.
+ *
+ * ── Waarom een tweede, verlopen ronde ───────────────────────────────────────
+ *
+ * 'te laat' is `closes_at < now()` bij een actieve ronde. Eén ronde kan niet
+ * tegelijk open en verlopen zijn, dus krijgt dat stadium een eigen ronde met
+ * een sluitdatum vijf dagen terug.
+ *
+ * ── Waarom oordelen in de seed ──────────────────────────────────────────────
+ *
+ * Zonder oordelen toonde het statusoverzicht alleen 'nog niet terug' en 'wacht
+ * op beoordeling': de helft van de statussen was visueel nooit beoordeeld.
+ * Eén response krijgt twee tegenstrijdige oordelen, zodat zichtbaar is dat het
+ * laatste telt én dat er meer zijn.
  */
 async function rondeAanmaken(db, vendors) {
   return db.transaction(async (tx) =>
@@ -360,6 +428,36 @@ async function rondeAanmaken(db, vendors) {
       );
 
       const runId = ronde.rows[0].run_id;
+
+      // Een tweede ronde die al gesloten is, voor de status 'te laat'.
+      // Dezelfde ronde kan niet tegelijk open en verlopen zijn, en de
+      // statusberekening kijkt naar closes_at bij een 'active' ronde
+      // (src/survey/respons-status.ts).
+      const verlopen = await tx.execute(
+        sql`INSERT INTO clm.survey_run
+                (tenant_id, template_id, survey_kind, status, closes_at)
+            VALUES (${DEMO_TENANT_ID}, ${templateId}, 'vendor_compliance',
+                    'active', now() - interval '10 days')
+            RETURNING run_id`,
+      );
+
+      const verlopenRunId = verlopen.rows[0].run_id;
+
+      // Wie de oordelen op zijn naam krijgt. De eerste gebruiker is admin, de
+      // rest reviewer; een oordeel van een reviewer laat zien dat die rol dat
+      // mag zonder admin te zijn (plan §2a).
+      const beoordelaars = await tx.execute(
+        sql`SELECT u.user_id
+              FROM clm."user" u
+              JOIN clm.tenant_membership m ON m.user_id = u.user_id
+             WHERE u.tenant_id = ${DEMO_TENANT_ID}
+               AND m.role = 'reviewer'
+             ORDER BY u.full_name
+             LIMIT 1`,
+      );
+
+      const beoordelaarId = beoordelaars.rows[0]?.user_id ?? null;
+
       const vragen = await tx.execute(
         sql`SELECT question_id, answer_type, position, config
              FROM clm.survey_question
@@ -368,24 +466,123 @@ async function rondeAanmaken(db, vendors) {
              ORDER BY position`,
       );
 
+      // Zes responses: drie invulstadia plus drie beoordeelstadia.
+      //
+      // De eerste drie waren er al en volgen het datamodel: status is
+      // 'pending' | 'submitted' | 'revoked' (migratie 0003). Een "concept" is
+      // daarin een pending response met enkele antwoorden — geen aparte status.
+      //
+      // De laatste drie bestaan voor het statusoverzicht (plan 2026-08-07).
+      // `oordelen` bepaalt wat er ná het indienen wordt vastgelegd; de
+      // berekende status volgt daaruit vanzelf, want die kijkt naar het
+      // laatste oordeel (src/survey/respons-status.ts).
+      // `dagenGeleden` zet de uitnodiging terug in de tijd.
+      //
+      // Zonder dat staan alle uitnodigingen op vandaag, en dan zegt de kolom
+      // "Uitgestuurd" niets: het verschil tussen gisteren verstuurd en zes
+      // weken geleden verstuurd is juist wat een lege "terug ontvangen"
+      // betekenis geeft. Bij de verlopen ronde was het zelfs tegenstrijdig —
+      // uitgestuurd ná de sluitdatum.
       const stadia = [
         {
           sleutel: 'open',
           mockId: vendors[0],
           status: 'pending',
           antwoorden: 0,
+          oordelen: [],
+          dagenGeleden: 5,
         },
         {
           sleutel: 'concept',
           mockId: vendors[1],
           status: 'pending',
           antwoorden: 3,
+          oordelen: [],
+          dagenGeleden: 12,
         },
         {
           sleutel: 'ingediend',
           mockId: vendors[2],
           status: 'submitted',
           antwoorden: vragen.rows.length,
+          oordelen: [],
+          dagenGeleden: 9,
+          ingediendDagenGeleden: 2,
+          // Eén afwijking, zodat het beoordeelscherm iets te tonen heeft: dat
+          // toont standaard alléén wat afwijkt. Alles bevestigd betekent daar
+          // een leeg scherm.
+          afwijkingen: {
+            2: {
+              code: 'cannot_upload',
+              toelichting:
+                'Certificaat verloopt volgende maand; hercertificering loopt. Nieuw certificaat volgt in september.',
+            },
+          },
+        },
+        {
+          // Status 'te laat': niet ingediend, en de ronde is gesloten. Krijgt
+          // hieronder een eigen ronde met een sluitdatum in het verleden —
+          // dezelfde ronde kan niet tegelijk open en verlopen zijn.
+          sleutel: 'telaat',
+          mockId: vendors[3],
+          status: 'pending',
+          antwoorden: 1,
+          oordelen: [],
+          verlopenRonde: true,
+          // Ruim vóór de sluitdatum van die ronde (5 dagen terug), anders zou
+          // de uitnodiging ná het sluiten zijn uitgegaan.
+          dagenGeleden: 40,
+          notities: [
+            'Twee keer gebeld, contactpersoon met vakantie. Collega zou het oppakken.',
+          ],
+        },
+        {
+          // Twee oordelen die elkaar tegenspreken. Het laatste telt voor de
+          // status, maar het scherm toont "(van 2)" — anders verdwijnt een
+          // meningsverschil uit beeld (besluit eigenaar, V3).
+          sleutel: 'beoordeeld',
+          mockId: vendors[4],
+          status: 'submitted',
+          antwoorden: vragen.rows.length,
+          oordelen: [
+            { verdict: 'goed', toelichting: 'Ziet er compleet uit.' },
+            {
+              verdict: 'nadere_vragen',
+              toelichting: 'Toch een vraag over het onderaannemersbeleid.',
+            },
+          ],
+          dagenGeleden: 21,
+          ingediendDagenGeleden: 14,
+          notities: [
+            'Mail gestuurd met de vraag over onderaannemers. Nog geen antwoord.',
+            'Gesproken op de kwartaalmeeting; sturen deze week aanvulling.',
+          ],
+          // Twee afwijkingen: dit is het geval waar de notities en het
+          // meningsverschil over gaan.
+          afwijkingen: {
+            5: {
+              code: 'not_confirmed',
+              toelichting:
+                'In maart is er een phishingincident geweest. Gemeld op dag 4 in plaats van binnen 48 uur; procedure is inmiddels aangepast.',
+            },
+            9: {
+              code: 'not_confirmed',
+              toelichting:
+                'Eén onderaannemer voldoet nog niet aan alle eisen; contract wordt dit kwartaal herzien.',
+            },
+          },
+        },
+        {
+          sleutel: 'goedgekeurd',
+          mockId: vendors[5],
+          status: 'submitted',
+          antwoorden: vragen.rows.length,
+          oordelen: [
+            { verdict: 'goed', toelichting: 'Alles aangeleverd.' },
+            { verdict: 'goedgekeurd', toelichting: '' },
+          ],
+          dagenGeleden: 28,
+          ingediendDagenGeleden: 20,
         },
       ];
 
@@ -402,13 +599,26 @@ async function rondeAanmaken(db, vendors) {
           sql`INSERT INTO clm.survey_response
                   (tenant_id, run_id, vendor_id, subject_vendor_id, token_hash,
                    status, expires_at)
-              VALUES (${DEMO_TENANT_ID}, ${runId}, ${stadium.mockId},
+              VALUES (${DEMO_TENANT_ID},
+                      ${stadium.verlopenRonde ? verlopenRunId : runId},
+                      ${stadium.mockId},
                       ${stadium.mockId},
                       ${hashToken(DEMO_TOKENS[stadium.sleutel])},
                       'pending',
                       ${vervalOverDagen(30).toISOString()})
               RETURNING response_id`,
         );
+
+        // created_at is de uitnodigingsdatum in het statusoverzicht. De kolom
+        // heeft DEFAULT now(), dus terugzetten gebeurt hier in plaats van in
+        // de INSERT — dat houdt de INSERT gelijk aan wat de applicatie doet.
+        if (stadium.dagenGeleden) {
+          await tx.execute(
+            sql`UPDATE clm.survey_response
+                   SET created_at = now() - (${stadium.dagenGeleden} * interval '1 day')
+                 WHERE response_id = ${respons.rows[0].response_id}`,
+          );
+        }
 
         const responseId = respons.rows[0].response_id;
 
@@ -420,7 +630,15 @@ async function rondeAanmaken(db, vendors) {
             continue;
           }
 
-          const antwoord = antwoordVoor(vraag.answer_type, vraag.config);
+          // Afwijkingen zijn per positie opgegeven; `position` telt vanaf 1 en
+          // is wat de leverancier als vraagnummer ziet.
+          const afwijking = stadium.afwijkingen?.[vraag.position];
+
+          const antwoord = antwoordVoor(
+            vraag.answer_type,
+            vraag.config,
+            afwijking?.code,
+          );
 
           // Geen plausibel antwoord te maken (keuzevraag zonder opties in de
           // config): overslaan in plaats van iets verzinnen dat de
@@ -434,9 +652,13 @@ async function rondeAanmaken(db, vendors) {
           // survey_answer_comment_required_check). Bij 'confirmed' mag het
           // leeg blijven, en dat houden we ook zo — anders toont de demo een
           // toelichting waar een echte invuller er geen hoeft te geven.
-          const toelichting =
-            vraag.answer_type === 'confirmation' &&
-            antwoord.code === 'confirmed'
+          const toelichting = afwijking
+            ? // Bij een afwijking is de toelichting het antwoord op "waarom",
+              // en dus het enige wat de beoordelaar echt leest. Een generieke
+              // zin zou het scherm vullen zonder iets te zeggen.
+              afwijking.toelichting
+            : vraag.answer_type === 'confirmation' &&
+                antwoord.code === 'confirmed'
               ? null
               : 'Voorbeeldantwoord uit de demo-seed.';
 
@@ -471,9 +693,60 @@ async function rondeAanmaken(db, vendors) {
         if (stadium.status === 'submitted') {
           await tx.execute(
             sql`UPDATE clm.survey_response
-                   SET status = 'submitted', submitted_at = now()
+                   SET status = 'submitted',
+                       submitted_at = now() -
+                         (${stadium.ingediendDagenGeleden ?? 0} * interval '1 day')
                  WHERE response_id = ${responseId}
                    AND tenant_id = ${DEMO_TENANT_ID}`,
+          );
+        }
+
+        // Oordelen ná het indienen, in volgorde: het láátste bepaalt de
+        // status. Elk oordeel krijgt een created_at die een uur later ligt dan
+        // het vorige, want binnen één transactie geeft now() steeds hetzelfde
+        // tijdstip — en dan is "het laatste oordeel" niet te bepalen.
+        // De policy op survey_review eist naast de tenant ook actor
+        // 'medewerker' (migratie 0015): een leverancier zit in dezelfde tenant
+        // als zijn beoordelaar en mag het oordeel niet zien. metTenantContext
+        // zet alleen de tenant, dus zonder deze regel weigert RLS elke INSERT
+        // — met een foutmelding die de constraint niet noemt.
+        const teOordelen = beoordelaarId ? (stadium.oordelen ?? []) : [];
+        const teNoteren = beoordelaarId ? (stadium.notities ?? []) : [];
+
+        if (teOordelen.length > 0 || teNoteren.length > 0) {
+          await tx.execute(
+            sql`SELECT set_config('app.current_actor', 'medewerker', true)`,
+          );
+        }
+
+        // Notities van collega's onderling (migratie 0018). Ze raken de status
+        // niet — het scherm toont alleen dát ze er zijn. Zonder deze regels
+        // bleef dat deel van het overzicht visueel ongetest.
+        let notitieDagen = stadium.dagenGeleden ?? 0;
+        for (const tekst of teNoteren) {
+          notitieDagen = Math.max(0, notitieDagen - 3);
+          await tx.execute(
+            sql`INSERT INTO clm.response_note
+                    (tenant_id, response_id, tekst, author_user_id, created_at)
+                VALUES (${DEMO_TENANT_ID}, ${responseId}, ${tekst},
+                        ${beoordelaarId},
+                        now() - (${notitieDagen} * interval '1 day'))`,
+          );
+        }
+
+        // Ná het indienen, elk oordeel een dag later dan het vorige. Binnen één
+        // transactie geeft now() steeds hetzelfde tijdstip, en dan is "het
+        // laatste oordeel" niet te bepalen — juist dat bepaalt de status.
+        let oordeelDagen = stadium.ingediendDagenGeleden ?? 0;
+        for (const oordeel of teOordelen) {
+          oordeelDagen = Math.max(0, oordeelDagen - 1);
+          await tx.execute(
+            sql`INSERT INTO clm.survey_review
+                    (tenant_id, response_id, verdict, toelichting,
+                     reviewer_user_id, created_at)
+                VALUES (${DEMO_TENANT_ID}, ${responseId}, ${oordeel.verdict},
+                        ${oordeel.toelichting}, ${beoordelaarId},
+                        now() - (${oordeelDagen} * interval '1 day'))`,
           );
         }
       }
@@ -495,14 +768,20 @@ async function rondeAanmaken(db, vendors) {
  * vormconstraint (die alleen NOT NULL eist) maar levert een demo op met
  * antwoorden die in geen enkele keuzelijst voorkomen.
  */
-function antwoordVoor(type, config) {
+/**
+ * @param afwijkendeCode Alternatief voor 'confirmed' bij een bevestigingsvraag.
+ *   Bedoeld om een inzending mét afwijking te kunnen tonen: het beoordeelscherm
+ *   laat standaard alléén de afwijkingen zien, en zonder deze mogelijkheid was
+ *   dat scherm altijd leeg.
+ */
+function antwoordVoor(type, config, afwijkendeCode) {
   const opties = (config?.options ?? config?.choices ?? [])
     .map((optie) => (typeof optie === 'string' ? optie : optie?.code))
     .filter(Boolean);
 
   switch (type) {
     case 'confirmation':
-      return { code: 'confirmed' };
+      return { code: afwijkendeCode ?? 'confirmed' };
     case 'yes_no':
       return { code: 'yes' };
     case 'single_choice':
@@ -528,7 +807,15 @@ function antwoordVoor(type, config) {
 async function verwijderen(db) {
   // Volgorde volgt de foreign keys: antwoorden en bijlagen vóór responses,
   // responses vóór rondes, rondes vóór templates.
+  //
+  // Oordelen en notities staan bovenaan om dezelfde reden. Beide verwijzen met
+  // ON DELETE restrict naar survey_response — bewust, want een oordeel is
+  // bewijsmateriaal en mag niet stilzwijgend meeverdwijnen. Vergeet je ze hier,
+  // dan strandt het opruimen op een foreign key. Gebeurde op 2026-08-07 bij het
+  // toevoegen van notities aan de seed.
   const stappen = [
+    sql`DELETE FROM clm.response_note WHERE tenant_id = ${DEMO_TENANT_ID}`,
+    sql`DELETE FROM clm.survey_review WHERE tenant_id = ${DEMO_TENANT_ID}`,
     sql`DELETE FROM clm.survey_answer WHERE tenant_id = ${DEMO_TENANT_ID}`,
     sql`DELETE FROM clm.survey_attachment WHERE tenant_id = ${DEMO_TENANT_ID}`,
     sql`DELETE FROM clm.survey_response WHERE tenant_id = ${DEMO_TENANT_ID}`,
@@ -545,6 +832,16 @@ async function verwijderen(db) {
 
   await db.transaction(async (tx) =>
     metTenantContext(tx, async () => {
+      // survey_review en response_note eisen naast de tenant ook actor
+      // 'medewerker' (migraties 0015 en 0018): een leverancier zit in dezelfde
+      // tenant als zijn beoordelaar en mag niet meelezen. Zonder deze regel
+      // weigert de policy élke rij — ook bij het opruimen, en dan strandt de
+      // DELETE op survey_response met een foreign-keyfout die naar de
+      // verkeerde oorzaak wijst.
+      await tx.execute(
+        sql`SELECT set_config('app.current_actor', 'medewerker', true)`,
+      );
+
       for (const stap of stappen) {
         await tx.execute(stap);
       }
@@ -682,9 +979,31 @@ async function main() {
     console.table(await tellen(db));
 
     if (!ronde.overgeslagen) {
-      console.log('\nDemo-links (alleen deze tenant, alleen verzonnen data):');
+      if (ECHTE_TOKENS) {
+        // Deze uitvoer is eenmalig: de database bewaart alleen een hash, en er
+        // is geen route die een token opnieuw kan tonen. Wie hem nu niet
+        // bewaart, kan die survey nooit meer openen — dat is het ontwerp, geen
+        // omissie.
+        console.log(
+          '\nUitnodigingslinks — DEZE UITVOER IS EENMALIG.\n' +
+            'De database bewaart alleen een hash. Bewaar wat je nodig hebt;\n' +
+            'daarna is er geen enkele manier om deze links terug te halen.',
+        );
+      } else {
+        console.log(
+          '\nDemo-links (alleen deze tenant, alleen verzonnen data):',
+        );
+      }
+
       for (const [stadium, token] of Object.entries(DEMO_TOKENS)) {
-        console.log(`  ${stadium.padEnd(10)} /portal/survey/${token}`);
+        console.log(`  ${stadium.padEnd(12)} /portal/survey/${token}`);
+      }
+
+      if (!ECHTE_TOKENS) {
+        console.log(
+          '\nDeze tokens staan in de broncode. Voor een echte omgeving:\n' +
+            '  node scripts/seed-demo-tenant.js --echte-tokens',
+        );
       }
     }
 

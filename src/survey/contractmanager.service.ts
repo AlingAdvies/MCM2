@@ -45,6 +45,15 @@ export interface StatusItem {
   /** De contractmanager van deze vendor; null wanneer er geen is. */
   eigenaarUserId: string | null;
   eigenaarNaam: string | null;
+  /**
+   * Wanneer de uitnodiging is uitgegeven.
+   *
+   * Hoort naast `submittedAt` in beeld: een leverancier die nog niet heeft
+   * ingediend zegt weinig, tenzij je weet of de uitnodiging drie dagen of zes
+   * weken oud is (besluit eigenaar 2026-08-07).
+   */
+  uitgestuurdOp: string | null;
+  /** Wanneer de leverancier heeft ingediend. Daarna staat zijn antwoord vast. */
   submittedAt: string | null;
   closesAt: string | null;
   /** De berekende status — de centrale waarheid uit respons-status.ts. */
@@ -70,6 +79,7 @@ interface StatusRij extends Record<string, unknown> {
   vendor_naam: string | null;
   eigenaar_user_id: string | null;
   eigenaar_naam: string | null;
+  uitgestuurd_op: Date | string | null;
   submitted_at: Date | string | null;
   closes_at: Date | string | null;
   ronde_status: string;
@@ -132,6 +142,9 @@ export class ContractmanagerService {
                      v.name          AS vendor_naam,
                      v.owner_user_id AS eigenaar_user_id,
                      o.full_name     AS eigenaar_naam,
+                     -- Het moment waarop het token is uitgegeven; dat is wat
+                     -- de leverancier als uitnodiging in zijn mailbox kreeg.
+                     s.created_at    AS uitgestuurd_op,
                      s.submitted_at,
                      r.closes_at,
                      r.status        AS ronde_status,
@@ -168,6 +181,7 @@ export class ContractmanagerService {
           vendorNaam: r.vendor_naam,
           eigenaarUserId: r.eigenaar_user_id,
           eigenaarNaam: r.eigenaar_naam,
+          uitgestuurdOp: iso(r.uitgestuurd_op),
           submittedAt: iso(r.submitted_at),
           closesAt: iso(r.closes_at),
           // Eén plek waar de status wordt bepaald: dezelfde functie die de

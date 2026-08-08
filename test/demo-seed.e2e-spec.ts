@@ -68,9 +68,17 @@ interface Telling {
 function leesDemoTokens(): string[] {
   const TOKEN_LENGTE = 43;
 
-  return ['open', 'concept', 'ingediend'].map((naam) =>
-    `demo-${naam}`.padEnd(TOKEN_LENGTE, 'x'),
-  );
+  // Zes stadia sinds 2026-08-07: de laatste drie bestaan zodat het
+  // statusoverzicht élke status kan tonen. Verandert deze lijst in het script,
+  // dan valt deze test om — en dat is de bedoeling.
+  return [
+    'open',
+    'concept',
+    'ingediend',
+    'telaat',
+    'beoordeeld',
+    'goedgekeurd',
+  ].map((naam) => `demo-${naam}`.padEnd(TOKEN_LENGTE, 'x'));
 }
 
 function draaiSeed(argumenten: string[] = []): string {
@@ -143,8 +151,13 @@ describe('Demo-seed (e2e)', () => {
     // niemand om een survey naartoe te sturen.
     expect(stand.contactpersonen).toBe(stand.leveranciers);
 
-    expect(stand.rondes).toBe(1);
-    expect(stand.responses).toBe(3);
+    // Twee rondes: één lopende en één met een gepasseerde sluitdatum. Die
+    // tweede bestaat voor de status 'te laat' — dezelfde ronde kan niet
+    // tegelijk open en verlopen zijn (statusoverzicht, 2026-08-07).
+    expect(stand.rondes).toBe(2);
+    // Zes responses die samen élke status in het overzicht laten zien. Waren
+    // het er drie, dan toonde dat scherm maar twee van de vijf statussen.
+    expect(stand.responses).toBe(6);
     expect(stand.antwoorden).toBeGreaterThan(0);
     // Zelfde limiet en dezelfde reden als de test hieronder: deze start het
     // seedscript als apart Node-proces. Bij die reparatie (2026-08-04) is
@@ -173,9 +186,9 @@ describe('Demo-seed (e2e)', () => {
     // suite, en die op 2026-08-04 opnieuw toesloeg.
   }, 20_000);
 
-  // ── De drie stadia ────────────────────────────────────────────────────────
+  // ── De invulstadia ────────────────────────────────────────────────────────
 
-  it('levert responses in drie verschillende stadia', async () => {
+  it('levert responses in elk invulstadium', async () => {
     await client.query('SELECT set_config($1, $2, false)', [
       'app.current_tenant_id',
       DEMO_TENANT_ID,
@@ -193,22 +206,81 @@ describe('Demo-seed (e2e)', () => {
        ORDER BY antwoorden
     `);
 
-    expect(rows).toHaveLength(3);
+    expect(rows).toHaveLength(6);
 
     // Open: nog niets ingevuld.
     expect(rows[0].status).toBe('pending');
     expect(rows[0].antwoorden).toBe(0);
 
-    // Concept: deels ingevuld, nog niet ingediend. Geen aparte status in het
-    // model — 'concept' is een pending response mét antwoorden.
-    expect(rows[1].status).toBe('pending');
-    expect(rows[1].antwoorden).toBeGreaterThan(0);
+    // Er is minstens één respons die deels is ingevuld maar niet ingediend.
+    // 'concept' is geen aparte status in het model — het is een pending
+    // response mét antwoorden.
+    const concepten = rows.filter(
+      (r) => r.status === 'pending' && r.antwoorden > 0,
+    );
+    expect(concepten.length).toBeGreaterThan(0);
 
     // Ingediend: submitted_at is gevuld, afgedwongen door
     // survey_response_submitted_consistent_check.
-    expect(rows[2].status).toBe('submitted');
-    expect(rows[2].submitted_at).not.toBeNull();
-    expect(rows[2].antwoorden).toBeGreaterThan(rows[1].antwoorden);
+    const ingediend = rows.filter((r) => r.status === 'submitted');
+    expect(ingediend.length).toBeGreaterThan(0);
+    for (const r of ingediend) {
+      expect(r.submitted_at).not.toBeNull();
+    }
+  });
+
+  // ── De statusketen ────────────────────────────────────────────────────────
+
+  it('dekt élke status uit het overzicht', async () => {
+    // Zonder deze test kan de seed stilzwijgend terugvallen naar één ronde met
+    // alleen bevestigde antwoorden, en dan toont het statusoverzicht nog maar
+    // twee van de vijf statussen — precies de situatie van vóór 2026-08-07.
+    await client.query('SELECT set_config($1, $2, false)', [
+      'app.current_tenant_id',
+      DEMO_TENANT_ID,
+    ]);
+    await client.query('SELECT set_config($1, $2, false)', [
+      'app.current_actor',
+      'medewerker',
+    ]);
+
+    const { rows } = await client.query<{
+      te_laat: number;
+      beoordeeld: number;
+      goedgekeurd: number;
+      met_notities: number;
+      afwijkende_antwoorden: number;
+    }>(`
+      SELECT
+        (SELECT count(*)::int
+           FROM clm.survey_response s
+           JOIN clm.survey_run u ON u.run_id = s.run_id
+          WHERE s.submitted_at IS NULL
+            AND u.status = 'active'
+            AND u.closes_at < now())                        AS te_laat,
+        (SELECT count(DISTINCT response_id)::int
+           FROM clm.survey_review
+          WHERE deleted_at IS NULL)                          AS beoordeeld,
+        (SELECT count(*)::int FROM clm.survey_review
+          WHERE verdict = 'goedgekeurd' AND deleted_at IS NULL) AS goedgekeurd,
+        (SELECT count(DISTINCT response_id)::int
+           FROM clm.response_note
+          WHERE deleted_at IS NULL)                          AS met_notities,
+        (SELECT count(*)::int FROM clm.survey_answer
+          WHERE answer_type = 'confirmation'
+            AND answer_code <> 'confirmed')                  AS afwijkende_antwoorden
+    `);
+
+    const stand = rows[0];
+
+    expect(stand.te_laat).toBeGreaterThan(0);
+    expect(stand.beoordeeld).toBeGreaterThan(0);
+    expect(stand.goedgekeurd).toBeGreaterThan(0);
+    expect(stand.met_notities).toBeGreaterThan(0);
+
+    // Het beoordeelscherm toont standaard alléén de afwijkingen. Zonder
+    // afwijkende antwoorden is dat scherm leeg en valt er niets te beoordelen.
+    expect(stand.afwijkende_antwoorden).toBeGreaterThan(0);
   });
 
   // ── Tokens ────────────────────────────────────────────────────────────────
@@ -231,7 +303,7 @@ describe('Demo-seed (e2e)', () => {
     // links en viel om op iets dat niets met hashing te maken had.
     const tokens = leesDemoTokens();
 
-    expect(tokens).toHaveLength(3);
+    expect(tokens).toHaveLength(6);
 
     // Vanaf niets, zodat de hashes bij déze tokens horen en niet bij een
     // eerdere seed met andere waarden.
@@ -294,7 +366,7 @@ describe('Demo-seed (e2e)', () => {
       (match) => match[1],
     );
 
-    expect(links).toHaveLength(3);
+    expect(links).toHaveLength(6);
 
     for (const token of links) {
       expect(token).toMatch(TOKEN_PATROON);

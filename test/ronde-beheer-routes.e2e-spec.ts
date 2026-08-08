@@ -107,6 +107,16 @@ async function verwijderTestdata(client: Client): Promise<void> {
 }
 
 describe('Ronde-beheerroutes (e2e)', () => {
+  // Eén limiet voor de hele suite in plaats van 32 losse regels.
+  //
+  // Elke test hier doet minstens één HTTP-verzoek tegen een echte database, en
+  // sommige twee (een ronde aanmaken, dan iets ermee doen). Binnen Jests
+  // standaard van 5 seconden past dat alleen op een verder onbelaste machine;
+  // in de volledige e2e-run viel er daardoor onregelmatig één om — welke hing
+  // af van de volgorde. Zelfde faalvorm als in demo-seed (2026-08-04 en
+  // 2026-08-07).
+  jest.setTimeout(20_000);
+
   let app: INestApplication<App>;
   let server: App;
   let client: Client;
