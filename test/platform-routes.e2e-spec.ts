@@ -1,0 +1,398 @@
+import { INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import cookieParser from 'cookie-parser';
+import { Client } from 'pg';
+import request from 'supertest';
+import type { App } from 'supertest/types';
+
+import { AppModule } from '../src/app.module';
+import { cookieInstellingen } from '../src/auth/sessie';
+import { SessieService } from '../src/auth/sessie.service';
+import { TEST_IDS } from './test-ids';
+
+/**
+ * De platformroutes van buitenaf (ADR-015, migratie 0020).
+ *
+ * Wat hier bewezen moet worden is niet dat een tenant aangemaakt kan worden —
+ * dat is het makkelijke deel — maar dat de route dicht zit voor iedereen die
+ * geen platformbeheerder is. Een beheerscherm waarvan de route openstaat is
+ * gevaarlijker dan geen scherm: het wekt de indruk dat er iets geregeld is.
+ *
+ * De tweede kern: deze controller is de enige plek in de applicatie waar een
+ * tenant uit de invoer komt (§6). Dat mag alleen omdat PlatformAdminGuard
+ * ervoor staat, en die uitzondering hoort dus zwaarder bewaakt dan de regel.
+ */
+
+const {
+  tenantThuis: TENANT_THUIS,
+  tenantVreemd: TENANT_VREEMD,
+  beheerder: USER_BEHEERDER,
+  gewoneGebruiker: USER_GEWOON,
+} = TEST_IDS['platform-routes'];
+
+const SUBJECT_BEHEERDER = `oid-platroute-beheer-${Date.now()}`;
+const SUBJECT_GEWOON = `oid-platroute-gewoon-${Date.now()}`;
+
+interface TenantAntwoord {
+  tenantId?: string;
+  naam?: string;
+  aantalLeden?: number;
+  melding?: string;
+  verlooptOp?: string;
+  reden?: string;
+  veld?: string;
+}
+
+const body = (res: { body: unknown }) => res.body as TenantAntwoord;
+
+/** Migratierol, altijd naar dezelfde database als DATABASE_URL — zie 0020. */
+function migratieUrl(): string {
+  const runtime = process.env.DATABASE_URL;
+  if (!runtime) throw new Error('DATABASE_URL ontbreekt.');
+
+  const doel = new URL(runtime);
+  const expliciet = process.env.MIGRATION_DATABASE_URL;
+
+  if (expliciet) {
+    const gegeven = new URL(expliciet);
+    if (gegeven.host === doel.host && gegeven.pathname === doel.pathname) {
+      return expliciet;
+    }
+  }
+
+  doel.username = 'clm_migrator';
+  return doel.toString();
+}
+
+describe('Platformroutes (e2e, ADR-015)', () => {
+  let app: INestApplication<App>;
+  let server: App;
+  let client: Client;
+  let migratieClient: Client;
+  let cookieBeheerder: string;
+  let cookieGewoon: string;
+  /** Tenants die de tests aanmaken; in afterAll op te ruimen. */
+  const aangemaakt: string[] = [];
+
+  beforeAll(async () => {
+    client = new Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+
+    for (const [tenant, user, subject, naam] of [
+      [TENANT_THUIS, USER_BEHEERDER, SUBJECT_BEHEERDER, 'Platformbeheerder'],
+      [TENANT_VREEMD, USER_GEWOON, SUBJECT_GEWOON, 'Gewone gebruiker'],
+    ] as const) {
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL app.current_tenant_id = '${tenant}'`);
+      await client.query(
+        'INSERT INTO clm.tenant (tenant_id, name) VALUES ($1, $2)',
+        [tenant, `platroute-${naam}`],
+      );
+      await client.query(
+        `INSERT INTO clm."user" (user_id, tenant_id, full_name, email, external_subject)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [user, tenant, naam, `${subject}@voorbeeld.nl`, subject],
+      );
+      await client.query(
+        `INSERT INTO clm.tenant_membership (user_id, tenant_id, role)
+         VALUES ($1, $2, 'admin')`,
+        [user, tenant],
+      );
+      await client.query('COMMIT');
+    }
+
+    // Alleen de eerste is platformbeheerder. Via de migratierol, want de
+    // runtime-rol mag deze tabel niet schrijven — dat is het punt van 0020.
+    migratieClient = new Client({ connectionString: migratieUrl() });
+    await migratieClient.connect();
+    await migratieClient.query(
+      `INSERT INTO clm.platform_admin (user_id, toelichting)
+       VALUES ($1, 'e2e platformroutes') ON CONFLICT DO NOTHING`,
+      [USER_BEHEERDER],
+    );
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleRef.createNestApplication();
+    app.use(cookieParser());
+    await app.init();
+    server = app.getHttpServer();
+
+    const sessies = app.get(SessieService);
+    const cookieNaam = cookieInstellingen().naam;
+
+    const sessieBeheerder = await sessies.aanmaken(SUBJECT_BEHEERDER);
+    const sessieGewoon = await sessies.aanmaken(SUBJECT_GEWOON);
+    expect(sessieBeheerder).not.toBeNull();
+    expect(sessieGewoon).not.toBeNull();
+
+    cookieBeheerder = `${cookieNaam}=${sessieBeheerder!.token}`;
+    cookieGewoon = `${cookieNaam}=${sessieGewoon!.token}`;
+  }, 30000);
+
+  afterAll(async () => {
+    await app.close();
+
+    for (const tenant of [...aangemaakt, TENANT_VREEMD, TENANT_THUIS]) {
+      // De audit trail is append-only: de runtime-rol heeft alleen INSERT en
+      // SELECT (migratie 0001, §7.7). Opruimen kan daarom alleen via de
+      // migratierol — en dat is precies zoals het hoort.
+      await migratieClient.query(
+        'DELETE FROM audit.audit_event WHERE tenant_id = $1',
+        [tenant],
+      );
+
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL app.current_tenant_id = '${tenant}'`);
+      await client.query(
+        'DELETE FROM clm.tenant_membership WHERE tenant_id = $1',
+        [tenant],
+      );
+      await client.query('DELETE FROM clm."user" WHERE tenant_id = $1', [
+        tenant,
+      ]);
+      await client.query('DELETE FROM clm.tenant WHERE tenant_id = $1', [
+        tenant,
+      ]);
+      await client.query('COMMIT');
+    }
+
+    await migratieClient.query(
+      'DELETE FROM clm.platform_admin WHERE user_id = $1',
+      [USER_BEHEERDER],
+    );
+    await migratieClient.end();
+    await client.end();
+  }, 30000);
+
+  describe('de deur', () => {
+    it('weigert een verzoek zonder sessie met 401', async () => {
+      await request(server)
+        .post('/platform/tenants')
+        .send({ naam: 'Zomaar', adminNaam: 'X', adminEmail: 'x@y.nl' })
+        .expect(401);
+    });
+
+    it('weigert een gewone tenant-admin met 403', async () => {
+      // Dit is de belangrijkste test van deze suite. Een geldige sessie, een
+      // echte admin — maar geen platformbeheerder. Zonder deze grens zou elke
+      // klantbeheerder tenants kunnen aanmaken.
+      const antwoord = await request(server)
+        .post('/platform/tenants')
+        .set('Cookie', cookieGewoon)
+        .send({
+          naam: 'Stiekem BV',
+          adminNaam: 'Indringer',
+          adminEmail: 'indringer@voorbeeld.nl',
+        })
+        .expect(403);
+
+      expect(JSON.stringify(antwoord.body)).toContain('platformbeheer');
+    });
+
+    it('weigert ook lezen voor een gewone tenant-admin', async () => {
+      await request(server)
+        .get(`/platform/tenants/${TENANT_THUIS}`)
+        .set('Cookie', cookieGewoon)
+        .expect(403);
+    });
+  });
+
+  describe('een tenant aanmaken', () => {
+    it('maakt tenant, eerste admin en membership in één handeling', async () => {
+      const antwoord = await request(server)
+        .post('/platform/tenants')
+        .set('Cookie', cookieBeheerder)
+        .send({
+          naam: 'AlingAdvies',
+          adminNaam: 'Kees',
+          adminEmail: 'kees@alingadvies.nl',
+        })
+        .expect(201);
+
+      const uit = body(antwoord);
+      expect(uit.tenantId).toBeDefined();
+      expect(uit.naam).toBe('AlingAdvies');
+      expect(uit.aantalLeden).toBe(1);
+      expect(uit.melding).toContain('inloggen');
+
+      aangemaakt.push(uit.tenantId!);
+
+      // De admin bestaat, nog zonder external_subject: die komt bij zijn
+      // eerste login. De partiële unieke index staat dat toe (migratie 0009).
+      await client.query('BEGIN');
+      await client.query(
+        `SET LOCAL app.current_tenant_id = '${uit.tenantId!}'`,
+      );
+      const { rows } = await client.query<{
+        email: string;
+        external_subject: string | null;
+        role: string;
+      }>(
+        `SELECT u.email, u.external_subject, m.role
+           FROM clm."user" u
+           JOIN clm.tenant_membership m ON m.user_id = u.user_id
+          WHERE u.tenant_id = $1`,
+        [uit.tenantId],
+      );
+      await client.query('COMMIT');
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0].email).toBe('kees@alingadvies.nl');
+      expect(rows[0].external_subject).toBeNull();
+      expect(rows[0].role).toBe('admin');
+    });
+
+    it('legt het aanmaken vast in de audit trail', async () => {
+      const tenantId = aangemaakt[0];
+
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL app.current_tenant_id = '${tenantId}'`);
+      const { rows } = await client.query<{
+        action_type: string;
+        new_values: Record<string, unknown>;
+      }>(
+        `SELECT action_type, new_values FROM audit.audit_event
+          WHERE tenant_id = $1 AND action_type = 'tenant_aangemaakt'`,
+        [tenantId],
+      );
+      await client.query('COMMIT');
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0].new_values.naam).toBe('AlingAdvies');
+      expect(rows[0].new_values.eersteAdmin).toBe('kees@alingadvies.nl');
+    });
+
+    it('weigert dezelfde naam met 409', async () => {
+      await request(server)
+        .post('/platform/tenants')
+        .set('Cookie', cookieBeheerder)
+        .send({
+          naam: 'AlingAdvies',
+          adminNaam: 'Iemand',
+          adminEmail: 'iemand@voorbeeld.nl',
+        })
+        .expect(409);
+    });
+
+    it('weigert een naam die alleen in hoofdletters verschilt', async () => {
+      // Migratie 0021. Deze test gaf 201 vóórdat die index bestond: de
+      // baseline-index is hoofdlettergevoelig, en in de applicatielaag was het
+      // niet te vangen — de route draait in de context van de níéuwe tenant en
+      // RLS verbergt daar elke bestaande tenant.
+      await request(server)
+        .post('/platform/tenants')
+        .set('Cookie', cookieBeheerder)
+        .send({
+          naam: 'alingadvies',
+          adminNaam: 'Iemand',
+          adminEmail: 'iemand@voorbeeld.nl',
+        })
+        .expect(409);
+    });
+
+    it('weigert een onvolledig verzoek met 400', async () => {
+      const antwoord = await request(server)
+        .post('/platform/tenants')
+        .set('Cookie', cookieBeheerder)
+        .send({ naam: 'Zonder admin' })
+        .expect(400);
+
+      expect(JSON.stringify(antwoord.body)).toContain('adminNaam');
+    });
+
+    it('weigert een onzinnig e-mailadres met 400', async () => {
+      await request(server)
+        .post('/platform/tenants')
+        .set('Cookie', cookieBeheerder)
+        .send({
+          naam: 'Kapot Adres BV',
+          adminNaam: 'Iemand',
+          adminEmail: 'geen-apenstaartje',
+        })
+        .expect(400);
+    });
+  });
+
+  describe('support-toegang', () => {
+    it('kent tijdelijke toegang toe, met reden en einddatum', async () => {
+      const tenantId = aangemaakt[0];
+
+      const antwoord = await request(server)
+        .post(`/platform/tenants/${tenantId}/toegang`)
+        .set('Cookie', cookieBeheerder)
+        .send({ reden: 'Klant meldt dat ronde 3 niet opent' })
+        .expect(201);
+
+      const uit = body(antwoord);
+      expect(uit.reden).toBe('Klant meldt dat ronde 3 niet opent');
+      expect(new Date(uit.verlooptOp!).getTime()).toBeGreaterThan(Date.now());
+
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL app.current_tenant_id = '${tenantId}'`);
+      const { rows } = await client.query<{ role: string; reden: string }>(
+        `SELECT role, reden FROM clm.tenant_membership
+          WHERE tenant_id = $1 AND user_id = $2`,
+        [tenantId, USER_BEHEERDER],
+      );
+      await client.query('COMMIT');
+
+      // Rol 'support', niet 'admin': de beheerder is herkenbaar als platform,
+      // niet als medewerker van de klant (Issue #57).
+      expect(rows).toHaveLength(1);
+      expect(rows[0].role).toBe('support');
+    });
+
+    it('legt de toekenning vast in de audit trail', async () => {
+      const tenantId = aangemaakt[0];
+
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL app.current_tenant_id = '${tenantId}'`);
+      const { rows } = await client.query<{
+        new_values: Record<string, unknown>;
+      }>(
+        `SELECT new_values FROM audit.audit_event
+          WHERE tenant_id = $1 AND action_type = 'support_toegang_toegekend'`,
+        [tenantId],
+      );
+      await client.query('COMMIT');
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0].new_values.reden).toBe(
+        'Klant meldt dat ronde 3 niet opent',
+      );
+      expect(rows[0].new_values.beheerder).toBe(USER_BEHEERDER);
+    });
+
+    it('eist een reden van betekenis', async () => {
+      const tenantId = aangemaakt[0];
+
+      // 'test' is geen reden. Wat hier wordt tegengehouden is de gewoonte om
+      // het veld met een teken te vullen — dan staat er straks een audit trail
+      // vol regels die niets verklaren.
+      await request(server)
+        .post(`/platform/tenants/${tenantId}/toegang`)
+        .set('Cookie', cookieBeheerder)
+        .send({ reden: 'test' })
+        .expect(400);
+    });
+
+    it('weigert support-toegang voor een gewone tenant-admin', async () => {
+      await request(server)
+        .post(`/platform/tenants/${TENANT_THUIS}/toegang`)
+        .set('Cookie', cookieGewoon)
+        .send({ reden: 'Ik wil ook wel eens meekijken' })
+        .expect(403);
+    });
+
+    it('geeft 404 op een onbekende tenant', async () => {
+      await request(server)
+        .post('/platform/tenants/00000000-0000-0000-0000-0000000000ff/toegang')
+        .set('Cookie', cookieBeheerder)
+        .send({ reden: 'Bestaat helemaal niet, deze tenant' })
+        .expect(404);
+    });
+  });
+});
