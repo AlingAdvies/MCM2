@@ -59,8 +59,16 @@ function laadValidatie() {
 }
 
 function bestandenUitArgumenten(argumenten) {
-  if (argumenten.length > 0) {
-    return argumenten.map((naam) =>
+  // Vlaggen zijn geen bestandsnamen. Zonder deze regel wordt `--extern` gelezen
+  // als `db/seeds/--extern`, en dan laadt dit script nul vragenlijsten met de
+  // melding dat het bestand niet bestaat — terwijl de aanroeper alleen
+  // toestemming voor een niet-lokaal doelwit gaf.
+  //
+  // Nodig sinds seed-demo-tenant.js zijn doelwitvlaggen doorgeeft (2026-08-09).
+  const bestanden = argumenten.filter((naam) => !naam.startsWith('--'));
+
+  if (bestanden.length > 0) {
+    return bestanden.map((naam) =>
       path.isAbsolute(naam) ? naam : path.join(SEEDMAP, naam),
     );
   }

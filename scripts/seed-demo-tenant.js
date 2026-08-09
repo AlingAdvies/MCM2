@@ -449,9 +449,29 @@ async function leveranciersAanmaken(db, vendors, gebruikers) {
 function vragenlijstenLaden() {
   const { execFileSync } = require('node:child_process');
 
+  // De doelwitvlaggen doorgeven aan het subproces.
+  //
+  // `seed-vragenlijsten.js` heeft zijn eigen `eisToestemmingBuitenLokaal()` en
+  // kijkt daarvoor naar zijn éígen argv — niet naar die van de aanroeper.
+  // Zonder deze regel stopt het bij een niet-lokaal doelwit terwijl het
+  // hoofdscript al toestemming heeft gekregen, en dan staan de leveranciers er
+  // wél en de vragenlijsten niet.
+  //
+  // Vastgesteld op 2026-08-09 bij het vullen van een tenant op productie: de
+  // seed strandde halverwege. Geen schade — beide scripts zijn idempotent —
+  // maar een halve seed is een verwarrende toestand, en de melding wees naar
+  // het subscript in plaats van naar de ontbrekende doorgifte.
+  const doorgeven = ['--extern', '--ook-beschermd'].filter((vlag) =>
+    process.argv.includes(vlag),
+  );
+
   execFileSync(
     process.execPath,
-    [path.join(__dirname, 'seed-vragenlijsten.js'), DEMO_TENANT_ID],
+    [
+      path.join(__dirname, 'seed-vragenlijsten.js'),
+      DEMO_TENANT_ID,
+      ...doorgeven,
+    ],
     { stdio: 'inherit' },
   );
 }
