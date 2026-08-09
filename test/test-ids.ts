@@ -331,6 +331,15 @@ export const TEST_IDS = {
     /** Een tenant zonder — de andere helft van de tegenproef. */
     tenantZonder: id('1e'),
   },
+  'tenant-instellingen': {
+    tenantA: id('1f'),
+    /** Tweede tenant, om cross-tenant zichtbaarheid uit te lokken. */
+    tenantB: id('20'),
+    adminA: id('21'),
+    /** Beoordelaar: mag lezen, niet wijzigen. */
+    reviewerA: id('22'),
+    adminB: id('23'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */
