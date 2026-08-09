@@ -82,6 +82,14 @@ export interface Uitnodiging {
 export interface UitnodigingContext {
   tenantNaam: string;
   vragenlijstNaam: string;
+  /**
+   * Waar een antwoord van de leverancier heen gaat (migratie 0025).
+   *
+   * Van de tenant, niet van het platform: alleen de opdrachtgever kan een vraag
+   * over zijn eigen uitvraag beantwoorden. Ontbreekt hij, dan verwijst de
+   * berichttekst naar de contactpersoon bij de tenant.
+   */
+  antwoordAan?: string;
 }
 
 export interface UitnodigingResultaat {
@@ -311,8 +319,10 @@ export class RondeBeheerService {
           status: string;
           template_naam: string;
           tenant_naam: string;
+          antwoord_email: string | null;
         }>(
-          sql`SELECT r.status, t.name AS template_naam, tn.name AS tenant_naam
+          sql`SELECT r.status, t.name AS template_naam, tn.name AS tenant_naam,
+                     tn.antwoord_email
                 FROM clm.survey_run r
                 JOIN clm.survey_template t ON t.template_id = r.template_id
                 JOIN clm.tenant tn ON tn.tenant_id = r.tenant_id
@@ -447,6 +457,11 @@ export class RondeBeheerService {
           context: {
             tenantNaam: ronde.tenant_naam,
             vragenlijstNaam: ronde.template_naam,
+            // Zonder deze regel komt een antwoord van de leverancier bij het
+            // platform terecht in plaats van bij de opdrachtgever. `undefined`
+            // en niet `null`: de mailketen gebruikt de aanwezigheid van dit
+            // veld om te kiezen tussen twee zinnen in de berichttekst.
+            antwoordAan: ronde.antwoord_email ?? undefined,
           },
         };
       },

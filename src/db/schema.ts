@@ -45,6 +45,10 @@ export const tenant = clm.table(
   {
     tenantId: uuid('tenant_id').primaryKey().defaultRandom(),
     name: text('name').notNull(),
+    // Migratie 0025. Waar een antwoord van een leverancier heen gaat: van de
+    // tenant, niet van het platform. NULL is een geldige stand — de
+    // berichttekst verwijst dan naar de contactpersoon bij de tenant.
+    antwoordEmail: text('antwoord_email'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

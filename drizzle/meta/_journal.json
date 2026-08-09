@@ -176,6 +176,13 @@
       "when": 1786896000000,
       "tag": "0024_uitnodigingstoken",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1786982400000,
+      "tag": "0025_tenant_antwoordadres",
+      "breakpoints": true
     }
   ]
 }
