@@ -162,6 +162,13 @@
       "when": 1786723200000,
       "tag": "0022_rechten_expliciet",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1786809600000,
+      "tag": "0023_eerste_login_koppelen",
+      "breakpoints": true
     }
   ]
 }

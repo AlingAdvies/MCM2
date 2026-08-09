@@ -32,6 +32,14 @@ export interface GeverifieerdeIdentiteit {
   readonly naam?: string;
   /** De tenant-ID van de identity provider — niet die van MCM2. */
   readonly identityTenantId?: string;
+  /**
+   * De `idp`-claim: via welke provider deze login binnenkwam.
+   *
+   * Bij federatie wijst hij naar de eigen organisatie van de gebruiker. Alleen
+   * gebruikt bij de eerste login, als waarborg bij het koppelen van een oid aan
+   * een wachtende gebruikersrij.
+   */
+  readonly identityProvider?: string;
 }
 
 /** Wordt geworpen wanneer een token niet te vertrouwen is. */
@@ -123,6 +131,14 @@ export class IdTokenVerificateur {
       email: leesTekstClaim(payload, 'email'),
       naam: leesTekstClaim(payload, 'name'),
       identityTenantId: leesTekstClaim(payload, 'tid'),
+      // Bij federatie wijst deze claim naar de identity provider van de
+      // gebruiker zelf, niet naar onze CIAM-tenant — voor een AlingAdvies-
+      // account bijvoorbeeld naar login.microsoftonline.com/<hun tenant>.
+      //
+      // Alleen nodig bij de eerste login, waar een oid aan een wachtende
+      // gebruikersrij gekoppeld wordt: dan is "kwam deze login via een
+      // federatieve provider" een van de waarborgen. Zie koppelEersteLogin().
+      identityProvider: leesTekstClaim(payload, 'idp'),
     };
   }
 }

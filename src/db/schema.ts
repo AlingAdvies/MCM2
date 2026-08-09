@@ -73,6 +73,9 @@ export const user = clm.table(
     // Nooit het e-mailadres: dat verandert, een oid niet. NULL voor gebruikers
     // die niet inloggen — respondenten van interne beoordelingen bijvoorbeeld.
     externalSubject: text('external_subject'),
+    // Migratie 0023. Tot wanneer een oid aan deze rij gekoppeld mag worden bij
+    // de eerste login. NULL is de veilige stand: niet koppelbaar.
+    koppelbaarTot: timestamp('koppelbaar_tot', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

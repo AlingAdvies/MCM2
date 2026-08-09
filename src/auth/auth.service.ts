@@ -144,7 +144,14 @@ export class AuthService {
       throw err;
     }
 
-    return this.sessies.aanmaken(identiteit.externalSubject);
+    // E-mail en idp gaan alleen mee voor het geval dit een eerste login is van
+    // een uitgenodigde gebruiker. Voor iedereen die al een external_subject
+    // heeft, worden ze genegeerd — clm.sessie_aanmaken() slaagt dan meteen en
+    // de koppelfunctie wordt niet eens aangeroepen.
+    return this.sessies.aanmaken(identiteit.externalSubject, {
+      email: identiteit.email,
+      identityProvider: identiteit.identityProvider,
+    });
   }
 
   /** Beëindigt de sessie bij het ruwe token uit het cookie. */
