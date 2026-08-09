@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 
+import {
+  stelBeheerderUitnodigingSamen,
+  type BeheerderUitnodigingGegevens,
+} from './beheerder-uitnodiging-bericht';
 import { MailKanaal, MailVerzendFout } from './mail-kanaal';
 import { stelUitnodigingSamen } from './uitnodiging-bericht';
 
@@ -95,6 +99,53 @@ export class UitnodigingVerzender {
     }
 
     return uitkomsten;
+  }
+
+  /**
+   * Verstuurt de uitnodiging aan de eerste beheerder van een nieuwe tenant.
+   *
+   * Anders dan `verstuurAllemaal()` is dit er altijd precies één, en is de
+   * uitkomst rechtstreeks van belang voor de aanroeper: mislukt hij, dan moet
+   * de platformbeheerder de link met de hand doorgeven. Vandaar één
+   * `VerzendUitkomst` in plaats van een lijst.
+   *
+   * Werpt niet. Een tenant die is aangemaakt blijft aangemaakt, ook als de mail
+   * strandt — hem alsnog laten falen zou betekenen dat een hikkende mailserver
+   * een geslaagde databasehandeling ongedaan lijkt te maken, terwijl hij dat
+   * niet is.
+   */
+  async verstuurAanBeheerder(gegevens: BeheerderUitnodigingGegevens): Promise<{
+    verstuurd: boolean;
+    providerId?: string;
+    fout?: string;
+    tijdelijk?: boolean;
+  }> {
+    try {
+      const { providerId } = await this.mail.verstuur(
+        stelBeheerderUitnodigingSamen(gegevens),
+      );
+
+      this.logger.log(
+        `Uitnodiging voor de beheerder van ${gegevens.tenantNaam} verstuurd.`,
+      );
+
+      return { verstuurd: true, providerId };
+    } catch (err) {
+      const fout = err instanceof MailVerzendFout;
+
+      // Het adres staat bewust niet in de logregel — MCM2-CLAUDE.md §6.
+      this.logger.error(
+        `Uitnodiging voor de beheerder van ${gegevens.tenantNaam} niet verstuurd: ` +
+          (err instanceof Error ? err.message : 'onbekende fout'),
+      );
+
+      return {
+        verstuurd: false,
+        fout:
+          err instanceof Error ? err.message : 'Onbekende fout bij versturen.',
+        tijdelijk: fout ? err.tijdelijk : false,
+      };
+    }
   }
 
   private async verstuurEen(

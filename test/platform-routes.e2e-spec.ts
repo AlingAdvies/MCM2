@@ -213,12 +213,20 @@ describe('Platformroutes (e2e, ADR-015)', () => {
         .expect(201);
 
       const uit = body(antwoord);
+
+      // Vastleggen vóór de asserties, niet erna. Faalt er hierna één, dan is
+      // het id anders nooit vastgelegd en ruimt afterAll de tenant niet op —
+      // waarna elke volgende run strandt op de unieke naamindex. Precies dat
+      // gebeurde op 2026-08-09: een 500 in de eerste test maakte de suite
+      // daarna onherhaalbaar, en de 409 die je dan zag verborg de echte fout.
       expect(uit.tenantId).toBeDefined();
+      aangemaakt.push(uit.tenantId!);
+
       expect(uit.naam).toBe('AlingAdvies');
       expect(uit.aantalLeden).toBe(1);
-      expect(uit.melding).toContain('inloggen');
-
-      aangemaakt.push(uit.tenantId!);
+      // De uitnodiging gaat per mail (migratie 0025). In de e2e-run staat geen
+      // RESEND_API_KEY, dus dit is het logkanaal — dat "verstuurt" en meldt.
+      expect(uit.melding).toContain('uitnodiging');
 
       // De admin bestaat, nog zonder external_subject: die komt bij zijn
       // eerste login. De partiële unieke index staat dat toe (migratie 0009).
@@ -243,6 +251,75 @@ describe('Platformroutes (e2e, ADR-015)', () => {
       expect(rows[0].email).toBe('kees@alingadvies.nl');
       expect(rows[0].external_subject).toBeNull();
       expect(rows[0].role).toBe('admin');
+    });
+
+    it('geeft een bruikbare uitnodigingslink terug', async () => {
+      // Het token staat óók in het antwoord als de mail geslaagd is. Dit is het
+      // enige moment waarop het bestaat; gaat de mail verloren, dan is dit de
+      // laatste kans om de link handmatig door te geven.
+      const antwoord = await request(server)
+        .post('/platform/tenants')
+        .set('Cookie', cookieBeheerder)
+        .send({
+          naam: `Linktest ${Date.now()}`,
+          adminNaam: 'Linkbeheerder',
+          adminEmail: `link-${Date.now()}@voorbeeld.nl`,
+        })
+        .expect(201);
+
+      const uit = body(antwoord) as Record<string, string>;
+      aangemaakt.push(uit.tenantId);
+
+      expect(uit.uitnodigingslink).toContain('/auth/login?uitnodiging=');
+      expect(uit.uitnodigingslink).toContain(uit.uitnodigingstoken);
+      // Naar de backend, niet naar het portaal: /auth/login zet het token in
+      // het pogingcookie. Het portaal is de leverancierskant.
+      expect(uit.uitnodigingslink).not.toContain('/portal/');
+    });
+
+    it('bewaart het antwoordadres van de tenant', async () => {
+      // Migratie 0025. Zonder dit adres komt een antwoord van een leverancier
+      // bij het platform terecht in plaats van bij de opdrachtgever.
+      const adres = `contractmanagement+${Date.now()}@voorbeeld.nl`;
+
+      const antwoord = await request(server)
+        .post('/platform/tenants')
+        .set('Cookie', cookieBeheerder)
+        .send({
+          naam: `Antwoordtest ${Date.now()}`,
+          adminNaam: 'Beheerder',
+          adminEmail: `antwoord-${Date.now()}@voorbeeld.nl`,
+          antwoordEmail: adres,
+        })
+        .expect(201);
+
+      const uit = body(antwoord);
+      aangemaakt.push(uit.tenantId!);
+
+      await client.query('BEGIN');
+      await client.query(
+        `SET LOCAL app.current_tenant_id = '${uit.tenantId!}'`,
+      );
+      const { rows } = await client.query<{ antwoord_email: string | null }>(
+        'SELECT antwoord_email FROM clm.tenant WHERE tenant_id = $1',
+        [uit.tenantId],
+      );
+      await client.query('COMMIT');
+
+      expect(rows[0].antwoord_email).toBe(adres);
+    });
+
+    it('weigert een antwoordadres dat geen adres is', async () => {
+      await request(server)
+        .post('/platform/tenants')
+        .set('Cookie', cookieBeheerder)
+        .send({
+          naam: `Ongeldig ${Date.now()}`,
+          adminNaam: 'Beheerder',
+          adminEmail: `ongeldig-${Date.now()}@voorbeeld.nl`,
+          antwoordEmail: 'geen-adres',
+        })
+        .expect(400);
     });
 
     it('legt het aanmaken vast in de audit trail', async () => {

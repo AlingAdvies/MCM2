@@ -25,6 +25,14 @@ export interface NieuweTenant {
   /** Wordt de eerste admin. Zijn oid volgt bij de eerste login. */
   readonly adminEmail: string;
   readonly adminNaam: string;
+  /**
+   * Waar een antwoord van een leverancier heen gaat (migratie 0025).
+   *
+   * Optioneel: niet elke klant heeft een gedeeld postvak. Blijft hij leeg, dan
+   * verwijst de uitnodigingsmail naar de contactpersoon bij de tenant in plaats
+   * van naar een adres.
+   */
+  readonly antwoordEmail?: string;
 }
 
 export interface TenantOverzicht {
@@ -139,7 +147,9 @@ export class PlatformService {
       // vertalen naar iets wat het scherm kan tonen.
       try {
         await tx.execute(
-          sql`INSERT INTO clm.tenant (tenant_id, name) VALUES (${tenantId}, ${invoer.naam})`,
+          sql`INSERT INTO clm.tenant (tenant_id, name, antwoord_email)
+              VALUES (${tenantId}, ${invoer.naam},
+                      ${invoer.antwoordEmail ?? null})`,
         );
       } catch (fout) {
         if (isUniekeNaamFout(fout)) {
@@ -154,9 +164,14 @@ export class PlatformService {
       // Entra-login koppelt clm.koppel_eerste_login() de oid aan deze rij op
       // vertoon van het token (migratie 0024). Ontbreekt een van beide, dan is
       // de rij niet koppelbaar — NULL is daar de veilige stand.
+      // koppelbaar_tot komt als string terug, niet als Date: drizzle's
+      // execute() geeft de ruwe pg-waarden door zonder de kolomtypen om te
+      // zetten. Het type hier eerlijk houden en één keer converteren is beter
+      // dan een Date beloven die er niet is — dat leverde een 500 op
+      // (`toISOString is not a function`), pas zichtbaar in de e2e-run.
       const gebruiker = await tx.execute<{
         user_id: string;
-        koppelbaar_tot: Date;
+        koppelbaar_tot: string;
       }>(
         sql`INSERT INTO clm."user"
               (tenant_id, full_name, email, uitnodiging_hash, koppelbaar_tot)
@@ -183,17 +198,17 @@ export class PlatformService {
                     })}::jsonb)`,
       );
 
-      const rij = await tx.execute<{ created_at: Date }>(
+      const rij = await tx.execute<{ created_at: string }>(
         sql`SELECT created_at FROM clm.tenant WHERE tenant_id = ${tenantId}`,
       );
 
       return {
         tenantId,
         naam: invoer.naam,
-        aangemaaktOp: rij.rows[0].created_at,
+        aangemaaktOp: new Date(rij.rows[0].created_at),
         aantalLeden: 1,
         uitnodigingstoken: token,
-        uitnodigingVerlooptOp: gebruiker.rows[0].koppelbaar_tot,
+        uitnodigingVerlooptOp: new Date(gebruiker.rows[0].koppelbaar_tot),
       };
     });
   }
@@ -214,7 +229,7 @@ export class PlatformService {
       // Een bestaande support-rij wordt vervangen, niet gedupliceerd: de
       // primaire sleutel is (user_id, tenant_id). Verlengen is hetzelfde als
       // opnieuw toekennen, met een nieuwe reden en een nieuwe einddatum.
-      const rij = await tx.execute<{ verloopt_op: Date }>(
+      const rij = await tx.execute<{ verloopt_op: string }>(
         sql`INSERT INTO clm.tenant_membership
               (user_id, tenant_id, role, verloopt_op, reden, toegekend_door)
             VALUES (${beheerderUserId}, ${tenantId}, 'support',
@@ -240,7 +255,11 @@ export class PlatformService {
                     })}::jsonb)`,
       );
 
-      return { tenantId, verlooptOp: rij.rows[0].verloopt_op, reden };
+      return {
+        tenantId,
+        verlooptOp: new Date(rij.rows[0].verloopt_op),
+        reden,
+      };
     });
   }
 
@@ -261,7 +280,7 @@ export class PlatformService {
       const { rows } = await tx.execute<{
         tenant_id: string;
         name: string;
-        created_at: Date;
+        created_at: string;
         leden: string;
       }>(
         sql`SELECT t.tenant_id, t.name, t.created_at,
@@ -278,7 +297,7 @@ export class PlatformService {
       return {
         tenantId: rows[0].tenant_id,
         naam: rows[0].name,
-        aangemaaktOp: rows[0].created_at,
+        aangemaaktOp: new Date(rows[0].created_at),
         aantalLeden: Number(rows[0].leden),
       };
     });

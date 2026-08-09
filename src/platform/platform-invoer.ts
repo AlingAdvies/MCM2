@@ -63,7 +63,33 @@ export function leesNieuweTenant(body: unknown): NieuweTenant {
     naam: verplichteTekst(invoer.naam, 'naam', MAX_NAAM),
     adminNaam: verplichteTekst(invoer.adminNaam, 'adminNaam', MAX_NAAM),
     adminEmail: email(invoer.adminEmail, 'adminEmail'),
+    antwoordEmail: optioneelEmail(invoer.antwoordEmail, 'antwoordEmail'),
   };
+}
+
+/**
+ * Het antwoordadres van de tenant — optioneel (migratie 0025).
+ *
+ * Leeg of afwezig is een geldige keuze en geen halve invoer: niet elke klant
+ * heeft een gedeeld postvak, en de berichttekst vangt dat af met een andere
+ * zin. Een lege string wordt daarom `undefined` en geen `''` — dat laatste zou
+ * als "wel ingevuld" door de keten reizen en in de mail een leeg Reply-To
+ * opleveren.
+ */
+function optioneelEmail(waarde: unknown, veld: string): string | undefined {
+  if (waarde === undefined || waarde === null) {
+    return undefined;
+  }
+
+  if (typeof waarde !== 'string') {
+    throw new InvoerFout(veld, `${veld} moet tekst zijn.`);
+  }
+
+  if (waarde.trim() === '') {
+    return undefined;
+  }
+
+  return email(waarde, veld);
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   TenantContextGuard,
   type RequestMetSessie,
 } from '../auth/tenant-context.guard';
+import { UitnodigingVerzender } from '../mail/uitnodiging-verzender.service';
 import { InvoerFout } from '../vendor/vendor-invoer';
 import { PlatformAdminGuard } from './platform-admin.guard';
 import { leesNieuweTenant, leesSupportReden } from './platform-invoer';
@@ -41,7 +42,10 @@ import { PlatformService } from './platform.service';
 @Controller('platform')
 @UseGuards(TenantContextGuard, PlatformAdminGuard)
 export class PlatformController {
-  constructor(private readonly platform: PlatformService) {}
+  constructor(
+    private readonly platform: PlatformService,
+    private readonly uitnodigingen: UitnodigingVerzender,
+  ) {}
 
   @Post('tenants')
   async tenantAanmaken(@Body() body: unknown) {
@@ -49,14 +53,38 @@ export class PlatformController {
       const invoer = leesNieuweTenant(body);
       const tenant = await this.platform.tenantAanmaken(invoer);
 
+      const link = this.uitnodigingsLink(tenant.uitnodigingstoken);
+
+      // Versturen ná het aanmaken, nooit erin.
+      //
+      // Een verstuurde mail is niet terug te draaien. Zat de verzending in de
+      // transactie en faalde er daarna iets, dan bestond de tenant niet maar
+      // was de uitnodiging wél de deur uit — een link naar niets. Zelfde
+      // volgorde en zelfde reden als bij de leveranciersuitnodigingen.
+      const verzending = await this.uitnodigingen.verstuurAanBeheerder({
+        ontvanger: invoer.adminEmail,
+        beheerderNaam: invoer.adminNaam,
+        tenantNaam: invoer.naam,
+        link,
+        verlooptOp: tenant.uitnodigingVerlooptOp.toISOString(),
+      });
+
       return {
         ...tenant,
-        // De eerste admin kan pas inloggen nadat hij zich bij Entra heeft
-        // gemeld; zijn oid koppelt dan aan deze rij. Het scherm hoort dat te
-        // vertellen, anders lijkt een aangemaakte tenant onbruikbaar.
-        melding:
-          `Tenant aangemaakt. ${invoer.adminNaam} kan inloggen zodra hij zich ` +
-          'met dit e-mailadres bij de identity provider aanmeldt.',
+        // Het token blijft in het antwoord staan, óók als de mail geslaagd is.
+        // Dit is het enige moment waarop het bestaat; er is geen route die het
+        // opnieuw kan tonen. Gaat de mail alsnog verloren, dan is dit de
+        // laatste kans om de link handmatig door te geven. Zelfde afweging als
+        // bij de leverancierstokens.
+        uitnodigingslink: link,
+        mailVerstuurd: verzending.verstuurd,
+        mailFout: verzending.fout,
+        melding: verzending.verstuurd
+          ? `Tenant aangemaakt. ${invoer.adminNaam} heeft een uitnodiging ` +
+            `ontvangen op ${invoer.adminEmail}.`
+          : `Tenant aangemaakt, maar de uitnodiging kon niet verstuurd worden ` +
+            `(${verzending.fout ?? 'onbekende fout'}). Geef de link hierboven ` +
+            'handmatig door.',
       };
     } catch (fout) {
       if (fout instanceof InvoerFout) {
@@ -67,6 +95,25 @@ export class PlatformController {
       }
       throw fout;
     }
+  }
+
+  /**
+   * De URL die de nieuwe beheerder in de mail krijgt.
+   *
+   * Wijst naar **deze backend** en niet naar het portaal: `/auth/login` zet het
+   * token in het pogingcookie en stuurt door naar de identity provider. Het
+   * portaal is de leverancierskant en heeft met deze stroom niets te maken.
+   *
+   * `API_BASIS_URL` en niet `PORTAAL_BASIS_URL`. Ontbreekt de variabele, dan
+   * valt dit terug op de lokale poort — zichtbaar fout in een mail, in plaats
+   * van een lege link waar niemand iets van merkt.
+   */
+  private uitnodigingsLink(token: string): string {
+    const basis = (
+      process.env.API_BASIS_URL ?? 'http://localhost:5001'
+    ).replace(/\/+$/, '');
+
+    return `${basis}/auth/login?uitnodiging=${encodeURIComponent(token)}`;
   }
 
   @Get('tenants/:id')

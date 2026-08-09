@@ -325,6 +325,12 @@ export const TEST_IDS = {
     /** Iemand die al een oid heeft — mag nooit overschreven worden. */
     bestaand: id('7f'),
   },
+  'tenant-antwoordadres': {
+    /** Een tenant mét antwoordadres. */
+    tenantMet: id('1d'),
+    /** Een tenant zonder — de andere helft van de tegenproef. */
+    tenantZonder: id('1e'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */
