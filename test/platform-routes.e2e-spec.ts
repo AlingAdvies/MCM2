@@ -208,7 +208,7 @@ describe('Platformroutes (e2e, ADR-015)', () => {
         .send({
           naam: 'AlingAdvies',
           adminNaam: 'Kees',
-          adminEmail: 'kees@alingadvies.nl',
+          adminEmail: 'kees@voorbeeld.nl',
         })
         .expect(201);
 
@@ -248,7 +248,7 @@ describe('Platformroutes (e2e, ADR-015)', () => {
       await client.query('COMMIT');
 
       expect(rows).toHaveLength(1);
-      expect(rows[0].email).toBe('kees@alingadvies.nl');
+      expect(rows[0].email).toBe('kees@voorbeeld.nl');
       expect(rows[0].external_subject).toBeNull();
       expect(rows[0].role).toBe('admin');
     });
@@ -339,7 +339,7 @@ describe('Platformroutes (e2e, ADR-015)', () => {
 
       expect(rows).toHaveLength(1);
       expect(rows[0].new_values.naam).toBe('AlingAdvies');
-      expect(rows[0].new_values.eersteAdmin).toBe('kees@alingadvies.nl');
+      expect(rows[0].new_values.eersteAdmin).toBe('kees@voorbeeld.nl');
     });
 
     it('weigert dezelfde naam met 409', async () => {

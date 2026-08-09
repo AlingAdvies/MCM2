@@ -7,6 +7,7 @@ import { HealthModule } from './health/health.module';
 import { MailModule } from './mail/mail.module';
 import { PlatformModule } from './platform/platform.module';
 import { SurveyModule } from './survey/survey.module';
+import { TenantModule } from './tenant/tenant.module';
 import { VendorModule } from './vendor/vendor.module';
 
 @Module({
@@ -18,6 +19,7 @@ import { VendorModule } from './vendor/vendor.module';
     VendorModule,
     MailModule,
     PlatformModule,
+    TenantModule,
   ],
   controllers: [AppController],
   providers: [AppService],
