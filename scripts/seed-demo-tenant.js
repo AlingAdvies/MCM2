@@ -49,8 +49,59 @@ const {
 // Vast UUID, zodat het script idempotent is en `--verwijder` precies weet wat
 // het weghaalt. Bewust niet 1111.../2222..., die zijn in gebruik bij
 // otap-doorloop.js en de e2e-suites.
-const DEMO_TENANT_ID = 'dededede-0000-4000-8000-000000000001';
-const DEMO_TENANT_NAAM = 'Demo (voorbeelddata)';
+const STANDAARD_TENANT_ID = 'dededede-0000-4000-8000-000000000001';
+const STANDAARD_TENANT_NAAM = 'Demo (voorbeelddata)';
+
+/**
+ * Naar welke tenant deze seed schrijft.
+ *
+ * ── Waarom dit instelbaar is ────────────────────────────────────────────────
+ *
+ * Tot 2026-08-09 stond hier alleen het vaste UUID hierboven, en dat is voor de
+ * demo-database precies goed: één herkenbare tenant die het script zelf
+ * aanmaakt en zelf opruimt.
+ *
+ * Maar de eigenaar wilde dezelfde voorbeelddata in een bestáánde tenant
+ * (AlingAdvies, aangemaakt via de platformroute), om die als demo-omgeving te
+ * gebruiken. Zonder deze vlag zou het script daar een tweede tenant naast
+ * zetten in plaats van de bestaande te vullen.
+ *
+ * ── Wat de vlag NIET doet ───────────────────────────────────────────────────
+ *
+ * Een tenant aanmaken die niet bestaat. Bij `--tenant` moet de tenant er al
+ * zijn: die hoort via de platformroute te ontstaan, met een uitnodiging voor
+ * zijn beheerder. Een seed die stilzwijgend tenants aanmaakt in een echte
+ * omgeving is precies het soort script dat je niet wilt hebben.
+ */
+function leesDoelTenant(argv) {
+  const index = argv.indexOf('--tenant');
+
+  if (index === -1) {
+    return { id: STANDAARD_TENANT_ID, eigen: true };
+  }
+
+  const waarde = argv[index + 1];
+
+  if (!waarde || waarde.startsWith('--')) {
+    console.error('\n--tenant verwacht een tenant-UUID erachter.\n');
+    process.exit(1);
+  }
+
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      waarde,
+    )
+  ) {
+    console.error(`\n'${waarde}' is geen geldig UUID.\n`);
+    process.exit(1);
+  }
+
+  return { id: waarde.toLowerCase(), eigen: false };
+}
+
+const DOEL = leesDoelTenant(process.argv);
+const DEMO_TENANT_ID = DOEL.id;
+const DEMO_TENANT_NAAM = STANDAARD_TENANT_NAAM;
 
 // Herkenbaar niet-echt. Een verzonnen UUID hier zou niet te onderscheiden zijn
 // van een echte Entra-oid: dan kan niemand later nog zien welke gebruikers
@@ -238,6 +289,19 @@ async function tenantAanmaken(db) {
 
       if (bestaand.rows.length > 0) {
         return { nieuw: false, naam: bestaand.rows[0].name };
+      }
+
+      // Met --tenant hoort de tenant al te bestaan: die ontstaat via de
+      // platformroute, met een uitnodiging voor zijn beheerder. Hem hier
+      // alsnog aanmaken zou een tenant opleveren zonder beheerder en zonder
+      // spoor in de audit trail — en bij een typefout in het UUID zou dat
+      // stilzwijgend gebeuren.
+      if (!DOEL.eigen) {
+        throw new Error(
+          `Tenant ${DEMO_TENANT_ID} bestaat niet.\n\n` +
+            'Met --tenant vult dit script een bestáánde tenant. Controleer het\n' +
+            'UUID, of maak de tenant eerst aan via POST /platform/tenants.',
+        );
       }
 
       await tx.execute(
@@ -853,8 +917,20 @@ async function verwijderen(db) {
     sql`DELETE FROM clm.vendor_tag WHERE tenant_id = ${DEMO_TENANT_ID}`,
     sql`DELETE FROM clm.vendor_contact WHERE tenant_id = ${DEMO_TENANT_ID}`,
     sql`DELETE FROM clm.vendor WHERE tenant_id = ${DEMO_TENANT_ID}`,
-    sql`DELETE FROM clm.tenant_membership WHERE tenant_id = ${DEMO_TENANT_ID}`,
-    sql`DELETE FROM clm.user WHERE tenant_id = ${DEMO_TENANT_ID}`,
+    // Alleen de demo-gebruikers, herkenbaar aan hun voorvoegsel.
+    //
+    // Tot 2026-08-09 stond hier `WHERE tenant_id = …` zonder meer, en dat kon
+    // ook: in een tenant die dit script zelf aanmaakt zijn álle gebruikers van
+    // dit script. Met --tenant is dat niet langer waar — daar staat de echte
+    // beheerder tussen, en die mag een opruimactie nooit raken.
+    sql`DELETE FROM clm.tenant_membership
+         WHERE tenant_id = ${DEMO_TENANT_ID}
+           AND user_id IN (SELECT user_id FROM clm.user
+                            WHERE tenant_id = ${DEMO_TENANT_ID}
+                              AND external_subject LIKE ${`${DEMO_SUBJECT_PREFIX}%`})`,
+    sql`DELETE FROM clm.user
+         WHERE tenant_id = ${DEMO_TENANT_ID}
+           AND external_subject LIKE ${`${DEMO_SUBJECT_PREFIX}%`}`,
   ];
 
   await db.transaction(async (tx) =>
@@ -875,9 +951,15 @@ async function verwijderen(db) {
 
       // De tenantrij als laatste, binnen dezelfde context — zie
       // tenantAanmaken() voor waarom dat binnen de context moet.
-      await tx.execute(
-        sql`DELETE FROM clm.tenant WHERE tenant_id = ${DEMO_TENANT_ID}`,
-      );
+      //
+      // Maar alléén wanneer dit script de tenant zelf heeft aangemaakt. Met
+      // --tenant is hij van iemand anders: daar haalt opruimen de voorbeelddata
+      // weg en blijft de omgeving met zijn beheerder staan.
+      if (DOEL.eigen) {
+        await tx.execute(
+          sql`DELETE FROM clm.tenant WHERE tenant_id = ${DEMO_TENANT_ID}`,
+        );
+      }
     }),
   );
 }
@@ -977,7 +1059,12 @@ async function main() {
 
     if (moetVerwijderen) {
       await verwijderen(db);
-      console.log(`Demo-tenant ${DEMO_TENANT_ID} verwijderd.`);
+      console.log(
+        DOEL.eigen
+          ? `Demo-tenant ${DEMO_TENANT_ID} verwijderd.`
+          : `Voorbeelddata uit tenant ${DEMO_TENANT_ID} verwijderd.\n` +
+              'De tenant zelf en zijn eigen gebruikers zijn ongemoeid gebleven.',
+      );
       return;
     }
 
