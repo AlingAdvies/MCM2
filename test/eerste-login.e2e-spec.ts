@@ -1,10 +1,14 @@
 import { Client } from 'pg';
 
+import {
+  genereerUitnodigingstoken,
+  hashUitnodigingstoken,
+} from '../src/auth/uitnodigingstoken';
 import { verwijderTestdata } from './opruimen';
 import { TEST_IDS } from './test-ids';
 
 /**
- * De eerste login van een uitgenodigde beheerder (migratie 0023).
+ * De eerste login van een uitgenodigde beheerder (migratie 0024).
  *
  * ── Waarom deze suite zwaarder weegt dan hij lijkt ───────────────────────────
  *
@@ -13,15 +17,22 @@ import { TEST_IDS } from './test-ids';
  * iets mis, dan is het gevolg niet "een test faalt" maar een account-overname:
  * iemand anders komt binnen als de beheerder van een klant.
  *
- * De functie kent vijf voorwaarden. Deze suite lokt ze alle vijf uit — niet
- * omdat de code er onbetrouwbaar uitziet, maar omdat een voorwaarde die niet
- * getest is er net zo goed niet kan zijn (§15b).
+ * Elke voorwaarde wordt hier apart uitgelokt — niet omdat de code er
+ * onbetrouwbaar uitziet, maar omdat een voorwaarde die niet getest is er net zo
+ * goed niet kan zijn (§15b).
+ *
+ * ── Wat er veranderde in 0024 ────────────────────────────────────────────────
+ *
+ * De koppeling rustte in 0023 op het kennen van een e-mailadres, met een
+ * idp-claim als waarborg. Die claim toetste de *vorm* van de login en niet wie
+ * er inlogde, en sloot tegelijk elke niet-federatieve inlogmethode uit. Nu is
+ * het uitnodigingstoken de waarborg: het bewijst dat deze toegang is toegekend.
  *
  * ── Wat er NIET getest wordt, en waarom ──────────────────────────────────────
  *
  * De echte Entra-flow. Die is op 2026-08-08 handmatig doorlopen en bewezen
  * (claims-meten.js); hem hier nabootsen zou een mock testen in plaats van de
- * database. Wat hier telt is wat de functie doet met de claims die binnenkomen.
+ * database. Wat hier telt is wat de functie doet met wat er binnenkomt.
  */
 
 const {
@@ -38,27 +49,26 @@ const OID_BESTAAND = `oid-bestaand-${Date.now()}`;
 const EMAIL_UITGENODIGD = `uitgenodigd-${Date.now()}@voorbeeld.nl`;
 const EMAIL_BESTAAND = `bestaand-${Date.now()}@voorbeeld.nl`;
 
-/** Een geloofwaardige idp-claim, zoals Entra hem bij federatie levert. */
-const IDP =
-  'https://login.microsoftonline.com/3ce5523c-cc8b-4422-a310-8bdfa3715168/v2.0';
+/** Het token uit de uitnodigingslink. De database kent alleen de hash. */
+const TOKEN = genereerUitnodigingstoken();
 
 interface Koppeling {
   user_id: string;
   tenant_id: string;
 }
 
-describe('Eerste login koppelen (e2e, migratie 0023)', () => {
+describe('Eerste login koppelen (e2e, migratie 0024)', () => {
   let client: Client;
 
-  /** Roept de functie aan zoals de applicatie dat doet. */
+  /** Roept de functie aan zoals de applicatie dat doet: met de hash. */
   async function koppel(
     oid: string,
     email: string | null,
-    idp: string | null = IDP,
+    token: string | null = TOKEN,
   ): Promise<Koppeling[]> {
     const { rows } = await client.query<Koppeling>(
       'SELECT * FROM clm.koppel_eerste_login($1, $2, $3)',
-      [oid, email, idp],
+      [oid, email, token === null ? null : hashUitnodigingstoken(token)],
     );
     return rows;
   }
@@ -70,9 +80,10 @@ describe('Eerste login koppelen (e2e, migratie 0023)', () => {
     await client.query(
       `UPDATE clm."user"
           SET external_subject = NULL,
-              koppelbaar_tot = now() + ($1 || ' days')::interval
-        WHERE user_id = $2`,
-      [String(dagen), USER_UITGENODIGD],
+              uitnodiging_hash = $1,
+              koppelbaar_tot = now() + ($2 || ' days')::interval
+        WHERE user_id = $3`,
+      [hashUitnodigingstoken(TOKEN), String(dagen), USER_UITGENODIGD],
     );
     await client.query('COMMIT');
   }
@@ -88,11 +99,18 @@ describe('Eerste login koppelen (e2e, migratie 0023)', () => {
       [TENANT, `eerste-login-${Date.now()}`],
     );
 
-    // De uitgenodigde: e-mailadres bekend, oid nog niet.
+    // De uitgenodigde: e-mailadres en tokenhash bekend, oid nog niet.
     await client.query(
-      `INSERT INTO clm."user" (user_id, tenant_id, full_name, email, koppelbaar_tot)
-       VALUES ($1, $2, 'Uitgenodigde Admin', $3, now() + interval '90 days')`,
-      [USER_UITGENODIGD, TENANT, EMAIL_UITGENODIGD],
+      `INSERT INTO clm."user"
+         (user_id, tenant_id, full_name, email, uitnodiging_hash, koppelbaar_tot)
+       VALUES ($1, $2, 'Uitgenodigde Admin', $3, $4,
+               now() + interval '90 days')`,
+      [
+        USER_UITGENODIGD,
+        TENANT,
+        EMAIL_UITGENODIGD,
+        hashUitnodigingstoken(TOKEN),
+      ],
     );
     await client.query(
       `INSERT INTO clm.tenant_membership (user_id, tenant_id, role)
@@ -123,22 +141,25 @@ describe('Eerste login koppelen (e2e, migratie 0023)', () => {
       expect(rijen[0].tenant_id).toBe(TENANT);
     });
 
-    it('sluit de uitnodiging na gebruik', async () => {
-      // koppelbaar_tot op NULL: de rij is niet nóg een keer koppelbaar. Zonder
-      // dit zou een tweede persoon met hetzelfde e-mailadres later alsnog
-      // kunnen proberen.
+    it('sluit de uitnodiging na gebruik — beide sporen tegelijk', async () => {
+      // Hash én vervaldatum op NULL. Alleen de datum wissen zou niet genoeg
+      // zijn: dan blijft er een geldige hash in de database staan, en die is
+      // precies wat een tweede poging nodig heeft.
       await client.query('BEGIN');
       await client.query(`SET LOCAL app.current_tenant_id = '${TENANT}'`);
       const { rows } = await client.query<{
         external_subject: string;
+        uitnodiging_hash: string | null;
         koppelbaar_tot: Date | null;
       }>(
-        'SELECT external_subject, koppelbaar_tot FROM clm."user" WHERE user_id = $1',
+        `SELECT external_subject, uitnodiging_hash, koppelbaar_tot
+           FROM clm."user" WHERE user_id = $1`,
         [USER_UITGENODIGD],
       );
       await client.query('COMMIT');
 
       expect(rows[0].external_subject).toBe(OID_NIEUW);
+      expect(rows[0].uitnodiging_hash).toBeNull();
       expect(rows[0].koppelbaar_tot).toBeNull();
     });
 
@@ -163,7 +184,28 @@ describe('Eerste login koppelen (e2e, migratie 0023)', () => {
       await client.query('COMMIT');
 
       expect(rows).toHaveLength(1);
-      expect(rows[0].new_values.identity_provider).toBe(IDP);
+      expect(rows[0].new_values.via).toBe('uitnodigingstoken');
+    });
+
+    it('bewaart geen sleutelmateriaal in de audit trail', async () => {
+      // De audit trail is voor de tenant leesbaar. Het token hoort daar niet
+      // in, ook niet gehasht: een audit trail hoort te vertellen wát er
+      // gebeurde, niet de sleutel te bewaren waarmee het kon.
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL app.current_tenant_id = '${TENANT}'`);
+      const { rows } = await client.query<{ regel: string }>(
+        `SELECT new_values::text AS regel FROM audit.audit_event
+          WHERE tenant_id = $1
+            AND action_type = 'eerste_login_gekoppeld'
+            AND entity_id = $2
+          ORDER BY created_at DESC
+          LIMIT 1`,
+        [TENANT, USER_UITGENODIGD],
+      );
+      await client.query('COMMIT');
+
+      expect(rows[0].regel).not.toContain(TOKEN);
+      expect(rows[0].regel).not.toContain(hashUitnodigingstoken(TOKEN));
     });
 
     it('laat de gekoppelde gebruiker daarna gewoon inloggen', async () => {
@@ -194,9 +236,18 @@ describe('Eerste login koppelen (e2e, migratie 0023)', () => {
       expect(rijen).toHaveLength(0);
     });
 
-    it('weigert wanneer twee rijen hetzelfde e-mailadres hebben', async () => {
-      // Voorwaarde 1. Gokken zou betekenen dat de uitkomst van volgorde
-      // afhangt — en dan bepaalt toeval wie er binnenkomt.
+    it('koppelt de juiste rij wanneer twee tenants hetzelfde e-mailadres kennen', async () => {
+      // Dit is de situatie die op productie ontstond: één persoon met één
+      // e-mailadres, uitgenodigd in twee tenants. In 0023 was dat een
+      // patstelling — twee kandidaten, dus weigeren — en kwam die persoon
+      // nergens binnen.
+      //
+      // Met een token per uitnodiging is het geen patstelling meer maar een
+      // keuze: het token wijst één rij aan. Dat is niet alleen veiliger, het is
+      // ook het enige dat een platformbeheerder die zelf klant is werkbaar
+      // maakt.
+      const tokenTweede = genereerUitnodigingstoken();
+
       await client.query('BEGIN');
       await client.query(
         `SET LOCAL app.current_tenant_id = '${TENANT_TWEEDE}'`,
@@ -205,18 +256,27 @@ describe('Eerste login koppelen (e2e, migratie 0023)', () => {
         'INSERT INTO clm.tenant (tenant_id, name) VALUES ($1, $2)',
         [TENANT_TWEEDE, `eerste-login-tweede-${Date.now()}`],
       );
-      await client.query(
-        `INSERT INTO clm."user" (tenant_id, full_name, email, koppelbaar_tot)
-         VALUES ($1, 'Dubbel Adres', $2, now() + interval '90 days')`,
-        [TENANT_TWEEDE, EMAIL_UITGENODIGD],
+      const { rows: nieuw } = await client.query<{ user_id: string }>(
+        `INSERT INTO clm."user"
+           (tenant_id, full_name, email, uitnodiging_hash, koppelbaar_tot)
+         VALUES ($1, 'Zelfde Adres', $2, $3, now() + interval '90 days')
+         RETURNING user_id`,
+        [TENANT_TWEEDE, EMAIL_UITGENODIGD, hashUitnodigingstoken(tokenTweede)],
       );
       await client.query('COMMIT');
 
-      const rijen = await koppel(`${OID_NIEUW}-tweede`, EMAIL_UITGENODIGD);
+      // Het token van de tweede tenant wijst de tweede rij aan, niet de eerste.
+      const rijen = await koppel(
+        `${OID_NIEUW}-tweede`,
+        EMAIL_UITGENODIGD,
+        tokenTweede,
+      );
 
-      expect(rijen).toHaveLength(0);
+      expect(rijen).toHaveLength(1);
+      expect(rijen[0].user_id).toBe(nieuw[0].user_id);
+      expect(rijen[0].tenant_id).toBe(TENANT_TWEEDE);
 
-      // Opruimen zodat de volgende test weer één kandidaat heeft.
+      // Opruimen zodat de volgende test weer een schone stand heeft.
       await client.query('BEGIN');
       await client.query(
         `SET LOCAL app.current_tenant_id = '${TENANT_TWEEDE}'`,
@@ -228,6 +288,48 @@ describe('Eerste login koppelen (e2e, migratie 0023)', () => {
         TENANT_TWEEDE,
       ]);
       await client.query('COMMIT');
+    });
+
+    it('laat twee openstaande uitnodigingen niet dezelfde hash delen', async () => {
+      // De unieke index is wat "precies één kandidaat" van een telling in code
+      // naar een eigenschap van de database verplaatst. Deze tegenproef legt
+      // vast dat hij er is: zonder index zou dit slagen en zou één token naar
+      // twee gebruikers wijzen.
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL app.current_tenant_id = '${TENANT}'`);
+
+      await expect(
+        client.query(
+          `INSERT INTO clm."user"
+             (tenant_id, full_name, email, uitnodiging_hash, koppelbaar_tot)
+           VALUES ($1, 'Zelfde Token', $2, $3, now() + interval '90 days')`,
+          [
+            TENANT,
+            `dubbel-token-${Date.now()}@voorbeeld.nl`,
+            hashUitnodigingstoken(TOKEN),
+          ],
+        ),
+      ).rejects.toThrow(/user_uitnodiging_hash_key/);
+
+      await client.query('ROLLBACK');
+    });
+
+    it('weigert een hash die niet de vorm van een hash heeft', async () => {
+      // De CHECK-constraint vangt af wat het meest waarschijnlijke ongeluk is:
+      // het ruwe token opslaan in plaats van de hash.
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL app.current_tenant_id = '${TENANT}'`);
+
+      await expect(
+        client.query(
+          `INSERT INTO clm."user"
+             (tenant_id, full_name, email, uitnodiging_hash, koppelbaar_tot)
+           VALUES ($1, 'Ruw Token', $2, $3, now() + interval '90 days')`,
+          [TENANT, `ruw-${Date.now()}@voorbeeld.nl`, TOKEN],
+        ),
+      ).rejects.toThrow(/user_uitnodiging_hash_format_check/);
+
+      await client.query('ROLLBACK');
     });
 
     it('weigert een verlopen uitnodiging', async () => {
@@ -267,17 +369,49 @@ describe('Eerste login koppelen (e2e, migratie 0023)', () => {
       expect(rijen).toHaveLength(0);
     });
 
-    it('weigert een login zonder federatieve provider', async () => {
-      // Voorwaarde 5. Entra levert geen email_verified; de idp-claim is wat er
-      // wél is, en die zegt dat de gebruiker bij zijn eigen organisatie is
-      // geauthenticeerd.
+    it('weigert een login zonder token', async () => {
+      // De kern van 0024: het e-mailadres alleen is niet genoeg meer. Dit is de
+      // aanval die 0023 als aanvaard restrisico opschreef — wie het adres kent,
+      // komt binnen — en die hier nu op afketst.
       const rijen = await koppel(
-        `${OID_NIEUW}-geen-idp`,
+        `${OID_NIEUW}-geen-token`,
         EMAIL_UITGENODIGD,
         null,
       );
 
       expect(rijen).toHaveLength(0);
+    });
+
+    it('weigert een token dat bij niemand hoort', async () => {
+      const rijen = await koppel(
+        `${OID_NIEUW}-vals-token`,
+        EMAIL_UITGENODIGD,
+        genereerUitnodigingstoken(),
+      );
+
+      expect(rijen).toHaveLength(0);
+    });
+
+    it('weigert een geldig token bij het verkeerde e-mailadres', async () => {
+      // Beide moeten kloppen. Een link die bij de verkeerde persoon belandt is
+      // daarmee waardeloos, ook als die persoon hem eerder opent dan de
+      // geadresseerde.
+      const rijen = await koppel(
+        `${OID_NIEUW}-ander-adres`,
+        `iemand-anders-${Date.now()}@voorbeeld.nl`,
+      );
+
+      expect(rijen).toHaveLength(0);
+    });
+
+    it('werkt precies één keer — na koppelen vindt een tweede poging niets', async () => {
+      // De tegenproef bij "sluit de uitnodiging na gebruik": zonder deze zou
+      // dat een bewering over een kolom blijven in plaats van over gedrag.
+      const eerste = await koppel(`${OID_NIEUW}-eenmalig`, EMAIL_UITGENODIGD);
+      expect(eerste).toHaveLength(1);
+
+      const tweede = await koppel(`${OID_NIEUW}-eenmalig-2`, EMAIL_UITGENODIGD);
+      expect(tweede).toHaveLength(0);
     });
 
     it('weigert een leeg e-mailadres', async () => {

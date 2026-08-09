@@ -8,6 +8,10 @@ import {
   hashSessieToken,
   heeftGeldigeSessieVorm,
 } from './sessie';
+import {
+  hashUitnodigingstoken,
+  heeftGeldigeVorm as heeftGeldigeUitnodigingsVorm,
+} from './uitnodigingstoken';
 
 /**
  * De sessielaag: de enige route naar clm.sessie (Issue #7, spoor 1).
@@ -31,14 +35,18 @@ export interface SessieContext {
 }
 
 /**
- * De claims die een eerste login mag gebruiken om zich te koppelen.
+ * Wat een eerste login mag gebruiken om zich te koppelen.
  *
  * Alleen bij de allereerste login van een uitgenodigde gebruiker; daarna doet
- * `external_subject` het werk. Zie migratie 0023 voor de vijf voorwaarden.
+ * `external_subject` het werk. Zie migratie 0024 voor de voorwaarden.
+ *
+ * Twee gegevens langs twee wegen: het e-mailadres uit het geverifieerde
+ * ID-token, het token uit de uitnodigingslink. Beide moeten kloppen.
  */
 export interface EersteLoginGegevens {
   readonly email?: string;
-  readonly identityProvider?: string;
+  /** Het ruwe token uit de link; de hash gaat naar de database. */
+  readonly uitnodigingstoken?: string;
 }
 
 /** Wat een geslaagde login oplevert: de context plus het ruwe token. */
@@ -93,11 +101,19 @@ export class SessieService {
     //
     // De volgorde is opzet: eerst de gewone weg proberen. Een bestaande
     // gebruiker raakt clm.koppel_eerste_login() daarmee nooit.
-    if (resultaat.rows.length === 0 && uitnodiging?.email) {
+    //
+    // De vormcontrole staat er vóór de query: een token uit een cookie dat door
+    // iets anders gevuld is hoort af te ketsen op zijn vorm, niet op een
+    // databaseaanroep.
+    if (
+      resultaat.rows.length === 0 &&
+      uitnodiging?.email &&
+      heeftGeldigeUitnodigingsVorm(uitnodiging.uitnodigingstoken)
+    ) {
       const gekoppeld = await this.db.db.execute<{ user_id: string }>(
         sql`SELECT * FROM clm.koppel_eerste_login(
               ${externalSubject}, ${uitnodiging.email},
-              ${uitnodiging.identityProvider ?? null})`,
+              ${hashUitnodigingstoken(uitnodiging.uitnodigingstoken)})`,
       );
 
       if (gekoppeld.rows.length > 0) {

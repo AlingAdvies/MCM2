@@ -1,6 +1,10 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 
+import {
+  genereerUitnodigingstoken,
+  hashUitnodigingstoken,
+} from '../auth/uitnodigingstoken';
 import { DatabaseService } from '../db/database.service';
 
 /** Hoe lang support-toegang standaard geldig is. */
@@ -28,6 +32,20 @@ export interface TenantOverzicht {
   readonly naam: string;
   readonly aangemaaktOp: Date;
   readonly aantalLeden: number;
+}
+
+/**
+ * Wat het aanmaken oplevert: de tenant plus de uitnodiging voor zijn eerste
+ * beheerder.
+ *
+ * Het ruwe token staat hier één keer in en is daarna nergens meer op te vragen
+ * — de database kent alleen de hash. Raakt het kwijt, dan is opnieuw uitnodigen
+ * de weg, en dat is met opzet: een token dat je kunt navragen is een token dat
+ * een ander kan navragen.
+ */
+export interface NieuweTenantMetUitnodiging extends TenantOverzicht {
+  readonly uitnodigingstoken: string;
+  readonly uitnodigingVerlooptOp: Date;
 }
 
 export interface SupportToegang {
@@ -86,15 +104,27 @@ export class PlatformService {
   constructor(private readonly db: DatabaseService) {}
 
   /**
-   * Maakt een tenant met zijn eerste beheerder.
+   * Maakt een tenant met zijn eerste beheerder, en geeft de uitnodiging uit.
    *
    * De gebruikersrij krijgt géén `external_subject`: die is pas bekend als de
    * persoon voor het eerst inlogt bij Entra. De partiële unieke index op die
    * kolom (migratie 0009, `WHERE external_subject IS NOT NULL`) staat dat
    * uitdrukkelijk toe — precies met deze situatie in gedachten.
+   *
+   * Wat de rij wél krijgt is de hash van een uitnodigingstoken. Dat token is
+   * het bewijs dat deze toegang is toegekend, en zonder dat bewijs koppelt
+   * `clm.koppel_eerste_login()` niets (migratie 0024).
    */
-  async tenantAanmaken(invoer: NieuweTenant): Promise<TenantOverzicht> {
+  async tenantAanmaken(
+    invoer: NieuweTenant,
+  ): Promise<NieuweTenantMetUitnodiging> {
     const tenantId = crypto.randomUUID();
+
+    // Het ruwe token blijft hier, in het geheugen van deze aanroep; alleen de
+    // hash gaat de transactie in. Daarmee is er geen pad waarlangs het token
+    // alsnog in de database, een log of een queryplan belandt.
+    const token = genereerUitnodigingstoken();
+    const tokenHash = hashUitnodigingstoken(token);
 
     return this.db.withTenant(tenantId, async (tx) => {
       // ── Waarom hier geen "bestaat de naam al?"-query staat ─────────────────
@@ -120,15 +150,20 @@ export class PlatformService {
         throw fout;
       }
 
-      // koppelbaar_tot maakt dit een uitnodiging: bij zijn eerste Entra-login
-      // koppelt clm.koppel_eerste_login() de oid aan deze rij (migratie 0023).
-      // Zonder die datum is de rij niet koppelbaar en kan deze admin nooit
-      // inloggen — NULL is daar de veilige stand.
-      const gebruiker = await tx.execute<{ user_id: string }>(
-        sql`INSERT INTO clm."user" (tenant_id, full_name, email, koppelbaar_tot)
+      // Hash en vervaldatum samen maken dit een uitnodiging: bij zijn eerste
+      // Entra-login koppelt clm.koppel_eerste_login() de oid aan deze rij op
+      // vertoon van het token (migratie 0024). Ontbreekt een van beide, dan is
+      // de rij niet koppelbaar — NULL is daar de veilige stand.
+      const gebruiker = await tx.execute<{
+        user_id: string;
+        koppelbaar_tot: Date;
+      }>(
+        sql`INSERT INTO clm."user"
+              (tenant_id, full_name, email, uitnodiging_hash, koppelbaar_tot)
             VALUES (${tenantId}, ${invoer.adminNaam}, ${invoer.adminEmail},
+                    ${tokenHash},
                     now() + ${`${UITNODIGING_GELDIG_DAGEN} days`}::interval)
-            RETURNING user_id`,
+            RETURNING user_id, koppelbaar_tot`,
       );
 
       const userId = gebruiker.rows[0].user_id;
@@ -157,6 +192,8 @@ export class PlatformService {
         naam: invoer.naam,
         aangemaaktOp: rij.rows[0].created_at,
         aantalLeden: 1,
+        uitnodigingstoken: token,
+        uitnodigingVerlooptOp: gebruiker.rows[0].koppelbaar_tot,
       };
     });
   }

@@ -29,13 +29,27 @@ export const INLOGPOGING_COOKIE_ONVEILIG = 'mcm2_inlog';
 export interface Inlogpoging {
   readonly state: string;
   readonly codeVerifier: string;
+  /**
+   * Het uitnodigingstoken, alleen aanwezig wanneer de gebruiker via een
+   * uitnodigingslink binnenkwam.
+   *
+   * Reist mee om precies dezelfde reden als de twee velden hierboven: tussen de
+   * klik op de link en de terugkeer van de provider zit een omweg, en het token
+   * moet die overleven. Een aparte opslag zou een tweede mechanisme zijn voor
+   * hetzelfde probleem.
+   *
+   * Optioneel, en dat is wezenlijk: een gewone login heeft geen token en mag er
+   * niet op stuklopen.
+   */
+  readonly uitnodigingstoken?: string;
 }
 
 /** Genereert een verse inlogpoging. */
-export function nieuweInlogpoging(): Inlogpoging {
+export function nieuweInlogpoging(uitnodigingstoken?: string): Inlogpoging {
   return {
     state: randomBytes(BYTES).toString('base64url'),
     codeVerifier: randomBytes(BYTES).toString('base64url'),
+    uitnodigingstoken,
   };
 }
 
@@ -67,12 +81,28 @@ export function stateKlopt(uitCookie: string, uitCallback: unknown): boolean {
   return timingSafeEqual(a, b);
 }
 
-/** Serialiseert de poging voor in het cookie. */
+/**
+ * Serialiseert de poging voor in het cookie.
+ *
+ * De punt kan als scheidingsteken omdat base64url hem niet bevat: het alfabet
+ * is `A-Za-z0-9_-`. Een waarde kan het formaat dus niet van binnenuit breken.
+ */
 export function serialiseer(poging: Inlogpoging): string {
-  return `${poging.state}.${poging.codeVerifier}`;
+  const basis = `${poging.state}.${poging.codeVerifier}`;
+
+  return poging.uitnodigingstoken
+    ? `${basis}.${poging.uitnodigingstoken}`
+    : basis;
 }
 
-/** Leest de poging terug. Geeft `null` bij alles wat niet de juiste vorm heeft. */
+/**
+ * Leest de poging terug. Geeft `null` bij alles wat niet de juiste vorm heeft.
+ *
+ * Twee delen is een gewone login, drie een login via een uitnodigingslink.
+ * Beide worden aanvaard; alles daarbuiten niet. Dat het derde deel mag
+ * ontbreken is geen soepelheid maar noodzaak — anders zou deze wijziging elke
+ * bestaande login breken.
+ */
 export function deserialiseer(waarde: unknown): Inlogpoging | null {
   if (typeof waarde !== 'string') {
     return null;
@@ -80,9 +110,19 @@ export function deserialiseer(waarde: unknown): Inlogpoging | null {
 
   const delen = waarde.split('.');
 
-  if (delen.length !== 2 || !delen[0] || !delen[1]) {
+  if (delen.length < 2 || delen.length > 3 || !delen[0] || !delen[1]) {
     return null;
   }
 
-  return { state: delen[0], codeVerifier: delen[1] };
+  // Een aanwezig maar leeg derde deel is een kapot cookie, geen login zonder
+  // token: `a.b.` hoort niet stilzwijgend als gewone login door te gaan.
+  if (delen.length === 3 && !delen[2]) {
+    return null;
+  }
+
+  return {
+    state: delen[0],
+    codeVerifier: delen[1],
+    uitnodigingstoken: delen[2],
+  };
 }
