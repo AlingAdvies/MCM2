@@ -7,6 +7,7 @@ import {
   serialiseer,
   stateKlopt,
 } from './inlogpoging';
+import { genereerUitnodigingstoken } from './uitnodigingstoken';
 
 describe('inlogpoging', () => {
   describe('nieuweInlogpoging', () => {
@@ -107,10 +108,44 @@ describe('inlogpoging', () => {
       ['zonder scheidingsteken', 'alleenstate'],
       ['met een leeg eerste deel', '.verifier'],
       ['met een leeg tweede deel', 'state.'],
-      ['met te veel delen', 'a.b.c'],
+      ['met een leeg derde deel', 'state.verifier.'],
+      ['met te veel delen', 'a.b.c.d'],
       ['een getal', 42],
     ])('geeft null bij een cookie dat %s is', (_omschrijving, waarde) => {
       expect(deserialiseer(waarde)).toBeNull();
+    });
+  });
+
+  describe('het uitnodigingstoken over de omweg langs de provider', () => {
+    it('reist mee en komt er ongeschonden uit', () => {
+      const poging = nieuweInlogpoging('token-uit-de-link');
+
+      expect(deserialiseer(serialiseer(poging))?.uitnodigingstoken).toBe(
+        'token-uit-de-link',
+      );
+    });
+
+    it('ontbreekt bij een gewone login, en dat mag', () => {
+      // De belangrijkste van deze twee: elke bestaande login gaat langs dit
+      // pad, en die heeft geen token. Zou het veld verplicht zijn, dan zou
+      // niemand meer kunnen inloggen.
+      const poging = nieuweInlogpoging();
+
+      expect(serialiseer(poging).split('.')).toHaveLength(2);
+      expect(deserialiseer(serialiseer(poging))?.uitnodigingstoken).toBe(
+        undefined,
+      );
+    });
+
+    it('overleeft een echt token, dat base64url is', () => {
+      // Het scheidingsteken is een punt, en base64url bevat er geen. Deze test
+      // legt vast waaróm dat formaat werkt: met een alfabet dat wél punten kent
+      // zou een token het cookie van binnenuit kunnen breken.
+      const token = genereerUitnodigingstoken();
+      const poging = nieuweInlogpoging(token);
+
+      expect(token).not.toContain('.');
+      expect(deserialiseer(serialiseer(poging))?.uitnodigingstoken).toBe(token);
     });
   });
 });

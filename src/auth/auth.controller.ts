@@ -20,6 +20,7 @@ import {
   stateKlopt,
 } from './inlogpoging';
 import { cookieInstellingen } from './sessie';
+import { heeftGeldigeVorm as heeftGeldigeUitnodigingsVorm } from './uitnodigingstoken';
 import {
   TenantContextGuard,
   leesCookies,
@@ -51,8 +52,26 @@ export class AuthController {
    * cookie, en stuur de browser naar de provider.
    */
   @Get('login')
-  login(@Res() response: Response): void {
-    const { url, poging } = this.auth.beginInlog();
+  login(
+    @Res() response: Response,
+    @Query('uitnodiging') uitnodiging?: string,
+  ): void {
+    // De vorm wordt hier gecontroleerd en niet pas bij de koppeling: onzin in
+    // de query hoort niet in een cookie te belanden dat vijftien minuten
+    // meereist. Een ongeldige waarde wordt genegeerd, niet geweigerd — de
+    // login zelf mag er niet op stuklopen, die verloopt dan gewoon als een
+    // gewone login zonder uitnodiging.
+    const token = heeftGeldigeUitnodigingsVorm(uitnodiging)
+      ? uitnodiging
+      : undefined;
+
+    if (uitnodiging && !token) {
+      this.logger.warn(
+        'Inlogpoging met een uitnodigingsparameter van de verkeerde vorm — genegeerd.',
+      );
+    }
+
+    const { url, poging } = this.auth.beginInlog(token);
 
     const sessieCookie = cookieInstellingen();
     const naam = sessieCookie.secure
@@ -126,6 +145,7 @@ export class AuthController {
     const sessie = await this.auth.voltooiInlog(
       code ?? '',
       poging.codeVerifier,
+      poging.uitnodigingstoken,
     );
 
     if (!sessie) {

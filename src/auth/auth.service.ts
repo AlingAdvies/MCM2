@@ -84,8 +84,11 @@ export class AuthService {
    * configuratie. Zo hoeft er geen zesde variabele bij die altijd samen met de
    * andere verandert.
    */
-  beginInlog(): { url: string; poging: Inlogpoging } {
-    const poging = nieuweInlogpoging();
+  beginInlog(uitnodigingstoken?: string): {
+    url: string;
+    poging: Inlogpoging;
+  } {
+    const poging = nieuweInlogpoging(uitnodigingstoken);
 
     const parameters = new URLSearchParams({
       client_id: this.config.clientId,
@@ -118,6 +121,7 @@ export class AuthService {
   async voltooiInlog(
     code: string,
     codeVerifier: string,
+    uitnodigingstoken?: string,
   ): Promise<NieuweSessie | null> {
     let idToken: string;
 
@@ -144,13 +148,17 @@ export class AuthService {
       throw err;
     }
 
-    // E-mail en idp gaan alleen mee voor het geval dit een eerste login is van
-    // een uitgenodigde gebruiker. Voor iedereen die al een external_subject
+    // E-mail en token gaan alleen mee voor het geval dit een eerste login is
+    // van een uitgenodigde gebruiker. Voor iedereen die al een external_subject
     // heeft, worden ze genegeerd — clm.sessie_aanmaken() slaagt dan meteen en
     // de koppelfunctie wordt niet eens aangeroepen.
+    //
+    // Het e-mailadres komt uit het geverifieerde ID-token, het token uit het
+    // pogingcookie. Die twee moeten allebei kloppen (migratie 0024), en dat is
+    // opzet: ze komen langs verschillende wegen binnen.
     return this.sessies.aanmaken(identiteit.externalSubject, {
       email: identiteit.email,
-      identityProvider: identiteit.identityProvider,
+      uitnodigingstoken,
     });
   }
 

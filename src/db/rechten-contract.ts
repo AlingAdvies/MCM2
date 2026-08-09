@@ -190,7 +190,8 @@ export const DEFINER_FUNCTIES: Readonly<Record<string, FunctieContract>> = {
   // De leverancierstoken-lookup, spoor 2 (0003, herzien in 0006 en 0008).
   resolve_survey_token: DEFINER_STANDAARD,
 
-  // De eerste login van een uitgenodigde beheerder (0023). Koppelt een oid aan
-  // een wachtende gebruikersrij, onder vijf voorwaarden.
+  // De eerste login van een uitgenodigde beheerder (0023, herzien in 0024).
+  // Koppelt een oid aan een wachtende gebruikersrij op vertoon van het
+  // uitnodigingstoken.
   koppel_eerste_login: DEFINER_STANDAARD,
 };

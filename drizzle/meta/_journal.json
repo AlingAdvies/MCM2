@@ -169,6 +169,13 @@
       "when": 1786809600000,
       "tag": "0023_eerste_login_koppelen",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1786896000000,
+      "tag": "0024_uitnodigingstoken",
+      "breakpoints": true
     }
   ]
 }
