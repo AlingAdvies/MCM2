@@ -9,6 +9,7 @@ import { AppModule } from '../src/app.module';
 import { cookieInstellingen } from '../src/auth/sessie';
 import { SessieService } from '../src/auth/sessie.service';
 import { TEST_IDS } from './test-ids';
+import { verwijderTestdata } from './opruimen';
 
 /**
  * Beoordelaars koppelen aan een vragenlijst (fase C3, ADR-013).
@@ -64,30 +65,6 @@ interface WerkvoorraadBody {
   }>;
 }
 
-async function verwijderTestdata(client: Client) {
-  for (const tenant of [tenantA, tenantB]) {
-    await client.query('BEGIN');
-    await client.query(`SET LOCAL app.current_tenant_id = '${tenant}'`);
-    await client.query(`SET LOCAL app.current_actor = 'medewerker'`);
-    for (const tabel of [
-      'clm.template_reviewer',
-      'clm.survey_review',
-      'clm.survey_answer',
-      'clm.survey_response',
-      'clm.survey_run',
-      'clm.survey_question',
-      'clm.survey_template',
-      'clm.vendor',
-      'clm.tenant_membership',
-      'clm."user"',
-      'clm.tenant',
-    ]) {
-      await client.query(`DELETE FROM ${tabel} WHERE tenant_id = $1`, [tenant]);
-    }
-    await client.query('COMMIT');
-  }
-}
-
 describe('Beoordelaar koppelen aan een vragenlijst (e2e)', () => {
   let app: INestApplication<App>;
   let server: App;
@@ -100,7 +77,7 @@ describe('Beoordelaar koppelen aan een vragenlijst (e2e)', () => {
   beforeAll(async () => {
     client = new Client({ connectionString: process.env.DATABASE_URL });
     await client.connect();
-    await verwijderTestdata(client);
+    await verwijderTestdata(tenantA, tenantB);
 
     await client.query('BEGIN');
     await client.query(`SET LOCAL app.current_tenant_id = '${tenantA}'`);
@@ -215,7 +192,7 @@ describe('Beoordelaar koppelen aan een vragenlijst (e2e)', () => {
 
   afterAll(async () => {
     await app.close();
-    await verwijderTestdata(client);
+    await verwijderTestdata(tenantA, tenantB);
     await client.end();
   }, 30000);
 

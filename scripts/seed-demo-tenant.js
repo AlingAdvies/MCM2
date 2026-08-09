@@ -170,6 +170,33 @@ function hashToken(token) {
  * typefout op. sql.param() houdt de array bij elkaar, en de pg-driver zet hem
  * om naar het array-formaat dat Postgres verwacht.
  */
+/**
+ * De verbinding voor `--verwijder`: dezelfde database, maar als migratierol.
+ *
+ * Waarom niet gewoon MIGRATION_DATABASE_URL lezen: die staat in `.env` en wijst
+ * naar productie. Wordt hij niet expliciet meegegeven, dan vult dotenv hem aan
+ * — en dan wist dit script in de verkeerde database. Dat patroon kostte op
+ * 2026-08-08 bijna een ongeluk in een e2e-suite.
+ *
+ * Vandaar: alleen gebruiken als hij op dezelfde database uitkomt als de
+ * opgegeven URL. Anders de rol vervangen en verder alles laten staan.
+ */
+function opruimUrl(runtimeUrl) {
+  const doel = new URL(runtimeUrl);
+  const expliciet = process.env.MIGRATION_DATABASE_URL;
+
+  if (expliciet) {
+    const gegeven = new URL(expliciet);
+
+    if (gegeven.host === doel.host && gegeven.pathname === doel.pathname) {
+      return expliciet;
+    }
+  }
+
+  doel.username = 'clm_migrator';
+  return doel.toString();
+}
+
 function arrayOfNull(waarde) {
   return Array.isArray(waarde) && waarde.length > 0
     ? sql.param(waarde)
@@ -914,7 +941,23 @@ async function main() {
   ) {
     process.exit(1);
   }
-  const pool = new Pool({ connectionString: url });
+
+  // ── Opruimen gaat via de migratierol, seeden via de runtime-rol ────────────
+  //
+  // Sinds migratie 0022 heeft de applicatierol geen DELETE op clm.survey_review
+  // en clm.response_note: een oordeel of notitie wordt zacht verwijderd. Dat is
+  // de stand op productie, en dit script hoort die te delen.
+  //
+  // Opruimen is daarmee geen applicatiehandeling meer maar een beheerhandeling.
+  // Dat is geen omweg om de beperking heen — de applicatie kán het niet, en dat
+  // is het punt. De wegwerpeis hierboven staat er nog steeds vóór.
+  //
+  // Seeden blijft bewust op de runtime-rol: dat moet werken met exact de rechten
+  // die de applicatie heeft, anders bewijst een geslaagde seed niets over of de
+  // data langs de normale weg bereikbaar is.
+  const verbinding = moetVerwijderen ? opruimUrl(url) : url;
+
+  const pool = new Pool({ connectionString: verbinding });
   const db = drizzle(pool);
 
   try {
