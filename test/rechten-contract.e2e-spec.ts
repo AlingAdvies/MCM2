@@ -1,10 +1,6 @@
 import { Client } from 'pg';
 
-import {
-  DEFINER_FUNCTIES,
-  TABELRECHTEN,
-  type Tabelrechten,
-} from '../src/db/rechten-contract';
+import { DEFINER_FUNCTIES, TABELRECHTEN } from '../src/db/rechten-contract';
 import { inventariseerSchema } from '../src/db/schema-inventory';
 
 /**
@@ -118,7 +114,7 @@ describe('Rechtencontract (e2e)', () => {
           continue;
         }
 
-        const verwachtGesorteerd = sorteer(verwacht as Tabelrechten);
+        const verwachtGesorteerd = sorteer(verwacht);
 
         if (gevonden.join(',') !== verwachtGesorteerd.join(',')) {
           afwijkingen.push(
@@ -232,9 +228,9 @@ describe('Rechtencontract (e2e)', () => {
         const contract = DEFINER_FUNCTIES[rij.proname];
         if (!contract) continue; // gedekt door de test hierboven
 
-        const gevonden = sorteer(
-          rij.rollen ? rij.rollen.split(',') : [],
-        ).join(', ');
+        const gevonden = sorteer(rij.rollen ? rij.rollen.split(',') : []).join(
+          ', ',
+        );
         const verwacht = sorteer(contract.execute).join(', ');
 
         if (gevonden !== verwacht) {

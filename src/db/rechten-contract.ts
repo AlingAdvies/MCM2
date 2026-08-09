@@ -54,13 +54,15 @@
 
 /** De rechten die één rol op één tabel heeft. `[]` betekent: geen enkel recht. */
 export type Tabelrechten = readonly (
-  | 'SELECT'
-  | 'INSERT'
-  | 'UPDATE'
-  | 'DELETE'
+  'SELECT' | 'INSERT' | 'UPDATE' | 'DELETE'
 )[];
 
-const LEZEN_EN_SCHRIJVEN: Tabelrechten = ['SELECT', 'INSERT', 'UPDATE', 'DELETE'];
+const LEZEN_EN_SCHRIJVEN: Tabelrechten = [
+  'SELECT',
+  'INSERT',
+  'UPDATE',
+  'DELETE',
+];
 
 /** Toevoegen en bijwerken mag, verwijderen niet. */
 const NIET_VERWIJDEREN: Tabelrechten = ['SELECT', 'INSERT', 'UPDATE'];

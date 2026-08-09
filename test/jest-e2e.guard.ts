@@ -110,11 +110,7 @@ function zonderWachtwoord(url: string): string {
  */
 const TE_CONTROLEREN = ['DATABASE_URL', 'MIGRATION_DATABASE_URL'] as const;
 
-function foutmelding(
-  variabele: string,
-  url: string,
-  wat: string,
-): string {
+function foutmelding(variabele: string, url: string, wat: string): string {
   return (
     '\n\n' +
     '  E2E GESTOPT — deze database is geen wegwerpdatabase.\n\n' +

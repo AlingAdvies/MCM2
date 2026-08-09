@@ -9,6 +9,7 @@ import { AppModule } from '../src/app.module';
 import { cookieInstellingen } from '../src/auth/sessie';
 import { SessieService } from '../src/auth/sessie.service';
 import { TEST_IDS } from './test-ids';
+import { verwijderTestdata } from './opruimen';
 
 /**
  * Beoordelen van een ingediende respons (fase C2 van het surveybeheerplan).
@@ -69,32 +70,6 @@ interface LijstBody {
   }>;
 }
 
-async function verwijderTestdata(client: Client) {
-  for (const tenant of [tenantA, tenantB]) {
-    await client.query('BEGIN');
-    await client.query(`SET LOCAL app.current_tenant_id = '${tenant}'`);
-    // De actor moet 'medewerker' zijn: zonder dat weigert de policy op
-    // survey_review élke rij, ook bij het opruimen. Dat is precies wat de
-    // policy hoort te doen.
-    await client.query(`SET LOCAL app.current_actor = 'medewerker'`);
-    for (const tabel of [
-      'clm.survey_review',
-      'clm.survey_answer',
-      'clm.survey_response',
-      'clm.survey_run',
-      'clm.survey_question',
-      'clm.survey_template',
-      'clm.vendor',
-      'clm.tenant_membership',
-      'clm."user"',
-      'clm.tenant',
-    ]) {
-      await client.query(`DELETE FROM ${tabel} WHERE tenant_id = $1`, [tenant]);
-    }
-    await client.query('COMMIT');
-  }
-}
-
 describe('Beoordelen van een respons (e2e)', () => {
   // Met de generic erbij: zonder <App> geeft getHttpServer() `any` terug en
   // slaat no-unsafe-assignment aan.
@@ -108,7 +83,7 @@ describe('Beoordelen van een respons (e2e)', () => {
   beforeAll(async () => {
     client = new Client({ connectionString: process.env.DATABASE_URL });
     await client.connect();
-    await verwijderTestdata(client);
+    await verwijderTestdata(tenantA, tenantB);
 
     await client.query('BEGIN');
     await client.query(`SET LOCAL app.current_tenant_id = '${tenantA}'`);
@@ -229,7 +204,7 @@ describe('Beoordelen van een respons (e2e)', () => {
 
   afterAll(async () => {
     await app.close();
-    await verwijderTestdata(client);
+    await verwijderTestdata(tenantA, tenantB);
     await client.end();
   }, 30000);
 
