@@ -33,6 +33,21 @@ import { Client } from 'pg';
  * een oude wegwerpcontainer zijn — maar net zo goed een kopie van productie van
  * vóór die migratie. Doorgaan zou betekenen dat de bescherming zwijgt op
  * precies het moment dat je hem nodig hebt.
+ *
+ * ── Waarom BEIDE verbindingen worden gecontroleerd ──────────────────────────
+ *
+ * Toegevoegd op 2026-08-09. Tot dan keek deze poort alleen naar DATABASE_URL,
+ * en dat was een gat zo groot als het probleem dat hij moest oplossen:
+ * MIGRATION_DATABASE_URL staat in `.env` en wijst naar Supabase.
+ *
+ * Op 2026-08-08 liep een e2e-suite daar doorheen. `platformbeheer.e2e-spec.ts`
+ * had de migratierol nodig om clm.platform_admin te vullen, las
+ * MIGRATION_DATABASE_URL, en dotenv vulde die aan met de productie-URL. De
+ * eerste query faalde toevallig op een ontbrekende tabel; anders had die test
+ * rijen in de productiedatabase aangemaakt.
+ *
+ * Elke verbinding die een suite opent hoort door dezelfde poort. Wordt er ooit
+ * een derde toegevoegd, dan hoort die hier in deze lijst — niet ernaast.
  */
 
 const UITWEG = 'MCM2_E2E_ONBESCHERMD';
@@ -86,43 +101,66 @@ function zonderWachtwoord(url: string): string {
   }
 }
 
-beforeAll(async () => {
-  const url = process.env.DATABASE_URL;
+/**
+ * Elke verbinding die een e2e-suite mag openen.
+ *
+ * Beide moeten door de poort. MIGRATION_DATABASE_URL staat in `.env` en wijst
+ * naar Supabase; een suite die hem leest zonder dat hij is overschreven, praat
+ * tegen productie. Zie de toelichting bovenaan.
+ */
+const TE_CONTROLEREN = ['DATABASE_URL', 'MIGRATION_DATABASE_URL'] as const;
 
-  if (!url) {
-    // Geen database: de suites die er een nodig hebben falen vanzelf met een
-    // duidelijke fout. Hier stoppen zou de read-only controles onterecht
-    // blokkeren.
-    return;
-  }
-
-  if (process.env[UITWEG] === 'ja') {
-    console.warn(
-      `\n${UITWEG}=ja — de omgevingscontrole is overgeslagen.\n` +
-        `Doelwit: ${zonderWachtwoord(url)}\n`,
-    );
-    return;
-  }
-
-  const { soort, reden } = await leesOmgevingssoort(url);
-
-  if (soort === 'wegwerp') return;
-
-  const wat = soort ? `gemarkeerd als '${soort}'` : (reden ?? 'onbekend');
-
-  throw new Error(
+function foutmelding(
+  variabele: string,
+  url: string,
+  wat: string,
+): string {
+  return (
     '\n\n' +
-      '  E2E GESTOPT — deze database is geen wegwerpdatabase.\n\n' +
-      `  Doelwit: ${zonderWachtwoord(url)}\n` +
-      `  Status:  ${wat}\n\n` +
-      '  Deze suites maken tenants aan en voeren DELETE uit. Op een database\n' +
-      '  die niet als wegwerp is gemarkeerd, is dat gegevensverlies.\n\n' +
-      '  Dit gebeurde op 2026-08-07 met de demo-database: de demo-tenant\n' +
-      '  verdween en er bleven 400 testleveranciers achter.\n\n' +
-      '  Een verse wegwerpdatabase opzetten:\n' +
-      '    zie docs/runbooks/commandos-en-omgeving.md\n\n' +
-      '  Is dit wel een wegwerpdatabase, markeer hem dan:\n' +
-      '    node scripts/markeer-wegwerp.js\n\n' +
-      `  Alleen als je zeker weet wat je doet: ${UITWEG}=ja\n`,
+    '  E2E GESTOPT — deze database is geen wegwerpdatabase.\n\n' +
+    `  Variabele: ${variabele}\n` +
+    `  Doelwit:   ${zonderWachtwoord(url)}\n` +
+    `  Status:    ${wat}\n\n` +
+    '  Deze suites maken tenants aan en voeren DELETE uit. Op een database\n' +
+    '  die niet als wegwerp is gemarkeerd, is dat gegevensverlies.\n\n' +
+    '  Dit gebeurde op 2026-08-07 met de demo-database: de demo-tenant\n' +
+    '  verdween en er bleven 400 testleveranciers achter. En op 2026-08-08\n' +
+    '  praatte een suite via MIGRATION_DATABASE_URL tegen productie — dotenv\n' +
+    '  vult die aan wanneer je hem niet zelf meegeeft.\n\n' +
+    '  Een verse wegwerpdatabase opzetten:\n' +
+    '    zie docs/runbooks/commandos-en-omgeving.md\n\n' +
+    '  Is dit wel een wegwerpdatabase, markeer hem dan:\n' +
+    '    node scripts/markeer-wegwerp.js\n\n' +
+    `  Alleen als je zeker weet wat je doet: ${UITWEG}=ja\n`
   );
+}
+
+beforeAll(async () => {
+  if (process.env[UITWEG] === 'ja') {
+    console.warn(`\n${UITWEG}=ja — de omgevingscontrole is overgeslagen.\n`);
+    return;
+  }
+
+  for (const variabele of TE_CONTROLEREN) {
+    const url = process.env[variabele];
+
+    if (!url) {
+      // Niet gezet: de suites die deze verbinding nodig hebben falen vanzelf
+      // met een duidelijke fout. Hier stoppen zou de read-only controles
+      // onterecht blokkeren.
+      continue;
+    }
+
+    const { soort, reden } = await leesOmgevingssoort(url);
+
+    if (soort === 'wegwerp') continue;
+
+    throw new Error(
+      foutmelding(
+        variabele,
+        url,
+        soort ? `gemarkeerd als '${soort}'` : (reden ?? 'onbekend'),
+      ),
+    );
+  }
 }, 30000);
