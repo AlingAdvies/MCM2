@@ -317,6 +317,14 @@ export const TEST_IDS = {
     beheerder: id('76'),
     gewoneGebruiker: id('77'),
   },
+  'eerste-login': {
+    tenant: id('78'),
+    /** Tweede tenant, om een dubbel e-mailadres uit te lokken. */
+    tenantTweede: id('79'),
+    uitgenodigd: id('7e'),
+    /** Iemand die al een oid heeft — mag nooit overschreven worden. */
+    bestaand: id('7f'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */

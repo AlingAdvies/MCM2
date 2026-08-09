@@ -6,6 +6,16 @@ import { DatabaseService } from '../db/database.service';
 /** Hoe lang support-toegang standaard geldig is. */
 export const SUPPORT_TOEGANG_UREN = 8;
 
+/**
+ * Hoe lang een uitnodiging voor een eerste admin geldig blijft.
+ *
+ * Negentig dagen: ruim genoeg voor een klant die een paar weken nodig heeft om
+ * te beginnen, kort genoeg om niet jaren een koppelbare rij te laten staan.
+ * Verloopt hij, dan moet de platformbeheerder opnieuw uitnodigen — een
+ * zichtbare handeling in plaats van een deur die open blijft.
+ */
+export const UITNODIGING_GELDIG_DAGEN = 90;
+
 export interface NieuweTenant {
   readonly naam: string;
   /** Wordt de eerste admin. Zijn oid volgt bij de eerste login. */
@@ -110,9 +120,14 @@ export class PlatformService {
         throw fout;
       }
 
+      // koppelbaar_tot maakt dit een uitnodiging: bij zijn eerste Entra-login
+      // koppelt clm.koppel_eerste_login() de oid aan deze rij (migratie 0023).
+      // Zonder die datum is de rij niet koppelbaar en kan deze admin nooit
+      // inloggen — NULL is daar de veilige stand.
       const gebruiker = await tx.execute<{ user_id: string }>(
-        sql`INSERT INTO clm."user" (tenant_id, full_name, email)
-            VALUES (${tenantId}, ${invoer.adminNaam}, ${invoer.adminEmail})
+        sql`INSERT INTO clm."user" (tenant_id, full_name, email, koppelbaar_tot)
+            VALUES (${tenantId}, ${invoer.adminNaam}, ${invoer.adminEmail},
+                    now() + ${`${UITNODIGING_GELDIG_DAGEN} days`}::interval)
             RETURNING user_id`,
       );
 

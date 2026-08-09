@@ -30,6 +30,17 @@ export interface SessieContext {
   readonly role: string;
 }
 
+/**
+ * De claims die een eerste login mag gebruiken om zich te koppelen.
+ *
+ * Alleen bij de allereerste login van een uitgenodigde gebruiker; daarna doet
+ * `external_subject` het werk. Zie migratie 0023 voor de vijf voorwaarden.
+ */
+export interface EersteLoginGegevens {
+  readonly email?: string;
+  readonly identityProvider?: string;
+}
+
 /** Wat een geslaagde login oplevert: de context plus het ruwe token. */
 export interface NieuweSessie extends SessieContext {
   /**
@@ -65,13 +76,40 @@ export class SessieService {
    * Entra inloggen zonder in MCM2 bekend te zijn. Authenticatie is niet
    * hetzelfde als autorisatie.
    */
-  async aanmaken(externalSubject: string): Promise<NieuweSessie | null> {
+  async aanmaken(
+    externalSubject: string,
+    uitnodiging?: EersteLoginGegevens,
+  ): Promise<NieuweSessie | null> {
     const token = genereerSessieToken();
     const hash = hashSessieToken(token);
 
-    const resultaat = await this.db.db.execute<SessieRij>(
+    let resultaat = await this.db.db.execute<SessieRij>(
       sql`SELECT * FROM clm.sessie_aanmaken(${hash}, ${externalSubject}, ${GELDIGHEID_INTERVAL}::interval)`,
     );
+
+    // Geen sessie kan twee dingen betekenen: deze persoon hoort er niet bij, óf
+    // hij is uitgenodigd en logt voor het eerst in. Dat tweede geval krijgt één
+    // kans om zichzelf te koppelen; daarna verloopt het als een gewone login.
+    //
+    // De volgorde is opzet: eerst de gewone weg proberen. Een bestaande
+    // gebruiker raakt clm.koppel_eerste_login() daarmee nooit.
+    if (resultaat.rows.length === 0 && uitnodiging?.email) {
+      const gekoppeld = await this.db.db.execute<{ user_id: string }>(
+        sql`SELECT * FROM clm.koppel_eerste_login(
+              ${externalSubject}, ${uitnodiging.email},
+              ${uitnodiging.identityProvider ?? null})`,
+      );
+
+      if (gekoppeld.rows.length > 0) {
+        this.logger.log(
+          'Eerste login van een uitgenodigde gebruiker — identiteit gekoppeld.',
+        );
+
+        resultaat = await this.db.db.execute<SessieRij>(
+          sql`SELECT * FROM clm.sessie_aanmaken(${hash}, ${externalSubject}, ${GELDIGHEID_INTERVAL}::interval)`,
+        );
+      }
+    }
 
     const rij = resultaat.rows[0];
 
