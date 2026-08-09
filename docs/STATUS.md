@@ -1,9 +1,113 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-08-07, avond (**de statusketen werkt van database tot scherm.** Vier PR's gemerged — goedkeuren (0017), notities (0018), werkvoorraad contractmanager, en de wegwerpmarkering (0019). Beide schermen zijn gebouwd en met echte data bekeken. **Twee PR's staan open, allebei groen, en die zijn het startpunt voor morgen.**)
 
-## 🔵 MORGEN BEGINNEN: twee open PR's, in deze volgorde
+2026-08-09, avond (**de eerste echte tenant leeft, en de frontend is nu de
+zwakste schakel.** Zeven PR's gemerged: uitnodigingstoken (0024), rechtencontract
+(0022), antwoordadres per tenant (0025), tenantinstellingen, uitvragen per
+leverancier, ADR-016 en de demo-seed naar een bestaande tenant. Productie staat
+op 0025. Geen open PR's meer.)
+
+## 🔵 MORGEN BEGINNEN: het frontend-ontwerp
+
+Alle PR's zijn gemerged; er staat niets te wachten. Het startpunt is een
+**observatie van de eigenaar**, en die is de moeite waard om letterlijk te
+bewaren:
+
+> "mijn indruk is dat er nu prima veel in de back end staat, maar dat we veel
+> meer aandacht moeten gaan geven aan het front end design."
+
+Aanleiding: hij klikte op Siemens en zag twee uitvragen staan, maar het
+statusscherm meldde niets dat op zijn beoordeling wachtte. Geen fout — het
+scherm staat standaard op "mijn lijst", en hij is van geen enkele leverancier
+eigenaar. De schakelaar naar "hele organisatie" staat er, zonder enige
+aanwijzing dat je hem nodig hebt.
+
+Dat is symptomatisch: **de backend weet meer dan de frontend toont.**
+
+### De drie stappen, in deze volgorde
+
+| # | Wat | Waarom hier |
+|---|---|---|
+| 1 | **Lege toestanden repareren** | Elke lege lijst zegt waarom hij leeg is en wat je kunt doen. Een halve slag werk, haalt de scherpste randen eraf. |
+| 2 | **Ontwerpprincipes vastleggen** | Zodat het volgende scherm niet opnieuw bedacht wordt. Maakt stap 3 goedkoper. |
+| 3 | **Eén startscherm: "wat staat er op mij te wachten"** | De vraag waarmee je de app opent. MVM_V2 heeft daar een cockpit voor. |
+
+### MVM_V2 als bron, niet als sjabloon
+
+MVM_V2 heeft een uitgewerkte frontend en het is verstandig ernaar te kijken —
+dat leverde vandaag `VendorSurveyPanel` op, en daar is het uitvraagpaneel op
+gebaseerd.
+
+Maar het draait op **mock data**. De schermen zijn ontworpen zonder de
+beperkingen van echte queries, echte rollen en RLS. Klakkeloos overnemen levert
+schermen op die er goed uitzien en niet kloppen: MVM_V2 toont een score
+(`4.2 / 5` met trendpijl) die MCM2 niet kan berekenen.
+
+**De werkwijze die vandaag werkte:** kijken hoe MVM_V2 het oplost, en dan bouwen
+wat MCM2 werkelijk kan — met de status in de taal van de gebruiker in plaats van
+die van de database.
+
+### Los daarvan: de demo-seed wijst alles toe aan demo-gebruikers
+
+Siemens hoort bij "Sophie van der Berg", een verzonnen gebruiker. De echte
+beheerder is van **nul** leveranciers eigenaar, en daardoor is zijn "mijn lijst"
+altijd leeg.
+
+Voor een demo-omgeving waarin hij de hoofdrol speelt is dat onhandig. Een deel
+van de leveranciers aan hem toewijzen maakt "mijn lijst" pas zinvol.
+
+### Wat er blijft liggen, ongewijzigd
+
+- **Issue #75** — gebruikers en rechten per tenant. Een tweede persoon toegang
+  geven tot AlingAdvies kan alleen nog met de hand in de database.
+- **Issue #77** — het selectiescherm voor uitnodigingen. Niet meer geblokkeerd;
+  het criterium staat sinds 2026-08-09 in de issue.
+- De Entra-naam van de platformbeheerder staat op `unknown` (één veld in het
+  portaal), en je ziet nergens in de app in welke omgeving je zit.
+
+---
+
+## Wat er op 2026-08-09 is gebouwd
+
+**De eerste echte tenant, van aanmaken tot inloggen.** AlingAdvies bestaat in
+productie, met een uitnodigingstoken, een gekoppelde Entra-identiteit en 21
+leveranciers.
+
+| Migratie | Wat |
+|---|---|
+| 0022 | rechten expliciet per tabel (het rechtencontract) |
+| 0023 | eerste-login koppeling |
+| **0024** | uitnodigingstoken — verving de `idp`-eis uit 0023 |
+| **0025** | antwoordadres per tenant |
+
+**ADR-016** legt vast waar de grens ligt: de identity provider doet identiteit,
+MCM2 doet toegang, en Entra moet inwisselbaar zijn voor bijvoorbeeld Cognito.
+Gemeten, niet beweerd — `src/` bevat geen enkele providernaam.
+
+**Twee identiteiten, twee rollen.** `kees@alingadvies.nl` is platformbeheerder;
+`cmaling+alingadvies@gmail.com` is admin van AlingAdvies. Eén Entra-oid hoort bij
+precies één gebruikersrij, en dat is de reden dat één adres voor twee rollen niet
+werkt.
+
+> ### ⚠ Wat er op 2026-08-09 misging
+>
+> **Een testrun verstuurde echte mail.** `verify:volledig` stuurde een
+> uitnodiging naar een bestaand postvak: `platform-routes.e2e-spec.ts` gebruikte
+> een echt adres als testgegeven, en de e2e-run erft `RESEND_API_KEY` uit `.env`.
+> Sinds de platformroute uitnodigingen verstuurt kwamen die twee samen.
+>
+> Opgelost op twee niveaus: het adres is nu `voorbeeld.nl`, én
+> `jest-e2e.setup.ts` wist de mailsleutel. `geen-echte-mail.e2e-spec.ts` bewaakt
+> dat. Alleen het adres vervangen zou beschermen tegen wat vandaag is
+> opgeschreven, niet tegen de volgende suite.
+>
+> **De seed strandde halverwege op productie.** Leveranciers erin,
+> vragenlijsten niet: `seed-demo-tenant.js` gaf `--extern` niet door aan het
+> subscript. Geen schade (beide zijn idempotent), maar de generale repetitie ving
+> het niet — die draaide tegen localhost, waar die controle niet aanslaat.
+
+## 🔵 EERDER (2026-08-07): twee open PR's, in deze volgorde
 
 Allebei groen op CI, allebei wachtend op akkoord van de eigenaar.
 
