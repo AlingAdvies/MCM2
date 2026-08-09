@@ -562,6 +562,87 @@ describe('Vragenlijst-beheerroutes (e2e)', () => {
     });
   });
 
+  describe('de uitvragen van één leverancier', () => {
+    /**
+     * ── Waarom deze route bestaat ─────────────────────────────────────────
+     *
+     * Op 2026-08-09 nodigde de eigenaar een leverancier uit, kreeg de mail,
+     * vulde de vragenlijst in en diende hem in — en kon in de app nergens
+     * terugvinden dát hij hem had uitgestuurd. De data stond er wel, maar
+     * alleen te vinden via Rondes, en dat is de omgekeerde vraag van wat een
+     * contractmanager stelt.
+     */
+    it('toont wat er bij deze leverancier loopt', async () => {
+      const antwoord = await request(server)
+        .get(`/admin/survey/vendors/${VENDOR_A}/uitvragen`)
+        .set('Cookie', cookieA)
+        .expect(200);
+
+      const { uitvragen } = antwoord.body as {
+        uitvragen: Array<Record<string, unknown>>;
+      };
+
+      expect(uitvragen).toHaveLength(1);
+      expect(uitvragen[0].responseId).toBe(RESPONSE_A);
+      expect(uitvragen[0].runId).toBe(RUN_A);
+      expect(uitvragen[0].status).toBe('pending');
+      expect(uitvragen[0].ingediendOp).toBeNull();
+      expect(uitvragen[0].templateNaam).toBeTruthy();
+    });
+
+    it('lekt het token niet', async () => {
+      // Het paneel toont de status van een uitvraag, niet de sleutel ernaartoe.
+      // Zou de hash meekomen, dan staat sleutelmateriaal in een scherm dat
+      // iedereen met een sessie mag openen.
+      const antwoord = await request(server)
+        .get(`/admin/survey/vendors/${VENDOR_A}/uitvragen`)
+        .set('Cookie', cookieA)
+        .expect(200);
+
+      const ruw = JSON.stringify(antwoord.body);
+
+      expect(ruw).not.toContain(TOKEN_HASH);
+      expect(ruw).not.toContain('token');
+    });
+
+    it('laat een reviewer meekijken', async () => {
+      // Lezen mag: wie beoordeelt, hoort te zien wat er bij een leverancier
+      // loopt. Dezelfde afweging als bij rondes en vragenlijsten.
+      await request(server)
+        .get(`/admin/survey/vendors/${VENDOR_A}/uitvragen`)
+        .set('Cookie', cookieReviewer)
+        .expect(200);
+    });
+
+    it('geeft een lege lijst voor een leverancier van een andere tenant', async () => {
+      // Geen 403 maar niets: dat een vendorId elders bestaat is zelf al
+      // informatie. RLS doet het werk, de route hoeft niets te weten.
+      const antwoord = await request(server)
+        .get(`/admin/survey/vendors/${VENDOR_A}/uitvragen`)
+        .set('Cookie', cookieB)
+        .expect(200);
+
+      expect((antwoord.body as { uitvragen: unknown[] }).uitvragen).toEqual([]);
+    });
+
+    it('geeft een lege lijst voor een onbekende leverancier', async () => {
+      const antwoord = await request(server)
+        .get(
+          '/admin/survey/vendors/00000000-0000-0000-0000-00000000dead/uitvragen',
+        )
+        .set('Cookie', cookieA)
+        .expect(200);
+
+      expect((antwoord.body as { uitvragen: unknown[] }).uitvragen).toEqual([]);
+    });
+
+    it('weigert zonder sessie', async () => {
+      await request(server)
+        .get(`/admin/survey/vendors/${VENDOR_A}/uitvragen`)
+        .expect(401);
+    });
+  });
+
   describe('onbekende id’s', () => {
     it('geeft 404 op een niet-bestaande vragenlijst', async () => {
       await request(server)
