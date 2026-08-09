@@ -91,6 +91,28 @@ export interface RondeSamenvatting {
   aantalIngediend: number;
 }
 
+/**
+ * Eén uitvraag zoals hij op de leverancierspagina getoond wordt.
+ *
+ * Bewust vanuit de leverancier gezien en niet vanuit de ronde: wat een
+ * contractmanager wil weten is "wat loopt er bij Siemens", niet "wie zat er in
+ * ronde 3". Vandaar dat de respons hier de hoofdzaak is en de ronde de context.
+ */
+export interface VendorUitvraag {
+  responseId: string;
+  runId: string;
+  templateNaam: string;
+  /** `pending`, `submitted` of `revoked`. */
+  status: string;
+  isTest: boolean;
+  startedAt: string | null;
+  verlooptOp: string | null;
+  ingediendOp: string | null;
+  /** Waar de hele ronde is ingetrokken; dan telt deze uitvraag niet meer. */
+  rondeIngetrokken: boolean;
+  aantalBeoordelingen: number;
+}
+
 /** Eén deelnemer aan een ronde. */
 export interface DeelnemerSamenvatting {
   responseId: string;
@@ -452,6 +474,87 @@ export class VragenlijstBeheerService {
         );
 
         return resultaat.rows.map((r) => this.naarRonde(r));
+      },
+      'medewerker',
+    );
+  }
+
+  /**
+   * De uitvragen van één leverancier, nieuwste eerst.
+   *
+   * ── Waarom deze route bestaat ───────────────────────────────────────────────
+   *
+   * Op 2026-08-09 nodigde de eigenaar een leverancier uit, kreeg de mail,
+   * vulde de vragenlijst in en diende hem in — en kon in de app nergens
+   * terugvinden dát hij hem had uitgestuurd, laat staan dat er antwoord was.
+   *
+   * De data stond er wel. Alleen: wie wil weten hoe het met één leverancier
+   * staat, moet bij Rondes zijn en daar de juiste ronde zoeken. Dat is de
+   * omgekeerde vraag van wat een contractmanager stelt — die kijkt naar de
+   * leverancier, niet naar de ronde.
+   *
+   * MVM_V2 lost dat op met een `VendorSurveyPanel` op de leverancierspagina
+   * (src/shared/components/VendorSurveyPanel.tsx). Deze methode is de
+   * databron daarvoor.
+   *
+   * ── Wat er bewust niet in zit ───────────────────────────────────────────────
+   *
+   * Scores. MVM_V2 toont er een (`4.2 / 5` met een trendpijl), maar dat vraagt
+   * een scoreberekening die MCM2 niet heeft. Liever tonen wat er is —
+   * uitgenodigd, ingediend, beoordeeld — dan een getal dat nergens op rust.
+   */
+  async uitvragenVanVendor(
+    tenantId: string,
+    vendorId: string,
+  ): Promise<VendorUitvraag[]> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const { rows } = await tx.execute<{
+          response_id: string;
+          run_id: string;
+          template_naam: string;
+          status: string;
+          is_test: boolean;
+          started_at: Date | null;
+          expires_at: Date | null;
+          submitted_at: Date | null;
+          run_status: string;
+          revoked_at: Date | null;
+          aantal_beoordelingen: string;
+        }>(
+          sql`SELECT resp.response_id,
+                     run.run_id,
+                     t.name          AS template_naam,
+                     resp.status,
+                     run.is_test,
+                     run.started_at,
+                     resp.expires_at,
+                     resp.submitted_at,
+                     run.status      AS run_status,
+                     run.revoked_at,
+                     (SELECT count(*) FROM clm.survey_review rev
+                       WHERE rev.response_id = resp.response_id
+                         AND rev.deleted_at IS NULL) AS aantal_beoordelingen
+                FROM clm.survey_response resp
+                JOIN clm.survey_run run ON run.run_id = resp.run_id
+                JOIN clm.survey_template t ON t.template_id = run.template_id
+               WHERE resp.vendor_id = ${vendorId}
+               ORDER BY run.started_at DESC NULLS LAST, t.name`,
+        );
+
+        return rows.map((r) => ({
+          responseId: r.response_id,
+          runId: r.run_id,
+          templateNaam: r.template_naam,
+          status: r.status,
+          isTest: r.is_test,
+          startedAt: iso(r.started_at),
+          verlooptOp: iso(r.expires_at),
+          ingediendOp: iso(r.submitted_at),
+          rondeIngetrokken: r.revoked_at !== null,
+          aantalBeoordelingen: getal(r.aantal_beoordelingen),
+        }));
       },
       'medewerker',
     );

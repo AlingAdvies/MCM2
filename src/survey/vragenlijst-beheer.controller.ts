@@ -352,6 +352,29 @@ export class VragenlijstBeheerController {
     return { werkvoorraad, scope: heleOrganisatie ? 'organisatie' : 'mij' };
   }
 
+  /**
+   * De uitvragen van één leverancier — de databron voor het paneel op zijn
+   * detailpagina.
+   *
+   * Geen `@VereistRol`: dit is lezen, en een beoordelaar mag zien wat er bij
+   * een leverancier loopt. Dezelfde afweging als bij `runs` en `templates`.
+   *
+   * De vendorId komt uit het pad, de tenant uit de sessie. RLS zorgt dat een
+   * vendorId uit een andere tenant hier niets oplevert — geen 403 maar een lege
+   * lijst, want het bestaan van die leverancier is zelf al informatie.
+   */
+  @Get('vendors/:id/uitvragen')
+  async uitvragenVanVendor(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+  ) {
+    const sessie = request.sessie!;
+
+    const uitvragen = await this.beheer.uitvragenVanVendor(sessie.tenantId, id);
+
+    return { uitvragen };
+  }
+
   /** Wie er aan deze vragenlijst gekoppeld zijn als beoordelaar. */
   @Get('templates/:id/reviewers')
   async reviewers(@Req() request: RequestMetSessie, @Param('id') id: string) {
