@@ -8,6 +8,19 @@ samenhang met de architectuur — productiedatabase, backup, backend en frontend
 > datastructuur met alle cijfers, lagen en relaties. De rest van het document is
 > de onderbouwing. Voorgestelde visuele opbouw staat in §12.
 
+**Verhouding tot de runbooks.** Dit document beschrijft *waarom* er zo getest
+wordt. Het *hoe* staat in `docs/runbooks/`, en dat blijft daar leidend:
+
+| Runbook | Waarvoor |
+|---|---|
+| `commandos-en-omgeving.md` | welk commando bestaat, waar praat het naartoe, wat mag nooit |
+| `zelf-testen.md` | de demo-omgeving gebruiken |
+| `otap-doorloop.md` | de volledige doorloop naar productie-images |
+| `backupcontrole.md` | de dagelijkse dump nalopen |
+| `supabase-verificatie-en-restoretest.md` | herstel beproeven |
+
+Bij twijfel over een commando of doelwit: het runbook wint van dit document.
+
 ---
 
 ## 1. Het uitgangspunt
@@ -214,6 +227,45 @@ achterloopt zijn twee verschillende dingen.
 | `src/db/rechten-contract.ts` | legt vast wat de applicatierol mág |
 | `scripts/db-doelwit.js` | hostcontrole + `--extern`-bevestiging voor scripts |
 | `scripts/markeer-wegwerp.js` | de enige manier om een database als wegwerp te markeren |
+
+### Poorten — wie claimt wat
+
+| Poort | Wie | Wanneer |
+|---|---|---|
+| 55440 | handmatige wegwerpdatabase | als je hem zelf opzet |
+| 55441 | `verify:volledig` | tijdens stap 1 |
+| 55450 | `mcm2demo` | zolang de demo staat |
+| 5001 | API in de doorloopstack | `verify:volledig` en `npm run demo` |
+| 3000 | frontend | idem |
+
+`verify:volledig` faalt op een bezette 55441 met "geen testdatabase kunnen
+starten" — een melding die naar de verkeerde oorzaak wijst. Het script sluit
+bewust niets zelf af: een server op 3000 of 5001 kan van een ander project zijn.
+
+### De valkuil van gedeelde suites
+
+Alle e2e-suites delen één database. Een suite die los groen draait kan de
+volledige run alsnog rood maken, en welke suite dan omvalt hangt af van de
+volgorde — de vervelendste faalvorm die er is, want hij ziet eruit als toeval.
+
+**Vier unieke sleutels hebben géén `tenant_id` erin.** Je eigen tenant beschermt
+je dus niet:
+
+| Sleutel | Op | Oplossing |
+|---|---|---|
+| `survey_response_token_hash_key` | `survey_response.token_hash` | eigen herhaald teken per suite |
+| `tenant_name_key` | `tenant.name` | suitenaam in de tenantnaam |
+| `user_external_subject_key` | `user.external_subject` | suiteprefix **plus** `Date.now()` |
+| `survey_attachment_storage_key_key` | `survey_attachment.storage_key` | eigen prefix per suite |
+
+Daarom bestaat `test-ids.ts` als centraal register, met een bewakingstest die
+een botsing vangt en beide suites bij naam noemt. Die kost een seconde en heeft
+geen database nodig — draai hem vóór een volledige run.
+
+**De aanleiding:** op 2026-07-31 viel de suite onregelmatig om — één run 21
+falende tests, dan drie runs groen, dan weer 20. De foutmeldingen wezen naar
+`duplicate key` en een foreign key: allebei gevolgen, geen oorzaken. Drie suites
+deelden dezelfde UUID's.
 
 ### Twee registers, één principe
 
@@ -439,6 +491,28 @@ twee_registers:
     vraag: "Wat is toegestaan?"
     bron: "een expliciet besluit"
   samen: "een test leest de database terug en vergelijkt"
+
+gedeelde_database:              # waarom suites elkaar kunnen slopen
+  probleem: "alle e2e-suites delen één database"
+  kern: "vier unieke sleutels hebben géén tenant_id — je eigen tenant beschermt je niet"
+  sleutels:
+    - "survey_response.token_hash"
+    - "tenant.name"
+    - "user.external_subject"
+    - "survey_attachment.storage_key"
+  oplossing: "test-ids.ts — centraal register met bewakingstest"
+
+poorten:                        # eventueel als klein schema
+  - poort: 55440
+    wie: "handmatige wegwerpdatabase"
+  - poort: 55441
+    wie: "verify:volledig"
+  - poort: 55450
+    wie: "demo (beschermd)"
+  - poort: 5001
+    wie: "API"
+  - poort: 3000
+    wie: "frontend"
 
 backup:
   bron: "Supabase Free — geen providerbackup"
