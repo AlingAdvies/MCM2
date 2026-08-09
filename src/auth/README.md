@@ -17,6 +17,17 @@ die uit een geverifieerd ID-token komt. Zie MCM2-CLAUDE.md §6 en het plan in
 | `tenant-context.guard.ts` | Sessiecookie → tenantcontext op de request. Dit is de laag die P0 sluit. |
 | `auth.controller.ts` | `/auth/login`, `/auth/callback`, `/auth/logout`. |
 | `auth.service.ts` | Bindt de bouwstenen aan elkaar; bevat de volgorde, geen eigen securitylogica. |
+| `uitnodigingstoken.ts` | Het token waarmee een uitgenodigde beheerder zijn eerste login koppelt (migratie 0024). |
+
+## Wat hier wél en niet thuishoort
+
+De identity provider doet identiteit — registratie, wachtwoorden, MFA,
+federatie. Deze module doet toegang: welke tenant, welke rol. Die grens staat
+in **ADR-016**, samen met de eis dat de provider inwisselbaar blijft.
+
+Praktisch gevolg: geen providernaam in de code, en geen waarborg die leunt op
+een claim die alleen deze provider levert. Vier claims worden gelezen (`oid`,
+`email`, `name`, `tid`); dat is de volledige koppelvlakte.
 
 ## De keten in één regel
 
