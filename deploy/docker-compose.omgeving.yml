@@ -1,0 +1,95 @@
+# Eén omgeving (acceptatie óf productie) op saxombp.
+#
+# ── Waarom één bestand voor twee omgevingen ────────────────────────────────
+#
+# Acceptatie en productie horen identiek te zijn op de configuratie na. Twee
+# aparte compose-bestanden lopen onvermijdelijk uiteen — dan draait acceptatie
+# op een instelling die productie niet heeft, en bewijst een groene acceptatie
+# niets meer. Alles wat verschilt komt daarom uit variabelen, en die staan in
+# `acceptatie.env` en `productie.env` op de server.
+#
+# ── Gebruik ────────────────────────────────────────────────────────────────
+#
+# Niet met de hand aanroepen. `scripts/deploy.js` doet dit, met de juiste
+# variabelen en een rookproef erna:
+#
+#   npm run deploy:acceptatie
+#   npm run deploy:productie
+#
+# Handmatig, op de server zelf:
+#   docker compose --env-file acceptatie.env -p mcm2-acceptatie \
+#     -f docker-compose.omgeving.yml up -d
+#
+# ── Wat hier bewust NIET staat ─────────────────────────────────────────────
+#
+# Geen `build:`. Dit bestand haalt een image op dat CI al gebouwd en getest
+# heeft. Zou de server zelf bouwen, dan is het per definitie een ánder artefact
+# dan wat door de poorten kwam — andere basis-laag, andere npm-resolutie — en
+# dan bewijst acceptatie niets over productie. Dat is de kern van OTAP.
+
+name: ${COMPOSE_PROJECT_NAME}
+
+services:
+  db:
+    image: postgres:17.6
+    environment:
+      POSTGRES_PASSWORD: ${DB_WACHTWOORD}
+      POSTGRES_DB: postgres
+    volumes:
+      # Benoemd volume per omgeving: de data van acceptatie en productie raken
+      # elkaar nooit. Dit is het onderdeel dat "gescheiden omgevingen" echt
+      # maakt in plaats van alleen andere poortnummers.
+      - db-data:/var/lib/postgresql/data
+    # Alleen bereikbaar binnen het compose-netwerk plus, via de host, op
+    # 127.0.0.1. Nooit 0.0.0.0: de server hangt aan Tailscale én aan het
+    # thuisnetwerk, en een database met een wachtwoord uit een .env hoort daar
+    # niet aan te luisteren.
+    ports:
+      - "127.0.0.1:${DB_POORT}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    image: ${API_IMAGE}
+    environment:
+      DATABASE_URL: postgresql://clm_api_runtime:${DB_WACHTWOORD}@db:5432/postgres
+      PORT: "5001"
+      CORS_ORIGIN: ${FRONTEND_URL}
+      # Deze omgevingen draaien over http binnen Tailscale, zonder certificaat.
+      # Het sessiecookie draagt standaard de __Host--prefix en Secure; dat
+      # weigert elke browser over http. Zie sessie.ts — de standaard faalt naar
+      # de veilige kant, dit is de bewuste uitzondering.
+      #
+      # Bij verhuizing naar een echte cloud met TLS: deze regel weg uit
+      # productie.env. Dat is één regel, en het hoort in het uitrolrunbook.
+      SESSIE_COOKIE_INSECURE: "true"
+      #
+      # Bewust GEEN omgevingsvariabele die "acceptatie" of "productie" zegt.
+      # De app leest zoiets nergens: de oranje balk komt uit de tenantnaam in
+      # de sessie (OmgevingBanner.tsx), niet uit een variabele. Die keuze is
+      # opzet — een variabele kan per ongeluk meegaan naar productie of juist
+      # ontbreken, en dan waarschuwt hij op het verkeerde moment.
+      #
+      # Wil je de omgeving zichtbaar maken in het scherm, dan is de weg: een
+      # tenant met een herkenbare naam in de acceptatiedatabase.
+    ports:
+      - "${API_POORT}:5001"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    image: ${FRONTEND_IMAGE}
+    ports:
+      - "${FRONTEND_POORT}:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  db-data:
