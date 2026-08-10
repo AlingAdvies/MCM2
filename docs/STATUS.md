@@ -2,17 +2,91 @@
 
 ## Laatst bijgewerkt
 
-**2026-08-10, avond.** De OTAP-keten is af en beproefd: acceptatie en productie
-draaien op `saxombp`, een image promoveert van de ene naar de andere, en
-terugdraaien werkt. Daarnaast: een onderhoudskalender met een poort die faalt als
-hij veroudert, een startscherm in de frontend, en vier documenten bijgewerkt die
-tot twee weken achterliepen.
+**2026-08-10, laat op de avond.** Twee dingen deze dag, en het tweede kwam voort
+uit een fout.
 
-Geen open PR's.
+Overdag: de OTAP-keten op `saxombp` af en beproefd, een onderhoudskalender met
+een poort die faalt als hij veroudert, een startscherm in de frontend.
+
+'s Avonds: vastgesteld dat die keten **niet uitkomt op de database die ertoe
+doet**. Daar is een plan voor geschreven en de eerste stap is uitgevoerd — er is
+nu een **stagingomgeving bij Supabase** die aantoonbaar gelijk is aan productie.
 
 ---
 
-## 🔵 MORGEN BEGINNEN: de frontend promoveerbaar maken (Issue #51)
+## ⚠️ EERST LEZEN: wat er op 10-08 is misgegaan
+
+**De productiedatabase is leeggemaakt op basis van een meetfout.**
+
+Wat er gebeurde: een query op `clm.tenant` zonder tenantcontext gaf nul rijen.
+Dat werd gelezen als "de database is kapot", terwijl RLS gewoon zijn werk deed —
+de tenant AlingAdvies bestond gewoon, hij was alleen niet zichtbaar zonder de
+juiste context. Op die verkeerde meting is een diagnose gebouwd, en op die
+diagnose is toestemming gevraagd om op te ruimen.
+
+**Weg:** tenant AlingAdvies (`c9f2a68a…`), 21 leveranciers, 2 vragenlijsten,
+7 responses, 34 antwoorden, 4 oordelen, 3 notities, 5 gebruikers, 1 bijlage.
+Een gedeeltelijke backup staat in de scratchpad (alleen gebruikers, memberships
+en sessies — niet de leveranciers en antwoorden).
+
+**Wat dit betekent, en waarom het het plan draagt:** de fout was menselijk, maar
+de *gevolgen* waren onmiddellijk omdat er niets tussen zat. Geen goedkeuring,
+geen afgedwongen backup, geen omgeving waar het eerst had moeten gebeuren.
+Zolang de enige weg naar productie een mens met een laptop is, is elke verkeerde
+inschatting direct dataverlies.
+
+Twee lessen die in de code horen:
+
+1. **In een database met RLS betekent nul rijen niet dat er niets staat.** Het
+   betekent dat je niets mag zien. Zet altijd `app.current_tenant_id` voordat je
+   een conclusie trekt over vulling.
+2. **Toon het doelwit, niet alleen de handeling.** Later die avond gaf ik
+   `DATABASE_URL` mee aan `markeer-wegwerp.js`, dat `MIGRATION_DATABASE_URL`
+   leest — het pakte productie uit `.env`. De rem hield het tegen, en de
+   projectreferentie in de melding maakte zichtbaar wat er werkelijk gebeurde.
+
+---
+
+## 🔵 MORGEN BEGINNEN
+
+**Lees eerst:** [`docs/architectuur/plan-otap-straat-met-staging.md`](architectuur/plan-otap-straat-met-staging.md).
+Dat is het plan waar de rest van dit hoofdstuk uit volgt. Stap 2 van de negen is
+gisteren gedaan; morgen begint bij **stap 1 (Issue #51)** en **stap 3**.
+
+### Wat er gisteravond is neergezet: staging
+
+| | Productie | Staging |
+|---|---|---|
+| Project | `clm-enterprise` | `clm-staging3` |
+| Ref | `agojesdovwsupidwlevh` | `ljdldwfylcbubzglxjoa` |
+| Postgres | 17.6 | 17.6 |
+| Regio | eu-west-1 | eu-west-1 |
+| Migraties | 26 | 26 |
+| Tabellen | 23 | 23 |
+| RLS in `clm` | 17/19 | 17/19 |
+| FORCE RLS | 12 | 12 |
+| `clm.omgeving` | `beschermd` | `wegwerp` |
+
+Alles teruggelezen uit beide databases en naast elkaar gelegd — niet aangenomen
+uit een melding die "voltooid" zei.
+
+**Rollen aangemaakt** via `db/roles/bootstrap-roles.sql`: zes stuks, `clm_migrator`
+en `clm_api_runtime` inlogbaar, geen enkele met BYPASSRLS.
+
+**Verbindingsgegevens** staan in de scratchpad van de sessie van 10-08:
+`staging.txt` (postgres), `staging-migrator.txt`, `staging-runtime.txt`. Die
+verdwijnen bij het opruimen van de sessie — ze horen als GitHub secret te
+worden vastgelegd zodra de straat gebouwd wordt. **Is dat nog niet gebeurd en
+zijn ze weg, dan is een wachtwoordreset nodig** (zie waarschuwing hieronder).
+
+> **Val bij Supabase, kost twee uur op 10-08:** een wachtwoord *resetten* komt
+> niet altijd door bij de connection pooler — drie resets, drie keer
+> "password authentication failed", ook na een projectherstart. Het wachtwoord
+> **bij het aanmaken van het project zelf instellen** werkte meteen. Loop je hier
+> weer tegenaan: nieuw project, wachtwoord zelf intypen, niet genereren.
+> Alfanumeriek houden, want `@ : / ? # % &` breken de connectiestring.
+
+### Dan: de frontend promoveerbaar maken (Issue #51)
 
 Dit is de enige plek waar de keten van vandaag nog niet dekt.
 
@@ -156,7 +230,8 @@ handmatig te starten is (PR #122).
 
 | # | Wat | Waarom nu |
 |---|---|---|
-| **#51** | Frontend promoveerbaar maken | Blokkeert de helft van de OTAP-keten — zie bovenaan |
+| — | **Geen geautomatiseerde uitrol naar staging en productie** | De gemeenschappelijke oorzaak onder 04-08, 07-08 en 10-08. Zolang dit ontbreekt, is elke uitrol een mens met een laptop en `.env` wijzend naar productie. Plan: [`plan-otap-straat-met-staging.md`](architectuur/plan-otap-straat-met-staging.md) |
+| **#51** | Frontend promoveerbaar maken | Voorwaarde voor het bovenstaande — zonder verplaatsbaar image is er niets te promoveren |
 | **#46** | Uploads op een containerschijf: weg bij image-vervanging | **Harde datum**: pilot ~1 september. Dit zijn compliance-bewijsstukken |
 | — | Geen bewaking die waarschuwt als een omgeving omvalt | Je zou het merken doordat iemand belt |
 | — | Geen incidentplan | NIS2 kent een meldplicht binnen 24 uur; die klok loopt of je een plan hebt of niet |

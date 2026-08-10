@@ -1,7 +1,7 @@
 # Plan — een OTAP-straat met staging, van nul opnieuw doordacht
 
-**Status:** voorstel, nog niet uitgevoerd
-**Datum:** 2026-08-10
+**Status:** in uitvoering — **stap 2 is gedaan** (staging bestaat, zie §8)
+**Datum:** 2026-08-10, bijgewerkt dezelfde avond
 **Eigenaar:** Kees Aling
 **Aanleiding:** de straat die op 09/10-08 op saxombp gebouwd is, loopt niet uit
 op de database die er werkelijk toe doet. Dit plan trekt hem door tot het einde,
@@ -182,20 +182,44 @@ Die hele klasse fouten verdwijnt.
 verschillende backends. Dat is acceptatiecriterium 3 van #51 en het is de enige
 maatstaf die telt.
 
-### 3.2 Staging aanmaken
+### 3.2 Staging aanmaken — ✅ GEDAAN op 2026-08-10
 
-1. Nieuw Supabase-project in KeesOrg, regio **eu-west-1** — dezelfde als
-   productie. Naam: `clm-staging`.
-2. Rollen aanmaken via `db/roles/bootstrap-roles.sql`. Deze staan bewust niet in
-   de migratieketen (ADR-009), dus ze moeten apart.
-3. Alle 26 migraties draaien met `migrate:deploy`.
-4. **Markeren als wat het is.** `clm.omgeving` staat standaard op `beschermd`.
-   Staging bevat geen echte gegevens, dus `wegwerp` is de eerlijke markering —
-   en die maakt seeden en e2e-tests er mogelijk.
+Uitgevoerd. Project `clm-staging3`, ref `ljdldwfylcbubzglxjoa`, KeesOrg,
+regio eu-west-1.
 
-**Verificatie, terug te lezen uit de database:** 26 migraties, hetzelfde aantal
-tabellen als productie, RLS actief op dezelfde tabellen. Niet "het commando zei
-dat het goed ging".
+| Stap | Uitkomst |
+|---|---|
+| Rollen via `db/roles/bootstrap-roles.sql` | 6 rollen; `clm_migrator` en `clm_api_runtime` inlogbaar, geen BYPASSRLS |
+| 26 migraties met `migrate:deploy --extern` | Voltooid |
+| Markeren als `wegwerp` | `clm.omgeving` = `wegwerp`, productie blijft `beschermd` |
+
+**Verificatie, teruggelezen uit beide databases en naast elkaar gelegd:**
+
+| | Productie | Staging |
+|---|---|---|
+| Postgres | 17.6 | 17.6 |
+| Migraties | 26 | 26 |
+| Tabellen | 23 | 23 |
+| RLS in `clm` | 17/19 | 17/19 |
+| FORCE RLS | 12 | 12 |
+
+Geen tabel die alleen in de één voorkomt.
+
+> **Val die twee uur kostte.** Een wachtwoord *resetten* bij Supabase komt niet
+> altijd door bij de connection pooler: drie resets, drie keer
+> `password authentication failed`, ook na een projectherstart. Productie bleef
+> intussen gewoon bereikbaar via dezelfde pooler-host — dus het lag niet aan het
+> netwerk. **Het wachtwoord bij het aanmaken van het project zelf instellen
+> werkte meteen.** Houd het alfanumeriek: `@ : / ? # % &` breken de
+> connectiestring.
+
+> **Tweede bijna-ongeluk, en het bewijst §6.** `markeer-wegwerp.js` leest
+> `MIGRATION_DATABASE_URL`, niet `DATABASE_URL`. Bij het meegeven van de
+> verkeerde variabele pakte het script de waarde uit `.env` — **productie**.
+> Met `--extern` erbij was productie als `wegwerp` gemarkeerd, en dan mogen de
+> e2e-suites hem leegmaken. Wat het tegenhield: de rem die niet-lokale doelwitten
+> weigert, én het feit dat de melding de **projectreferentie** toont. Zonder dat
+> tweede was de fout onzichtbaar geweest.
 
 ### 3.3 De uitrol naar staging automatiseren
 
@@ -397,7 +421,7 @@ het als eerste staat.
 | Stap | Wat | Beslissing nodig? |
 |---|---|---|
 | 1 | Issue #51 — frontend promoveerbaar | Nee, gaat sowieso door |
-| 2 | Staging aanmaken bij Supabase | **Ja — §1, optie A of B** |
+| 2 | ✅ **Staging aanmaken bij Supabase** — gedaan 10-08 | Beslist: optie A |
 | 3 | Uitrol naar staging automatiseren | Nee |
 | 4 | Uitrol naar productie automatiseren, met akkoordrem | Nee |
 | 5 | `.env` omleiden naar staging | Nee, maar wel melden wanneer |
