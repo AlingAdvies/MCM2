@@ -17,6 +17,15 @@ const { spawnSync } = require('node:child_process');
 
 const SERVER = 'root@saxombp';
 
+/**
+ * Draait de frontend mee? Gelijk aan de vlag in deploy.js.
+ *
+ * Staat dit op false, dan wordt de frontend niet als storing gemeld — hij hoort
+ * er dan niet te zijn (Issue #51). Een rood bolletje voor iets dat bewust niet
+ * draait, leert je rode bolletjes negeren.
+ */
+const FRONTEND_MEE = false;
+
 const OMGEVINGEN = [
   { naam: 'acceptatie', project: 'mcm2-acceptatie', api: 5011, frontend: 3010 },
   { naam: 'productie', project: 'mcm2-productie', api: 5021, frontend: 3020 },
@@ -93,17 +102,24 @@ function main() {
     const health = opServer(
       `curl -s -o /dev/null -w '%{http_code}' --max-time 8 http://localhost:${omgeving.api}/health || echo geen`,
     );
-    const web = opServer(
-      `curl -s -o /dev/null -w '%{http_code}' --max-time 8 http://localhost:${omgeving.frontend}/ || echo geen`,
-    );
-
     console.log('');
     console.log(
       `   backend  http://saxombp:${omgeving.api}/health   ${health.uit === '200' ? kleur.groen('200') : kleur.rood(health.uit)}`,
     );
-    console.log(
-      `   frontend http://saxombp:${omgeving.frontend}/         ${web.uit === '200' ? kleur.groen('200') : kleur.rood(web.uit)}`,
-    );
+
+    if (FRONTEND_MEE) {
+      const web = opServer(
+        `curl -s -o /dev/null -w '%{http_code}' --max-time 8 http://localhost:${omgeving.frontend}/ || echo geen`,
+      );
+      console.log(
+        `   frontend http://saxombp:${omgeving.frontend}/         ${web.uit === '200' ? kleur.groen('200') : kleur.rood(web.uit)}`,
+      );
+    } else {
+      console.log(
+        kleur.grijs('   frontend draait bewust niet mee — Issue #51'),
+      );
+    }
+
     console.log('');
   }
 

@@ -54,6 +54,23 @@ const SERVER = 'root@saxombp';
 const SERVER_MAP = '/opt/mcm2';
 
 /**
+ * Draait de frontend mee?
+ *
+ * Voorlopig niet. `NEXT_PUBLIC_API_URL` wordt in de frontend tijdens de build
+ * in de bundel gebakken (Issue #51), dus één image weet al welke backend het
+ * aanroept — en dan is promoveren van acceptatie naar productie onmogelijk.
+ *
+ * Liever een keten die alleen de backend dekt en dat eerlijk zegt, dan een die
+ * er compleet uitziet en een image promoveert dat naar de verkeerde backend
+ * wijst. Dat laatste zou pas opvallen wanneer iemand op productie kijkt en
+ * acceptatiedata ziet.
+ *
+ * Zodra #51 is opgelost: deze vlag op `true`, en `profiles:` weg uit
+ * docker-compose.omgeving.yml. Verder verandert er niets in dit script.
+ */
+const FRONTEND_MEE = false;
+
+/**
  * De omgevingen. Poorten liggen ver uit elkaar zodat een typefout in een
  * poortnummer niet per ongeluk de andere omgeving raakt.
  */
@@ -165,11 +182,15 @@ function rookproef(omgeving) {
       commando: `curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:${omgeving.apiPoort}/health`,
       verwacht: (uit) => uit === '200',
     },
-    {
-      wat: 'frontend serveert een pagina',
-      commando: `curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:${omgeving.frontendPoort}/`,
-      verwacht: (uit) => uit === '200',
-    },
+    ...(FRONTEND_MEE
+      ? [
+          {
+            wat: 'frontend serveert een pagina',
+            commando: `curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:${omgeving.frontendPoort}/`,
+            verwacht: (uit) => uit === '200',
+          },
+        ]
+      : []),
     {
       // Zonder sessie hoort dit 401 te geven, niet 500. Dat bewijst dat de
       // guard draait én dat de app de database kon bereiken om dat vast te
@@ -200,11 +221,19 @@ function rookproef(omgeving) {
 
 /** Start een omgeving met een bepaalde versie. */
 function start(omgeving, versie) {
+  // Het profiel `frontend` staat in het compose-bestand en is standaard uit.
+  // Zonder `--profile frontend` blijft die dienst dus buiten beschouwing —
+  // ook zijn ontbrekende image levert dan geen fout op.
+  const profiel = FRONTEND_MEE ? '--profile frontend ' : '';
+
   const zet = [
     `cd ${SERVER_MAP}`,
     `export API_IMAGE=$(grep '^GHCR_API=' ${omgeving.naam}.env | cut -d= -f2):${versie}`,
+    // Ook zetten wanneer de frontend niet meedraait: docker compose
+    // waarschuwt anders over een lege variabele, en zo'n waarschuwing in de
+    // uitvoer van een uitrol leidt af van meldingen die er wél toe doen.
     `export FRONTEND_IMAGE=$(grep '^GHCR_FRONTEND=' ${omgeving.naam}.env | cut -d= -f2):${versie}`,
-    `docker compose --env-file ${omgeving.naam}.env -p ${omgeving.project} -f docker-compose.omgeving.yml up -d`,
+    `docker compose --env-file ${omgeving.naam}.env -p ${omgeving.project} ${profiel}-f docker-compose.omgeving.yml up -d`,
   ].join(' && ');
 
   return opServer(zet);
@@ -306,7 +335,11 @@ async function main() {
     [
       `cd ${SERVER_MAP}`,
       `docker pull $(grep '^GHCR_API=' ${omgeving.naam}.env | cut -d= -f2):${versie}`,
-      `docker pull $(grep '^GHCR_FRONTEND=' ${omgeving.naam}.env | cut -d= -f2):${versie}`,
+      ...(FRONTEND_MEE
+        ? [
+            `docker pull $(grep '^GHCR_FRONTEND=' ${omgeving.naam}.env | cut -d= -f2):${versie}`,
+          ]
+        : []),
     ].join(' && '),
     { stil: true },
   );
@@ -318,7 +351,9 @@ async function main() {
     );
   }
 
-  console.log(`     ${kleur.groen('OK')}   beide images opgehaald`);
+  console.log(
+    `     ${kleur.groen('OK')}   ${FRONTEND_MEE ? 'beide images' : 'backend-image'} opgehaald`,
+  );
 
   // ── 4. Migraties ────────────────────────────────────────────────────────
   //
@@ -343,8 +378,34 @@ async function main() {
   const migreren = opServer(
     [
       `cd ${SERVER_MAP}`,
+      // API_IMAGE en FRONTEND_IMAGE moeten gezet zijn, óók nu we alleen `db`
+      // starten: compose valideert het hele bestand en weigert met "service
+      // 'api' has neither an image nor a build context specified" zodra één
+      // dienst een lege image-variabele heeft. Gemeten op 2026-08-10, bij de
+      // eerste uitrol.
+      `export API_IMAGE=$(grep '^GHCR_API=' ${omgeving.naam}.env | cut -d= -f2):${versie}`,
+      `export FRONTEND_IMAGE=$(grep '^GHCR_FRONTEND=' ${omgeving.naam}.env | cut -d= -f2):${versie}`,
       `docker compose --env-file ${omgeving.naam}.env -p ${omgeving.project} -f docker-compose.omgeving.yml up -d db`,
-      `sleep 3`,
+      // Wachten op de healthcheck in plaats van op een vaste tijd. Een `sleep`
+      // is óf te kort (dan faalt de migratie op "the database system is
+      // starting up") óf onnodig lang. De container weet zelf wanneer hij
+      // klaar is; 60 pogingen van een seconde is ruim voor een koude start.
+      `for i in $(seq 1 60); do ` +
+        `docker exec ${omgeving.project}-db-1 pg_isready -U postgres >/dev/null 2>&1 && break; ` +
+        `sleep 1; done`,
+      // De rollen komen NIET uit de migratieketen maar uit
+      // db/roles/bootstrap-roles.sql (ADR-009). Zonder deze stap bestaat
+      // `clm_migrator` niet en faalt de migratie op een authenticatiefout —
+      // een melding die naar de verkeerde oorzaak wijst.
+      //
+      // Het script is idempotent (IF NOT EXISTS per rol), dus het mag bij elke
+      // uitrol opnieuw draaien. Daarna krijgen de twee inlogbare rollen het
+      // wachtwoord van deze omgeving; dat staat alleen in het .env-bestand op
+      // de server.
+      `docker exec -i ${omgeving.project}-db-1 psql -U postgres -q -v ON_ERROR_STOP=1 < rollen.sql`,
+      `docker exec ${omgeving.project}-db-1 psql -U postgres -q -c ` +
+        `"ALTER ROLE clm_migrator LOGIN PASSWORD '$(grep '^DB_WACHTWOORD=' ${omgeving.naam}.env | cut -d= -f2)'; ` +
+        `ALTER ROLE clm_api_runtime PASSWORD '$(grep '^DB_WACHTWOORD=' ${omgeving.naam}.env | cut -d= -f2)';"`,
       `docker run --rm --network ${omgeving.project}_default ` +
         `-e MIGRATION_DATABASE_URL="postgresql://clm_migrator:$(grep '^DB_WACHTWOORD=' ${omgeving.naam}.env | cut -d= -f2)@db:5432/postgres" ` +
         `-e MCM2_EXTERNE_DB=ja ` +
@@ -360,7 +421,36 @@ async function main() {
     );
   }
 
-  console.log(`     ${kleur.groen('OK')}   ${migreren.uit.split('\n').pop()}`);
+  // ── De melding niet geloven, de database lezen ──────────────────────────
+  //
+  // Op 2026-08-10 gaf `migrate.js` exitcode 0 terwijl het script al op regel 8
+  // was gecrasht met MODULE_NOT_FOUND — de fout ging via een pipe naar `tail`,
+  // en die slaagde. De uitrol meldde "UITGEROLD" over een lege database, en de
+  // rookproef werd gewoon groen: een backend zonder tabellen antwoordt prima op
+  // /health en geeft netjes 401 op een beheerroute.
+  //
+  // Dat is dezelfde faalvorm als Issue #86 en migratie 0017: een geruststellende
+  // melding over iets dat niet gebeurd is. De enige remedie is teruglezen.
+  const migratiestand = opServer(
+    `docker exec ${omgeving.project}-db-1 psql -U postgres -tAc ` +
+      `"SELECT count(*) FROM drizzle.__drizzle_migrations" 2>/dev/null || echo 0`,
+    { stil: true },
+  );
+
+  const aantalMigraties = Number(migratiestand.uit.trim()) || 0;
+
+  if (aantalMigraties === 0) {
+    stop(
+      'De migraties meldden succes, maar de database is leeg.',
+      `In drizzle.__drizzle_migrations staan ${aantalMigraties} migraties.\n\n` +
+        `Uitvoer van het migratiescript:\n${migreren.uit}\n\n` +
+        'De nieuwe code is NIET gestart.',
+    );
+  }
+
+  console.log(
+    `     ${kleur.groen('OK')}   ${aantalMigraties} migraties op de database (teruggelezen, niet aangenomen)`,
+  );
 
   // ── 5. Containers vervangen ─────────────────────────────────────────────
   console.log('');
@@ -434,8 +524,17 @@ async function main() {
     kleur.groen(`UITGEROLD — ${omgeving.naam} draait op ${versie}.`),
   );
   console.log('');
-  console.log(`  frontend:  http://saxombp:${omgeving.frontendPoort}`);
   console.log(`  backend:   http://saxombp:${omgeving.apiPoort}/health`);
+
+  if (FRONTEND_MEE) {
+    console.log(`  frontend:  http://saxombp:${omgeving.frontendPoort}`);
+  } else {
+    console.log(
+      kleur.grijs(
+        `  frontend:  draait niet mee — nog niet promoveerbaar (Issue #51)`,
+      ),
+    );
+  }
 
   if (vorige && vorige !== versie) {
     console.log('');
