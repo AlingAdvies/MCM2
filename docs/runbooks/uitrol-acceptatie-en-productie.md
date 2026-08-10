@@ -293,6 +293,49 @@ sessie hoort dat **401** te geven:
 
 ---
 
+## ⚠ Het compose-bestand op de server loopt niet vanzelf mee
+
+`deploy.js` gebruikt `/opt/mcm2/docker-compose.omgeving.yml`, maar **brengt dat
+bestand niet mee**. Het komt daar via `deploy:inrichten`, en dat script weigert
+op een server waar al iets draait — terecht, want het zou de
+databasewachtwoorden opnieuw zetten.
+
+Wijzig je het bestand in de repository, dan draait de uitrol dus stilzwijgend
+door op de oude versie.
+
+**Dat is geen theorie.** Op 2026-08-10, bij de eerste uitrol met frontend, stond
+op saxombp nog een versie met `profiles: ["frontend"]` erin terwijl die regel in
+de repository al weg was. Gevolg: de frontend-container werd **niet aangemaakt**
+— geen fout, geen container, alleen een rookproef die faalde met `kreeg 000`.
+Zoeken naar de oorzaak kostte meer tijd dan de uitrol zelf.
+
+**Sindsdien controleert `deploy.js` dit als eerste**, op de inhoud (sha256) en
+niet op de datum. Wijkt het af, dan stopt de uitrol vóórdat er iets is
+aangeraakt, met beide vingerafdrukken en de commando's om het recht te zetten.
+
+Bijwerken doe je met de hand — bewust, want het bestand raakt **beide**
+omgevingen tegelijk, ook productie:
+
+```powershell
+# 1. Kijk eerst wat er verschilt
+ssh root@saxombp "cat /opt/mcm2/docker-compose.omgeving.yml" | diff - deploy/docker-compose.omgeving.yml
+
+# 2. Backup op de server
+ssh root@saxombp "cp /opt/mcm2/docker-compose.omgeving.yml /opt/mcm2/docker-compose.omgeving.yml.bak"
+
+# 3. Kopiëren
+ssh root@saxombp "cat > /opt/mcm2/docker-compose.omgeving.yml" < deploy/docker-compose.omgeving.yml
+
+# 4. Teruglezen — niet de melding geloven
+ssh root@saxombp "sha256sum /opt/mcm2/docker-compose.omgeving.yml"
+```
+
+Een gewijzigd compose-bestand raakt pas aan een draaiende omgeving bij de
+eerstvolgende uitrol daarheen. Rol je alleen acceptatie uit, dan blijft
+productie ongemoeid draaien tot je daar ook uitrolt.
+
+---
+
 ## Wat dit bewijst, en wat niet
 
 **Wel:**

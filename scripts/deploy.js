@@ -57,6 +57,9 @@
  */
 
 const { spawnSync } = require('node:child_process');
+const { createHash } = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const readline = require('node:readline');
 
 const SERVER = 'root@saxombp';
@@ -315,6 +318,77 @@ function start(omgeving, versie, frontendVersie) {
   return opServer(zet);
 }
 
+/**
+ * Draait de server op hetzelfde compose-bestand als de repository?
+ *
+ * ── Waarom dit bestaat ──────────────────────────────────────────────────────
+ *
+ * Dit script gebruikt `/opt/mcm2/docker-compose.omgeving.yml` op de server,
+ * maar brengt dat bestand niet mee — het komt daar via `deploy:inrichten`, dat
+ * alleen op een lege server draait. Wijzig je het bestand in de repository, dan
+ * draait de uitrol stilzwijgend door op de oude versie.
+ *
+ * Dat is geen theoretisch risico. Op 2026-08-10 stond op saxombp nog een versie
+ * met `profiles: ["frontend"]` erin, terwijl die regel in de repository al weg
+ * was. Gevolg: de frontend-container werd niet aangemaakt — geen fout, geen
+ * container, alleen een rookproef die faalde met "kreeg 000". Zoeken naar de
+ * oorzaak kostte meer tijd dan de uitrol zelf.
+ *
+ * Vergelijken gebeurt op de inhoud en niet op de wijzigingsdatum: een bestand
+ * dat toevallig even oud is, kan nog steeds anders zijn.
+ *
+ * ── Waarom dit stopt en niet zelf kopieert ──────────────────────────────────
+ *
+ * Het bestand overschrijven raakt beide omgevingen tegelijk — ook productie,
+ * die op dat moment kan draaien. Dat hoort een bewuste handeling te zijn, niet
+ * een bijwerking van een uitrol naar acceptatie.
+ */
+function controleerComposeBestand() {
+  const lokaalPad = path.join(
+    __dirname,
+    '..',
+    'deploy',
+    'docker-compose.omgeving.yml',
+  );
+
+  const lokaal = createHash('sha256')
+    .update(fs.readFileSync(lokaalPad))
+    .digest('hex');
+
+  const opDeServer = opServer(
+    `sha256sum ${SERVER_MAP}/docker-compose.omgeving.yml 2>/dev/null | cut -d' ' -f1 || true`,
+    { stil: true },
+  );
+
+  const server = opDeServer.uit.trim();
+
+  if (!server) {
+    stop(
+      `${SERVER_MAP}/docker-compose.omgeving.yml ontbreekt op de server.`,
+      'Richt de server eerst in:\n  npm run deploy:inrichten',
+    );
+  }
+
+  if (server !== lokaal) {
+    stop(
+      'Het compose-bestand op de server wijkt af van dat in de repository.',
+      `  server:      ${server.slice(0, 16)}…\n` +
+        `  repository:  ${lokaal.slice(0, 16)}…\n\n` +
+        'De uitrol zou draaien op een andere opzet dan je hier voor je hebt.\n' +
+        'Precies dat gebeurde op 2026-08-10: de frontend stond op de server nog\n' +
+        'achter een profiel en werd stilzwijgend overgeslagen.\n\n' +
+        'Verschil bekijken:\n' +
+        `  ssh ${SERVER} "cat ${SERVER_MAP}/docker-compose.omgeving.yml" | diff - deploy/docker-compose.omgeving.yml\n\n` +
+        'Bijwerken (raakt BEIDE omgevingen, dus kijk eerst naar het verschil):\n' +
+        `  ssh ${SERVER} "cp ${SERVER_MAP}/docker-compose.omgeving.yml ${SERVER_MAP}/docker-compose.omgeving.yml.bak"\n` +
+        `  ssh ${SERVER} "cat > ${SERVER_MAP}/docker-compose.omgeving.yml" < deploy/docker-compose.omgeving.yml\n\n` +
+        'Er is niets gewijzigd — de draaiende omgeving is niet aangeraakt.',
+    );
+  }
+
+  console.log(`     ${kleur.groen('OK')}   compose-bestand gelijk aan de repository`);
+}
+
 async function main() {
   const doelNaam = process.argv[2];
   const omgeving = OMGEVINGEN[doelNaam];
@@ -360,6 +434,8 @@ async function main() {
       'Richt de server eerst in:\n  npm run deploy:inrichten\n\nZie docs/runbooks/uitrol-acceptatie-en-productie.md.',
     );
   }
+
+  controleerComposeBestand();
 
   const vorige = huidigeVersie(omgeving);
   // Ook de frontend vastleggen, en wel hier — vóór er iets vervangen wordt.
