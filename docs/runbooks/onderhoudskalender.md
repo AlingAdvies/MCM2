@@ -85,6 +85,8 @@ npm run backup:controle
 | **Bij elke release naar productie** | OTAP-doorloop draaien | Bewijst dat het uitrolbare artefact werkt, niet alleen de code | [otap-doorloop.md](otap-doorloop.md) |
 | **Bij elke release naar productie** | Uitrollen via acceptatie, nooit rechtstreeks | Een versie die niet op acceptatie stond, is niet beproefd | [uitrol-acceptatie-en-productie.md](uitrol-acceptatie-en-productie.md) |
 | **Per kwartaal** | Rollback beproeven op acceptatie | Terugdraaien is het onderdeel dat in de praktijk het vaakst nooit getest is — en dat je nodig hebt op het slechtste moment | [uitrol-acceptatie-en-productie.md](uitrol-acceptatie-en-productie.md) |
+| **Wekelijks** | Staging wakker houden: één query tegen `clm-staging3` | Een gratis Supabase-project pauzeert na 7 dagen zonder databaseactiviteit. Pauzeert staging, dan faalt de eerstvolgende uitrol met een verbindingsfout die naar de verkeerde oorzaak wijst. | — (§5) |
+| **Bij elke migratie** | Eerst op staging draaien, dan pas op productie | Staging draait dezelfde Postgres-versie, regio en pooler als productie. Een migratie die daar slaagt, slaagt in productie — dat is de hele reden dat staging niet op saxombp staat. | — (§5) |
 
 ### Gebeurtenisgebonden — geen ritme, maar een trigger
 
@@ -167,6 +169,8 @@ document dat vertelt hóe.
 | **Logrotatie** | `backup-controle.log` en `backup-taak.log` groeien onbegrensd. Klein probleem, maar het staat nergens. | Laag |
 | **Certificaat- en domeinvervaldata** | Het verzenddomein van het mailkanaal en straks de productie-URL hebben vervaldata die niemand bewaakt. | Middel vanaf de pilotstart |
 | **Uploadopslag** | Certificaten staan op een containerschijf; bij image-vervanging zijn ze weg (Issue #46). Backup daarvan valt buiten ADR-011. | **Hoog** — harde datum, pilot start ~1 september |
+| **Uitrol naar staging en productie** | Staging bestaat sinds 2026-08-10, maar er loopt nog geen geautomatiseerde weg heen. Migraties gaan met de hand vanaf de laptop, met `.env` wijzend naar productie. Dat is de gemeenschappelijke oorzaak onder de incidenten van 04-08, 07-08 en 10-08. Plan: [plan-otap-straat-met-staging.md](../architectuur/plan-otap-straat-met-staging.md) | **Hoog** — elke handmatige uitrol is een kans op dataverlies |
+| **Staging wakker houden** | De wekelijkse taak staat in §2, maar er is nog geen geplande taak die hem uitvoert. Nu dus handwerk, en handwerk dat je vergeet. | Middel — pas pijnlijk bij de eerste uitrol na een stille week |
 
 **Deze lijst hoort korter te worden.** Groeit hij in plaats daarvan, dan is dat
 het signaal dat het onderhoud achterloopt op wat er gebouwd wordt.

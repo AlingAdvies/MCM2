@@ -2,7 +2,7 @@
 
 > Dit document legt in gewone taal uit hoe het ontwikkel- en testproces van MCM2 werkt, en welke bekende NIS2-thema's dit ontwerp raakt. Het is geen juridisch advies en geen compliance-verklaring — het is een eerlijk overzicht van wat er nu staat, wat dat oplevert, en wat nog ontbreekt.
 >
-> Laatst bijgewerkt: 2026-08-10 — acceptatie en productie draaien nu echt (§1), CI heeft vier controles in plaats van twee (§2), en er is een uitrolketen met rollback (§2b). De stand van 27 juli klopte op acht punten niet meer.
+> Laatst bijgewerkt: 2026-08-10, avond — er is een **staging**-omgeving bij Supabase bijgekomen die aantoonbaar gelijk is aan productie (§1). Eerder die dag: acceptatie en productie draaien echt, CI heeft vier controles in plaats van twee (§2), en er is een uitrolketen met rollback (§2b).
 
 ---
 
@@ -19,20 +19,38 @@ Denk aan het als een kwaliteitscontrole in een fabriek: je zet geen product op d
 | **Acceptatie** | De wijziging draait op een testomgeving die op productie lijkt, zodat je het zelf kan proberen vóórdat het "echt" is | Jij, functioneel |
 | **Productie** | De wijziging is live voor echte gebruikers (bijv. Transdev) | — |
 
-**Waar staat MCM2 nu?** Sinds 2026-08-10 bestaan **alle vier de stappen**. Acceptatie en Productie draaien op een aparte machine (`saxombp`, de thuisserver die ook de Saxo-app draait), elk met een eigen database die niets deelt met de ander.
+**Waar staat MCM2 nu?** Sinds 2026-08-10 bestaan **alle vier de stappen**, en
+sinds diezelfde dag is er een **staging**-omgeving bijgekomen die op hetzelfde
+platform draait als productie.
 
 | Omgeving | Waar | Bereikbaar op |
 |---|---|---|
 | Ontwikkel | jouw laptop | `localhost:3000` / `:5001` |
 | Test | jouw laptop, tijdelijk | wegwerpdatabase, verdwijnt na de test |
 | **Acceptatie** | saxombp | `http://saxombp:5011/health` |
-| **Productie** | saxombp | `http://saxombp:5021/health` |
+| **Staging** | Supabase `clm-staging3` | eu-west-1, Postgres 17.6 |
+| **Productie** | Supabase `clm-enterprise` | eu-west-1, Postgres 17.6 |
 
-Alleen bereikbaar via Tailscale — dus vanaf jouw eigen apparaten, niet vanaf internet.
+Acceptatie is alleen bereikbaar via Tailscale — dus vanaf jouw eigen apparaten,
+niet vanaf internet.
 
-> **Wat dit wél en niet is.** Dit is een **procesbewijs**: het toont aan dat dezelfde software die door de controles kwam ook echt draait op een andere machine, dat een nieuwe versie de oude vervangt, en dat terugdraaien werkt. Het is **geen** productieomgeving met garanties — één machine, thuisinternet, geen reservestroom. Voor de Transdev-pilot is een echte cloudomgeving nodig; ADR-011 heeft dat al vastgesteld.
+> **Waarom staging niet op saxombp staat.** Een generale repetitie op een ander
+> toneel bewijst weinig. Productie draait Postgres bij AWS in Ierland, achter een
+> connection pooler; een container op een thuisserver is een ander systeem, met
+> andere timeouts en ander gedrag bij migraties. Staging bij Supabase draait op
+> dezelfde Postgres-versie, dezelfde regio en dezelfde pooler. Wat daar werkt,
+> werkt in productie.
 >
-> Het verschil is belangrijk genoeg om te herhalen: het proces is bewezen, de beschikbaarheid niet.
+> Op 2026-08-10 is dat teruggelezen uit beide databases en naast elkaar gelegd:
+> 26 migraties, 23 tabellen, RLS op 17 van 19 tabellen, `FORCE ROW LEVEL
+> SECURITY` op 12 — in beide identiek.
+
+> **Wat saxombp dan nog is.** Acceptatie: de eerste plek waar een nieuwe versie
+> draait, tegen een wegwerpdatabase, met de e2e-suites erop. Snel, gratis, en het
+> mag stuk. De omgeving die daar "productie" heette is een **procesbewijs**
+> geweest — hij toonde aan dat promoveren en terugdraaien werken — maar hij wordt
+> opgeheven zodra de straat tot Supabase doorloopt. Twee dingen die "productie"
+> heten is precies de verwarring die op 2026-08-10 tot dataverlies leidde.
 
 **Wat is er van de frontend?** De backend doorloopt de volledige keten. De frontend nog niet: die heeft een technisch probleem waardoor één "verpakking" al weet met welke server hij praat (Issue #51). Twee verpakkingen maken — één voor acceptatie, één voor productie — zou dat oplossen, maar breekt het hele uitgangspunt: dan is wat je test niet meer wat je uitrolt. Daarom draait de frontend voorlopig bewust niet mee.
 
@@ -250,7 +268,8 @@ Het belang hiervan: zelfs als er ooit een fout in de applicatiecode zou zitten d
 | Verpakking wordt gebouwd én gestart in CI | ✅ | augustus |
 | Controle dat de documentatie niet veroudert | ✅ | 10-08 |
 | **Acceptatieomgeving** | ✅ Draait op saxombp, eigen database | 10-08 |
-| **Productieomgeving (als procesbewijs)** | ✅ Draait op saxombp, gescheiden data | 10-08 |
+| **Stagingomgeving** | ✅ Supabase, aantoonbaar gelijk aan productie | 10-08 |
+| **Uitrol naar staging en productie** | ❌ Nog met de hand vanaf de laptop | — |
 | **Uitrol met één commando, inclusief terugdraaien** | ✅ Beproefd, niet aangenomen | 10-08 |
 | Frontend doorloopt dezelfde keten | ❌ Nog niet — Issue #51 | — |
 | Wie-ben-ik-echt-verificatie voor gebruikers | ✅ Microsoft Entra, in productie doorlopen | 09-08 |
