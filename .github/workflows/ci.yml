@@ -17,6 +17,9 @@ on:
 
 permissions:
   contents: read
+  # Nodig om het image naar GitHub Container Registry te publiceren. Alleen de
+  # publiceer-job gebruikt dit; de andere jobs komen niet aan het register.
+  packages: write
 
 jobs:
   quality:
@@ -136,3 +139,57 @@ jobs:
       # het tokengebaseerde pad voor externe leveranciers (Issue #10).
       - name: Tenant- en token-isolatietests draaien (via clm_api_runtime)
         run: npx jest --config ./test/jest-e2e.json
+
+  # ── Het uitrolbare artefact ────────────────────────────────────────────────
+  #
+  # Publiceert het productie-image naar GitHub Container Registry, zodat
+  # acceptatie en productie hét image kunnen ophalen dat hier getest is —
+  # niet een image dat daar opnieuw gebouwd wordt.
+  #
+  # Dat onderscheid is de kern van OTAP. Bouwt de doelomgeving zelf, dan is het
+  # per definitie een ánder artefact dan wat door de poorten kwam: andere
+  # basis-image-laag, andere npm-resolutie, andere buildtijd. Dan bewijst een
+  # groene acceptatietest niets over productie.
+  #
+  # ── Waarom alleen op main ──────────────────────────────────────────────────
+  #
+  # Een PR-branch publiceren zou het register vullen met images die nooit
+  # uitgerold worden, en `:latest` laten wijzen naar ongemergde code. De
+  # docker-build-job hierboven blijft wél op elke PR draaien — die bewijst dat
+  # het image bouwt, dit publiceert het pas als het door main heen is.
+  publiceren:
+    name: Image publiceren naar GHCR
+    runs-on: ubuntu-latest
+    needs: [quality, docker-build, rls-isolation]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inloggen bij GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Twee tags op hetzelfde image:
+      #   :sha-<commit>  onveranderlijk, en dus waar een rollback naar terug kan
+      #   :latest        wat `deploy:acceptatie` standaard ophaalt
+      #
+      # De commit-tag is de belangrijkste. Zonder een onveranderlijke verwijzing
+      # is "dezelfde versie terugzetten" niet uitvoerbaar: `:latest` van
+      # gisteren bestaat morgen niet meer.
+      - name: Image bouwen en publiceren
+        run: |
+          REPO=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          SHA_TAG="$REPO/api:sha-${GITHUB_SHA::12}"
+          LATEST_TAG="$REPO/api:latest"
+
+          docker build -t "$SHA_TAG" -t "$LATEST_TAG" .
+          docker push "$SHA_TAG"
+          docker push "$LATEST_TAG"
+
+          echo "Gepubliceerd:"
+          echo "  $SHA_TAG"
+          echo "  $LATEST_TAG"
