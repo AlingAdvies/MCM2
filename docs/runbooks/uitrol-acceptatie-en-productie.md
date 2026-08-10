@@ -230,18 +230,29 @@ verhuizing naar een echte cloud met TLS moet die regel weg uit `productie.env`.*
 
 ---
 
-## Bekende beperking — de frontend is nog niet promoveerbaar
+## Bekende beperking — de frontend rolt nog niet mee
 
-`NEXT_PUBLIC_API_URL` wordt bij de **build** in de bundel gebakken (frontend
-`Dockerfile`, regel 28–29). Eén frontend-image weet dus al of het met de
-acceptatie- of de productiebackend praat.
+**De oude blokkade is weg.** `NEXT_PUBLIC_API_URL` werd bij de build in de
+bundel gebakken, waardoor één frontend-image al wist met welke backend het
+praatte. Sinds Issue #51 leest de frontend dat adres bij het **starten**, uit
+`API_BASE_URL`. Hetzelfde image is daarmee bruikbaar op elke omgeving, en
+`profiles:` is uit `deploy/docker-compose.omgeving.yml` verdwenen.
 
-**Gevolg:** hetzelfde frontend-image van A naar P promoveren levert een scherm
-op dat de acceptatiebackend blijft aanroepen. Dat is precies wat OTAP verbiedt.
+**Wat nu nog ontbreekt is eenvoudiger.** De frontend-image wordt nergens
+gepubliceerd: de CI van MCM2-frontend bouwt hem en controleert dat hij start,
+maar duwt hem niet naar GHCR. `FRONTEND_IMAGE` zou dus verwijzen naar iets dat
+niet bestaat, en de uitrol zou stranden op een `docker pull`.
 
-Dat is **Issue #51**, en tot dat opgelost is dekt deze keten alleen de backend
-volledig. De backend leest al zijn configuratie bij het starten en heeft dit
-probleem niet.
+Daarom staat `FRONTEND_MEE` in `scripts/deploy.js` nog op `false`. Zodra de
+frontend naar `ghcr.io/…/mcm2-frontend/web` publiceert met dezelfde SHA-tag als
+de backend, kan die vlag op `true` — verder verandert er niets.
+
+> **Let op bij het instellen:** `API_BASE_URL` wordt aangeroepen door de
+> frontend-*container*, niet door de browser. Daarbinnen is `localhost` de
+> container zelf; gebruik de servicenaam (`http://api:5001`). Dat is het
+> spiegelbeeld van `CORS_ORIGIN`, dat juist een adres is dat de browser
+> gebruikt. Staat het verkeerd, dan geeft de frontend een 502 met een leesbare
+> melding — geen stil scherm op voorbeelddata.
 
 ---
 
