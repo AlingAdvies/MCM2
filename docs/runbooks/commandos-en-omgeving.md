@@ -2,7 +2,8 @@
 
 **Type:** R — referentie
 **Eigenaar:** Kees Maling
-**Laatste update:** 2026-08-07
+**Laatste update:** 2026-08-10
+**Vereiste toegang:** deze PC, Docker Desktop
 **Aanleiding:** te vaak begonnen met een commando dat niet bestaat, of dat tegen
 de verkeerde database zou hebben gedraaid.
 
@@ -119,10 +120,11 @@ Volledige lijst uit `package.json`. Er is **geen** `npm run migrate`, **geen**
 
 | Commando | Wat het doet | Database nodig? |
 |---|---|---|
-| `npm run verify:volledig` | **Het bewijs.** Vijf stappen: code, unittests, e2e tegen een wegwerpdatabase, beide productie-images, browsertests, opruimen. | Zet er zelf een op (poort 55441) |
+| `npm run verify:volledig` | **Het bewijs.** Zeven stappen: onderhoud, code, unittests, e2e tegen een wegwerpdatabase, beide productie-images, browsertests, opruimen. | Zet er zelf een op (poort 55441) |
 | `npm run verify` | Dezelfde poorten als CI, zonder de stack | Ja — `DATABASE_URL` |
 | `npm run verify:snel` | Idem, e2e overgeslagen (zegt dat er ook bij) | Nee |
 | `npm run verify:schema` | Schemaconformiteit: draait `test/schema-conformiteit.e2e-spec.ts` | Ja |
+| `npm run verify:onderhoud` | Runbooks geïndexeerd en niet verouderd; `backup-verwachting.json` bij de migratiestand | Nee |
 
 `verify.js` **weigert** te draaien als `DATABASE_URL` niet naar een lokale host
 wijst. Die bescherming werkt; laat hem staan.
@@ -732,5 +734,11 @@ opgeschreven. Houd dat zo. Bij twijfel over een externe tool:
 | Deed de migratie wat er staat? | terugleze uit de database, niet de melding geloven |
 
 Een commando dat plausibel klinkt maar niet bestaat, kost meer tijd dan het
-opzoeken ervan. `npm run migrate`, `migrate:status`, `verify:migratieketen` en
-`node scripts/db-doelwit.js` zijn alle vier zo ontstaan — geen ervan bestaat.
+opzoeken ervan. `npm run migrate`, `migrate:status` en `verify:migratieketen`
+zijn alle drie zo ontstaan — geen ervan bestaat.
+
+`node scripts/db-doelwit.js` hoort in datzelfde rijtje maar ligt subtieler: het
+bestánd bestaat wél. Het is een gedeelde module die andere scripts aanroepen om
+hun doelwit te benoemen, en zelfstandig aanroepen doet niets zichtbaars. Een
+bestaand bestand is dus geen bewijs dat er een commando is — kijk in
+`package.json`.
