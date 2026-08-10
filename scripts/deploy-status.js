@@ -21,10 +21,14 @@ const SERVER = 'root@saxombp';
  * Draait de frontend mee? Gelijk aan de vlag in deploy.js.
  *
  * Staat dit op false, dan wordt de frontend niet als storing gemeld — hij hoort
- * er dan niet te zijn (Issue #51). Een rood bolletje voor iets dat bewust niet
- * draait, leert je rode bolletjes negeren.
+ * er dan niet te zijn. Een rood bolletje voor iets dat bewust niet draait,
+ * leert je rode bolletjes negeren.
+ *
+ * Sinds 2026-08-10 op true: het backend-adres komt uit `API_BASE_URL` (Issue
+ * #51) en het image wordt gepubliceerd naar GHCR. Deze vlag hoort gelijk te
+ * blijven aan die in deploy.js.
  */
-const FRONTEND_MEE = false;
+const FRONTEND_MEE = true;
 
 const OMGEVINGEN = [
   { naam: 'acceptatie', project: 'mcm2-acceptatie', api: 5011, frontend: 3010 },
@@ -114,9 +118,35 @@ function main() {
       console.log(
         `   frontend http://saxombp:${omgeving.frontend}/         ${web.uit === '200' ? kleur.groen('200') : kleur.rood(web.uit)}`,
       );
+
+      // Een pagina serveren is niet hetzelfde als de backend bereiken. Sinds
+      // Issue #51 loopt dat via een doorgeefluik dat `API_BASE_URL` bij het
+      // starten leest; staat die verkeerd, dan draait de frontend gewoon door
+      // en blijft elk beheerscherm leeg. Zonder deze regel zou dit overzicht
+      // twee groene bolletjes tonen bij een omgeving die niet werkt.
+      //
+      // 401 is het goede antwoord: de aanroep bereikte de backend en die
+      // weigerde hem zonder sessie. 502 betekent dat het doorgeefluik de
+      // backend niet vindt, 500 dat `API_BASE_URL` niet gezet is.
+      const doorgeefluik = opServer(
+        `curl -s -o /dev/null -w '%{http_code}' --max-time 8 http://localhost:${omgeving.frontend}/api/backend/admin/survey/templates || echo geen`,
+      );
+      const goed = doorgeefluik.uit === '401';
+      console.log(
+        `   frontend → backend                       ${goed ? kleur.groen('401') : kleur.rood(doorgeefluik.uit)}` +
+          (goed
+            ? ''
+            : kleur.rood(
+                doorgeefluik.uit === '502'
+                  ? '  ← doorgeefluik vindt de backend niet (API_BASE_URL)'
+                  : doorgeefluik.uit === '500'
+                    ? '  ← API_BASE_URL is niet gezet'
+                    : '  ← verwacht 401',
+              )),
+      );
     } else {
       console.log(
-        kleur.grijs('   frontend draait bewust niet mee — Issue #51'),
+        kleur.grijs('   frontend draait bewust niet mee — image ontbreekt'),
       );
     }
 

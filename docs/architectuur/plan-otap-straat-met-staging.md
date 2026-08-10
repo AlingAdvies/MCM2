@@ -182,10 +182,59 @@ melding. Geen stil terugvallen op voorbeelddata.
    is dat `http://api:5001`. Dat is het spiegelbeeld van `CORS_ORIGIN`, en die
    twee zijn makkelijk te verwarren.
 
-**Wat dit níét oplost, en wat stap 3 nu blokkeert:** de frontend-image wordt
-nergens gepubliceerd. De CI bouwt hem en controleert dat hij start, maar duwt
-hem niet naar GHCR. `FRONTEND_MEE` in `scripts/deploy.js` staat daarom nog op
-`false` — geen ontwerpprobleem meer, wel een ontbrekende publicatiestap.
+**Wat dit níét oploste:** de frontend-image werd nergens gepubliceerd. Dat is
+stap 2b geworden, hieronder.
+
+### 3.1b Frontend publiceren en meenemen in de uitrol — ✅ GEDAAN op 2026-08-10
+
+Kwam boven bij stap 1 en blokkeerde stap 3: de CI van MCM2-frontend bouwde het
+image en controleerde dat het start, maar duwde het niet naar GHCR.
+`FRONTEND_IMAGE` verwees dus naar iets dat niet bestond.
+
+**Uitgevoerd.** De frontend publiceert nu naar
+`ghcr.io/alingadvies/mcm2-frontend/web`, met dezelfde tagstructuur en dezelfde
+`workflow_dispatch`-terugval als de backend. `FRONTEND_MEE` staat op `true`.
+
+**Het besluit dat hier viel: twee versies, samen vastgelegd.**
+
+Backend en frontend zitten in aparte repositories, dus hun commit-SHA's zijn
+nooit gelijk. `deploy.js` gebruikte één versietag voor beide — dat zou een
+frontend-image zoeken met de SHA van de backend, en dat bestaat niet.
+
+Afgewogen (besluit eigenaar 2026-08-10):
+
+| Optie | Waarom niet |
+|---|---|
+| Frontend volgt `:latest` | Aan een draaiende omgeving is dan niet te zien welke schermcode erin zit, en terugdraaien werkt alleen voor de backend. In strijd met §6 |
+| Frontend onder de backend-SHA publiceren | Kan niet — de frontend-CI kent de backend-commit niet |
+| **Twee versies, apart meegegeven** | **Gekozen** |
+
+```powershell
+npm run deploy:productie -- --versie sha-abc123def456 --frontend-versie sha-987fed654321
+```
+
+**Eén afwijking van wat oorspronkelijk was voorgesteld, en het is een
+verbetering.** Het idee was de combinatie weg te schrijven in een bestand op de
+server. Dat is niet gebeurd: `deploy.js` leest de draaiende versies terug uit de
+containers zelf. Een bestand kan afwijken van de werkelijkheid zodra iemand met
+de hand ingrijpt, en wijst dan de verkeerde kant op precies wanneer je het nodig
+hebt. Dat is regel 4 van het runbook — teruglezen, niet aannemen.
+
+**Wat er verder bij kwam:**
+
+- **Rollback zet beide onderdelen samen terug.** Alleen de backend terugdraaien
+  laat een frontend achter die bij een andere versie hoort; die toestand is
+  nergens beproefd.
+- **De promotiecontrole vergelijkt beide.** Alleen de backend controleren zou
+  een onbeproefde frontend stilzwijgend laten meepromoveren.
+- **De rookproef toetst of de frontend de backend bereikt**, niet alleen of hij
+  een pagina serveert. Dat is een aparte schakel met een misleidende faalvorm.
+  Ook toegevoegd aan `deploy:status`.
+- **Een CI-poort die Issue #51 bewaakt.** Herintroductie van
+  `NEXT_PUBLIC_API_URL` is stil: het werkt lokaal en gaat pas mis bij de
+  promotie. De poort toetst de bron én het gebouwde image — twee containers uit
+  hetzelfde image met een verschillend adres moeten beide een 502 geven, en
+  zonder adres een 500. Tegenproef gedraaid: de poort wordt aantoonbaar rood.
 
 Uit onderzoek op 10-08 (acceptatiecriterium 1 van #51):
 
@@ -459,7 +508,7 @@ het als eerste staat.
 |---|---|---|
 | 1 | ✅ **Issue #51 — frontend promoveerbaar** — gedaan 10-08 | Nee, ging sowieso door |
 | 2 | ✅ **Staging aanmaken bij Supabase** — gedaan 10-08 | Beslist: optie A |
-| 2b | **Frontend-image publiceren naar GHCR** — kwam boven bij stap 1 | Nee. Voorwaarde voor stap 3 |
+| 2b | ✅ **Frontend-image publiceren, frontend in de uitrol** — gedaan 10-08 | Beslist: twee versies, zie hieronder |
 | 3 | Uitrol naar staging automatiseren | Nee |
 | 4 | Uitrol naar productie automatiseren, met akkoordrem | Nee |
 | 5 | `.env` omleiden naar staging | Nee, maar wel melden wanneer |

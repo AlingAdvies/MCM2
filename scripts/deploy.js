@@ -37,12 +37,21 @@
  *
  * ── Gebruik ─────────────────────────────────────────────────────────────────
  *
- *   npm run deploy:acceptatie              laatste main-image
+ *   npm run deploy:acceptatie              laatste main-images
  *   npm run deploy:acceptatie -- sha-abc123def456
  *   npm run deploy:productie               vraagt bevestiging
  *   npm run deploy:productie -- --versie sha-abc123def456
  *   npm run deploy:status                  wat draait waar
  *   npm run rollback:acceptatie            vorige versie terug
+ *
+ * Backend en frontend zijn aparte repositories met eigen SHA's. De frontend
+ * krijgt een eigen vlag; laat je hem weg, dan wordt dat `:latest`:
+ *
+ *   npm run deploy:productie -- --versie sha-abc123def456 \
+ *                               --frontend-versie sha-987fed654321
+ *
+ * Het slotbericht van een geslaagde uitrol drukt de terugdraairegel af met
+ * beide versies erin, zodat je die niet zelf hoeft samen te stellen.
  *
  * Zie docs/runbooks/uitrol-acceptatie-en-productie.md.
  */
@@ -56,24 +65,33 @@ const SERVER_MAP = '/opt/mcm2';
 /**
  * Draait de frontend mee?
  *
- * Nog niet, maar om een ándere reden dan voorheen. De oude blokkade — het
- * ingebakken backend-adres uit Issue #51 — is weg: de frontend leest dat adres
- * sinds die wijziging bij het starten uit `API_BASE_URL`, en `profiles:` is
- * daarom al uit docker-compose.omgeving.yml verdwenen.
+ * Ja, sinds 2026-08-10. Twee blokkades zijn achtereenvolgens weggenomen:
  *
- * Wat nu nog ontbreekt is eenvoudiger en concreter: **de frontend-image wordt
- * nergens gepubliceerd.** De CI van MCM2-frontend bouwt hem en controleert dat
- * hij start, maar duwt hem niet naar GHCR. `FRONTEND_IMAGE` zou dus verwijzen
- * naar iets dat niet bestaat, en de uitrol zou stranden op een `docker pull`.
+ *   1. Issue #51 — het backend-adres werd bij de build ingebakken, waardoor
+ *      één image al wist met welke backend het praatte. Dat adres komt nu uit
+ *      `API_BASE_URL`, gelezen bij het starten.
+ *   2. Het frontend-image werd nergens gepubliceerd. De CI van MCM2-frontend
+ *      duwt hem nu naar `ghcr.io/alingadvies/mcm2-frontend/web`, met dezelfde
+ *      tagstructuur als de backend.
  *
- * Liever een keten die alleen de backend dekt en dat eerlijk zegt, dan een die
- * er compleet uitziet en struikelt op een ontbrekend image.
+ * ── Twee versies, en waarom dat geen omissie is ─────────────────────────────
  *
- * Zodra de frontend naar `ghcr.io/…/mcm2-frontend/web` publiceert met dezelfde
- * SHA-tag als de backend: deze vlag op `true`. Verder verandert er niets in dit
- * script — het compose-bestand is er al klaar voor.
+ * Backend en frontend zitten in aparte repositories, dus hun commit-SHA's zijn
+ * nooit gelijk. Deze uitrol vraagt ze allebei:
+ *
+ *   npm run deploy:acceptatie -- --versie sha-abc123def456 \
+ *                                --frontend-versie sha-987fed654321
+ *
+ * Zonder argument valt elk terug op `:latest`. Wat er drááit wordt altijd
+ * teruggelezen uit de containers zelf — niet uit een bestand dat een vorige
+ * uitrol heeft weggeschreven, want zo'n bestand kan afwijken van de
+ * werkelijkheid zodra iemand met de hand ingrijpt.
+ *
+ * Bij een rollback gaan beide onderdelen samen terug naar de combinatie die er
+ * stond. Alleen de backend terugdraaien laat een frontend achter die bij een
+ * andere versie hoort, en die toestand is nergens beproefd.
  */
-const FRONTEND_MEE = false;
+const FRONTEND_MEE = true;
 
 /**
  * De omgevingen. Poorten liggen ver uit elkaar zodat een typefout in een
@@ -160,10 +178,45 @@ function bepaalVersie(argumenten) {
   return los || 'latest';
 }
 
-/** Wat er op dit moment draait, of null wanneer er niets draait. */
-function huidigeVersie(omgeving) {
+/**
+ * Stelt vast welk frontend-image uitgerold wordt.
+ *
+ * ── Waarom dit een aparte versie is ─────────────────────────────────────────
+ *
+ * Backend en frontend zitten in twee repositories, dus hun commit-SHA's zijn
+ * nooit gelijk. Eén versietag voor beide zou een frontend-image zoeken met de
+ * SHA van de backend, en dat bestaat niet — de uitrol zou stranden op een
+ * `docker pull` met een melding die naar de verkeerde oorzaak wijst.
+ *
+ * De alternatieven zijn afgewogen (besluit eigenaar 2026-08-10): de frontend
+ * `:latest` laten volgen is eenvoudiger, maar dan is aan een draaiende omgeving
+ * niet te zien welke schermcode erin zit en werkt terugdraaien alleen voor de
+ * backend. Dat gaat in tegen §6 van het OTAP-plan.
+ *
+ * Zonder argument valt dit terug op `:latest`, net als de backend.
+ */
+function bepaalFrontendVersie(argumenten) {
+  const index = argumenten.indexOf('--frontend-versie');
+  if (index !== -1 && argumenten[index + 1]) return argumenten[index + 1];
+
+  return 'latest';
+}
+
+/**
+ * Wat er op dit moment draait, of null wanneer er niets draait.
+ *
+ * Teruggelezen uit de draaiende container en niet uit een bestand dat de vorige
+ * uitrol heeft weggeschreven. Dat is bewust: zo'n bestand kan afwijken van de
+ * werkelijkheid zodra iemand met de hand ingrijpt, en dan wijst het de
+ * verkeerde kant op precies wanneer je het nodig hebt (runbook, regel 4).
+ *
+ * `dienst` is 'api' of 'frontend'. Draait de frontend niet mee, dan geeft
+ * `docker inspect` niets terug en is het antwoord null — dat is geen fout maar
+ * de juiste beschrijving van de toestand.
+ */
+function huidigeVersie(omgeving, dienst = 'api') {
   const res = opServer(
-    `docker inspect --format '{{.Config.Image}}' ${omgeving.project}-api-1 2>/dev/null || true`,
+    `docker inspect --format '{{.Config.Image}}' ${omgeving.project}-${dienst}-1 2>/dev/null || true`,
     { stil: true },
   );
 
@@ -193,6 +246,23 @@ function rookproef(omgeving) {
             wat: 'frontend serveert een pagina',
             commando: `curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:${omgeving.frontendPoort}/`,
             verwacht: (uit) => uit === '200',
+          },
+          {
+            // Een pagina serveren bewijst niet dat de frontend de backend
+            // bereikt: sinds Issue #51 loopt dat via een doorgeefluik dat
+            // `API_BASE_URL` bij het starten leest, en dat is een aparte
+            // schakel die apart stuk kan. Staat die variabele verkeerd, dan
+            // draait de frontend vrolijk door en geeft elk beheerscherm "kon
+            // niet worden opgehaald" — precies zoals bij een backend die niet
+            // draait.
+            //
+            // Dezelfde aanroep als de controle hierboven, maar via poort 3000.
+            // Zonder sessie hoort dat 401 te geven; een 502 betekent dat het
+            // doorgeefluik de backend niet vindt, een 500 dat de variabele
+            // helemaal niet gezet is.
+            wat: 'frontend bereikt de backend (401 via het doorgeefluik)',
+            commando: `curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:${omgeving.frontendPoort}/api/backend/admin/survey/templates`,
+            verwacht: (uit) => uit === '401',
           },
         ]
       : []),
@@ -225,11 +295,12 @@ function rookproef(omgeving) {
 }
 
 /** Start een omgeving met een bepaalde versie. */
-function start(omgeving, versie) {
-  // Het profiel `frontend` staat in het compose-bestand en is standaard uit.
-  // Zonder `--profile frontend` blijft die dienst dus buiten beschouwing —
-  // ook zijn ontbrekende image levert dan geen fout op.
-  const profiel = FRONTEND_MEE ? '--profile frontend ' : '';
+function start(omgeving, versie, frontendVersie) {
+  // Draait de frontend niet mee, dan wordt die dienst geschaald naar nul in
+  // plaats van uit het compose-bestand geweerd. `profiles:` is daar weg sinds
+  // de frontend promoveerbaar is (Issue #51); wat nu nog ontbreekt is dat het
+  // image gepubliceerd wordt, en dat is een tijdelijke toestand.
+  const schaal = FRONTEND_MEE ? '' : '--scale frontend=0 ';
 
   const zet = [
     `cd ${SERVER_MAP}`,
@@ -237,8 +308,8 @@ function start(omgeving, versie) {
     // Ook zetten wanneer de frontend niet meedraait: docker compose
     // waarschuwt anders over een lege variabele, en zo'n waarschuwing in de
     // uitvoer van een uitrol leidt af van meldingen die er wél toe doen.
-    `export FRONTEND_IMAGE=$(grep '^GHCR_FRONTEND=' ${omgeving.naam}.env | cut -d= -f2):${versie}`,
-    `docker compose --env-file ${omgeving.naam}.env -p ${omgeving.project} ${profiel}-f docker-compose.omgeving.yml up -d`,
+    `export FRONTEND_IMAGE=$(grep '^GHCR_FRONTEND=' ${omgeving.naam}.env | cut -d= -f2):${frontendVersie}`,
+    `docker compose --env-file ${omgeving.naam}.env -p ${omgeving.project} -f docker-compose.omgeving.yml up -d ${schaal}`.trim(),
   ].join(' && ');
 
   return opServer(zet);
@@ -257,11 +328,17 @@ async function main() {
 
   const argumenten = process.argv.slice(3);
   const versie = bepaalVersie(argumenten);
+  const frontendVersie = bepaalFrontendVersie(argumenten);
 
   console.log('');
   console.log(`Uitrol naar ${kleur.geel(omgeving.naam.toUpperCase())}`);
   console.log(kleur.grijs(`  server:  ${SERVER}`));
-  console.log(kleur.grijs(`  versie:  ${versie}`));
+  console.log(kleur.grijs(`  backend:  ${versie}`));
+  console.log(
+    kleur.grijs(
+      `  frontend: ${FRONTEND_MEE ? frontendVersie : '(rolt nog niet mee)'}`,
+    ),
+  );
   console.log(
     kleur.grijs(
       `  poorten: api ${omgeving.apiPoort}, frontend ${omgeving.frontendPoort}`,
@@ -285,8 +362,17 @@ async function main() {
   }
 
   const vorige = huidigeVersie(omgeving);
+  // Ook de frontend vastleggen, en wel hier — vóór er iets vervangen wordt.
+  // Bij een falende rookproef moeten beide onderdelen samen terug; alleen de
+  // backend terugdraaien laat een frontend achter die bij een andere versie
+  // hoort, en dat is een toestand die nergens beproefd is.
+  const vorigeFrontend = huidigeVersie(omgeving, 'frontend');
+
   console.log(
-    `     ${kleur.groen('OK')}   ${vorige ? `nu actief: ${vorige}` : 'er draait nog niets'}`,
+    `     ${kleur.groen('OK')}   ${vorige ? `nu actief: backend ${vorige}` : 'er draait nog niets'}` +
+      (vorige && FRONTEND_MEE
+        ? `, frontend ${vorigeFrontend || '(geen)'}`
+        : ''),
   );
 
   // ── 2. Bevestiging bij productie ────────────────────────────────────────
@@ -297,13 +383,18 @@ async function main() {
     // Een uitrol naar productie die niet eerst op acceptatie stond, is precies
     // de stap die OTAP overslaat. Melden, niet blokkeren: soms is er een
     // gegronde reden, maar hij moet zichtbaar zijn.
+    //
+    // Beide onderdelen worden vergeleken. Alleen de backend controleren zou
+    // betekenen dat een onbeproefde frontend stilzwijgend meepromoveert — en
+    // juist omdat de versies uit twee repositories komen, is dat makkelijk om
+    // over het hoofd te zien.
     const opAcceptatie = huidigeVersie(OMGEVINGEN.acceptatie);
 
     if (opAcceptatie !== versie) {
       console.log('');
       console.log(
         kleur.geel(
-          `     LET OP: op acceptatie draait ${opAcceptatie || '(niets)'}, niet ${versie}.`,
+          `     LET OP: op acceptatie draait als backend ${opAcceptatie || '(niets)'}, niet ${versie}.`,
         ),
       );
       console.log(
@@ -311,6 +402,24 @@ async function main() {
           '     Deze versie is daar dus niet beproefd. Dat is de stap die OTAP juist voorschrijft.',
         ),
       );
+    }
+
+    if (FRONTEND_MEE) {
+      const feOpAcceptatie = huidigeVersie(OMGEVINGEN.acceptatie, 'frontend');
+
+      if (feOpAcceptatie !== frontendVersie) {
+        console.log('');
+        console.log(
+          kleur.geel(
+            `     LET OP: op acceptatie draait als frontend ${feOpAcceptatie || '(niets)'}, niet ${frontendVersie}.`,
+          ),
+        );
+        console.log(
+          kleur.geel(
+            '     Het is de combinatie die beproefd wordt, niet elk onderdeel apart.',
+          ),
+        );
+      }
     }
 
     console.log('');
@@ -342,7 +451,7 @@ async function main() {
       `docker pull $(grep '^GHCR_API=' ${omgeving.naam}.env | cut -d= -f2):${versie}`,
       ...(FRONTEND_MEE
         ? [
-            `docker pull $(grep '^GHCR_FRONTEND=' ${omgeving.naam}.env | cut -d= -f2):${versie}`,
+            `docker pull $(grep '^GHCR_FRONTEND=' ${omgeving.naam}.env | cut -d= -f2):${frontendVersie}`,
           ]
         : []),
     ].join(' && '),
@@ -350,9 +459,21 @@ async function main() {
   );
 
   if (!ophalen.ok) {
+    // Twee images, twee registers, twee mogelijke tikfouten. De melding noemt
+    // ze allebei: uit de foutuitvoer alleen is niet af te leiden welk van de
+    // twee niet bestond, en zoeken in het verkeerde register kost tijd.
     stop(
-      `Kon image '${versie}' niet ophalen.`,
-      `${ophalen.fout}\n\nBestaat die tag? Kijk op:\n  https://github.com/AlingAdvies/MCM2/pkgs/container/mcm2%2Fapi\n\nEr is niets gewijzigd — de draaiende omgeving is niet aangeraakt.`,
+      FRONTEND_MEE
+        ? `Kon image '${versie}' (backend) of '${frontendVersie}' (frontend) niet ophalen.`
+        : `Kon image '${versie}' niet ophalen.`,
+      `${ophalen.fout}\n\nBestaan die tags? Kijk op:\n` +
+        `  https://github.com/AlingAdvies/MCM2/pkgs/container/mcm2%2Fapi\n` +
+        (FRONTEND_MEE
+          ? `  https://github.com/AlingAdvies/MCM2-frontend/pkgs/container/mcm2-frontend%2Fweb\n`
+          : '') +
+        `\nLet op: backend en frontend zijn aparte repositories, dus hun SHA's\n` +
+        `verschillen. De frontendversie geef je mee met --frontend-versie.\n\n` +
+        `Er is niets gewijzigd — de draaiende omgeving is niet aangeraakt.`,
     );
   }
 
@@ -472,7 +593,7 @@ async function main() {
   console.log('');
   console.log('5/6  Containers vervangen');
 
-  const gestart = start(omgeving, versie);
+  const gestart = start(omgeving, versie, frontendVersie);
 
   if (!gestart.ok) {
     stop(
@@ -499,8 +620,15 @@ async function main() {
     console.log(kleur.rood(`De rookproef faalde op ${mislukt.length} punt(en).`));
 
     if (vorige && vorige !== versie) {
-      console.log(`Terugdraaien naar ${vorige}…`);
-      const terug = start(omgeving, vorige);
+      // Beide onderdelen samen terug naar de combinatie die er stond. Draait de
+      // frontend niet mee, dan is `vorigeFrontend` null en valt hij terug op
+      // `latest` — dat is dan een lege variabele die niets start.
+      console.log(
+        `Terugdraaien naar ${vorige}` +
+          (FRONTEND_MEE ? ` met frontend ${vorigeFrontend || 'latest'}` : '') +
+          '…',
+      );
+      const terug = start(omgeving, vorige, vorigeFrontend || 'latest');
 
       if (terug.ok) {
         opServer('sleep 6', { stil: true });
@@ -537,7 +665,11 @@ async function main() {
   // ── Klaar ───────────────────────────────────────────────────────────────
   console.log('');
   console.log(
-    kleur.groen(`UITGEROLD — ${omgeving.naam} draait op ${versie}.`),
+    kleur.groen(
+      `UITGEROLD — ${omgeving.naam} draait op ${versie}` +
+        (FRONTEND_MEE ? ` met frontend ${frontendVersie}` : '') +
+        '.',
+    ),
   );
   console.log('');
   console.log(`  backend:   http://saxombp:${omgeving.apiPoort}/health`);
@@ -547,17 +679,29 @@ async function main() {
   } else {
     console.log(
       kleur.grijs(
-        `  frontend:  draait niet mee — nog niet promoveerbaar (Issue #51)`,
+        `  frontend:  draait niet mee — image wordt nog niet gepubliceerd`,
       ),
     );
   }
 
   if (vorige && vorige !== versie) {
     console.log('');
-    console.log(kleur.grijs(`  vorige versie was ${vorige}`));
     console.log(
       kleur.grijs(
-        `  terugdraaien:  npm run deploy:${omgeving.naam} -- --versie ${vorige}`,
+        `  vorige versie was ${vorige}` +
+          (FRONTEND_MEE
+            ? ` met frontend ${vorigeFrontend || '(geen)'}`
+            : ''),
+      ),
+    );
+    // De hele combinatie in één regel, zodat terugdraaien geen puzzel is: met
+    // twee repositories is de frontendversie precies het stuk dat je vergeet.
+    console.log(
+      kleur.grijs(
+        `  terugdraaien:  npm run deploy:${omgeving.naam} -- --versie ${vorige}` +
+          (FRONTEND_MEE && vorigeFrontend
+            ? ` --frontend-versie ${vorigeFrontend}`
+            : ''),
       ),
     );
   }
