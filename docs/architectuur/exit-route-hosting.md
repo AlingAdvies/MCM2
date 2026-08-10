@@ -158,18 +158,27 @@ verschillen, en alle drie staan in een `.env`-bestand op de doelmachine:
 De rest van de keten — bouwen, publiceren, migreren, rookproef, terugdraaien — is
 leverancieronafhankelijk. Dat was de opzet en dat is nu aantoonbaar.
 
-### De frontend is minder los dan deze tabel eerder suggereerde
+### De frontend was minder los dan deze tabel suggereerde — opgelost 2026-08-10
 
-`NEXT_PUBLIC_API_URL` wordt tijdens de **build** in de bundel gebakken (frontend
-`Dockerfile`, regel 28–29). Eén frontend-image weet daardoor al met welke backend het praat.
+`NEXT_PUBLIC_API_URL` werd tijdens de **build** in de bundel gebakken. Eén frontend-image
+wist daardoor al met welke backend het praatte.
 
-Dat is geen lock-in bij een leverancier, maar het is wél een blokkade voor het uitgangspunt
-dat hetzelfde artefact van acceptatie naar productie promoveert — en dus voor elke cloud die
-je met omgevingsvariabelen configureert, wat ze allemaal doen.
+Dat was geen lock-in bij een leverancier, maar wél een blokkade voor het uitgangspunt dat
+hetzelfde artefact van acceptatie naar productie promoveert — en dus voor elke cloud die je
+met omgevingsvariabelen configureert, wat ze allemaal doen.
 
-**Issue #51.** Zolang dit open staat draait de frontend niet mee in de uitrolketen; de
-backend wel. Dat is een bewuste keuze: liever een keten die minder dekt en dat zegt, dan een
-die een image promoveert dat naar de verkeerde backend wijst.
+**Issue #51 is opgelost.** De frontend leest het backend-adres nu bij het **starten**, uit
+`API_BASE_URL`; de browser praat via een server-side doorgeefluik op de frontend zelf.
+Bewezen met hetzelfde image in twee containers die alleen in die variabele verschilden: de
+een gaf de leverancierslijst uit de demo-database, de ander een 401 uit een verse database.
+
+Daarmee is er geen enkele instelling meer die bij het bouwen vastligt en per omgeving zou
+moeten verschillen — precies wat App Runner, ECS en Kubernetes verwachten.
+
+**Wat er nog wél in de weg staat**, en dat is iets anders: de frontend-image wordt nergens
+gepubliceerd. De CI bouwt hem en controleert dat hij start, maar duwt hem niet naar GHCR.
+Zolang dat zo is draait de frontend niet mee in de uitrolketen — geen ontwerpprobleem meer,
+maar een ontbrekende publicatiestap.
 
 ### Wat deze tabel níét meet: beschikbaarheid
 

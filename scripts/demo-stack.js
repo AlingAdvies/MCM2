@@ -368,7 +368,11 @@ function frontendStarten() {
   const pid = startAchtergrond('npm', ['run', 'dev'], LOG_WEB, {
     cwd: FRONTEND,
     env: {
-      NEXT_PUBLIC_API_URL: `http://localhost:${API_POORT}`,
+      // Sinds Issue #51 leest de frontend dit bij het starten, niet bij het
+      // bouwen. Hier is `localhost` wél goed: de demo draait niet in Docker,
+      // dus de frontend en de backend delen de machine. In
+      // docker-compose.otap.yml staat om die reden de servicenaam.
+      API_BASE_URL: `http://localhost:${API_POORT}`,
       PORT: String(WEB_POORT),
     },
   });
@@ -569,6 +573,47 @@ function controleerKeten(token) {
       reden:
         `de backend antwoordde, maar niet met vragenlijsten: ` +
         `${JSON.stringify(antwoord).slice(0, 200)}`,
+    };
+  }
+
+  // ── Het doorgeefluik (Issue #51) ──────────────────────────────────────────
+  //
+  // Alles hierboven praat rechtstreeks met de backend. Sinds #51 doet de
+  // browser dat niet meer: die gaat via de frontend, die het adres van de
+  // backend bij het starten leest. Dat is een aparte schakel die apart stuk
+  // kan, en de faalvorm is de bekende — het scherm toont "kon niet worden
+  // opgehaald", precies zoals bij een backend die niet draait.
+  //
+  // Dezelfde aanroep als hierboven, maar via poort 3000.
+  const viaFrontend = draai('curl', [
+    '-s',
+    '--max-time',
+    '15',
+    '-H',
+    `"Cookie: mcm2_sessie=${token}"`,
+    `http://localhost:${WEB_POORT}/api/backend/admin/survey/templates`,
+  ]);
+
+  let viaProxy;
+
+  try {
+    viaProxy = JSON.parse(viaFrontend.uitvoer);
+  } catch {
+    return {
+      ok: false,
+      reden:
+        'het doorgeefluik naar de backend werkt niet.\n' +
+        `  De frontend gaf: ${viaFrontend.uitvoer.trim().slice(0, 200)}\n` +
+        `  Controleer API_BASE_URL en ${LOG_WEB}`,
+    };
+  }
+
+  if (!Array.isArray(viaProxy.vragenlijsten)) {
+    return {
+      ok: false,
+      reden:
+        'het doorgeefluik antwoordde, maar niet met vragenlijsten: ' +
+        `${JSON.stringify(viaProxy).slice(0, 200)}`,
     };
   }
 

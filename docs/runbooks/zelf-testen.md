@@ -42,8 +42,8 @@ npm run demo:af
 | 1 | Poorten 5001 en 3000 vrijmaken | Een eerdere demo-stack wordt opgeruimd; iets anders wordt met rust gelaten |
 | 2 | Demo-database (`npm run demo:start`) | Container `mcm2demo` op poort 55450, data blijft staan |
 | 3 | Backend bouwen en starten | Op 5001, met de vier variabelen die met de hand steeds misgingen |
-| 4 | Frontend starten | Op 3000, met `NEXT_PUBLIC_API_URL` gezet |
-| 5 | Sessie maken en de keten controleren | Haalt zelf de vragenlijsten op en toont wat het terugkreeg |
+| 4 | Frontend starten | Op 3000, met `API_BASE_URL` gezet |
+| 5 | Sessie maken en de keten controleren | Haalt de vragenlijsten twee keer op: rechtstreeks bij de backend én via de frontend |
 
 Stap 5 is het verschil met alles wat hiervoor bestond. Zonder die stap eindigt
 een script met "klaar" terwijl de browser een leeg scherm toont.
@@ -58,7 +58,7 @@ ongeveer hetzelfde uit:
 
 | Wat ontbrak | Wat je zag | Wat het werkelijk was |
 |---|---|---|
-| `NEXT_PUBLIC_API_URL` | Voorbeeldgegevens | De frontend praatte met niemand |
+| `NEXT_PUBLIC_API_URL` (nu `API_BASE_URL`) | Voorbeeldgegevens | De frontend praatte met niemand |
 | Backend niet gestart | "Kon niet worden opgehaald" | Er was geen backend |
 | `CORS_ORIGIN` | "Kon niet worden opgehaald" | De browser gooide het antwoord weg |
 | `SESSIE_COOKIE_INSECURE` | Lege lijst na inloggen | De backend zocht `__Host-mcm2_sessie`, dat over http niet bestaat |
@@ -67,6 +67,17 @@ Het script zet ze alle vier goed én controleert ze. Die controle stuurt bewust
 een `Origin`-header mee: zonder die header geeft de backend ook bij een
 verkeerde `CORS_ORIGIN` netjes 200 terug, en dan zou de controle de derde fout
 missen. Gemeten, niet aangenomen.
+
+> **Twee daarvan zijn sinds Issue #51 veranderd van karakter.** De browser praat
+> niet meer rechtstreeks met de backend maar via de frontend, dus `CORS_ORIGIN`
+> is niet langer nodig — het staat er nog als vangnet zolang het doorgeefluik
+> niet in productie bewezen is. En de eerste fout heet nu `API_BASE_URL`, die
+> bij het **starten** gelezen wordt in plaats van bij het bouwen.
+>
+> Er is een vijfde controle bijgekomen: het script haalt de vragenlijsten óók
+> via poort 3000 op. Dat is een aparte schakel die apart stuk kan, met dezelfde
+> misleidende faalvorm — "kon niet worden opgehaald", precies zoals bij een
+> backend die niet draait.
 
 ---
 

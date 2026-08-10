@@ -17,7 +17,8 @@
  *   7. De vragenlijst komt uit de database (stap 5 uit de bouwvolgorde)
  *   8. Validatie, bestandsupload en indienen werken end-to-end (stap 6 en 8)
  *   9. Frontend-image draait en serveert het portaal
- *  10. De frontend praat met de echte backend, niet met mock data
+ *  10. De frontend praat met de echte backend, niet met mock data, en het
+ *      doorgeefluik uit Issue #51 bereikt de backend werkelijk
  *
  * Elke stap faalt hard. Een groene doorloop betekent dat de keten
  * browser → frontend → backend → database aantoonbaar werkt.
@@ -460,7 +461,38 @@ async function main() {
   if (home.tekst.includes('Live backend')) {
     ok('frontend draait op de echte backend, niet op mock data');
   } else {
-    fout('frontend draait op mock data — NEXT_PUBLIC_API_URL niet ingebakken');
+    fout('frontend draait op mock data — NEXT_PUBLIC_MOCK_DATA staat aan');
+  }
+
+  // Het doorgeefluik zelf (Issue #51). De controle hierboven bewijst alleen dat
+  // de mock-schakelaar uitstaat; die zegt sinds #51 niets meer over de vraag óf
+  // de frontend de backend werkelijk bereikt. Dat is precies het onderscheid
+  // dat op 2026-08-04 in de demo-stack misging: mock data en een onbereikbare
+  // backend zien er in het scherm identiek uit.
+  //
+  // Deze route vraagt een onbekend token op. Het antwoord moet van de BACKEND
+  // komen — 404 met een melding — en niet van Next.js, dat bij een ontbrekende
+  // route ook een 404 geeft. Vandaar dat de inhoud gecontroleerd wordt en niet
+  // alleen de code: een 404 van Next.js is HTML, die van de backend is JSON.
+  // Dezelfde aanroep als stap 4 hierboven, maar dan via de frontend in plaats
+  // van rechtstreeks naar de backend. Slaagt die daar en hier niet, dan zit het
+  // verschil in het doorgeefluik en nergens anders.
+  const doorgeefluik = await http(
+    `${FRONTEND}/api/backend/survey/respond?t=${'x'.repeat(43)}`,
+  );
+
+  if (doorgeefluik.status === 404 && doorgeefluik.tekst.trim().startsWith('{')) {
+    ok('doorgeefluik bereikt de backend (JSON-antwoord, niet Next.js zelf)');
+  } else if (doorgeefluik.status === 502) {
+    fout(
+      'doorgeefluik kan de backend niet bereiken — API_BASE_URL wijst verkeerd. ' +
+        'Binnen de container is dat de servicenaam, niet localhost.',
+    );
+  } else {
+    fout(
+      `doorgeefluik gaf ${doorgeefluik.status} met ` +
+        `${doorgeefluik.tekst.trim().slice(0, 80)} — verwacht 404 met JSON`,
+    );
   }
 
   // Bewust een ánder token: het eerste is hierboven verbruikt door de

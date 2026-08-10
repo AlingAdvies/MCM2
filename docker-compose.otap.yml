@@ -60,12 +60,16 @@ services:
   frontend:
     build:
       context: ../MCM2-frontend
-      args:
-        # NEXT_PUBLIC_* wordt tijdens de BUILD in de bundel gebakken, niet bij
-        # het starten gelezen. Daarom een build-arg en geen environment-regel;
-        # dat laatste zou stilzwijgend niets doen en de frontend op mock data
-        # laten draaien terwijl je denkt dat hij live is.
-        NEXT_PUBLIC_API_URL: http://localhost:5001
+      # Geen build-args meer. Sinds Issue #51 leest de frontend het adres van de
+      # backend bij het STARTEN, niet bij het bouwen — dat is wat het image
+      # promoveerbaar maakt.
+    environment:
+      # LET OP: `api`, niet `localhost`. Voorheen stond hier het adres dat de
+      # BROWSER aanriep, en die zit buiten Docker — daar is localhost:5001 de
+      # doorgezette poort. Nu roept de frontend-CONTAINER de backend aan, en
+      # binnen die container is localhost de container zelf. Alleen de
+      # servicenaam uit dit compose-netwerk werkt.
+      API_BASE_URL: http://api:5001
     ports:
       - "3000:3000"
     depends_on:

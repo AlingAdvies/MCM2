@@ -1,6 +1,6 @@
 # Plan — een OTAP-straat met staging, van nul opnieuw doordacht
 
-**Status:** in uitvoering — **stap 2 is gedaan** (staging bestaat, zie §8)
+**Status:** in uitvoering — **stap 1 en 2 zijn gedaan** (§3.1 en §3.2)
 **Datum:** 2026-08-10, bijgewerkt dezelfde avond
 **Eigenaar:** Kees Aling
 **Aanleiding:** de straat die op 09/10-08 op saxombp gebouwd is, loopt niet uit
@@ -144,11 +144,48 @@ plek.
 
 Dit is de fase die af moet zijn voordat er ook maar één rij data wordt ingevoerd.
 
-### 3.1 Voorwaarde: Issue #51
+### 3.1 Voorwaarde: Issue #51 — ✅ GEDAAN op 2026-08-10
 
-**Zonder dit werkt de rest niet.** `NEXT_PUBLIC_API_URL` wordt nu tijdens de
-build in de frontend gebakken. Eén image kan dus niet naar meerdere omgevingen —
-en dat is precies wat de straat belooft.
+**Zonder dit werkte de rest niet.** `NEXT_PUBLIC_API_URL` werd tijdens de build
+in de frontend gebakken. Eén image kon dus niet naar meerdere omgevingen — en
+dat is precies wat de straat belooft.
+
+**Uitgevoerd.** De browser praat alleen nog met de frontend zelf; alle aanroepen
+gaan naar `/api/backend/...`, een server-side route die `API_BASE_URL` bij elke
+aanroep uit de omgeving leest.
+
+| Wat | Uitkomst |
+|---|---|
+| Acceptatiecriterium 1 — moet de browser cross-origin praten? | Nee. Alle 18 componenten die services aanroepen zijn `'use client'`; frontend en backend rollen samen uit |
+| Acceptatiecriterium 2 — same-origin doorgeefluik | `src/app/api/backend/[...pad]/route.ts` |
+| Acceptatiecriterium 3 — hetzelfde image, twee backends | Bewezen, zie hieronder |
+| `profiles:` uit `docker-compose.omgeving.yml` | Weg |
+| Browsertests | 55 geslaagd, 5 gevallen — dezelfde als de nulmeting, geen regressie |
+
+**Het bewijs.** Image `sha256:8526dae2…` twee keer gestart, verschil alleen
+`API_BASE_URL`, hetzelfde sessiecookie meegestuurd: container A gaf de
+leverancierslijst uit de demo-database, container B een 401 uit een verse
+database. Geen herbouw tussendoor.
+
+**Tegenproef gedraaid**, want een geslaagde meting bewijst geen grens: met een
+onbereikbaar `API_BASE_URL` geeft het doorgeefluik een 502 met een leesbare
+melding. Geen stil terugvallen op voorbeelddata.
+
+**Twee dingen die aandacht verdienen bij het vervolg:**
+
+1. **De mock-schakelaar is omgekeerd.** Voorheen betekende een lege variabele
+   mock data; nu moet mock expliciet aan met `NEXT_PUBLIC_MOCK_DATA`. Vergeten
+   instellen gaf vroeger een scherm vol verzonnen data dat er echt uitzag, en
+   geeft nu een zichtbare fout — de veilige kant van de twee.
+2. **`API_BASE_URL` is géén browseradres.** Het wordt aangeroepen door de
+   frontend-container, waarbinnen `localhost` de container zelf is. In compose
+   is dat `http://api:5001`. Dat is het spiegelbeeld van `CORS_ORIGIN`, en die
+   twee zijn makkelijk te verwarren.
+
+**Wat dit níét oplost, en wat stap 3 nu blokkeert:** de frontend-image wordt
+nergens gepubliceerd. De CI bouwt hem en controleert dat hij start, maar duwt
+hem niet naar GHCR. `FRONTEND_MEE` in `scripts/deploy.js` staat daarom nog op
+`false` — geen ontwerpprobleem meer, wel een ontbrekende publicatiestap.
 
 Uit onderzoek op 10-08 (acceptatiecriterium 1 van #51):
 
@@ -420,8 +457,9 @@ het als eerste staat.
 
 | Stap | Wat | Beslissing nodig? |
 |---|---|---|
-| 1 | Issue #51 — frontend promoveerbaar | Nee, gaat sowieso door |
+| 1 | ✅ **Issue #51 — frontend promoveerbaar** — gedaan 10-08 | Nee, ging sowieso door |
 | 2 | ✅ **Staging aanmaken bij Supabase** — gedaan 10-08 | Beslist: optie A |
+| 2b | **Frontend-image publiceren naar GHCR** — kwam boven bij stap 1 | Nee. Voorwaarde voor stap 3 |
 | 3 | Uitrol naar staging automatiseren | Nee |
 | 4 | Uitrol naar productie automatiseren, met akkoordrem | Nee |
 | 5 | `.env` omleiden naar staging | Nee, maar wel melden wanneer |

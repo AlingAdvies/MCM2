@@ -83,29 +83,27 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # ── De frontend draait pas mee zodra hij promoveerbaar is ─────────────────
+  # ── De frontend, promoveerbaar sinds Issue #51 ────────────────────────────
   #
-  # Achter een profiel, dus standaard uit. Reden: `NEXT_PUBLIC_API_URL` wordt in
-  # de frontend tijdens de BUILD in de bundel gebakken (Dockerfile regel 28-29,
-  # Issue #51). Eén image weet daardoor al of het met de acceptatie- of de
-  # productiebackend praat.
+  # Hier stond een `profiles:`-regel die deze service standaard uitzette. Reden:
+  # `NEXT_PUBLIC_API_URL` werd tijdens de BUILD in de bundel gebakken, dus één
+  # image wist al of het met de acceptatie- of de productiebackend praatte. Dat
+  # maakte promoveren onmogelijk — het image dat op acceptatie beproefd was zou
+  # op productie de verkeerde backend aanroepen.
   #
-  # Dat maakt promoveren onmogelijk: het image dat op acceptatie is beproefd
-  # zou op productie de verkeerde backend aanroepen. Twee images bouwen — één
-  # per omgeving — lost dat niet op maar breekt juist het uitgangspunt: dan is
-  # wat je test niet wat je uitrolt.
-  #
-  # Daarom draait deze keten voorlopig alleen de backend. Dat is geen halve
-  # oplossing maar een eerlijke: de backend leest al zijn configuratie bij het
-  # starten en ís promoveerbaar, dus wat hier bewezen wordt, is echt bewezen.
-  #
-  # Zodra Issue #51 is opgelost:
-  #   - deze regel `profiles:` weghalen
-  #   - de frontend publiceert dan naar ghcr.io/…/mcm2-frontend/web
-  # Verder verandert er niets aan dit bestand of aan deploy.js.
+  # De frontend leest dat adres nu bij het STARTEN, uit `API_BASE_URL`. Daarmee
+  # is hetzelfde image bruikbaar op elke omgeving en draait hij gewoon mee.
   frontend:
-    profiles: ["frontend"]
     image: ${FRONTEND_IMAGE}
+    environment:
+      # `api`, niet `localhost`: dit adres wordt aangeroepen door de
+      # frontend-CONTAINER, en daarbinnen is localhost de container zelf. De
+      # servicenaam uit dit compose-netwerk is het enige dat werkt.
+      #
+      # Let op het verschil met CORS_ORIGIN hierboven: dat is een adres dat de
+      # BROWSER gebruikt en dus van buitenaf moet kloppen. Deze twee zien er
+      # verwarrend genoeg allebei uit als "waar staat de ander".
+      API_BASE_URL: http://api:5001
     ports:
       - "${FRONTEND_POORT}:3000"
     depends_on:

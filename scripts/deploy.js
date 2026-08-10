@@ -56,17 +56,22 @@ const SERVER_MAP = '/opt/mcm2';
 /**
  * Draait de frontend mee?
  *
- * Voorlopig niet. `NEXT_PUBLIC_API_URL` wordt in de frontend tijdens de build
- * in de bundel gebakken (Issue #51), dus één image weet al welke backend het
- * aanroept — en dan is promoveren van acceptatie naar productie onmogelijk.
+ * Nog niet, maar om een ándere reden dan voorheen. De oude blokkade — het
+ * ingebakken backend-adres uit Issue #51 — is weg: de frontend leest dat adres
+ * sinds die wijziging bij het starten uit `API_BASE_URL`, en `profiles:` is
+ * daarom al uit docker-compose.omgeving.yml verdwenen.
+ *
+ * Wat nu nog ontbreekt is eenvoudiger en concreter: **de frontend-image wordt
+ * nergens gepubliceerd.** De CI van MCM2-frontend bouwt hem en controleert dat
+ * hij start, maar duwt hem niet naar GHCR. `FRONTEND_IMAGE` zou dus verwijzen
+ * naar iets dat niet bestaat, en de uitrol zou stranden op een `docker pull`.
  *
  * Liever een keten die alleen de backend dekt en dat eerlijk zegt, dan een die
- * er compleet uitziet en een image promoveert dat naar de verkeerde backend
- * wijst. Dat laatste zou pas opvallen wanneer iemand op productie kijkt en
- * acceptatiedata ziet.
+ * er compleet uitziet en struikelt op een ontbrekend image.
  *
- * Zodra #51 is opgelost: deze vlag op `true`, en `profiles:` weg uit
- * docker-compose.omgeving.yml. Verder verandert er niets in dit script.
+ * Zodra de frontend naar `ghcr.io/…/mcm2-frontend/web` publiceert met dezelfde
+ * SHA-tag als de backend: deze vlag op `true`. Verder verandert er niets in dit
+ * script — het compose-bestand is er al klaar voor.
  */
 const FRONTEND_MEE = false;
 

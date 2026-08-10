@@ -135,7 +135,7 @@ Concreet voor de frontend:
 
 | Regel | Waarom |
 |---|---|
-| API-adres uit `NEXT_PUBLIC_API_URL` | Zelfde patroon als MVM_V2's mock/live-schakelaar |
+| ~~API-adres uit `NEXT_PUBLIC_API_URL`~~ → `API_BASE_URL`, zie de aanvulling onderaan | Zelfde patroon als MVM_V2's mock/live-schakelaar |
 | Geen platformspecifieke build-functies | Anders is verhuizen later duur |
 | Geen aanname over het domein | Het adres verschilt per omgeving |
 | Bestandsopslag via de backend, nooit rechtstreeks | De backend bewaakt de tokencontrole (vragenlijst-ontwerp §6) |
@@ -265,3 +265,60 @@ Herzien wanneer:
   en wordt een preview-omgeving per pull request waardevoller;
 - **het handmatig tonen van schermen aan de klant in de praktijk knelt** — dat is de bekende prijs
   van dit besluit en het is legitiem om hem opnieuw te wegen.
+
+---
+
+## Aanvulling 2026-08-10 — het API-adres wordt runtime gelezen (Issue #51)
+
+Het besluit hierboven blijft staan; één regel eruit is achterhaald door de
+uitvoering ervan.
+
+**Wat er niet klopte.** De draagbaarheidsregel eist "alle configuratie via
+omgevingsvariabelen". `NEXT_PUBLIC_API_URL` leek daaraan te voldoen, maar
+Next.js bakt zulke variabelen tijdens de **build** in de bundel. Het adres was
+dus geen configuratie maar een eigenschap van het image — precies wat deze ADR
+wilde vermijden, in de ene regel die de uitzondering vormde.
+
+Het gevolg raakte de kern van de OTAP-belofte: één image kon niet van acceptatie
+naar productie promoveren, want het wist al met welke backend het praatte. Twee
+images bouwen lost dat niet op maar breekt het uitgangspunt — dan is wat je test
+niet wat je uitrolt.
+
+**Wat er nu staat.** De browser praat alleen nog met de frontend zelf. Alle
+aanroepen gaan naar `/api/backend/...`, een server-side route die `API_BASE_URL`
+bij elke aanroep uit de omgeving leest en het verzoek doorgeeft.
+
+| | Voor | Na |
+|---|---|---|
+| Variabele | `NEXT_PUBLIC_API_URL` | `API_BASE_URL` |
+| Gelezen | bij het bouwen | bij het starten |
+| Promoveerbaar | nee | ja |
+| `CORS_ORIGIN` nodig | ja | nee — zelfde herkomst |
+
+**Afgewogen en verworpen:** een publiek `/config`-endpoint dat de browser bij het
+laden bevraagt. Dat was de eerste gedachte in Issue #51; de externe review van
+2026-07-29 wees hem af wegens een extra netwerklaag, een endpoint dat vertelt
+waar de backend leeft, en een venster waarin de eerste aanroep nog niet weet
+waarheen.
+
+**De mock/live-schakelaar is losgekoppeld, niet verplaatst.**
+`NEXT_PUBLIC_MOCK_DATA` blijft een build-variabele. Mock data is een
+ontwikkelstand en geen omgeving: test, acceptatie, staging en productie draaien
+allemaal op de echte backend, en een mock-image wordt nooit gepromoveerd. De
+schakelaar zit bovendien in achttien schermbestanden, en als hij breekt tonen
+schermen stilletjes verzonnen data terwijl je denkt naar echte klantgegevens te
+kijken — de gevaarlijkste faalvorm die deze applicatie heeft.
+
+**Let op de omkering.** Voorheen betekende een lege variabele mock data, doordat
+één variabele twee dingen deed. Nu moet mock expliciet aan. Vergeten instellen
+gaf vroeger een scherm vol verzonnen data dat er echt uitzag; het geeft nu een
+zichtbare fout.
+
+**Bewezen, niet aangenomen.** Hetzelfde image (`sha256:8526dae2…`) draaide in
+twee containers die alleen in `API_BASE_URL` verschilden, met hetzelfde
+sessiecookie: de een gaf de leverancierslijst uit de demo-database, de ander een
+401 uit een verse database. Dat is acceptatiecriterium 3 van Issue #51.
+
+Daarmee is de draagbaarheidsregel voor het eerst volledig waar: er is geen enkele
+instelling meer die bij het bouwen vastligt en per omgeving zou moeten
+verschillen. Dat is wat App Runner, ECS en Kubernetes nodig hebben.
