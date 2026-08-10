@@ -230,29 +230,66 @@ verhuizing naar een echte cloud met TLS moet die regel weg uit `productie.env`.*
 
 ---
 
-## Bekende beperking — de frontend rolt nog niet mee
+## De frontend rolt mee — met een eigen versie
 
-**De oude blokkade is weg.** `NEXT_PUBLIC_API_URL` werd bij de build in de
-bundel gebakken, waardoor één frontend-image al wist met welke backend het
-praatte. Sinds Issue #51 leest de frontend dat adres bij het **starten**, uit
-`API_BASE_URL`. Hetzelfde image is daarmee bruikbaar op elke omgeving, en
-`profiles:` is uit `deploy/docker-compose.omgeving.yml` verdwenen.
+Sinds 2026-08-10 draait de frontend mee in deze keten. Twee blokkades zijn
+achtereenvolgens weggenomen: het ingebakken backend-adres (Issue #51) en het
+ontbreken van een gepubliceerd image.
 
-**Wat nu nog ontbreekt is eenvoudiger.** De frontend-image wordt nergens
-gepubliceerd: de CI van MCM2-frontend bouwt hem en controleert dat hij start,
-maar duwt hem niet naar GHCR. `FRONTEND_IMAGE` zou dus verwijzen naar iets dat
-niet bestaat, en de uitrol zou stranden op een `docker pull`.
+### Twee repositories, twee versies
 
-Daarom staat `FRONTEND_MEE` in `scripts/deploy.js` nog op `false`. Zodra de
-frontend naar `ghcr.io/…/mcm2-frontend/web` publiceert met dezelfde SHA-tag als
-de backend, kan die vlag op `true` — verder verandert er niets.
+**Dit is het enige dat je hier echt moet onthouden.** Backend en frontend zitten
+in aparte repositories, dus hun commit-SHA's zijn nooit gelijk. De uitrol vraagt
+ze allebei:
 
-> **Let op bij het instellen:** `API_BASE_URL` wordt aangeroepen door de
-> frontend-*container*, niet door de browser. Daarbinnen is `localhost` de
-> container zelf; gebruik de servicenaam (`http://api:5001`). Dat is het
-> spiegelbeeld van `CORS_ORIGIN`, dat juist een adres is dat de browser
-> gebruikt. Staat het verkeerd, dan geeft de frontend een 502 met een leesbare
-> melding — geen stil scherm op voorbeelddata.
+```powershell
+npm run deploy:acceptatie -- --versie sha-abc123def456 --frontend-versie sha-987fed654321
+```
+
+Laat je een van beide weg, dan wordt dat `:latest`. Voor acceptatie is dat
+prima. **Voor productie niet**: dan is aan de omgeving niet te zien welke code
+er draait, en dat is precies wat §6 van het OTAP-plan uitsluit.
+
+Het slotbericht van een geslaagde uitrol drukt de terugdraairegel af met beide
+versies erin, zodat je die niet zelf hoeft samen te stellen:
+
+```
+  vorige versie was sha-25ffdf847ce0 met frontend sha-f850fc0d4e5f
+  terugdraaien:  npm run deploy:acceptatie -- --versie sha-25ffdf847ce0 --frontend-versie sha-f850fc0d4e5f
+```
+
+**Bij een rollback gaan beide onderdelen samen terug** naar de combinatie die er
+stond. Alleen de backend terugdraaien zou een frontend achterlaten die bij een
+andere versie hoort — een toestand die nergens beproefd is.
+
+**De promotiecontrole kijkt naar allebei.** Rol je naar productie uit met een
+combinatie die niet op acceptatie stond, dan meldt het script dat per onderdeel.
+Het blokkeert niet: soms is er een gegronde reden, maar hij moet zichtbaar zijn.
+
+### Wat er nu extra gecontroleerd wordt
+
+De rookproef controleerde of de frontend een pagina serveert. Dat bewijst niet
+dat hij de backend bereikt — sinds #51 loopt dat via een doorgeefluik dat
+`API_BASE_URL` bij het starten leest, en dat is een aparte schakel die apart
+stuk kan. Staat die variabele verkeerd, dan draait de frontend gewoon door en
+blijft elk beheerscherm leeg.
+
+Daarom vraagt de rookproef nu ook een beheerroute op via poort 3000. Zonder
+sessie hoort dat **401** te geven:
+
+| Antwoord | Wat het betekent |
+|---|---|
+| 401 | goed — de aanroep bereikte de backend en werd geweigerd |
+| 502 | het doorgeefluik vindt de backend niet — `API_BASE_URL` wijst verkeerd |
+| 500 | `API_BASE_URL` is helemaal niet gezet |
+
+`npm run deploy:status` toont dezelfde controle.
+
+> **`API_BASE_URL` is géén browseradres.** Het wordt aangeroepen door de
+> frontend-*container*, en daarbinnen is `localhost` de container zelf. Gebruik
+> de servicenaam: `http://api:5001`. Dat is het spiegelbeeld van `CORS_ORIGIN`,
+> dat juist wél een adres is dat de browser gebruikt — die twee zijn makkelijk
+> te verwarren.
 
 ---
 
