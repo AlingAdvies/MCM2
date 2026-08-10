@@ -1,66 +1,182 @@
 # MCM2 — actuele status
 
 ## Laatst bijgewerkt
-2026-08-07, avond (**de statusketen werkt van database tot scherm.** Vier PR's gemerged — goedkeuren (0017), notities (0018), werkvoorraad contractmanager, en de wegwerpmarkering (0019). Beide schermen zijn gebouwd en met echte data bekeken. **Twee PR's staan open, allebei groen, en die zijn het startpunt voor morgen.**)
 
-## 🔵 MORGEN BEGINNEN: twee open PR's, in deze volgorde
+**2026-08-10, avond.** De OTAP-keten is af en beproefd: acceptatie en productie
+draaien op `saxombp`, een image promoveert van de ene naar de andere, en
+terugdraaien werkt. Daarnaast: een onderhoudskalender met een poort die faalt als
+hij veroudert, een startscherm in de frontend, en vier documenten bijgewerkt die
+tot twee weken achterliepen.
 
-Allebei groen op CI, allebei wachtend op akkoord van de eigenaar.
+Geen open PR's.
 
-| Volgorde | PR | Repo | Wat |
-|---|---|---|---|
-| 1 | **#104** | `MCM2` | Demo-seed toont élke status, plus de documentatie van 07-08 |
-| 2 | **#8** | `MCM2-frontend` | Statusoverzicht + beoordeelscherm |
+---
 
-> **De volgorde is niet vrijblijvend.** #104 bevat de seed die de schermen data
-> geeft. Merge je #8 eerst, dan staat het beoordeelscherm leeg bij een demo:
-> het toont alleen afwijkingen, en zonder die seed is alles bevestigd.
+## 🔵 MORGEN BEGINNEN: de frontend promoveerbaar maken (Issue #51)
 
-Na het mergen:
+Dit is de enige plek waar de keten van vandaag nog niet dekt.
 
-```powershell
-gh workflow run ci.yml --ref main          # in MCM2
-npm run demo -- --vers                     # verse demo met alle statussen
+`NEXT_PUBLIC_API_URL` wordt in de frontend tijdens de **build** in de bundel
+gebakken (`Dockerfile` regel 28–29). Eén image weet daardoor al met welke backend
+het praat, en dan is promoveren van acceptatie naar productie onmogelijk: het
+image dat je op acceptatie beproeft zou op productie de verkeerde backend
+aanroepen.
+
+Twee images bouwen — één per omgeving — lost dat niet op maar breekt juist het
+uitgangspunt: dan is wat je test niet wat je uitrolt.
+
+**De oplossing:** de frontend leest de API-URL bij het starten in plaats van bij
+het bouwen. Server-side meegeven bij het renderen, geen losse `/config`-fetch —
+anders is er een venster waarin de eerste aanroep nog niet weet waarheen.
+
+**Waarom dit meer is dan een uitrolprobleem.** Elke cloudleverancier configureert
+containers met omgevingsvariabelen. Zolang de URL ingebakken zit, kun je die knop
+niet gebruiken — bij AWS App Runner net zo min als bij Azure of Kubernetes. Dit
+is dus geen tussenstap naar de cloud, het is de eis zelf.
+
+**Risico's** (besproken 2026-08-10): het raakt `client.ts`, de laag waar élk
+scherm doorheen praat. Twee dingen vangen dat af — de 55 browsertests draaien
+tegen de echte backend en worden massaal rood bij een breuk, en elke test
+controleert al expliciet dat `mock-melding` afwezig is. Die tweede is de
+belangrijkste: als de mock-schakelaar sneuvelt, draaien schermen stil op
+voorbeelddata terwijl je denkt dat ze live zijn.
+
+Werkwijze: eerst de basislijn meten (welke tests falen nu al — dat zijn er vijf),
+dan bouwen, dan opnieuw meten. Het verschil is de regressie.
+
+Daarna kan `FRONTEND_MEE` in `scripts/deploy.js` op `true` en de regel
+`profiles:` uit `deploy/docker-compose.omgeving.yml`. Verder verandert er niets.
+
+---
+
+## Wat er op 2026-08-10 is gebouwd
+
+### De OTAP-keten (PR #120 t/m #123)
+
+```
+merge naar main → CI (3 poorten) → image naar GHCR
+                                    :sha-<commit>  onveranderlijk
+                                    :latest
+  → npm run deploy:acceptatie   ophalen, migreren, starten, rookproef
+  → npm run deploy:productie    HETZELFDE image, vraagt bevestiging
 ```
 
-Daarna is `/beheer/status` het scherm om te bekijken.
+| Omgeving | Waar | Backend | Database |
+|---|---|---|---|
+| Acceptatie | `saxombp` | `:5011` | 55460 (127.0.0.1) |
+| Productie | `saxombp` | `:5021` | 55470 (127.0.0.1) |
 
-> ### ⚠ Wat er op 2026-08-07 misging, en wat eraan is gedaan
->
-> De e2e-suites draaiden tegen de **demo-database**: `DATABASE_URL` wees naar
-> poort 55450 in plaats van naar een wegwerpcontainer op 55440. De demo-tenant
-> verdween, 400 testleveranciers bleven achter. Er sloeg niets aan.
->
-> De bestaande bescherming (`scripts/db-doelwit.js`) kent één criterium — is de
-> host lokaal — en zat bovendien alleen in vier scripts. Binnen `localhost` was
-> de demo niet te onderscheiden van een wegwerpcontainer.
->
-> **Migratie 0019** zet `clm.omgeving` neer: elke database is `beschermd` tot
-> hij zichzelf als `wegwerp` meldt. De e2e-suites weigeren te starten tegen
-> alles wat niet wegwerp is, en `seed:demo --verwijder` ook. Zie
-> `docs/runbooks/commandos-en-omgeving.md` en **ADR-014**.
->
-> Productie is niet geraakt: die loopt zelfs achter (0017–0019 staan er nog
-> niet op).
+Bereikbaar via Tailscale, niet vanaf internet. Docker is op die server
+geïnstalleerd; de Saxo-app op 8080/8081 is aantoonbaar ongemoeid gebleven —
+zelfde PID's voor en na.
 
-> ### ⚠ Wat er op 2026-08-07 misging, en wat eraan is gedaan
->
-> De e2e-suites draaiden tegen de **demo-database**: `DATABASE_URL` wees naar
-> poort 55450 in plaats van naar een wegwerpcontainer op 55440. De demo-tenant
-> verdween, 400 testleveranciers bleven achter. Er sloeg niets aan.
->
-> De bestaande bescherming (`scripts/db-doelwit.js`) kent één criterium — is de
-> host lokaal — en zat bovendien alleen in vier scripts. Binnen `localhost` was
-> de demo niet te onderscheiden van een wegwerpcontainer.
->
-> **Migratie 0019** zet `clm.omgeving` neer: elke database is `beschermd` tot
-> hij zichzelf als `wegwerp` meldt. De e2e-suites weigeren te starten tegen
-> alles wat niet wegwerp is, en `seed:demo --verwijder` ook. Zie
-> `docs/runbooks/commandos-en-omgeving.md`.
->
-> Productie is niet geraakt: die loopt zelfs achter (0017–0019 staan er nog
-> niet op).
+**Wat is beproefd, niet aangenomen:**
 
+- uitrol naar acceptatie: 26 migraties, teruggelezen uit `drizzle.__drizzle_migrations`
+- promotie naar productie met hetzelfde image
+- rollback naar `sha-25ffdf847ce0` en weer terug, beide keren groen
+- datascheiding: tenant aangemaakt op acceptatie → productie zag `(leeg)`
+
+> **"Productie" betekent nu twee dingen, en dat verschil is wezenlijk.**
+> `saxombp:5021` is een **procesbewijs** zonder klantdata. De échte
+> productiedatabase is Supabase, met de tenant AlingAdvies erin; daar draait geen
+> uitgerolde applicatie tegen. Een cloudomgeving die beide samenbrengt is nodig
+> vóór de pilot (Issue #12).
+>
+> Wat dit **niet** bewijst: beschikbaarheid. Eén machine, thuisinternet, geen
+> reservestroom.
+
+### Onderhoud (PR #119)
+
+`docs/runbooks/README.md` als index, `onderhoudskalender.md` met alle
+terugkerende taken, en `npm run verify:onderhoud` als stap 1 van
+`verify:volledig`. Die poort is bewezen rood én groen: drie tegenproeven gedraaid.
+
+§5 van de kalender is de eerlijkste sectie — zeven ontbrekende onderdelen, vier
+met urgentie hoog.
+
+### Frontend (frontend PR #11)
+
+Startscherm op `/beheer` met vier tegels die de **hele organisatie** tellen, plus
+urgentiesortering in het statusoverzicht. Aanleiding: op 09-08 stonden er twee
+uitvragen bij Siemens terwijl het statusoverzicht niets meldde — dat scherm staat
+standaard op "van mij".
+
+Bewust **niet** overgenomen uit MVM_V2: de KPI's "compliance %" en "gemiddelde
+risicoscore". Die staan daar op handmatig ingetypte getallen in `vendors.mock.ts`.
+
+### Documentatie (PR #124)
+
+Vier documenten bijgewerkt die tot twee weken achterliepen. `otap-en-security-
+voor-eigenaar.md` stond nog op *"Acceptatie en Productie bestaan nog niet"*.
+
+---
+
+## ⚠ Vier fouten van 2026-08-10, en wat eruit volgde
+
+Alle vier gevonden door terug te lezen in plaats van een melding te geloven.
+
+| Wat er leek te gebeuren | Wat er werkelijk was | Wat eruit volgde |
+|---|---|---|
+| Backupcontrole: "Compleet: 18 tabellen" | `backup-verwachting.json` liep **twaalf migraties** achter; vijf tabellen ontbraken | `verify:onderhoud` als stap 1 |
+| Uitrol: "UITGEROLD", rookproef groen | De database was **leeg** | uitrol leest `__drizzle_migrations` terug |
+| `migrate.js`: exitcode 0 | Het script crashte op `MODULE_NOT_FOUND`; de pipe naar `tail` slaagde | exitcode is geen bewijs |
+| `pg_isready`: "klaar" | Een verse Postgres start intern twee keer; hij zei ja in het venster ertussen | twee opeenvolgende **queries** |
+
+**Drie van de vier zijn varianten van hetzelfde**: elk zag eruit als succes. Dat
+is §15b, tegenproef 6 — de afwezigheid van een fout is niet de aanwezigheid van
+een grens.
+
+---
+
+## ⚠ De repository is een uur kwijt geweest
+
+Bij het verwijderen van een GHCR-pakket is `AlingAdvies/MCM2` zelf verwijderd —
+de knop *"Delete this repository"* staat in dezelfde Danger Zone als *"Delete this
+package"*, op een pagina waar je makkelijk terechtkomt vanaf de pakketpagina.
+
+**Hersteld via** `https://github.com/organizations/AlingAdvies/settings/deleted_repositories`,
+met alles erin: branches, issues, 124 PR's. GitHub bewaart 90 dagen.
+
+Twee dingen om te onthouden:
+
+1. **De herstelpagina toont niets in het eerste uur.** "No recoverable
+   repositories" betekende daar: nog niet verwerkt, niet: weg.
+2. **Er staat nu een geverifieerde git-bundel in OneDrive**
+   (`mcm2-git-noodkopie-20260810-1423.bundle`, *"records a complete history"*).
+   Die blijft staan.
+
+Na het herstel stond de repository op **public** in plaats van private, en pikte
+GitHub de push-triggers niet meer op — vandaar dat de publiceer-job nu ook
+handmatig te starten is (PR #122).
+
+---
+
+## Openstaand, in volgorde van urgentie
+
+| # | Wat | Waarom nu |
+|---|---|---|
+| **#51** | Frontend promoveerbaar maken | Blokkeert de helft van de OTAP-keten — zie bovenaan |
+| **#46** | Uploads op een containerschijf: weg bij image-vervanging | **Harde datum**: pilot ~1 september. Dit zijn compliance-bewijsstukken |
+| — | Geen bewaking die waarschuwt als een omgeving omvalt | Je zou het merken doordat iemand belt |
+| — | Geen incidentplan | NIS2 kent een meldplicht binnen 24 uur; die klok loopt of je een plan hebt of niet |
+| — | Geen sleutelrotatie | Het GHCR-token op saxombp **verloopt rond 08-11-2026**; dan stopt elke uitrol |
+| **#58** | Backup hangt aan deze laptop | Er leeft een echte tenant |
+| **#12** | Echte cloudomgeving | Nodig vóór de pilot |
+
+De drie regels zonder nummer staan in `docs/runbooks/onderhoudskalender.md` §5.
+Die lijst hoort korter te worden; groeit hij, dan loopt het onderhoud achter op
+wat er gebouwd wordt.
+
+---
+
+## Vijf falende browsertests (bestaand, niet nieuw)
+
+In `instellingen` (3), `uitnodigen` (1) en `vragenlijsten` (1). Gemeten op schone
+`main` vóór het startschermwerk — ze faalden daar ook.
+
+Drie ervan gaan over het antwoordadres dat op 09-08 is gemerged: het veld staat
+op `disabled` terwijl de ingelogde gebruiker admin is. Verdient aparte aandacht.
 ---
 
 ## De PR-stapel van 06-08 is weg (afgehandeld 2026-08-07)
@@ -115,7 +231,11 @@ Twee dingen die daarbij geen detail waren, en die nu gebouwd zijn:
 
 ---
 
-## Wat er ná de twee open PR's ligt
+## Functionele wensen (stand 2026-08-07, nog geldig)
+
+> Deze lijst komt uit de sessie van 7 augustus en gaat over **functionaliteit**,
+> niet over de infrastructuur van 10 augustus. Punt 1 en 2 staan nog open; punt 1
+> is deels ingehaald doordat er sinds 09-08 een echte tenant in productie leeft.
 
 **Voor de eigenaar, in volgorde van wat het meest oplevert:**
 
@@ -322,15 +442,24 @@ Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in
 2. Lees dit document (`docs/STATUS.md`) volledig — het is de enige actuele waarheid over fase en blockers.
 
    Wie wil begrijpen **waarom** de tenantgrens is zoals hij is, en hoe elke laag ervan bewezen wordt: `docs/architectuur-en-verificatie.md`. Dat document beschrijft de architectuur, het principe achter de testopzet (elke beveiligingstest krijgt een tegenproef) en — het belangrijkste hoofdstuk — wat er nog **niet** bewezen is. Het veroudert zodra de code verandert, dus werk het bij wanneer je de tenantgrens of de testopzet raakt.
+
+   Verder, sinds 2026-08-10:
+   - `docs/runbooks/README.md` — de index van alle runbooks
+   - `docs/runbooks/onderhoudskalender.md` — wat er terugkeert en wanneer, plus §5: wat nog **niet** beschreven is
+   - `docs/runbooks/uitrol-acceptatie-en-productie.md` — uitrollen, promoveren, terugdraaien
+
+   `npm run verify:onderhoud` bewaakt dat die documenten niet verouderen; hij draait als stap 1 van `verify:volledig`.
 3. Verifieer git-status zelf (`git status`, `git branch -a`) tegen wat hieronder staat — vertrouw niet blind op deze snapshot. **Doe dat in beide repositories.**
 4. Check de open GitHub Issues (`gh issue list --repo AlingAdvies/MCM2 --state open`) voor de actuele backlog — dit document verwijst naar issue-nummers, maar de Issues zelf zijn de bron van waarheid over wat daadwerkelijk nog open staat.
 5. **Werk verder volgens het plan** — sinds 2026-08-03 is dat
    `docs/superpowers/plans/2026-08-03-surveybeheer.md`. Niet volgens losse ingevingen.
    Uitdrukkelijke wens van de eigenaar: **de fases in volgorde afwerken.**
 
-   > **Stand 2026-08-06:** fase A, B en C zijn gebouwd; C staat nog in vijf ongemergede PR's.
-   > **Begin bij het rode blok bovenaan dit document**, niet bij punt 6 hieronder — dat
-   > beschrijft de situatie van vóór fase A.
+   > **Stand 2026-08-10:** fase A, B en C zijn gebouwd en gemerged. Er zijn geen
+   > open PR's. Het surveybeheerplan is daarmee grotendeels afgewerkt; wat er nu
+   > ligt is infrastructuur (Issue #51, #46, #12) en frontend-ontwerp.
+   > **Begin bij het blauwe blok bovenaan dit document**, niet bij punt 6 hieronder —
+   > dat beschrijft de situatie van vóór fase A.
 
    Twee dingen die daarbij horen en makkelijk wegzakken:
    - **Issue #59 — `npm audit` meldt 29 kwetsbaarheden.** Niet vergeten, maar ook niet nu oplossen: `npm audit --omit=dev` geeft **0**, dus er zit niets van in het productie-image. De voorgestelde automatische fix zet eslint jaren terug en breekt de lint-configuratie. Hoort bij de eerste major-onderhoudsronde op devDependencies, samen met Dependabot (#22). **Controleer wel bij elke sessie dat `npm audit --omit=dev` nul blijft** — wordt dat meer dan nul, dan is het geen onderhoudspunt meer maar een blocker.
