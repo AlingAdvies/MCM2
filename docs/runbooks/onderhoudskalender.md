@@ -83,6 +83,8 @@ npm run backup:controle
 | **Maandelijks** | Deze kalender nalopen: klopt hij nog met wat er werkelijk draait? | Een kalender die veroudert is erger dan geen kalender | dit document |
 | **Per kwartaal** | ADR's op geldigheid nalopen, met name ADR-011 en ADR-002 | Fase-overgangen veranderen de norm, niet het document | — (§5) |
 | **Bij elke release naar productie** | OTAP-doorloop draaien | Bewijst dat het uitrolbare artefact werkt, niet alleen de code | [otap-doorloop.md](otap-doorloop.md) |
+| **Bij elke release naar productie** | Uitrollen via acceptatie, nooit rechtstreeks | Een versie die niet op acceptatie stond, is niet beproefd | [uitrol-acceptatie-en-productie.md](uitrol-acceptatie-en-productie.md) |
+| **Per kwartaal** | Rollback beproeven op acceptatie | Terugdraaien is het onderdeel dat in de praktijk het vaakst nooit getest is — en dat je nodig hebt op het slechtste moment | [uitrol-acceptatie-en-productie.md](uitrol-acceptatie-en-productie.md) |
 
 ### Gebeurtenisgebonden — geen ritme, maar een trigger
 
@@ -157,8 +159,9 @@ document dat vertelt hóe.
 
 | Ontbreekt | Waarom het een gat is | Urgentie |
 |---|---|---|
-| **Sleutel- en wachtwoordrotatie** | `.env` bevat het Supabase-productiewachtwoord, `RESEND_API_KEY`, `TELEGRAM_BOT_TOKEN` en de OIDC-secrets. Er is geen rotatieritme, geen vervaldatum en geen procedure. Bij vertrek van een betrokkene of een vermoed lek is er niets om te volgen. | **Hoog** — er leeft een echte tenant |
-| **Storing buiten backup** | De runbooktabel in de architectuurreview ("health-check faalt", "rollback na mislukte release") is expliciet indicatief en verwijst naar omgevingen die nog niet bestaan (Issue #12). Voor productie is er geen storingsprocedure. | **Hoog** vanaf de pilotstart |
+| **Sleutel- en wachtwoordrotatie** | `.env` bevat het Supabase-productiewachtwoord, `RESEND_API_KEY`, `TELEGRAM_BOT_TOKEN` en de OIDC-secrets. Sinds 2026-08-10 komt daar `/opt/mcm2/.ghcr-token` op saxombp bij — **dat verloopt rond 2026-11-08** en dan stopt elke uitrol. Er is geen rotatieritme, geen vervaldatum-bewaking en geen procedure. | **Hoog** — er leeft een echte tenant, en er is nu een sleutel met een harde einddatum |
+| **Storing buiten backup** | *Deels ingevuld op 2026-08-10:* rollback na een mislukte release staat in [uitrol-acceptatie-en-productie.md](uitrol-acceptatie-en-productie.md), en de uitrol draait zelf terug als de rookproef faalt. Wat ontbreekt: wat te doen als een omgeving spontaan omvalt — detectie, eerste respons, escalatie. | **Hoog** vanaf de pilotstart |
+| **Bewaking van de omgevingen** | Er is geen enkel signaal wanneer acceptatie of productie omvalt. De rookproef kijkt één keer, bij de uitrol. Voor de backup bestaat zo'n signaal wél (Telegram, met wekelijks levensteken); voor de draaiende omgevingen niet. Je zou het merken doordat iemand belt. | **Hoog** vanaf de pilotstart |
 | **Afwezigheid en vakantie** | Alles hangt aan één persoon en één machine. Staat de laptop uit, dan draait geen dump, geen controle en geen melding. Er is geen tweede lezer en geen overdracht. | **Hoog** — dit is Issue #58 plus Issue #48 |
 | **Dependabot** | `.github/dependabot.yml` bestaat niet. Het updatebeleid in de architectuurreview (patch automatisch, minor met review, major nooit blind) is nooit ingericht. De maandelijkse `npm audit` in §2 is de handmatige vervanging. | Middel |
 | **Logrotatie** | `backup-controle.log` en `backup-taak.log` groeien onbegrensd. Klein probleem, maar het staat nergens. | Laag |

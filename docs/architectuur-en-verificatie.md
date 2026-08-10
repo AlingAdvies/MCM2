@@ -1,6 +1,6 @@
 # MCM2 — de tenantgrens, en hoe elke laag ervan bewezen wordt
 
-**Opgesteld:** 2026-07-31 · **Bijgewerkt:** 2026-08-03 (actorgrens, migratie 0013)
+**Opgesteld:** 2026-07-31 · **Bijgewerkt:** 2026-08-10 (§8: uitrolketen beproefd, bewaking en sleutelrotatie als gaten)
 **Bedoeld voor:** de eigenaar en een externe reviewer
 **Leesbare webversie:** https://claude.ai/code/artifact/31d7819a-a7d9-4079-b224-c51d08497450
 
@@ -441,10 +441,13 @@ moeten lezen. Alles hierboven is gemeten; alles hieronder is dat niet.
 | De actorgrens in een policy | **Onbewezen** | `app.current_actor` komt aantoonbaar in de database aan en blijft per transactie geïsoleerd (5 tests). Maar **geen enkele policy gebruikt hem** — migratie 0013 verandert bewust geen gedrag. Dat een leverancier straks écht buiten een beoordeling blijft, wordt pas bewezen door migratie 0014 plus de tegenproef die `survey_review` aan het leverancierspad toevoegt. Tot dan is de doorgifte alleen bewaakt door een test die de broncode leest; zie §4. |
 | Wachtwoordrotatie `postgres` | **Niet gedaan** | Issue #1. De beheerrol heeft nog het oorspronkelijke wachtwoord. |
 | Gelijktijdige uploads | **Onbewezen** | De `FOR UPDATE`-vergrendeling is er, maar met die vergrendeling verwijderd bleven alle tests groen. De race was niet uit te lokken zonder kunstgrepen in productiecode. |
-| Gezondheid van een uitgerolde omgeving | **Bestaat niet** | De e2e-tests beantwoorden dit nooit — ze zijn destructief van aard. Er is een aparte, alleen-lezende rookproef nodig: **Issue #61**. |
+| Gezondheid van een uitgerolde omgeving | **Deels, sinds 2026-08-10** | Er is nu een alleen-lezende rookproef bij elke uitrol: `/health` geeft 200, en een beheerroute geeft **401 en geen 500** — dat laatste bewijst dat de guard draait én dat de database bereikbaar was. Wat nog ontbreekt is **doorlopende** bewaking: de rookproef kijkt één keer, bij de uitrol. Valt een omgeving daarna om, dan merkt niemand het. **Issue #61** blijft daarvoor open. |
+| Doorlopende bewaking van een draaiende omgeving | **Bestaat niet** | Geen enkel signaal wanneer acceptatie of productie omvalt. Je zou het merken doordat iemand belt. Voor de backup bestaat zo'n signaal wél (Telegram, met wekelijks levensteken); voor de omgevingen niet. |
 | Virusscan op bijlagen | **Niet gebouwd** | De klant heeft er niets over gezegd (OV-7); het ontwerp benoemt dit expliciet als openstaand risico. |
 | Eigenaarsgat op vijf tabellen | **Deels afgedekt** | `FORCE RLS` kon niet op `user`, `tenant_membership`, `survey_response`, `survey_run` en `vendor` — de `SECURITY DEFINER`-functies moeten die lezen vóór er tenantcontext is. Bewaakt door een test op tabeleigenaarschap; volledig sluiten vraagt een aparte eigenaarsrol (**Issue #65**). |
-| Branch protection op `main` | **Bewust niet geregeld** | Vereist GitHub Team (~$4 per gebruiker per maand). Op 2026-07-31 als kostenafweging voorgelegd aan de eigenaar en bewust zo gelaten. "Nooit rechtstreeks op main werken" blijft daarmee een werkafspraak zonder technische afdwinging — een keuze, geen technische blokkade zoals eerder in dit document stond. |
+| Branch protection op `main` | **Bewust niet geregeld** | Vereist GitHub Team (~$4 per gebruiker per maand). Op 2026-07-31 als kostenafweging voorgelegd aan de eigenaar en bewust zo gelaten. "Nooit rechtstreeks op main werken" blijft daarmee een werkafspraak zonder technische afdwinging.<br><br>**Op 2026-08-10 is die afspraak één keer geschonden**: een fix aan het uitrolscript ging rechtstreeks naar `main`. De wijziging was beproefd en groen, maar dat is niet het punt — dit is precies hoe een werkafspraak sneuvelt. Genoteerd als argument bij de kostenafweging, niet als incident. |
+| De uitrolketen zelf | **Beproefd 2026-08-10** | Uitrol naar acceptatie, promotie naar productie, en terugdraaien naar een oudere versie zijn alle drie uitgevoerd en gemeten. De gescheidenheid is aangetoond met echte data: een tenant aangemaakt op acceptatie, productie zag `(leeg)`. Wat dit **niet** bewijst is beschikbaarheid — één machine, thuisinternet, geen reservestroom. |
+| Sleutel- en wachtwoordrotatie | **Bestaat niet** | Geen ritme, geen vervaldatum, geen procedure. Raakt het Supabase-productiewachtwoord, de Resend-sleutel, het Telegram-token, de OIDC-secrets, en sinds 2026-08-10 een GHCR-token op `saxombp` dat over 90 dagen verloopt. Staat als gat in `docs/runbooks/onderhoudskalender.md` §5. |
 
 > **Over de dekking van `verify`.** De poort dekt de Docker-productiebuild *niet* — die
 > draait alleen in CI (job `docker-build`). Een geslaagde `nest build` bewijst bovendien
