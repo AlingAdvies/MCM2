@@ -197,6 +197,26 @@ storing alleen het *aantonen* raakt (CI, meldingen) is de schade uitgesteld werk
 *applicatie* raakt (database, identity, bestanden) staat de dienst stil. Dat onderscheid is
 belangrijker dan de verhuisbaarheid, en er is nog geen document dat het bijhoudt.
 
+### Nieuw sinds 2026-08-10: Tailscale draagt het certificaat van acceptatie
+
+Acceptatie draait op `https://saxombp.tail4b29b.ts.net` via `tailscale serve`. Dat was geen
+keuze uit voorkeur maar uit noodzaak: **Entra weigert een redirect-URI die niet met `https://`
+begint**, behalve op `localhost`. Zonder certificaat kan er dus niemand inloggen.
+
+| Vraag | Antwoord |
+|---|---|
+| Hoe vast? | **Los.** Elke reverse proxy met een certificaat doet hetzelfde — Caddy, nginx met Let's Encrypt, of de load balancer van een cloud |
+| Wat als Tailscale wegvalt? | Acceptatie is niet meer bereikbaar én inloggen werkt niet meer. Productie op Supabase raakt het niet |
+| Kost het iets? | Nee, het zit in het gratis plan |
+
+**Waarom dit hier hoort en niet alleen in het runbook:** het is een leveranciersafhankelijkheid
+die er gisteren niet was. Bij een verhuizing naar AWS verdwijnt hij vanzelf — App Runner en een
+load balancer leveren zelf TLS — maar tot die tijd hangt de inlog op acceptatie eraan.
+
+**En het verklapt iets over de doelomgeving.** Elke omgeving waar mensen inloggen heeft een
+geldig certificaat nodig, niet als goede gewoonte maar omdat Entra het afdwingt. Dat is een
+eis die eerder onzichtbaar was, en hij geldt voor elke cloudkeuze.
+
 ---
 
 ## 4. De enige echte blokkade: bestandsopslag

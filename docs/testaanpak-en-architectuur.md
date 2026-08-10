@@ -422,11 +422,25 @@ document maar de reden dat het te vertrouwen is.
 | 2026-08-10 | Uitrol meldde "UITGEROLD" over een **lege** database; de rookproef werd groen | uitrol leest `__drizzle_migrations` terug |
 | 2026-08-10 | `migrate.js` crashte op een ontbrekende module, maar de pipe naar `tail` gaf exitcode 0 | exitcode is geen bewijs |
 | 2026-08-10 | `pg_isready` meldde "klaar" tijdens de interne herstart van een verse Postgres | twee opeenvolgende **queries**, geen socketcontrole |
+| 2026-08-10 | Frontend met een verkeerd backend-adres gaf **200** op de startpagina | rookproef vraagt óók een beheerroute op via de frontend-poort |
+| 2026-08-10 | `deploy.js` draaide op een compose-bestand dat op de server anders was dan in de repo | sha256-vergelijking als eerste stap van de uitrol |
+| 2026-08-10 | `mailVerstuurd: true` terwijl het logkanaal `[niet echt verstuurd]` meldde | nog open — **Issue #131** |
 
-**De drie regels van 10 augustus zijn varianten van P3**, en dat is geen
-toeval. Elk van de drie zag eruit als succes: een groene controle, een
-geslaagde uitrol, een exitcode 0. Wat ze gemeen hebben is dat de melding klopte
-over iets anders dan waar hij over leek te gaan.
+**De regels van 10 augustus zijn varianten van P3**, en dat is geen toeval. Elk
+ervan zag eruit als succes: een groene controle, een geslaagde uitrol, een
+exitcode 0, een pagina die netjes antwoordt. Wat ze gemeen hebben is dat de
+melding klopte over iets anders dan waar hij over leek te gaan.
+
+**De laatste drie kwamen alleen boven doordat de keten één keer echt gedraaid
+is.** Geen enkele test ving ze: de eerste omdat een startpagina serveren iets
+anders is dan de backend bereiken, de tweede omdat de afstand tussen repository
+en server nergens gemeten werd, de derde omdat het antwoord van de route nooit
+naast het log is gelegd.
+
+Dat is een grens van deze testaanpak die het benoemen waard is: **alles hierboven
+toetst code tegen een database. Niets toetst de omgeving waarin die code
+terechtkomt.** De eerste twee zijn inmiddels een poort geworden; de derde staat
+nog open.
 
 De vierde is een variant van P2: `pg_isready` gaf een antwoord dat waar was op
 het moment van vragen, en onwaar een seconde later. Een controle die maar één

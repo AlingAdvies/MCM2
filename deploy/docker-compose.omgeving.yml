@@ -59,14 +59,22 @@ services:
       DATABASE_URL: postgresql://clm_api_runtime:${DB_WACHTWOORD}@db:5432/postgres
       PORT: "5001"
       CORS_ORIGIN: ${FRONTEND_URL}
-      # Deze omgevingen draaien over http binnen Tailscale, zonder certificaat.
       # Het sessiecookie draagt standaard de __Host--prefix en Secure; dat
       # weigert elke browser over http. Zie sessie.ts — de standaard faalt naar
-      # de veilige kant, dit is de bewuste uitzondering.
+      # de veilige kant, en `true` is de bewuste uitzondering.
       #
-      # Bij verhuizing naar een echte cloud met TLS: deze regel weg uit
-      # productie.env. Dat is één regel, en het hoort in het uitrolrunbook.
-      SESSIE_COOKIE_INSECURE: "true"
+      # Sinds 2026-08-10 per omgeving instelbaar in plaats van hier vastgezet.
+      # Acceptatie draait via `tailscale serve` over HTTPS met een geldig
+      # certificaat en heeft de uitzondering dus niet meer nodig; productie
+      # draait nog over http en wel.
+      #
+      # Aanleiding: Entra accepteert geen http-redirect behalve op localhost.
+      # Het adres van acceptatie moest daarom naar https, en dan is deze
+      # verzwakking niet alleen overbodig maar ook schadelijk — een cookie
+      # zonder Secure reist ook mee over een onversleutelde verbinding.
+      #
+      # Leeg of afwezig = veilig. Alleen de letterlijke tekst "true" zet het uit.
+      SESSIE_COOKIE_INSECURE: ${SESSIE_COOKIE_INSECURE:-}
       #
       # Bewust GEEN omgevingsvariabele die "acceptatie" of "productie" zegt.
       # De app leest zoiets nergens: de oranje balk komt uit de tenantnaam in

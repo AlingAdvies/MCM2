@@ -185,6 +185,62 @@ melding. Geen stil terugvallen op voorbeelddata.
 **Wat dit níét oploste:** de frontend-image werd nergens gepubliceerd. Dat is
 stap 2b geworden, hieronder.
 
+### 3.1c De eerste echte uitrol met frontend — ✅ GEDAAN op 2026-08-10
+
+De keten is één keer helemaal doorlopen naar acceptatie. Dat leverde meer op dan
+een draaiende omgeving: **de eerste poging faalde**, en dat was de opbrengst.
+
+**Vier dingen die alleen bij een echte uitrol boven komen:**
+
+| Wat | Wat er misging | Wat eruit volgde |
+|---|---|---|
+| Het compose-bestand op de server | Stond nog met `profiles: ["frontend"]` erin. Zonder `--profile` slaat compose die dienst over: geen fout, geen container, alleen `kreeg 000` | `deploy.js` vergelijkt nu de sha256 vóór elke uitrol (PR #129) |
+| Inloggen | `OIDC_*` ontbrak volledig — nooit onderdeel van de inrichting geweest. `/auth/login` gaf een kale 500 | Variabelen toegevoegd, redirect via de frontend (PR #130) |
+| HTTPS | Entra weigert een `http`-redirect behalve op localhost | `tailscale serve` levert een geldig certificaat; `SESSIE_COOKIE_INSECURE` kon eruit |
+| De rookproef | Een frontend met een verkeerd backend-adres gaf **200** op de startpagina | De nieuwe controle "frontend bereikt de backend" ving het met een 502 |
+
+Die laatste is bewezen door hem te saboteren: een container met een onbereikbaar
+`API_BASE_URL` serveert een pagina alsof er niets aan de hand is.
+
+**Eindstand acceptatie:**
+
+```
+● frontend   sha-635ff21150bd
+● api        sha-51319eaa4059
+● db         17.6 (healthy)
+
+https://saxombp.tail4b29b.ts.net   (tailnet only, geldig certificaat)
+```
+
+**Wat er nu in staat**, aangemaakt langs de bedoelde weg en teruggelezen uit de
+database:
+
+| | |
+|---|---|
+| Platformbeheerder | via `platform:inrichten`, met een echte Entra-login |
+| Tenant `Platformbeheer` | `…f1a7` — de administratieve thuisbasis, geen klant |
+| Tenant `AlingAdvies (acceptatie)` | via `POST /platform/tenants`, de échte route |
+| Audit trail | `platformbeheerder_aangewezen`, `tenant_aangemaakt` |
+
+Dat laatste is het punt: de vorige AlingAdvies-tenant op productie was er
+buitenom in gezet, en daarom stond er niets over in `audit.audit_event`. Deze
+keer wel.
+
+**Drie bevindingen die daarbij boven kwamen**, alle drie vastgelegd als issue:
+
+- **#131** — `mailVerstuurd: true` terwijl het logkanaal `[niet echt verstuurd]`
+  meldt. Op acceptatie onschuldig; op productie denk je dan dat een klant is
+  uitgenodigd.
+- **#132** — de uitnodigingslink wees naar `localhost:5001`, een adres dat op
+  die omgeving niet bestaat. Dezelfde soort omissie als de `OIDC_*`-variabelen.
+- **#133** — Entra stuurt `"name": "unknown"` mee, en één persoon kan twee
+  gebruikers worden. Geen blokkade voor de straat, wel voor de eerste klant.
+
+**Wat dit bewijst en wat niet.** De keten werkt van commit tot ingelogd scherm.
+Wat het níét bewijst: dat dit ook geldt voor een omgeving die je niet met de
+hand hebt bijgesteld — drie van de vier fouten hierboven zijn opgelost met een
+handmatige ingreep op de server, en pas daarna in code vastgelegd.
+
 ### 3.1b Frontend publiceren en meenemen in de uitrol — ✅ GEDAAN op 2026-08-10
 
 Kwam boven bij stap 1 en blokkeerde stap 3: de CI van MCM2-frontend bouwde het

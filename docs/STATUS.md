@@ -2,15 +2,26 @@
 
 ## Laatst bijgewerkt
 
-**2026-08-10, laat op de avond.** Twee dingen deze dag, en het tweede kwam voort
-uit een fout.
+**2026-08-10, nacht.** De dag begon met een leeggemaakte productiedatabase en
+eindigde met een **volledig werkende acceptatieomgeving waar je met je
+Microsoft-account op inlogt** — frontend, backend en database, uitgerold vanaf
+een image dat door de kwaliteitspoorten kwam.
 
-Overdag: de OTAP-keten op `saxombp` af en beproefd, een onderhoudskalender met
-een poort die faalt als hij veroudert, een startscherm in de frontend.
+Zes PR's, alle gemerged:
 
-'s Avonds: vastgesteld dat die keten **niet uitkomt op de database die ertoe
-doet**. Daar is een plan voor geschreven en de eerste stap is uitgevoerd — er is
-nu een **stagingomgeving bij Supabase** die aantoonbaar gelijk is aan productie.
+| | Wat |
+|---|---|
+| frontend #12, backend #127 | **Issue #51** — het backend-adres wordt bij het starten gelezen, niet ingebakken. Eén image, elke omgeving |
+| frontend #13, backend #128 | Frontend-image naar GHCR, en de frontend draait mee in de uitrol |
+| backend #129 | `deploy.js` stopt als het compose-bestand op de server afwijkt |
+| backend #130 | Inloggen werkt op een uitgerolde omgeving |
+
+Plus, niet in een PR maar op de server: **HTTPS op acceptatie** via
+`tailscale serve`, waardoor de cookie-verzwakking eruit kon.
+
+**De opbrengst zit niet in de PR's maar in wat de eerste echte uitrol
+blootlegde.** Die faalde, en drie van de vier oorzaken waren stille fouten die
+geen enkele test ving. Zie "Wat de uitrol leerde" hieronder.
 
 ---
 
@@ -50,8 +61,48 @@ Twee lessen die in de code horen:
 ## 🔵 MORGEN BEGINNEN
 
 **Lees eerst:** [`docs/architectuur/plan-otap-straat-met-staging.md`](architectuur/plan-otap-straat-met-staging.md).
-Dat is het plan waar de rest van dit hoofdstuk uit volgt. Stap 2 van de negen is
-gisteren gedaan; morgen begint bij **stap 1 (Issue #51)** en **stap 3**.
+Van de negen stappen zijn **1, 2 en 2b gedaan**. Morgen begint bij **stap 3**:
+de uitrol naar staging automatiseren.
+
+Dat was tot gisteren geblokkeerd door twee dingen die nu weg zijn — de frontend
+was niet promoveerbaar (#51) en zijn image werd nergens gepubliceerd (2b).
+
+### Waar je meteen naar kunt kijken
+
+```
+https://saxombp.tail4b29b.ts.net
+```
+
+Acceptatie draait, met een geldig certificaat, alleen binnen Tailscale. Inloggen
+met je Microsoft-account werkt — kies de knop van je eigen organisatie, niet het
+wachtwoordveld (anders `AADSTS50056`).
+
+Er staan twee tenants in: `Platformbeheer` (`…f1a7`, de administratieve
+thuisbasis) en `AlingAdvies (acceptatie)`, aangemaakt via de échte route
+`POST /platform/tenants` — met een spoor in `audit.audit_event`. Dat is precies
+wat bij de vorige AlingAdvies-tenant op productie ontbrak.
+
+### Drie dingen die morgen aandacht vragen
+
+Alle drie gevonden bij de eerste echte uitrol, alle drie vastgelegd:
+
+| Issue | Wat | Wanneer het pijn doet |
+|---|---|---|
+| **#131** | `mailVerstuurd: true` terwijl het logkanaal `[niet echt verstuurd]` meldt | Bij de eerste echte klantuitnodiging: je denkt dat hij uitgenodigd is |
+| **#132** | De uitnodigingslink wees naar `localhost:5001` — een adres dat op die omgeving niet bestaat | Bij de eerste tenant die via een uitnodiging in gebruik wordt genomen |
+| **#133** | Entra stuurt `"name": "unknown"`; en één persoon kan twee gebruikers worden | Zichtbaar in het scherm en in de audit trail. Blokkeert de straat niet |
+
+#131 en #132 zijn samen erger dan apart: de melding zegt dat de uitnodiging
+verstuurd is (niet waar), en de link die je als terugval krijgt is onbruikbaar.
+
+### Wat productie nog niet heeft
+
+Acceptatie is bijgewerkt, productie niet. Daar draait nog `latest` zonder
+frontend, zonder `OIDC_*` en zonder HTTPS. Inloggen kan daar dus niet.
+
+Dat is geen achterstand maar een keuze: het compose-bestand raakt beide
+omgevingen, en een uitrol naar productie hoort een aparte, bewuste handeling te
+zijn.
 
 ### Wat er gisteravond is neergezet: staging
 
@@ -120,6 +171,38 @@ dan bouwen, dan opnieuw meten. Het verschil is de regressie.
 
 Daarna kan `FRONTEND_MEE` in `scripts/deploy.js` op `true` en de regel
 `profiles:` uit `deploy/docker-compose.omgeving.yml`. Verder verandert er niets.
+
+---
+
+## ⚡ Wat de eerste echte uitrol leerde
+
+De keten is 's nachts één keer helemaal doorlopen naar acceptatie. **De eerste
+poging faalde**, en dat was de opbrengst — vier bevindingen die geen enkele test
+ving.
+
+| Wat je zag | Wat het was | Wat eruit volgde |
+|---|---|---|
+| Rookproef: `kreeg 000` | Het compose-bestand op de server stond nog met `profiles: ["frontend"]`. Compose slaat die dienst dan over: geen fout, geen container, niets | `deploy.js` vergelijkt de sha256 vóór elke uitrol (#129) |
+| `{"statusCode":500}` bij Inloggen | `OIDC_*` ontbrak volledig — inloggen is nooit onderdeel van de inrichting geweest. De backend zei precies wat er miste, maar in het serverlog | Variabelen toegevoegd, callback via de frontend (#130) |
+| Entra weigerde het adres | Microsoft accepteert geen `http`-redirect behalve op localhost | `tailscale serve` levert een geldig certificaat; `SESSIE_COOKIE_INSECURE` kon eruit |
+| Frontend serveert netjes een pagina | …terwijl `API_BASE_URL` naar niets wees. De oude rookproef had dit **groen** gemeld | Nieuwe controle "frontend bereikt de backend" — bewezen door hem te saboteren: **200** op de startpagina, **502** op het doorgeefluik |
+
+**De rode draad, en die is bekend:** drie van de vier zagen eruit als succes.
+Dat is §15b, tegenproef 6 — dezelfde klasse als de vier fouten van overdag en
+als Issue #86.
+
+**Wat nieuw is aan deze vier:** ze zitten niet in de code maar in de *afstand
+tussen de code en de omgeving waarin hij terechtkomt*. De testaanpak toetst code
+tegen een database; niets toetste wat er op de server stond. Twee van de vier
+zijn nu een poort; de derde staat als #131 open.
+
+**En één les over de callback die bijna verkeerd ging.** De backend zet bij
+`/auth/login` een pogingcookie en leest dat bij `/auth/callback` terug. Lopen die
+over verschillende herkomsten — de een via poort 3010, de ander via 5011 — dan
+stuurt de browser het cookie niet mee en mislukt élke login op een ontbrekende
+state. Sinds #51 klikt de gebruiker op de frontend, dus moet de callback daar
+terugkomen. Dat is niet af te leiden uit het verzoek: de backend gebruikt
+`OIDC_REDIRECT_URI` letterlijk.
 
 ---
 
@@ -230,8 +313,11 @@ handmatig te starten is (PR #122).
 
 | # | Wat | Waarom nu |
 |---|---|---|
-| — | **Geen geautomatiseerde uitrol naar staging en productie** | De gemeenschappelijke oorzaak onder 04-08, 07-08 en 10-08. Zolang dit ontbreekt, is elke uitrol een mens met een laptop en `.env` wijzend naar productie. Plan: [`plan-otap-straat-met-staging.md`](architectuur/plan-otap-straat-met-staging.md) |
-| **#51** | Frontend promoveerbaar maken | Voorwaarde voor het bovenstaande — zonder verplaatsbaar image is er niets te promoveren |
+| — | **Geen geautomatiseerde uitrol naar staging en productie** | De gemeenschappelijke oorzaak onder 04-08, 07-08 en 10-08. Acceptatie is sinds 10-08 wél volledig uitgerold, maar met de hand gestart. Dit is **stap 3** en de eerstvolgende taak. Plan: [`plan-otap-straat-met-staging.md`](architectuur/plan-otap-straat-met-staging.md) |
+| ~~#51~~ | ~~Frontend promoveerbaar maken~~ | ✅ **Gedaan 10-08.** Bewezen: hetzelfde image tegen twee backends, verschillende antwoorden, geen herbouw |
+| **#132** | Uitnodigingslink wijst naar `localhost` op een uitgerolde omgeving | Het token bestaat maar één keer; een verkeerde link is niet opnieuw uit te geven |
+| **#131** | `mailVerstuurd: true` terwijl er niets verstuurd is | Vóór de eerste echte klantuitnodiging |
+| **#133** | Naam `unknown` uit Entra; dubbele gebruiker mogelijk | "unknown heeft dit oordeel gegeven" is geen bruikbare audit trail |
 | **#46** | Uploads op een containerschijf: weg bij image-vervanging | **Harde datum**: pilot ~1 september. Dit zijn compliance-bewijsstukken |
 | — | Geen bewaking die waarschuwt als een omgeving omvalt | Je zou het merken doordat iemand belt |
 | — | Geen incidentplan | NIS2 kent een meldplicht binnen 24 uur; die klok loopt of je een plan hebt of niet |

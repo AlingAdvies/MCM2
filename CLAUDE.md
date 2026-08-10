@@ -45,13 +45,22 @@ container: `node scripts/markeer-wegwerp.js "waarvoor"`. **Markeer nooit de
 demo (poort 55450) of Supabase.** Aanleiding: op 2026-08-07 wisten de e2e-tests
 de demo-database leeg omdat `DATABASE_URL` naar 55450 wees.
 
-**2. Verzin nooit een commando.**
+**2. Verzin nooit een commando — en ook geen kolomnaam of route.**
 Staat het niet in `package.json`, dan bestaat het niet:
 ```powershell
 (Get-Content package.json | ConvertFrom-Json).scripts
 ```
 `psql` en de Supabase CLI staan **niet** op deze machine. psql loopt via
 `docker exec <container> psql …`.
+
+Dat geldt net zo hard voor namen die plausibel klinken. Op 2026-08-10 kostte
+`is_active` (bestaat niet, het is `deleted_at`), `occurred_at` (het is
+`created_at`) en `/survey/respond/status` (de route is `/survey/respond?t=`)
+elk een mislukte query. Opzoeken kost één commando:
+```sql
+SELECT string_agg(column_name, ', ' ORDER BY ordinal_position)
+  FROM information_schema.columns WHERE table_schema='clm' AND table_name='<tabel>';
+```
 
 **3. Een handgeschreven migratie moet in `drizzle/meta/_journal.json`.**
 Anders slaat Drizzle hem over en meldt `migrate:deploy` alsnog "Migraties
@@ -61,7 +70,17 @@ hand, in de stijl van `drizzle/0015_survey_review.sql`.
 **4. Vertrouw geen enkele geruststellende melding.**
 Lees het resultaat terug uit de database. "Migraties voltooid" betekende op
 2026-08-07 dat er niets was gebeurd, en in Issue #86 dat het op de verkeerde
-database was gebeurd.
+database was gebeurd. Op 2026-08-10 meldde een route `mailVerstuurd: true`
+terwijl het log in dezelfde seconde `[niet echt verstuurd]` zei (Issue #131).
+
+**4b. De server draait niet vanzelf op wat er in de repo staat.**
+`deploy.js` gebruikt `/opt/mcm2/docker-compose.omgeving.yml` maar brengt dat
+bestand niet mee; `deploy-inrichten.js` weigert op een server waar al iets
+draait. Op 2026-08-10 stond daar nog een versie met `profiles: ["frontend"]`
+erin, en compose sloeg die dienst stilzwijgend over: geen fout, geen container.
+Sindsdien vergelijkt `deploy.js` de sha256 als eerste stap — maar de les is
+breder dan dat ene bestand. **Werk je aan de uitrol, kijk dan wat er op de
+server staat en neem niet aan dat het de repo volgt.**
 
 **5. Schrijf je een e2e-suite? Lees dan eerst §"Een nieuwe e2e-suite schrijven".**
 Alle suites delen één database. Vier unieke sleutels hebben géén `tenant_id`
