@@ -161,7 +161,20 @@ jobs:
     name: Image publiceren naar GHCR
     runs-on: ubuntu-latest
     needs: [quality, docker-build, rls-isolation]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Publiceren mag alleen vanaf main, maar wél via beide wegen erheen: een
+    # gewone push, én een handmatige start.
+    #
+    # Die tweede is niet theoretisch. Op 2026-08-10 raakte de repository kwijt
+    # en werd hij hersteld; GitHub pikte de push-triggers daarna niet meer op,
+    # en met alleen `event_name == 'push'` was er geen enkele manier om het
+    # publiceren af te dwingen. Dezelfde klasse storing als op 2026-08-06, toen
+    # `workflow_dispatch` juist om die reden is toegevoegd (PR #92).
+    #
+    # De branchvoorwaarde blijft staan: publiceren vanaf een willekeurige branch
+    # zou `:latest` laten wijzen naar ongemergde code.
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
