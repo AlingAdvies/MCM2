@@ -76,6 +76,40 @@ services:
       #
       # Wil je de omgeving zichtbaar maken in het scherm, dan is de weg: een
       # tenant met een herkenbare naam in de acceptatiedatabase.
+      #
+      # ── Inloggen via Microsoft Entra (Issue #7) ────────────────────────────
+      #
+      # Deze ontbraken tot 2026-08-10. Gevolg: /auth/login gaf een kale 500 in
+      # de browser, terwijl in het serverlog netjes stond wélke variabelen
+      # misten. Precies de faalvorm die dit project vaker heeft gehad — de
+      # oorzaak stond er, alleen niet waar iemand keek.
+      #
+      # De waarden komen uit het omgevingsbestand op de server; ze staan hier
+      # niet, want OIDC_CLIENT_SECRET is een geheim en dit bestand zit in git.
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_TOKEN_ENDPOINT: ${OIDC_TOKEN_ENDPOINT}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET}
+      #
+      # LET OP: deze wijst naar de FRONTEND, niet naar de backend zelf.
+      #
+      # De backend zet bij /auth/login een pogingcookie en leest dat bij
+      # /auth/callback terug. Lopen die twee over verschillende herkomsten —
+      # de een via poort 3010, de ander via 5011 — dan stuurt de browser het
+      # cookie niet mee en mislukt élke login op een ontbrekende state.
+      #
+      # Sinds Issue #51 klikt de gebruiker op de frontend, dus moet de callback
+      # daar terugkomen. Dit adres moet als redirect-URI geregistreerd staan in
+      # de app-registratie bij Entra, anders weigert Microsoft de poging met
+      # AADSTS50011.
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI}
+      #
+      # Waar de gebruiker landt na in- en uitloggen. Zonder deze twee valt de
+      # backend terug op '/' — en dat is de backend-poort, waar geen scherm
+      # staat.
+      NA_LOGIN_URL: ${NA_LOGIN_URL}
+      NA_LOGOUT_URL: ${NA_LOGOUT_URL}
     ports:
       - "${API_POORT}:5001"
     depends_on:
