@@ -5,7 +5,29 @@
 // Bewust plain JavaScript, geen TypeScript: dit script draait vóór en los van
 // de applicatiebuild, en moet werken zonder ts-node, transpilatiestap of
 // module-resolutie-afhankelijkheid (MCM2-CLAUDE.md §5, criterium 7).
-require('dotenv').config();
+//
+// ── Waarom dotenv optioneel is ─────────────────────────────────────────────
+//
+// `dotenv` staat in devDependencies en zit dus NIET in het productie-image.
+// Dat is juist: in een container komen variabelen uit de omgeving, niet uit een
+// `.env`-bestand — dat bestand is er niet eens.
+//
+// Zonder deze try/catch faalt het script daar met MODULE_NOT_FOUND, en dat
+// gebeurde bij de eerste uitrol naar acceptatie op 2026-08-10. Erger dan de
+// fout zelf was wat eromheen zat: de uitrol meldde "UITGEROLD" en de rookproef
+// werd groen, want een backend zonder tabellen antwoordt prima op /health en
+// geeft netjes 401 op een beheerroute. Pas een telling in de database liet zien
+// dat er nul tabellen stonden.
+//
+// Vandaar dat de uitrol nu terugleest uit de database in plaats van de
+// exitcode te geloven — zie scripts/deploy.js, stap 4.
+try {
+  require('dotenv').config();
+} catch {
+  // Geen dotenv: dan draaien we in een container en staan de variabelen al in
+  // de omgeving. Geen fout, en bewust geen melding — dit is het normale geval
+  // bij een uitrol.
+}
 
 const { drizzle } = require('drizzle-orm/node-postgres');
 const { migrate } = require('drizzle-orm/node-postgres/migrator');

@@ -215,6 +215,24 @@ function main() {
 
   console.log('     docker-compose.omgeving.yml');
 
+  // De databaserollen komen niet uit de migratieketen maar uit dit script
+  // (ADR-009). Zonder deze rollen bestaat `clm_migrator` niet en faalt de
+  // eerste migratie op een authenticatiefout.
+  const rollenPad = path.join(PROJECT_DIR, 'db', 'roles', 'bootstrap-roles.sql');
+  const rollen = fs.readFileSync(rollenPad, 'utf8');
+
+  const rollenKopie = spawnSync(
+    'ssh',
+    ['-o', 'BatchMode=yes', SERVER, `cat > ${SERVER_MAP}/rollen.sql`],
+    { input: rollen, encoding: 'utf8' },
+  );
+
+  if (rollenKopie.status !== 0) {
+    stop('Kon bootstrap-roles.sql niet kopiëren.', rollenKopie.stderr);
+  }
+
+  console.log('     rollen.sql (uit db/roles/bootstrap-roles.sql)');
+
   const repoBasis = 'ghcr.io/alingadvies';
 
   for (const o of OMGEVINGEN) {
