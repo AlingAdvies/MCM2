@@ -151,10 +151,10 @@ const STACK_POORTEN = [
 /**
  * Weigert te starten zolang 5001 of 3000 bezet is.
  *
- * ── Waarom dit vóór stap 1 staat en niet bij stap 2 ──────────────────────────
+ * ── Waarom dit vóór alle stappen staat en niet bij het starten van de stack ──
  *
  * Aanleiding: op 2026-08-03 liep deze doorloop twee keer achter elkaar vast op
- * een bezette poort. Beide keren pas ná stap 1 — die duurt enkele minuten,
+ * een bezette poort. Beide keren pas ná de verify-stap — die duurt enkele minuten,
  * inclusief het opzetten en weer afbreken van een wegwerpdatabase en 269
  * e2e-tests. De foutmelding kwam van Docker en luidde "ports are not
  * available", zonder te zeggen wélk proces de poort vasthield.
@@ -217,12 +217,12 @@ function controleerPoortenVrij() {
   return bezet;
 }
 
-/** Containernaam voor de wegwerpdatabase van stap 1. */
+/** Containernaam voor de wegwerpdatabase van de verify-stap (stap 2). */
 const TESTDB = 'mcm2-verify-volledig-db';
 const TESTDB_POORT = 55441;
 
 /**
- * Start een wegwerpdatabase voor stap 1.
+ * Start een wegwerpdatabase voor de verify-stap (stap 2).
  *
  * Los van de doorloopstack (die draait op 55500) en los van de container die
  * iemand handmatig voor `npm run verify` gebruikt (55440). Drie poorten, drie
@@ -317,7 +317,7 @@ function startTestDatabase() {
       }
 
       // Deze container is per definitie wegwerp: hij is hierboven aangemaakt
-      // en wordt in stap 6 weer weggegooid. Zonder deze markering weigeren de
+      // en wordt in de opruimstap weer weggegooid. Zonder deze markering weigeren de
       // e2e-tests te draaien (migratie 0019, test/jest-e2e.setup.ts).
       const markering = draai(
         'node',
@@ -543,7 +543,7 @@ function controleerOmgevingsdrift() {
   //
   // Dit is de enige stap die de échte omgeving nodig heeft; alle andere bouwen
   // bewust hun eigen wegwerpwereld op. Zou dotenv bovenaan staan, dan zou een
-  // DATABASE_URL uit .env kunnen doorlekken naar stap 1 — en dan draaien de
+  // DATABASE_URL uit .env kunnen doorlekken naar de verify-stap — en dan draaien de
   // e2e-tests tegen productie in plaats van tegen de testcontainer. Precies wat
   // dit script overal vermijdt door DATABASE_URL expliciet mee te geven.
   //
@@ -631,11 +631,11 @@ function stopMetFout() {
 class DoorloopGestopt extends Error {}
 
 function main() {
-  const stappen = 6;
+  const stappen = 7;
   let gestart = false;
 
-  // Vóór alles: stap 1 duurt minuten, en die zijn weggegooid als stap 2 op een
-  // bezette poort strandt. Zie controleerPoortenVrij().
+  // Vóór alles: de verify-stap duurt minuten, en die zijn weggegooid als het
+  // starten van de stack op een bezette poort strandt. Zie controleerPoortenVrij().
   const bezet = controleerPoortenVrij();
 
   if (bezet.length > 0) {
@@ -666,7 +666,20 @@ function main() {
   }
 
   try {
-    kop(1, stappen, 'Code, unittests en backend-e2e (npm run verify)');
+    // Eerst, want hij kost een seconde, raakt geen database en heeft geen
+    // Docker nodig. Faalt het onderhoud, dan hoor je dat vóór de minuten die
+    // stap 2 kost — zelfde gedachte als de poortcontrole hierboven.
+    kop(1, stappen, 'Onderhoud van runbooks en verwachtingslijst');
+
+    if (!draai('node', ['scripts/verify-onderhoud.js']).ok) {
+      console.error(
+        '\nROOD op stap 1 — het onderhoudsproces loopt achter.\n' +
+          'Zie docs/runbooks/onderhoudskalender.md §4 voor wat deze controle bewaakt.',
+      );
+      stopMetFout();
+    }
+
+    kop(2, stappen, 'Code, unittests en backend-e2e (npm run verify)');
 
     // DATABASE_URL expliciet meegeven, anders slaat verify de e2e-stap over en
     // meldt hij "GROEN, met overgeslagen stappen" — misleidend in een
@@ -686,11 +699,11 @@ function main() {
     stopTestDatabase();
 
     if (!verify.ok) {
-      console.error('\nROOD op stap 1. De rest is niet gedraaid.');
+      console.error('\nROOD op stap 2. De rest is niet gedraaid.');
       stopMetFout();
     }
 
-    kop(2, stappen, 'Stack bouwen en starten (productie-images)');
+    kop(3, stappen, 'Stack bouwen en starten (productie-images)');
 
     if (!draai('docker', [...COMPOSE, 'up', '--build', '-d']).ok) {
       console.error('\nROOD: de stack kon niet gestart worden.');
@@ -699,7 +712,7 @@ function main() {
 
     gestart = true;
 
-    kop(3, stappen, 'Migraties, tenant en sessie klaarzetten');
+    kop(4, stappen, 'Migraties, tenant en sessie klaarzetten');
 
     const opgebouwd = bouwDatabaseOp();
 
@@ -725,7 +738,7 @@ function main() {
 
     console.log('  Sessie aangemaakt via clm.sessie_aanmaken().');
 
-    kop(4, stappen, 'Browsertest tegen de draaiende stack');
+    kop(5, stappen, 'Browsertest tegen de draaiende stack');
 
     const browser = draai('npm', ['run', 'e2e'], {
       env: {
@@ -744,11 +757,11 @@ function main() {
       stopMetFout();
     }
 
-    kop(5, stappen, 'Draaien de echte omgevingen op dit schema? (read-only)');
+    kop(6, stappen, 'Draaien de echte omgevingen op dit schema? (read-only)');
 
     const drift = controleerOmgevingsdrift();
 
-    kop(6, stappen, 'Opruimen');
+    kop(7, stappen, 'Opruimen');
     console.log('');
     console.log('GROEN — de hele keten, van code tot browser.');
     console.log('');

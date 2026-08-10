@@ -1,5 +1,20 @@
 # OTAP en Onderhoudsmodel — MCM2
 
+> **Historisch document — externe architectuurreview van 2026-07-24.**
+> Twee delen hiervan zijn opgevolgd en mogen niet meer als actueel gelezen worden:
+>
+> - **De paragraaf "Backup/restore" is feitelijk achterhaald.** Er staat dat
+>   Supabase managed backups biedt "afhankelijk van het gekozen plan". Op
+>   2026-07-28 is vastgesteld dat het Free-plan waar dit project op draait
+>   **géén enkele backup** levert. Leidend is **ADR-011**.
+> - **De "Maandelijkse onderhoudskalender (voorstel)" is nooit vastgesteld** en is
+>   opgevolgd door **`docs/runbooks/onderhoudskalender.md`**, dat wel de
+>   werkelijke ritmes bevat. Waar de twee elkaar tegenspreken — de restore-hertest
+>   staat hier op "per kwartaal", in ADR-011 op maandelijks — wint de kalender.
+>
+> De rest van dit document (CI-poorten, dependency-beleid, versiebeleid) staat er
+> onveranderd en is nog steeds bruikbaar als referentie.
+
 ---
 
 ## P0 — securityherstel, voorafgaand aan elke OTAP-stap

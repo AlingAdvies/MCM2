@@ -15,6 +15,9 @@
 | 2 | `MCM2-CLAUDE.md` | Rol, werkmodus, architectuurregels, §14 sessiestartprotocol |
 | 3 | `docs/STATUS.md` | Waar het project nu staat |
 
+Alle runbooks staan geïndexeerd in **`docs/runbooks/README.md`**; wat er
+terugkeert en wanneer, staat in **`docs/runbooks/onderhoudskalender.md`**.
+
 **Nummer 1 gaat vóór de rest**, en dat is een correctie op §14 van
 `MCM2-CLAUDE.md`. Reden: op 2026-08-07 werden in één sessie vier commando's
 aangeroepen die niet bestaan (`npm run migrate`, `migrate:status`,

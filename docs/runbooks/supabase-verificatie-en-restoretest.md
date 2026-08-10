@@ -3,6 +3,7 @@
 **Type:** C/D (verificatie en routineoperatie)
 **Eigenaar:** Kees Maling (enige met Supabase-dashboardtoegang)
 **Aangemaakt:** 2026-07-28
+**Laatste update:** 2026-07-30
 **Aanleiding:** ADR-002 laat drie van de vier controls open; Issue #19 (backup/restore nooit getest) en Issue #25 (Drizzle-migratiestand).
 **Vereiste toegang:** Supabase-dashboard voor project `agojesdovwsupidwlevh` (`clm-enterprise`, eu-west-1)
 

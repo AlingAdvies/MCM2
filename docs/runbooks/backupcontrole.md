@@ -2,8 +2,9 @@
 
 **Type:** D — routineoperaties
 **Eigenaar:** de eigenaar (Chris)
-**Laatste update:** 2026-08-04
+**Laatste update:** 2026-08-10
 **Vereiste toegang:** deze PC, Docker Desktop, een Telegram-account
+**Ritme:** zie [onderhoudskalender.md](onderhoudskalender.md) §1
 
 > **Status: ingericht en werkend op 2026-08-04.** Beide taken staan in Taakplanner en zijn
 > aantoonbaar via Taakplanner gedraaid (niet alleen handmatig). Het testbericht is in Telegram
@@ -263,12 +264,27 @@ dus elke herstart zonder handmatige start levert een dag zonder backup op. Waars
 er dan óók een `MISLUKT` in `backup-taak.log` — de dump heeft dezelfde container nodig.
 
 **Oplossen:** start Docker Desktop (die staat in
-`%LOCALAPPDATA%\Programs\DockerDesktop`, niet in Program Files), draai dan:
+`%LOCALAPPDATA%\Programs\DockerDesktop`, niet in Program Files), draai dan het
+taakbestand — **niet** `npm run backup:dump`:
 
 ```powershell
-npm run backup:dump        # de gemiste dump alsnog maken
-npm run backup:controle    # en controleren
+& "C:\DEV\Work\MCM2\scripts\backup-taak.cmd"   # de gemiste dump alsnog maken
+npm run backup:controle                         # en controleren
 ```
+
+> **Waarom het `.cmd` en niet het npm-script.** `BACKUP_DIR` wordt gezet in
+> `backup-taak.cmd`, niet in `package.json`. Draai je `npm run backup:dump` los,
+> dan valt het script terug op zijn standaard — `backups/` in de projectmap. De
+> dump slaagt, meldt "Geslaagd", en waarschuwt onderaan dat hij op dezelfde
+> machine staat. Maar de controle kijkt in OneDrive en ziet hem niet, de
+> retentie van 14 dagen raakt hem niet, en hij synchroniseert nergens heen.
+>
+> Op 2026-08-10 gebeurde dat: een dump van 121 kB in `backups/`, terwijl de
+> controle nog steeds die van gisteren als nieuwste zag. `/backups` staat in
+> `.gitignore`, dus zichtbaar werd het ook niet.
+>
+> Het `.cmd` zet `BACKUP_DIR`, schrijft naar OneDrive, logt in `backup-taak.log`
+> en geeft de echte exitcode terug — precies wat de geplande taak doet.
 
 > **Waarom dit een eigen melding heeft.** Tot 2026-08-06 meldde de controle in dit geval
 > *"De inhoudsopgave is niet leesbaar. Dat wijst op een beschadigde of afgebroken dump."*
@@ -288,8 +304,22 @@ of met de machine. Dat is het signaal om te gaan kijken.
 ## Onderhoud
 
 **Bij elke migratie die een tabel toevoegt of hernoemt:** werk
-`docs/runbooks/backup-verwachting.json` bij. Vergeet je dat, dan meldt de controle een
-"onbekende tabel" — vervelend, maar zichtbaar. Dat hoort in de definition of done.
+`docs/runbooks/backup-verwachting.json` bij, inclusief de velden `migratiestand` en
+`bijgewerkt`. Dat hoort in de definition of done.
+
+> **Sinds 2026-08-10 wordt dit afgedwongen.** `npm run verify:onderhoud` faalt zodra
+> de genoteerde migratiestand lager is dan de hoogste migratie in `drizzle/`, en die
+> controle draait mee in `verify:volledig`.
+>
+> De aanleiding: op 2026-08-10 stond de lijst op `0013` terwijl productie op `0025`
+> draaide. Vijf tabellen — `survey_review`, `template_reviewer`, `response_note`,
+> `omgeving` en `platform_admin` — ontbraken. De dagelijkse controle meldde daardoor
+> *"Compleet: 18 tabellen"*: waar tegen de lijst, onwaar over de database.
+>
+> De "onbekende tabel"-melding waar dit runbook op vertrouwde, slaat pas aan zodra de
+> tabel ook werkelijk in een dump zit. Tussen de migratie en de eerste dump op de
+> nieuwe stand zit dus een gat waarin de controle groen meldt over een incomplete
+> backup. De poort sluit dat gat aan de andere kant: bij het schrijven van de migratie.
 
 **Bij de overstap naar een managed service:** alleen `haalNieuwsteBackup()` in
 `scripts/backup-controle.js` hoeft vervangen te worden. Die functie beantwoordt één vraag:
