@@ -2,7 +2,8 @@
 
 **Type:** levend document — geen besluit
 **Eigenaar:** de eigenaar (Chris)
-**Laatste update:** 2026-08-06
+**Laatste update:** 2026-08-10 — GHCR als imageregister erbij, en "het image draait overal"
+is voor de backend van bewering naar meting gegaan (§3).
 **Status:** AWS is de waarschijnlijke bestemming, maar staat niet vast (ADR-012). Bizaline
 draait al op AWS; Azure alleen bij zwaarwegende redenen (eigenaar, 2026-08-06).
 
@@ -28,9 +29,19 @@ MCM2 zit vandaag **losser dan het lijkt**. Drie dingen dragen dat:
 3. **Het mailkanaal zit achter één interface** (`MailKanaal`, ontwerp §5). Een andere
    provider is één nieuwe klasse.
 
-Wat wél echt werk is: **de bestandsopslag**. Certificaten staan op de containerschijf. Dat is
-tegelijk het grootste openstaande risico van vandaag (Issue #46) en het enige onderdeel dat
-bij een verhuizing herbouwd moet worden.
+Sinds 2026-08-10 is punt 2 **gemeten in plaats van beweerd**: het backend-image dat CI bouwt
+draait ongewijzigd op een andere machine (`saxombp`), met migraties, rookproef en
+terugdraaien. Wat per omgeving verschilt staat in drie regels van een `.env`-bestand.
+
+Wat wél echt werk is:
+
+- **De bestandsopslag.** Certificaten staan op de containerschijf. Dat is tegelijk het
+  grootste openstaande risico van vandaag (Issue #46) en het enige onderdeel dat bij een
+  verhuizing herbouwd moet worden.
+- **De frontend.** Die is minder los dan hierboven gesuggereerd: de API-URL wordt tijdens de
+  build ingebakken, dus één image kan niet naar twee omgevingen (Issue #51). Geen lock-in bij
+  een leverancier, wel een blokkade voor elke cloud die je met omgevingsvariabelen instelt —
+  en dat doen ze allemaal.
 
 **Ruwe inschatting van een volledige verhuizing, in de huidige omvang:** dagen, geen weken —
 mits de bestandsopslag vóór die tijd al naar objectopslag is verhuisd. Zo niet, dan komt dat
@@ -49,6 +60,8 @@ werk er bovenop en op het verkeerde moment.
 | Mail | Resend, domein `send.myvendormanager.nl` | mailkanaal-ontwerp |
 | Bestanden | **containerschijf** `./var/uploads` (3,5 MB) | — |
 | CI | GitHub Actions | ADR-007 |
+| **Imageregister** | GitHub Container Registry (GHCR) | sinds 2026-08-10 |
+| **Acceptatie + productie-simulatie** | Docker op `saxombp` (thuisserver, Tailscale) | uitrol-runbook |
 | Meldingen | Telegram (backupcontrole) | backupcontrole-runbook |
 | Backup | `pg_dump` naar OneDrive vanaf de ontwikkellaptop | ADR-011, Issue #58 |
 
@@ -108,8 +121,9 @@ vullen, dan is dát de plek waar de lock-in zit.
 
 | Component | AWS-tegenhanger | Azure-tegenhanger | Hoe vast |
 |---|---|---|---|
-| Backend-container | App Runner (ADR-012 voorkeur), ECS Fargate | Container Apps | **Los** — image draait overal |
-| Frontend-container | idem | idem | **Los** |
+| Backend-container | App Runner (ADR-012 voorkeur), ECS Fargate | Container Apps | **Los — en sinds 2026-08-10 gemeten**, zie hieronder |
+| Frontend-container | idem | idem | **Minder los dan gedacht** — Issue #51, zie hieronder |
+| Imageregister | ECR | Azure Container Registry | **Los** — `docker push` naar een ander adres; de uitrol leest de registernaam uit een `.env` op de server |
 | Database | RDS PostgreSQL, Aurora | Azure Database for PostgreSQL | **Los** — dump + restore |
 | **Bestanden** | **S3** | **Blob Storage** | **VAST — zie §4** |
 | Identity | blijft Entra (of Cognito) | blijft Entra | **Los** — OIDC-standaard, ADR-006 |
@@ -121,6 +135,41 @@ vullen, dan is dát de plek waar de lock-in zit.
 **Identity verhuist waarschijnlijk helemaal niet.** ADR-006 koos bewust generieke `OIDC_*`-
 variabelen in plaats van `ENTRA_*`. Entra draait bij Microsoft; welke cloud de applicatie
 host, raakt dat niet.
+
+### "Los" was een bewering. Sinds 2026-08-10 is het voor de backend een meting.
+
+Tot die datum stond hier *"image draait overal"* zonder dat het ooit ergens anders had
+gedraaid dan op de ontwikkelmachine. Dat is nu beproefd: het image dat CI bouwt en publiceert
+naar GHCR draait op `saxombp` — een andere machine, ander besturingssysteem, andere
+netwerkomgeving — zonder enige aanpassing aan het image.
+
+Wat daarbij gemeten is: migraties draaien mee bij de uitrol, acceptatie en productie hebben
+gescheiden data, en terugdraaien naar een oudere versie werkt.
+
+**Wat dit betekent voor een verhuizing.** De uitrol kent precies drie dingen die per omgeving
+verschillen, en alle drie staan in een `.env`-bestand op de doelmachine:
+
+| Wat | Waar het staat |
+|---|---|
+| Welk register | `GHCR_API=` — wordt `…dkr.ecr.eu-west-1.amazonaws.com/…` bij AWS |
+| Welk databasewachtwoord | `DB_WACHTWOORD=` |
+| Welke poorten en URL | `API_POORT=`, `FRONTEND_URL=` |
+
+De rest van de keten — bouwen, publiceren, migreren, rookproef, terugdraaien — is
+leverancieronafhankelijk. Dat was de opzet en dat is nu aantoonbaar.
+
+### De frontend is minder los dan deze tabel eerder suggereerde
+
+`NEXT_PUBLIC_API_URL` wordt tijdens de **build** in de bundel gebakken (frontend
+`Dockerfile`, regel 28–29). Eén frontend-image weet daardoor al met welke backend het praat.
+
+Dat is geen lock-in bij een leverancier, maar het is wél een blokkade voor het uitgangspunt
+dat hetzelfde artefact van acceptatie naar productie promoveert — en dus voor elke cloud die
+je met omgevingsvariabelen configureert, wat ze allemaal doen.
+
+**Issue #51.** Zolang dit open staat draait de frontend niet mee in de uitrolketen; de
+backend wel. Dat is een bewuste keuze: liever een keten die minder dekt en dat zegt, dan een
+die een image promoveert dat naar de verkeerde backend wijst.
 
 ### Wat deze tabel níét meet: beschikbaarheid
 

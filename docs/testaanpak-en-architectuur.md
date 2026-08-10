@@ -1,6 +1,6 @@
 # Zo testen we MCM2 — principes, gereedschap en architectuur
 
-**Datum:** 2026-08-09
+**Datum:** 2026-08-10
 **Doel van dit document:** de testaanpak van MCM2 volledig beschrijven, in
 samenhang met de architectuur — productiedatabase, backup, backend en frontend.
 
@@ -13,9 +13,12 @@ wordt. Het *hoe* staat in `docs/runbooks/`, en dat blijft daar leidend:
 
 | Runbook | Waarvoor |
 |---|---|
+| `README.md` | de index — welke runbooks er zijn |
 | `commandos-en-omgeving.md` | welk commando bestaat, waar praat het naartoe, wat mag nooit |
 | `zelf-testen.md` | de demo-omgeving gebruiken |
 | `otap-doorloop.md` | de volledige doorloop naar productie-images |
+| `uitrol-acceptatie-en-productie.md` | een image promoveren naar acceptatie en productie, en terugdraaien |
+| `onderhoudskalender.md` | wat er terugkeert en wanneer |
 | `backupcontrole.md` | de dagelijkse dump nalopen |
 | `supabase-verificatie-en-restoretest.md` | herstel beproeven |
 
@@ -148,7 +151,7 @@ PostgreSQL, en 14 unittestbestanden.
 
 ---
 
-## 5. De vier omgevingen
+## 5. De zes omgevingen
 
 Dit is de kern van de aanpak: **elke omgeving heeft een eigen rol, en de
 database zegt zélf welke.**
@@ -158,7 +161,21 @@ database zegt zélf welke.**
 | **Wegwerp** | 55440 e.v. | `wegwerp` | e2e-tests | ja, altijd |
 | **Demo (lokaal)** | 55450 | `beschermd` | feature review, demo's geven | nee |
 | **CI** | in de runner | `wegwerp` | GitHub Actions | ja, per run |
+| **Acceptatie** *(saxombp)* | 55460 | `beschermd` | uitrol beproeven vóór productie | nee |
+| **Productie-simulatie** *(saxombp)* | 55470 | `beschermd` | het promotieproces bewijzen | nee |
 | **Productie** | Supabase | `beschermd` | de echte applicatie | **nooit** |
+
+> **Twee dingen heten hier "productie", en dat verschil is wezenlijk.**
+>
+> `saxombp:5021` is een **procesbewijs**: het toont aan dat hetzelfde image dat
+> op acceptatie stond ook op een andere machine draait, dat migraties meelopen,
+> en dat terugdraaien werkt. Het bevat geen klantdata.
+>
+> Supabase is de **échte** productiedatabase, met de tenant AlingAdvies erin.
+> Daar draait geen uitgerolde applicatie tegen — die wordt lokaal benaderd.
+>
+> Een echte cloudomgeving die beide samenbrengt is nodig vóór de pilot
+> (Issue #12). Zie `docs/runbooks/uitrol-acceptatie-en-productie.md`.
 
 ### Hoe de bescherming werkt
 
@@ -197,22 +214,34 @@ query faalde toevallig — anders had die test rijen in productie aangemaakt.
 | `npm run verify:snel` | zonder e2e | ~30 s |
 | `npm run verify:schema` | schema, RLS en policies vs. de code | ~20 s |
 
-### De zes stappen van `verify:volledig`
+### De zeven stappen van `verify:volledig`
 
 ```
-1  Code, unittests en backend-e2e     format → lint → typecheck → unit → e2e
-2  Stack bouwen en starten            beide PRODUCTIE-images via docker compose
-3  Migraties, tenant en sessie        een échte sessie klaarzetten
-4  Browsertest                        Playwright tegen de draaiende stack
-5  Draaien de echte omgevingen mee?   read-only controle op productie
-6  Opruimen                           altijd, ook na een fout
+1  Onderhoud van de documentatie      runbooks geïndexeerd, niet verouderd
+2  Code, unittests en backend-e2e     format → lint → typecheck → unit → e2e
+3  Stack bouwen en starten            beide PRODUCTIE-images via docker compose
+4  Migraties, tenant en sessie        een échte sessie klaarzetten
+5  Browsertest                        Playwright tegen de draaiende stack
+6  Draaien de echte omgevingen mee?   read-only controle op productie
+7  Opruimen                           altijd, ook na een fout
 ```
 
-**Stap 2 draait tegen productie-images, niet tegen een ontwikkelserver.** Dat
+**Stap 1 staat vooraan omdat hij een seconde kost en geen database nodig heeft.**
+Zelfde gedachte als de poortcontrole: de goedkoopste controle eerst, zodat je
+niet vier minuten aan Docker besteedt voordat je hoort dat er iets veroudert.
+
+Hij vangt vier dingen: een runbook dat niet in de index staat, een ontbrekende
+kop, een document dat langer dan zes maanden stilstaat, en — de belangrijkste —
+een `backup-verwachting.json` die achterloopt op de migratiestand. Die laatste
+kwam er na 2026-08-10, toen die lijst twaalf migraties achterliep en de
+dagelijkse backupcontrole daardoor "compleet: 18 tabellen" meldde over een dump
+die er 23 hoorde te hebben.
+
+**Stap 3 draait tegen productie-images, niet tegen een ontwikkelserver.** Dat
 verschil is de reden dat deze doorloop bestaat: een `next dev`-server had een
 EACCES-uploadfout in het productie-image nooit gevonden.
 
-**Stap 5 is read-only** en meldt wanneer productie achterloopt op het schema —
+**Stap 6 is read-only** en meldt wanneer productie achterloopt op het schema —
 zonder de doorloop rood te maken. De keten kloppen en een omgeving die
 achterloopt zijn twee verschillende dingen.
 
@@ -344,14 +373,34 @@ werkelijkheid.
 
 ## 9. CI: wat er bij elke push draait
 
-| Job | Wat |
-|---|---|
-| **Format, lint en typecheck** | prettier `--check`, eslint `--max-warnings=0`, `tsc --noEmit`, unittests |
-| **Docker productiebuild** | image bouwt, start, draait als non-root, serveert een pagina |
-| **RLS tenant-isolatietest** | de tenantgrens tegen een echte PostgreSQL |
+| Job | Wat | Wanneer |
+|---|---|---|
+| **Format, lint en typecheck** | prettier `--check`, eslint `--max-warnings=0`, `tsc --noEmit`, unittests | elke PR en push |
+| **Docker productiebuild** | image bouwt, start, draait als non-root, serveert een pagina | elke PR en push |
+| **RLS tenant-isolatietest** | de tenantgrens tegen een echte PostgreSQL | elke PR en push |
+| **Image publiceren naar GHCR** | het uitrolbare artefact, met een onveranderlijke `sha-`tag | **alleen op main** |
 
 CI draait `lint:check` en `format:check` — de **controlerende** varianten.
 `npm run lint` en `npm run format` wijzigen bestanden en horen daarom niet in CI.
+
+**De publiceer-job hangt aan alle drie de andere.** Faalt er één, dan komt er
+geen image, en dan kan er niets uitgerold worden. Dat is de koppeling tussen
+"getest" en "uitrolbaar": ze zijn niet los verkrijgbaar.
+
+**Twee tags per image**, en dat onderscheid doet ertoe:
+
+| Tag | Waarvoor |
+|---|---|
+| `:sha-<commit>` | onveranderlijk — hier draait een rollback naar terug |
+| `:latest` | wat de uitrol standaard ophaalt |
+
+Zonder de eerste is terugdraaien niet uitvoerbaar: `:latest` van gisteren
+bestaat morgen niet meer.
+
+**Publiceren kan ook handmatig afgedwongen worden** (`gh workflow run ci.yml
+--ref main`). Dat is geen luxe: op 2026-08-10 pikte GitHub na een storing de
+push-triggers niet meer op, en zonder die uitweg was er geen enkele manier om
+een image te publiceren terwijl alle poorten groen waren.
 
 ---
 
@@ -369,6 +418,19 @@ document maar de reden dat het te vertrouwen is.
 | 2026-08-07 | "Migraties voltooid" terwijl er niets gebeurde | P3: teruglezen |
 | 2026-08-08 | Suite praatte via de migratie-URL tegen productie | poort over **beide** verbindingen |
 | 2026-08-08 | Rechten lokaal ruimer dan productie | `rechten-contract.ts` |
+| 2026-08-10 | Backupcontrole meldde "compleet: 18 tabellen" — de verwachtingslijst liep twaalf migraties achter | `verify:onderhoud` als stap 1 |
+| 2026-08-10 | Uitrol meldde "UITGEROLD" over een **lege** database; de rookproef werd groen | uitrol leest `__drizzle_migrations` terug |
+| 2026-08-10 | `migrate.js` crashte op een ontbrekende module, maar de pipe naar `tail` gaf exitcode 0 | exitcode is geen bewijs |
+| 2026-08-10 | `pg_isready` meldde "klaar" tijdens de interne herstart van een verse Postgres | twee opeenvolgende **queries**, geen socketcontrole |
+
+**De drie regels van 10 augustus zijn varianten van P3**, en dat is geen
+toeval. Elk van de drie zag eruit als succes: een groene controle, een
+geslaagde uitrol, een exitcode 0. Wat ze gemeen hebben is dat de melding klopte
+over iets anders dan waar hij over leek te gaan.
+
+De vierde is een variant van P2: `pg_isready` gaf een antwoord dat waar was op
+het moment van vragen, en onwaar een seconde later. Een controle die maar één
+keer kijkt, meet een momentopname en geen toestand.
 
 ---
 
