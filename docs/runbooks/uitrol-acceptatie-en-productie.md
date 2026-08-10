@@ -293,6 +293,67 @@ sessie hoort dat **401** te geven:
 
 ---
 
+## Inloggen op een uitgerolde omgeving
+
+**Dit ontbrak tot 2026-08-10 volledig.** `deploy-inrichten.js` genereerde geen
+`OIDC_*`-variabelen, dus gaf `/auth/login` een kale `{"statusCode":500}` in de
+browser. In het serverlog stond netjes *"Identity-configuratie onvolledig.
+Ontbrekende variabelen: …"*, maar daar kijkt niemand als hij op een knop klikt.
+
+### De callback loopt via de frontend, niet via de backend
+
+```
+OIDC_REDIRECT_URI=http://saxombp:3010/api/backend/auth/callback
+                              ^^^^ frontend-poort, niet 5011
+```
+
+**Waarom dat moet.** De backend zet bij `/auth/login` een pogingcookie en leest
+dat bij `/auth/callback` terug. Lopen die twee over verschillende herkomsten —
+de een via poort 3010, de ander via 5011 — dan stuurt de browser het cookie niet
+mee, en mislukt élke login op een ontbrekende state. Sinds Issue #51 klikt de
+gebruiker op de frontend, dus moet de callback daar terugkomen.
+
+### Wat er per omgeving in het `.env`-bestand hoort
+
+`deploy-inrichten.js` zet deze nu **leeg** neer, met de reden erbij. Dat is
+opzet: het script kent het client-secret niet en hoort het niet uit een lokale
+`.env` te vissen — een geheim kopiëren is een bewuste handeling.
+
+| Variabele | Waar vandaan |
+|---|---|
+| `OIDC_ISSUER`, `OIDC_TOKEN_ENDPOINT`, `OIDC_JWKS_URI`, `OIDC_CLIENT_ID` | `.env.example` §Identity |
+| `OIDC_CLIENT_SECRET` | de lokale `.env` — nooit in git |
+| `OIDC_REDIRECT_URI` | vooringevuld op de frontend-poort |
+| `NA_LOGIN_URL`, `NA_LOGOUT_URL` | vooringevuld; zonder deze valt de backend terug op `/`, en dat is de backend-poort waar geen scherm staat |
+
+### En dan de stap die niet in code zit
+
+**Het redirect-adres moet geregistreerd staan in de app-registratie bij Entra.**
+Staat het er niet, dan weigert Microsoft met `AADSTS50011` — een melding die
+over de *reply URL* gaat, niet over je account.
+
+Elke omgeving heeft een eigen adres, dus elke omgeving vraagt een eigen regel in
+die lijst:
+
+| Omgeving | Redirect-URI |
+|---|---|
+| lokaal | `http://localhost:5001/auth/callback` |
+| acceptatie | `http://saxombp:3010/api/backend/auth/callback` |
+| productie | `http://saxombp:3020/api/backend/auth/callback` |
+
+Controleren wat de backend werkelijk meestuurt — niet wat er in het bestand
+staat:
+
+```powershell
+ssh root@saxombp "curl -s -i --max-time 15 'http://localhost:3010/api/backend/auth/login' | grep -i '^location:'"
+```
+
+Een `302` naar `ciamlogin.com` betekent dat de configuratie compleet is. Een
+`500` betekent dat er nog een variabele mist; welke, staat in
+`docker logs mcm2-acceptatie-api-1`.
+
+---
+
 ## ⚠ Het compose-bestand op de server loopt niet vanzelf mee
 
 `deploy.js` gebruikt `/opt/mcm2/docker-compose.omgeving.yml`, maar **brengt dat
