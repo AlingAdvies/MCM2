@@ -180,13 +180,26 @@ jobs:
       # De commit-tag is de belangrijkste. Zonder een onveranderlijke verwijzing
       # is "dezelfde versie terugzetten" niet uitvoerbaar: `:latest` van
       # gisteren bestaat morgen niet meer.
+      # De `image.source`-label is niet cosmetisch: zonder dat koppelt GitHub het
+      # pakket niet aan deze repository. Het gevolg is verwarrend — de
+      # pakketinstellingen tonen dan "Public" terwijl het overzicht "Private"
+      # zegt, en de registry weigert een anonieme pull met `unauthorized`.
+      # Zichtbaarheid wordt namelijk van de gekoppelde repo geërfd, en zonder
+      # koppeling is er niets om van te erven.
+      #
+      # Gevonden op 2026-08-10, bij de eerste uitrol naar saxombp.
       - name: Image bouwen en publiceren
         run: |
           REPO=$(echo "ghcr.io/${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           SHA_TAG="$REPO/api:sha-${GITHUB_SHA::12}"
           LATEST_TAG="$REPO/api:latest"
 
-          docker build -t "$SHA_TAG" -t "$LATEST_TAG" .
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            -t "$SHA_TAG" -t "$LATEST_TAG" .
+
           docker push "$SHA_TAG"
           docker push "$LATEST_TAG"
 
