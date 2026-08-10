@@ -386,13 +386,24 @@ async function main() {
       `export API_IMAGE=$(grep '^GHCR_API=' ${omgeving.naam}.env | cut -d= -f2):${versie}`,
       `export FRONTEND_IMAGE=$(grep '^GHCR_FRONTEND=' ${omgeving.naam}.env | cut -d= -f2):${versie}`,
       `docker compose --env-file ${omgeving.naam}.env -p ${omgeving.project} -f docker-compose.omgeving.yml up -d db`,
-      // Wachten op de healthcheck in plaats van op een vaste tijd. Een `sleep`
-      // is óf te kort (dan faalt de migratie op "the database system is
-      // starting up") óf onnodig lang. De container weet zelf wanneer hij
-      // klaar is; 60 pogingen van een seconde is ruim voor een koude start.
-      `for i in $(seq 1 60); do ` +
-        `docker exec ${omgeving.project}-db-1 pg_isready -U postgres >/dev/null 2>&1 && break; ` +
-        `sleep 1; done`,
+      // Wachten tot de database ECHT klaar is, niet tot hij dat één keer zegt.
+      //
+      // Een verse Postgres-container start intern twee keer: eerst voor de
+      // initialisatie (initdb, het aanmaken van de database), dan opnieuw voor
+      // gebruik. In dat venster antwoordt `pg_isready` bevestigend terwijl de
+      // server een seconde later "the database system is shutting down" geeft.
+      // Precies dat gebeurde bij de eerste uitrol naar productie op 2026-08-10;
+      // op acceptatie niet, want daar bestond de database al.
+      //
+      // Twee opeenvolgende geslaagde QUERIES in plaats van één `pg_isready`.
+      // Een query bewijst meer dan een socketcontrole, en twee achter elkaar
+      // vallen niet samen met een herstart ertussen. Zelfde patroon als de
+      // wachtlus in demo-omgeving.js.
+      `gereed=0; for i in $(seq 1 90); do ` +
+        `if docker exec ${omgeving.project}-db-1 psql -U postgres -tAc 'SELECT 1' >/dev/null 2>&1; then ` +
+        `gereed=$((gereed+1)); [ $gereed -ge 2 ] && break; ` +
+        `else gereed=0; fi; sleep 1; done; ` +
+        `[ $gereed -ge 2 ] || { echo "De database werd niet gereed binnen 90 seconden."; exit 1; }`,
       // De rollen komen NIET uit de migratieketen maar uit
       // db/roles/bootstrap-roles.sql (ADR-009). Zonder deze stap bestaat
       // `clm_migrator` niet en faalt de migratie op een authenticatiefout —
