@@ -158,13 +158,77 @@ versie en beproeft die opnieuw. Je krijgt dan `TERUGGEDRAAID naar <versie>`.
 
 ## Stap 3 — Promoveren naar productie
 
+**Sinds 2026-08-11 (stap 4 van het OTAP-plan) loopt dit via GitHub, niet meer
+rechtstreeks vanaf de laptop.** De migraties gaan achter vier remmen langs; het
+starten van de applicatie blijft één commando met de hand.
+
+### 3a. Vooraf: zorg dat de backup vers is
+
+De poort weigert een uitrol als de backupcontrole ouder is dan 36 uur.
+
+Meestal hoef je niets te doen: de geplande taken draaien dagelijks om 07:00 en
+07:30, en de controle van 07:30 schrijft `docs/runbooks/backup-bewijs.json`.
+**Wat je wél moet doen is dat bestand committen** — het is het enige wat een
+CI-runner over jouw backup te weten kan komen.
+
+Is de taak overgeslagen (Docker stond uit), haal hem dan in:
+
 ```powershell
-npm run deploy:productie
+& "C:\DEV\Work\MCM2\scripts\backup-taak.cmd"   # niet: npm run backup:dump
+npm run backup:controle
 ```
 
-**Verwacht resultaat:** het script vraagt bevestiging. Typ `ja`.
+> **Gebruik het `.cmd`, niet het npm-script.** `BACKUP_DIR` staat alleen in
+> `backup-taak.cmd`. Los gedraaid schrijft `npm run backup:dump` naar `backups/`
+> in de projectmap: de dump slaagt, de controle ziet hem niet, en de retentie
+> raakt hem niet.
 
-**Het waarschuwt als deze versie niet op acceptatie staat:**
+Je kunt de poort ook los draaien om te kijken of alles klaarstaat:
+
+```powershell
+npm run productie:poort
+```
+
+### 3b. De uitrol starten
+
+Actions → **Uitrol naar productie** → *Run workflow*. Drie velden:
+
+| Veld | Wat |
+|---|---|
+| `versie` | backend-tag, bijv. `sha-5428bb954884`. Leeg = de laatste van main |
+| `frontend_versie` | frontend-tag. Leeg = `latest` |
+| `reden` | **verplicht.** Komt in de samenvatting te staan |
+
+> **De tag is twaalf tekens.** `sha-ffd27dc9` bestaat niet, `sha-ffd27dc9472f`
+> wel. Dat is twee keer misgegaan (10-08 en 11-08); beide keren hield de rem het
+> tegen met *"Er is niets gewijzigd"*. Kijk ze op met
+> `ssh root@saxombp "docker images | grep mcm2/api"`.
+
+### 3c. Wat er dan gebeurt
+
+1. **De poort draait** — backup, staging op de stand van de repository,
+   productie niet vóór. Blokkeert dit, dan is er niemand lastiggevallen met een
+   akkoordverzoek voor niets.
+2. **Jij krijgt een akkoordverzoek** van de Environment `productie`. De run staat
+   stil tot je drukt.
+3. **De poort draait opnieuw** — een akkoord kan een dag wachten, en in die tijd
+   kan de wereld veranderd zijn.
+4. **Migraties, teruglezen, rechtencontrole** — precies zoals bij staging.
+5. **De samenvatting draagt het startcommando**, plus de weg terug.
+
+### 3d. De applicatie starten
+
+Dat doet CI niet, om dezelfde reden als bij staging: een CI-runner krijgt
+onvermijdelijk een Tailscale-label, en gelabelde apparaten kunnen niet via SSH
+bij een apparaat met een gebruikersidentiteit. Kopieer de regel uit de
+samenvatting:
+
+```powershell
+npm run deploy:productie -- --versie sha-<versie> --frontend-versie sha-<frontend>
+```
+
+Dat script vraagt nog steeds bevestiging, en waarschuwt als deze versie niet op
+acceptatie draait:
 
 ```
 LET OP: op acceptatie draait sha-abc123, niet sha-def456.
@@ -174,6 +238,19 @@ Deze versie is daar dus niet beproefd.
 Dat blokkeert niet. Soms is er een gegronde reden — maar hij moet zichtbaar
 zijn, want dit is precies de stap die OTAP voorschrijft en die onder tijdsdruk
 wordt overgeslagen.
+
+### De vier remmen, en waar ze zitten
+
+| Rem | Waar | Wat hem tegenhoudt |
+|---|---|---|
+| Backup vooraf | `productie-poort.js` | geen bewijs, ouder dan 36 uur, of de controle meldde problemen |
+| Staging beproefd | `productie-poort.js` | staging staat niet op de stand van de repository |
+| Productie niet vóór | `productie-poort.js` | productie telt méér migraties dan het journal |
+| Handmatig akkoord | GitHub Environment | jij drukt niet |
+
+De eerste drie zijn beproefd op alle uitkomsten (11-08), exitcodes zonder pipe
+gemeten. De vierde is een instelling op GitHub, geen code: staat `productie`
+daar niet met een required reviewer, dan draait de job gewoon door.
 
 ---
 
@@ -193,6 +270,26 @@ gemigreerd. **Let op:** migraties draaien niet terug. Bevatte de slechte versie
 een migratie, dan blijft die staan — dat is opzet (geen destructieve migraties
 zonder schema-debt issue), maar het betekent dat "terug naar de vorige versie"
 het schema niet terugdraait.
+
+**Je hoeft de regel niet zelf samen te stellen.** Elke geslaagde uitrol drukt
+hem af, met beide versies erin:
+
+```
+  vorige versie was sha-5428bb954884 met frontend sha-635ff21150bd
+  terugdraaien:  npm run deploy:acceptatie -- --versie sha-5428bb954884 --frontend-versie sha-635ff21150bd
+```
+
+**Beproefd op 2026-08-11**, op acceptatie: heen naar `sha-ffd27dc9472f`, terug
+naar `sha-5428bb954884` met de afgedrukte regel. Beide keren alle vier de
+rookproeven groen, en de omgeving stond daarna teruggelezen exact zoals hij
+stond. Acceptatie en niet productie, omdat `mcm2-productie` op saxombp een
+lokale database heeft en niet de Supabase-productiedatabase — dezelfde weg,
+zonder risico voor echte gegevens.
+
+> **Er is géén `npm run rollback:…`.** Dat commando bestaat niet en heeft nooit
+> bestaan, maar het stond wél in de foutmelding die je kreeg als de containers
+> niet startten — dus juist op het moment dat je het nodig had. Hersteld op
+> 11-08; die melding draagt nu de echte regel.
 
 ---
 

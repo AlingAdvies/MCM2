@@ -1,0 +1,227 @@
+name: Uitrol naar productie
+
+# ── Waarom dit een eigen workflow is en geen job in ci.yml ────────────────────
+#
+# De stagingjob draait bij elke merge op main. Voor productie mag dat niet: dan
+# staat er na elke merge een akkoordverzoek te wachten, en een akkoord dat je
+# tien keer per week wegklikt is geen rem meer — dat is een knop die in de weg
+# zit. Precies zo verdwijnt de aandacht die deze stap juist moet hebben.
+#
+# Vandaar: uitsluitend handmatig starten. Uitrollen naar productie is een
+# besluit, en het hoort te beginnen met iemand die dat besluit neemt.
+#
+# ── De vier remmen van §3.4 ──────────────────────────────────────────────────
+#
+#   1. handmatig akkoord      GitHub Environment `productie`, required reviewer
+#   2. backup vooraf          productie-poort.js leest het backup-bewijs
+#   3. migratiestand          vóór, ná, én vergeleken met staging
+#   4. terugdraaien           de vorige versie staat in de samenvatting
+#
+# Rem 2 en 3 zitten in de poort-job, die draait VÓÓR het akkoord. Dat is opzet:
+# een akkoordverzoek voor een uitrol die toch geblokkeerd wordt, is een vraag om
+# aandacht voor niets.
+#
+# ── Wat deze workflow NIET doet ──────────────────────────────────────────────
+#
+# De applicatie op saxombp starten. Dat blijft één commando met de hand, om
+# dezelfde reden als bij staging: een CI-runner krijgt onvermijdelijk een
+# Tailscale-label, en gelabelde apparaten kunnen niet via SSH bij een apparaat
+# met een gebruikersidentiteit. Zie de toelichting onderaan de stagingjob in
+# ci.yml.
+#
+# Dat is minder erg dan het klinkt. De migraties zijn de helft waar het misgaat
+# (2026-08-07, Issue #86), en dat is de helft die hier geautomatiseerd is.
+
+on:
+  workflow_dispatch:
+    inputs:
+      versie:
+        description: "Backend-image, bijv. sha-abc123def456 (leeg = laatste van main)"
+        required: false
+        default: ""
+      frontend_versie:
+        description: "Frontend-image, bijv. sha-987fed654321 (leeg = latest)"
+        required: false
+        default: ""
+      reden:
+        description: "Waarom rol je uit? Komt in de samenvatting en het akkoordverzoek."
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Rem 2 en 3 ─────────────────────────────────────────────────────────────
+  #
+  # Draait vóór het akkoord. Blokkeert deze job, dan is er niemand lastiggevallen
+  # met een vraag die toch nergens toe kon leiden.
+  poort:
+    name: Poort — backup en migratiestanden
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Dependencies installeren
+        run: npm ci
+
+      # Leest uitsluitend. Beide URL's zijn `clm_migrator`, want de migratietabel
+      # staat in het drizzle-schema en clm_api_runtime mag daar niet bij
+      # (ADR-009).
+      - name: De drie automatische remmen
+        env:
+          STAGING_MIGRATION_DATABASE_URL: ${{ secrets.STAGING_MIGRATION_DATABASE_URL }}
+          PRODUCTIE_MIGRATION_DATABASE_URL: ${{ secrets.PRODUCTIE_MIGRATION_DATABASE_URL }}
+        run: node scripts/productie-poort.js
+
+      # De stand van productie vastleggen vóórdat er iets gebeurt. Zonder deze
+      # meting is "onveranderd" achteraf niet te onderscheiden van "niets
+      # gedaan" — de fout van 2026-08-07.
+      - name: Migratiestand van productie vóór de uitrol
+        id: voor
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.PRODUCTIE_MIGRATION_DATABASE_URL }}
+        run: |
+          VOOR=$(node scripts/migratiestand.js | grep -oE '[0-9]+$' | head -1)
+          echo "aantal=$VOOR" >> "$GITHUB_OUTPUT"
+          echo "Productie stond op $VOOR migraties."
+    outputs:
+      voor: ${{ steps.voor.outputs.aantal }}
+
+  # ── Rem 1: het akkoord ─────────────────────────────────────────────────────
+  #
+  # De `environment`-regel is de hele rem. GitHub pauzeert deze job en stuurt
+  # een verzoek naar de reviewers van de Environment `productie`. Zonder die
+  # instelling in de repository draait deze job gewoon door — de rem zit in
+  # GitHub, niet in dit bestand. Zie het runbook voor het inrichten.
+  uitrollen:
+    name: Migraties naar productie
+    runs-on: ubuntu-latest
+    needs: [poort]
+    environment: productie
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Dependencies installeren
+        run: npm ci
+
+      # De poort draaide vóór het akkoord. Tussen dat moment en nu kan er tijd
+      # zitten — een akkoord kan een dag blijven wachten. In die tijd kan er van
+      # alles gebeurd zijn: een tweede merge, een migratie met de hand, een
+      # backup die verlopen is.
+      #
+      # Opnieuw toetsen kost seconden en sluit uit dat het akkoord ergens anders
+      # over ging dan wat er nu gebeurt.
+      - name: De remmen opnieuw, ná het akkoord
+        env:
+          STAGING_MIGRATION_DATABASE_URL: ${{ secrets.STAGING_MIGRATION_DATABASE_URL }}
+          PRODUCTIE_MIGRATION_DATABASE_URL: ${{ secrets.PRODUCTIE_MIGRATION_DATABASE_URL }}
+        run: node scripts/productie-poort.js
+
+      # `--extern` staat expliciet bij de aanroep en niet als omgevingsvariabele.
+      # Het runbook eist dat die vlag een zichtbare, bewuste uitzondering blijft:
+      # in de omgeving zou hij onzichtbaar doorwerken naar elke volgende stap.
+      - name: Migraties draaien tegen productie
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.PRODUCTIE_MIGRATION_DATABASE_URL }}
+        run: node scripts/migrate.js --extern
+
+      # Teruglezen, niet de melding geloven. "Migraties voltooid" betekende op
+      # 2026-08-07 dat er niets gebeurd was, en in Issue #86 dat het op de
+      # verkeerde database gebeurd was.
+      - name: Migratiestand teruglezen en vergelijken met de repository
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.PRODUCTIE_MIGRATION_DATABASE_URL }}
+        run: node scripts/migratiestand.js --volgens-journal
+
+      # Slaagt de migratie maar faalt dit, dan staan de rechten verkeerd — en dat
+      # merk je anders pas wanneer de applicatie start en elk scherm een fout
+      # geeft.
+      - name: De runtime-rol kan bij zijn eigen gegevens
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTIE_DATABASE_URL }}
+        run: |
+          node -e "
+            const {Client} = require('pg');
+            const c = new Client({
+              connectionString: process.env.DATABASE_URL,
+              ssl: { rejectUnauthorized: false },
+              connectionTimeoutMillis: 30000,
+            });
+            c.connect()
+              .then(() => c.query('SELECT count(*)::int AS n FROM clm.tenant'))
+              .then((r) => {
+                console.log('clm_api_runtime leest clm.tenant: ' + r.rows[0].n + ' rijen');
+                return c.end();
+              })
+              .catch((e) => { console.error('MISLUKT: ' + e.message); process.exit(1); });
+          "
+
+      # ── Rem 4: terugdraaien ────────────────────────────────────────────────
+      #
+      # De samenvatting draagt beide commando's: het startcommando en de weg
+      # terug. Dat is bewust één plek: op het moment dat je moet terugdraaien,
+      # ben je aan het zoeken en niet aan het lezen.
+      #
+      # `if: always()` omdat juist een MISLUKTE run die weg terug moet tonen.
+      - name: Samenvatting
+        if: always()
+        env:
+          VERSIE: ${{ inputs.versie }}
+          FRONTEND: ${{ inputs.frontend_versie }}
+          REDEN: ${{ inputs.reden }}
+          VOOR: ${{ needs.poort.outputs.voor }}
+        run: |
+          VERSIE_UIT="${VERSIE:-sha-${GITHUB_SHA::12}}"
+          FRONTEND_ARG=""
+          if [ -n "$FRONTEND" ]; then
+            FRONTEND_ARG=" --frontend-versie $FRONTEND"
+          fi
+
+          {
+            echo "### Productie — migraties bijgewerkt"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Reden | $REDEN |"
+            echo "| Commit | \`${GITHUB_SHA::12}\` |"
+            echo "| Migraties vóór | $VOOR |"
+            echo "| Migraties ná | teruggelezen, gelijk aan het journal |"
+            echo ""
+            echo "**De applicatie is nog niet vervangen.** Dat gebeurt met de hand:"
+            echo ""
+            echo '```powershell'
+            echo "npm run deploy:productie -- --versie $VERSIE_UIT$FRONTEND_ARG"
+            echo '```'
+            echo ""
+            echo "#### Als het misgaat"
+            echo ""
+            echo "\`deploy.js\` draait zelf een rookproef en zet de vorige versie terug"
+            echo "als die faalt. Terugdraaien is **geen apart script** maar dezelfde"
+            echo "uitrol met de vorige tag — die staat in het slotbericht van de"
+            echo "vorige uitrol, en anders vraag je hem op:"
+            echo ""
+            echo '```powershell'
+            echo "npm run deploy:status          # welke versie draait waar"
+            echo "npm run deploy:productie -- --versie sha-<vorige>"
+            echo '```'
+            echo ""
+            echo "> Let op: een teruggedraaide **applicatie** draait tegen een database"
+            echo "> die de nieuwe migraties al heeft. Dat gaat goed zolang migraties"
+            echo "> achterwaarts verdraagzaam zijn — kolommen toevoegen wel, kolommen"
+            echo "> verwijderen niet. Staat er een verwijderende migratie in, dan is"
+            echo "> terugzetten van de backup de weg, niet de rollback."
+          } >> "$GITHUB_STEP_SUMMARY"

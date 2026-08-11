@@ -39,7 +39,7 @@ dat je de meldingen leest.
 | Wanneer | Taak | Wat het doet | Runbook |
 |---|---|---|---|
 | Dagelijks 07:00 | `MCM2 databasebackup` | `pg_dump` van productie naar OneDrive, 14 dagen retentie | [backupcontrole.md](backupcontrole.md) |
-| Dagelijks 07:30 | `MCM2 backupcontrole` | Laag A (is er een dump?) en B (zit alles erin?) | [backupcontrole.md](backupcontrole.md) |
+| Dagelijks 07:30 | `MCM2 backupcontrole` | Laag A (is er een dump?) en B (zit alles erin?), en schrijft `backup-bewijs.json` | [backupcontrole.md](backupcontrole.md) |
 | Maandag 07:45 | `MCM2 backupcontrole volledig` | Idem, plus laag C: echte restore in een wegwerpcontainer | [backupcontrole.md](backupcontrole.md) |
 
 Nagaan of ze nog bestaan en wanneer ze laatst draaiden:
@@ -84,7 +84,7 @@ npm run backup:controle
 | **Per kwartaal** | ADR's op geldigheid nalopen, met name ADR-011 en ADR-002 | Fase-overgangen veranderen de norm, niet het document | — (§5) |
 | **Bij elke release naar productie** | OTAP-doorloop draaien | Bewijst dat het uitrolbare artefact werkt, niet alleen de code | [otap-doorloop.md](otap-doorloop.md) |
 | **Bij elke release naar productie** | Uitrollen via acceptatie, nooit rechtstreeks | Een versie die niet op acceptatie stond, is niet beproefd | [uitrol-acceptatie-en-productie.md](uitrol-acceptatie-en-productie.md) |
-| **Per kwartaal** | Rollback beproeven op acceptatie | Terugdraaien is het onderdeel dat in de praktijk het vaakst nooit getest is — en dat je nodig hebt op het slechtste moment | [uitrol-acceptatie-en-productie.md](uitrol-acceptatie-en-productie.md) |
+| **Per kwartaal** | Rollback beproeven op acceptatie (laatst: **11-08-2026**, heen en terug, alle rookproeven groen) | Terugdraaien is het onderdeel dat in de praktijk het vaakst nooit getest is — en dat je nodig hebt op het slechtste moment | [uitrol-acceptatie-en-productie.md](uitrol-acceptatie-en-productie.md) |
 | **Wekelijks** | Staging wakker houden: één query tegen `clm-staging3` | Een gratis Supabase-project pauzeert na 7 dagen zonder databaseactiviteit. Pauzeert staging, dan faalt de eerstvolgende uitrol met een verbindingsfout die naar de verkeerde oorzaak wijst. | — (§5) |
 | **Bij elke migratie** | Eerst op staging draaien, dan pas op productie | Staging draait dezelfde Postgres-versie, regio en pooler als productie. Een migratie die daar slaagt, slaagt in productie — dat is de hele reden dat staging niet op saxombp staat. | — (§5) |
 
@@ -93,6 +93,7 @@ npm run backup:controle
 | Trigger | Taak | Waarom het niet mag wachten |
 |---|---|---|
 | **Migratie die een tabel toevoegt of hernoemt** | [backup-verwachting.json](backup-verwachting.json) bijwerken, inclusief `bijgewerkt` en `migratiestand` | Vergeet je dit, dan meldt de controle "compleet" over een lijst die de nieuwe tabellen niet kent. Op 2026-08-10 stond de lijst twaalf migraties achter en misten er vijf tabellen. |
+| **Vóór een uitrol naar productie** | `docs/runbooks/backup-bewijs.json` committen | De poort weigert bij een bewijs ouder dan 36 uur. Het bestand wordt dagelijks geschreven door de backupcontrole, maar committen doet niemand vanzelf — en dan blokkeert de uitrol op een backup die er wél is |
 | **Nieuw runbook geschreven** | Regel toevoegen in [README.md](README.md) | Een runbook dat niet in de index staat, vindt niemand |
 | **Nieuwe terugkerende taak afgesproken** | Regel toevoegen in dit document | Anders staat hij over een maand weer in één losse spec |
 | **Major dependency-update** (NestJS, Drizzle, TypeScript) | Korte impact-analyse vóór merge, nooit blind updaten | De Prisma 7-episode in dit project is het directe bewijs |

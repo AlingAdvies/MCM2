@@ -1,0 +1,16 @@
+{
+  "gecontroleerdOp": "2026-08-11T13:54:44.791Z",
+  "dumpGemaaktOp": "2026-08-11T05:00:09.219Z",
+  "dumpNaam": "mcm2-2026-08-11_05-00-02.dump",
+  "dumpBytes": 110307,
+  "lagen": [
+    "A",
+    "B"
+  ],
+  "goed": true,
+  "problemen": [],
+  "bevindingen": [
+    "Laatste dump: mcm2-2026-08-11_05-00-02.dump (8 uur oud)",
+    "Compleet: 23 tabellen"
+  ]
+}

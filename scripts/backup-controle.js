@@ -274,6 +274,50 @@ function controleerHerstelbaarheid(dump) {
   }
 }
 
+// ── Het bewijsbestand ───────────────────────────────────────────────────────
+//
+// Waar het staat: `docs/runbooks/backup-bewijs.json`, náást de
+// verwachtingslijst waar het bij hoort. In de repository, want de lezer is een
+// CI-runner die alleen de repository heeft.
+//
+// ── Wat er NIET in staat, en waarom dat telt ────────────────────────────────
+//
+// Geen pad, geen mapnaam, geen hostnaam. Het bestand wordt gecommit en is dus
+// zo openbaar als de repository. `backupDir` wijst naar een OneDrive-map met de
+// naam van de eigenaar erin; die hoort daar niet in te belanden.
+//
+// De bestandsnaam van de dump is wél veilig: `mcm2-<tijdstempel>.dump` bevat
+// niets persoonlijks, en zonder die naam is niet na te gaan wélke dump het
+// akkoord droeg.
+const bewijsPad = path.join(PROJECT_DIR, 'docs', 'runbooks', 'backup-bewijs.json');
+
+function schrijfBewijs({ dump, problemen, regels, modus }) {
+  const bewijs = {
+    // Wanneer de controle draaide — niet wanneer de dump gemaakt is. Dat
+    // onderscheid is precies waar het op 2026-08-04 misging: de dumps waren
+    // dagelijks vers en al maanden incompleet.
+    gecontroleerdOp: new Date().toISOString(),
+    dumpGemaaktOp: new Date(dump.tijd).toISOString(),
+    dumpNaam: dump.naam,
+    dumpBytes: dump.grootte,
+    // Welke lagen er gedraaid hebben. Zonder `--volledig` is de
+    // herstelbaarheid niet getoetst, en dat mag het bewijs niet verzwijgen.
+    lagen: modus === '--volledig' ? ['A', 'B', 'C'] : ['A', 'B'],
+    goed: problemen.length === 0,
+    problemen: problemen.map((p) => p.sleutel),
+    bevindingen: regels,
+  };
+
+  try {
+    fs.writeFileSync(bewijsPad, JSON.stringify(bewijs, null, 2) + '\n', 'utf8');
+  } catch (err) {
+    // Niet fataal: de backupcontrole zelf is belangrijker dan zijn bewijs.
+    // Wél zichtbaar, want zonder dit bestand blokkeert de productie-uitrol en
+    // is de oorzaak anders niet te vinden.
+    console.error(`Bewijsbestand niet geschreven: ${err.message}`);
+  }
+}
+
 // ── Hoofdprogramma ──────────────────────────────────────────────────────────
 async function main() {
   const modus = process.argv[2] || '';
@@ -385,6 +429,30 @@ async function main() {
       `✅ MCM2 backup — weekcheck ${stempel}\n\n${regels.join('\n')}\nBewaard: ${aantal} dump(s)`,
     );
   }
+
+  // ── Het bewijsbestand voor de productie-uitrol ────────────────────────────
+  //
+  // Stap 4 van het OTAP-plan eist een backup vóór elke uitrol naar productie,
+  // en die eis moet AFDWINGBAAR zijn — niet een zin in een runbook.
+  //
+  // Het probleem: de backup ligt hier, op deze laptop, en de uitrol wordt
+  // gestart door een CI-runner die daar nooit bij kan. De runner kan dus niet
+  // zelf vaststellen of er een bruikbare dump is.
+  //
+  // Vandaar deze omkering. Niet de runner gaat kijken; de controle die hier
+  // tóch al draait laat een spoor achter in de repository, en de runner leest
+  // dat. `productie-poort.js` weigert de uitrol als het te oud is.
+  //
+  // ── Waarom het uit DEZE controle komt en niet uit backup-dump.js ──────────
+  //
+  // Een dump die bestaat is geen dump die deugt. Op 2026-08-04 waren alle
+  // dumps precies 21.683 bytes en misten er negen van de achttien tabellen —
+  // `backup-dump.js` meldde al die tijd succes. Laag B hierboven is de enige
+  // die dát vaststelt, dus het bewijs hoort daarachter te zitten.
+  //
+  // Het bestand zegt daarom niet "er is een backup" maar "de controle is
+  // gedraaid en dit vond hij". Staat er een probleem in, dan weigert de poort.
+  schrijfBewijs({ dump, problemen, regels, modus });
 
   // Console-uitvoer voor handmatig gebruik en het taaklog.
   console.log(`${new Date().toISOString()} — ${problemen.length} probleem(en)`);

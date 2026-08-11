@@ -471,16 +471,84 @@ erger dan geen stap: dan wordt elke run rood en leer je rode runs negeren.
 De samenvatting van elke CI-run drukt het vervolgcommando af met de juiste SHA
 erin, zodat het niet samengesteld hoeft te worden.
 
-### 3.4 De uitrol naar productie automatiseren
+### 3.4 De uitrol naar productie automatiseren — ✅ gedaan 2026-08-11
 
 Dezelfde stappen, plus vier remmen:
 
-| Rem | Waarom |
+| Rem | Waarom | Waar hij zit |
+|---|---|---|
+| **Handmatig akkoord** | GitHub Environments met required reviewer. Niets gaat naar productie zonder dat de eigenaar drukt. | Environment `productie`, teruggelezen: `required_reviewers` → `cmalinghotmail` |
+| **Backup vooraf** | Verplicht, niet optioneel. Faalt de backup, dan gaat de uitrol niet door. | `productie-poort.js`, leest `docs/runbooks/backup-bewijs.json` |
+| **Migratiestand teruglezen** | Vóór en ná. Wijkt het af van staging, dan stoppen. | `productie-poort.js` + `migratiestand.js --volgens-journal` |
+| **Terugdraaien beproefd** | De vorige SHA moet met één commando terug te zetten zijn. | Heen en terug gedraaid op acceptatie, 11-08 |
+
+**De workflow is `.github/workflows/productie.yml`, en hij staat bewust los van
+`ci.yml`.** De stagingjob draait bij elke merge op main; voor productie mag dat
+niet. Dan wacht er na elke merge een akkoordverzoek, en een akkoord dat je tien
+keer per week wegklikt is geen rem meer maar een knop die in de weg zit.
+Uitrollen naar productie begint daarom met iemand die dat besluit neemt:
+`workflow_dispatch`, met een verplicht veld `reden`.
+
+**De poort draait twee keer: vóór het akkoord en erna.** De eerste keer zodat er
+niemand om aandacht wordt gevraagd voor een uitrol die toch geblokkeerd wordt.
+De tweede omdat een akkoord een dag kan blijven wachten, en in die tijd kan er
+een tweede merge zijn geweest of een backup verlopen.
+
+#### Hoe de backuprem werkt zonder dat CI bij de backup kan
+
+Dit was het lastigste stuk. De backup ligt op de laptop van de eigenaar; een
+CI-runner kan daar nooit bij. De runner kan dus niet zelf vaststellen dat er een
+bruikbare dump is.
+
+Vandaar de omkering: **niet de runner gaat kijken, maar de backupcontrole laat
+een spoor achter.** `backup-controle.js` — die tóch al dagelijks draait —
+schrijft `docs/runbooks/backup-bewijs.json`, en dat bestand gaat mee in de
+repository. De poort leest het.
+
+Het bewijs komt uit de *controle* en niet uit `backup-dump.js`, en dat verschil
+is de hele les van 2026-08-04: alle dumps waren toen keurig vers en misten al
+maanden negen van de achttien tabellen. Een dump die bestaat is geen dump die
+deugt. Het bestand zegt daarom niet "er is een backup" maar "de controle is
+gedraaid en dit vond hij" — inclusief welke lagen er gedraaid hebben, want
+zonder `--volledig` is de herstelbaarheid niet getoetst.
+
+Er staat bewust géén pad, mapnaam of hostnaam in: het bestand wordt gecommit en
+is dus zo openbaar als de repository, en `BACKUP_DIR` wijst naar een
+OneDrive-map met de naam van de eigenaar erin.
+
+#### Beproefd op zeven uitkomsten
+
+Exitcodes zonder pipe gemeten — de fout van 2026-08-10 en 11-08.
+
+| Situatie | Uitkomst |
 |---|---|
-| **Handmatig akkoord** | GitHub Environments met required reviewer. Niets gaat naar productie zonder dat de eigenaar drukt. |
-| **Backup vooraf** | Verplicht, niet optioneel. Faalt de backup, dan gaat de uitrol niet door. |
-| **Migratiestand teruglezen** | Vóór en ná. Wijkt het af van staging, dan stoppen. |
-| **Terugdraaien beproefd** | De vorige SHA moet met één commando terug te zetten zijn. Dit is op 10-08 bewezen op saxombp; het moet opnieuw bewezen op deze weg. |
+| geen bewijsbestand | geblokkeerd, exitcode 1 |
+| bewijs 50 uur oud | geblokkeerd, 1 |
+| bewijs meldt problemen (`goed: false`) | geblokkeerd, 1 |
+| alles gelijk | **DOOR**, 0 |
+| staging loopt achter op de repository | geblokkeerd, 1 |
+| productie loopt vóór op de repository | geblokkeerd, 1 |
+| database onbereikbaar | geblokkeerd, 1 |
+
+De vier migratiegevallen zijn gemeten met twee wegwerpcontainers (55480, 55481)
+waarvan de migratietabel met de hand uit elkaar is getrokken.
+
+#### Wat de poort níét doet
+
+De applicatie starten. Dat blijft `npm run deploy:productie -- --versie …`, om
+dezelfde Tailscale-reden als bij staging (§3.3c). De samenvatting van de
+workflow draagt dat commando, en de weg terug.
+
+#### Bijvangst: een rollbackcommando dat niet bestond
+
+`deploy.js` verwees op twee plekken naar `npm run rollback:<omgeving>`. Dat
+script staat niet in `package.json` en heeft er nooit in gestaan. Eén ervan was
+een docstring — vervelend. De andere stond in de foutmelding die verschijnt
+wanneer de containers niet starten, dus precies op het moment dat je hem nodig
+hebt en een "Missing script"-melding het laatste is wat je kunt gebruiken.
+
+Terugdraaien is in dit project geen apart script maar dezelfde uitrol met de
+vorige tag. Die melding draagt nu die regel, samengesteld uit wat er draaide.
 
 ### 3.5 `.env` ontkoppelen van productie
 
@@ -669,7 +737,7 @@ het als eerste staat.
 | 2 | ✅ **Staging aanmaken bij Supabase** — gedaan 10-08 | Beslist: optie A |
 | 2b | ✅ **Frontend-image publiceren, frontend in de uitrol** — gedaan 10-08 | Beslist: twee versies, zie hieronder |
 | 3 | ✅ **Uitrol naar staging automatiseren** — gedaan 11-08 | Beslist: applicatie start met de hand, zie §3.3c |
-| 4 | Uitrol naar productie automatiseren, met akkoordrem | Nee |
+| 4 | ✅ **Uitrol naar productie automatiseren, met akkoordrem** — gedaan 11-08 | Beslist: backup blijft bij de eigenaar, CI controleert; applicatie start met de hand |
 | 5 | `.env` omleiden naar staging | Nee, maar wel melden wanneer |
 | 6 | `mcm2-productie` op saxombp opheffen | **Ja — onomkeerbaar** |
 | 7 | `verify:omgevingen` bouwen | Nee |
