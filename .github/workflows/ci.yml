@@ -231,34 +231,21 @@ jobs:
   # die anders worden vastgehouden, andere timeouts, ander gedrag bij migraties
   # die een tabel vergrendelen (§1 van het plan).
   #
-  # ── Wat deze job doet ──────────────────────────────────────────────────────
+  # ── Wat deze job wél en niet doet ──────────────────────────────────────────
   #
-  #   1. migraties draaien tegen staging en TERUGLEZEN of ze geland zijn
-  #   2. de applicatie op saxombp vervangen door dezelfde SHA
-  #   3. rookproef, waaronder een route die de Supabase-database raakt
+  # WEL: migraties draaien tegen staging en TERUGLEZEN of ze geland zijn.
+  # NIET: de applicatie op saxombp vervangen — dat blijft één commando met de
+  # hand, zie de toelichting onderaan deze job.
   #
-  # Stap 1 is de waardevolste: migraties zijn waar het misgaat. Op 2026-08-07
-  # meldde `migrate:deploy` "Migraties voltooid" terwijl er niets gebeurde, en
-  # in Issue #86 gebeurde het op de verkeerde database. Beide keren was de
-  # melding waar over iets anders.
+  # De migratiehelft is de waardevolste, en dat is geen troostprijs. Migraties
+  # zijn waar het misgaat: op 2026-08-07 meldde `migrate:deploy` "Migraties
+  # voltooid" terwijl er niets gebeurde, en in Issue #86 gebeurde het op de
+  # verkeerde database. Beide keren was de melding waar over iets anders.
   #
-  # ── Waarom hier een Tailscale-stap in zit ──────────────────────────────────
-  #
-  # saxombp staat thuis achter een router. Buiten het Tailscale-netwerk bestaat
-  # `saxombp.tail4b29b.ts.net` niet eens — een publieke DNS-server geeft
-  # "non-existent domain" (gemeten 2026-08-11). GitHub Actions kan er dus niet
-  # bij, en dat is precies goed: de machine hangt niet aan het open internet.
-  #
-  # De officiële Tailscale-action voegt de runner tijdelijk aan het netwerk toe.
-  # De auth-key is `ephemeral`: de node verdwijnt vanzelf wanneer de job klaar
-  # is. Er wordt niets opengezet en er blijft niets achter.
-  #
-  # Dit is de enige stap in deze workflow die vervalt bij een verhuizing naar
-  # AWS. App Runner en ECS hebben geen SSH nodig — je duwt een image en de
-  # dienst haalt het op. Wat hierboven staat (migraties, teruglezen) verhuist
-  # wél mee.
+  # Het is bovendien de helft die een verhuizing naar AWS overleeft. Migreren
+  # tegen RDS werkt precies zo; SSH naar een machine thuis verdwijnt dan.
   staging:
-    name: Migraties en uitrol naar staging
+    name: Migraties naar staging
     runs-on: ubuntu-latest
     needs: [publiceren]
     # Alleen vanaf main, en alleen als er werkelijk een image is gepubliceerd.
@@ -339,68 +326,31 @@ jobs:
               .catch((e) => { console.error('MISLUKT: ' + e.message); process.exit(1); });
           "
 
-      # ── Vanaf hier: de applicatie op saxombp ──────────────────────────────
+      # ── De applicatie starten gebeurt met de hand ─────────────────────────
       #
-      # De runner wordt tijdelijk lid van het Tailscale-netwerk. `ephemeral`
-      # betekent dat de node vanzelf verdwijnt na afloop; er blijft geen
-      # apparaat achter in het overzicht.
+      # Hier stonden drie stappen die de runner via Tailscale bij saxombp
+      # lieten komen. Ze zijn verwijderd op 2026-08-11, en de reden is een
+      # harde regel van Tailscale — geen instelling die verkeerd stond:
       #
-      # Tailscale beveelt een OAuth-client aan boven een auth-key, en de action
-      # waarschuwt daar ook over. Bewust nog niet gedaan: een auth-key is één
-      # secret en werkt vandaag, een OAuth-client vraagt een tag-opzet in het
-      # toegangsbeleid. Het verschil dat telt is de vervaldatum — een auth-key
-      # verloopt (standaard na 90 dagen) en dán stopt deze job.
+      #   "Devices with a tag-based identity can only SSH into other tagged
+      #    devices; they cannot SSH into devices with a user-based identity."
       #
-      # Dat hoort in de onderhoudskalender bij de sleutelrotatie, naast het
-      # GHCR-token dat rond 2026-11-08 verloopt.
-      - name: Tijdelijk in het Tailscale-netwerk
-        uses: tailscale/github-action@v3
-        with:
-          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
-          # Zonder SSH-vlag praat de action alleen; met deze vlag mag hij ook
-          # de Tailscale-SSH van saxombp gebruiken. Daar staan geen
-          # SSH-sleutels — de toegang loopt volledig via het netwerk zelf.
-          args: --ssh
-
-      # Bereikbaarheid apart controleren, vóór de uitrol.
+      # De CI-runner krijgt onvermijdelijk een label. saxombp heeft er geen en
+      # is eigendom van de gebruiker. Er bestáát dus geen geldige SSH-regel die
+      # dit toestaat; drie pogingen konden nooit werken.
       #
-      # Anders is een mislukte uitrol niet te onderscheiden van een netwerk dat
-      # niet tot stand kwam, en die twee vragen een heel ander onderzoek.
+      # De enige oplossing is saxombp óók labelen. Dat verwijdert de
+      # gebruiker als eigenaar ("applying a tag removes the user account") en
+      # raakt daarmee de HTTPS-opzet van acceptatie — de enige weg naar de
+      # inlog. Bewust niet gedaan (besluit eigenaar 2026-08-11): het levert
+      # alleen op dat één commando vanzelf gaat, en precies dat commando
+      # verdwijnt bij een verhuizing naar AWS, waar geen SSH aan te pas komt.
       #
-      # ── Waarom hier drie tijdslimieten op staan ────────────────────────────
-      #
-      # `ConnectTimeout` dekt alleen het OPENEN van de verbinding, niet de
-      # authenticatie erna. Op 2026-08-11 bleef deze stap daardoor hangen: de
-      # runner zat aantoonbaar in het Tailscale-netwerk (zichtbaar als
-      # `github-runnervmvrwv9`), maar de SSH-sessie kwam nooit tot stand en er
-      # verscheen geen enkele poging in het log van saxombp.
-      #
-      # Zonder limiet loopt zo'n stap door tot GitHub's maximum van zes uur.
-      # Vandaar `timeout-minutes` op de stap, `timeout 60` op het commando, en
-      # `ServerAliveInterval` zodat een stille verbinding zichzelf opgeeft.
-      - name: Is saxombp bereikbaar?
-        timeout-minutes: 3
+      # Een stap die altijd faalt is erger dan geen stap: dan wordt elke run
+      # rood en leer je rode runs negeren.
+      - name: Herinnering — de applicatie starten
         run: |
-          timeout 60 ssh \
-            -o StrictHostKeyChecking=no \
-            -o BatchMode=yes \
-            -o ConnectTimeout=20 \
-            -o ServerAliveInterval=5 \
-            -o ServerAliveCountMax=3 \
-            root@saxombp "echo bereikbaar; docker --version" || {
-              echo "::error::saxombp is niet bereikbaar via Tailscale SSH. Zit de runner in het netwerk (stap hierboven), en laat het SSH-beleid van het tailnet deze node toe? Een node zonder tag valt onder de standaardregels; die staan een CI-machine niet altijd toe."
-              exit 1
-            }
-
-      # `deploy.js` doet de rest: image ophalen, containers vervangen,
-      # rookproef, en bij een falende rookproef terugdraaien naar de vorige
-      # versie. Dat script is beproefd met de hand; hier draait het onbewaakt.
-      #
-      # De frontendversie komt uit een aparte repository en heeft dus een eigen
-      # SHA. Zolang die niet automatisch doorgegeven wordt, blijft `latest`
-      # staan — zichtbaar in de samenvatting hieronder, zodat het opvalt.
-      - name: Uitrollen naar staging
-        run: node scripts/deploy.js staging --versie "sha-${GITHUB_SHA:0:12}"
+          echo "::notice::Migraties staan op staging. Start de applicatie met: npm run deploy:staging -- --versie sha-${GITHUB_SHA:0:12}"
 
       - name: Samenvatting
         if: always()
@@ -412,7 +362,11 @@ jobs:
           echo "| Commit | \`${GITHUB_SHA::12}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Migraties vóór | $VOOR |" >> "$GITHUB_STEP_SUMMARY"
           echo "| Migraties ná | teruggelezen, gelijk aan het journal |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Backend | \`sha-${GITHUB_SHA::12}\` |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Frontend | \`latest\` — eigen repository, eigen SHA |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**De applicatie is nog niet vervangen.** Dat gebeurt met de hand:" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "npm run deploy:staging -- --versie sha-${GITHUB_SHA::12}" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Staging: http://saxombp:3030 (backend :5031), database bij Supabase." >> "$GITHUB_STEP_SUMMARY"
