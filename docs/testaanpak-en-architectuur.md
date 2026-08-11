@@ -425,6 +425,8 @@ document maar de reden dat het te vertrouwen is.
 | 2026-08-10 | Frontend met een verkeerd backend-adres gaf **200** op de startpagina | rookproef vraagt óók een beheerroute op via de frontend-poort |
 | 2026-08-10 | `deploy.js` draaide op een compose-bestand dat op de server anders was dan in de repo | sha256-vergelijking als eerste stap van de uitrol |
 | 2026-08-10 | `mailVerstuurd: true` terwijl het logkanaal `[niet echt verstuurd]` meldde | nog open — **Issue #131** |
+| 2026-08-11 | Een migratiescript dat faalt gaf **exitcode 0** door de pipe naar `tail` | exitcodes zonder pipe meten; `scripts/migratiestand.js` faalt aantoonbaar |
+| 2026-08-11 | Compose weigert een héél bestand bij `depends_on` naar een inactief profiel — niet alleen die dienst | overlay `compose.lokale-db.yml`; gemeten met een wegwerp-compose vóór toepassing |
 
 **De regels van 10 augustus zijn varianten van P3**, en dat is geen toeval. Elk
 ervan zag eruit als succes: een groene controle, een geslaagde uitrol, een
@@ -445,6 +447,40 @@ nog open.
 De vierde is een variant van P2: `pg_isready` gaf een antwoord dat waar was op
 het moment van vragen, en onwaar een seconde later. Een controle die maar één
 keer kijkt, meet een momentopname en geen toestand.
+
+### Teruglezen als testvorm — nieuw sinds 2026-08-11
+
+De poorten hierboven draaien vóór een uitrol. Sinds stap 3 van het OTAP-plan is
+er een controle die erná draait, in de pipeline, waar niemand meekijkt:
+`scripts/migratiestand.js`.
+
+Hij leest de migratiestand uit de database — uitsluitend `SELECT` — en
+vergelijkt met `drizzle/meta/_journal.json`. Dat is bewust **niet** een getal in
+de workflow: zo'n getal veroudert bij de volgende migratie, en dan faalt de
+controle om de verkeerde reden of blijft hij groen terwijl er iets ontbreekt.
+Het journal is het bestand dat `migrate()` zelf leest, dus wat daarin staat is
+per definitie wat er hoort te staan.
+
+**Waarom dit een testvorm is en geen logregel.** De drie eerdere gevallen —
+2026-08-07 ("Migraties voltooid" over niets), Issue #86 (de verkeerde database),
+2026-08-10 (exitcode 0 na een crash) — hadden allemaal een geruststellende
+melding. Geen ervan had een meting die daarnaast lag.
+
+**Beproefd op alle drie de uitkomsten**, met exitcodes zonder pipe gemeten:
+
+| Toestand | Antwoord |
+|---|---|
+| gelijk aan het journal | `Gelijk aan het journal (26)` — exitcode 0 |
+| 11 migraties achter | *"De database staat op 15, het journal telt 26"* — exitcode 1 |
+| onbereikbaar | exitcode 1 met de verbindingsfout |
+
+Die tweede is gemaakt door een database op te bouwen met een tijdelijk ingekort
+journal — de aanpak uit `docs/runbooks/commandos-en-omgeving.md`, met de `trap`
+die het journal altijd terugzet.
+
+**De grens die dit níét dekt:** het toetst dat migraties gelánd zijn, niet dat ze
+het júíste doen. Een migratie die een verkeerde kolom toevoegt telt gewoon mee.
+Daarvoor is `verify:schema` er, en die draait niet tegen staging.
 
 ---
 

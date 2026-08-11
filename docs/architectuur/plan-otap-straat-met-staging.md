@@ -1,6 +1,7 @@
 # Plan — een OTAP-straat met staging, van nul opnieuw doordacht
 
-**Status:** in uitvoering — **stap 1 en 2 zijn gedaan** (§3.1 en §3.2)
+**Status:** in uitvoering — **stap 1, 2, 2b en 3 zijn gedaan**. Volgende: stap 4
+(uitrol naar productie met een akkoordrem)
 **Datum:** 2026-08-10, bijgewerkt dezelfde avond
 **Eigenaar:** Kees Aling
 **Aanleiding:** de straat die op 09/10-08 op saxombp gebouwd is, loopt niet uit
@@ -363,22 +364,112 @@ Geen tabel die alleen in de één voorkomt.
 > weigert, én het feit dat de melding de **projectreferentie** toont. Zonder dat
 > tweede was de fout onzichtbaar geweest.
 
-### 3.3 De uitrol naar staging automatiseren
+### 3.3 De uitrol naar staging automatiseren — ✅ GEDAAN op 2026-08-11
 
-Uitbreiding van `.github/workflows/ci.yml`: na een geslaagde acceptatie-uitrol
-gaat dezelfde SHA naar staging.
+Uitbreiding van `.github/workflows/ci.yml`. Wat er nu draait na elke merge op
+`main`:
 
-Stappen, met de rem er al in:
+```
+CI: lint, tests, build
+  → image naar GHCR (SHA-tag, nooit `latest` — §6)
+  → migraties tegen Supabase-staging
+  → migratiestand TERUGGELEZEN en vergeleken met het journal
+  ────────────────────────────────────────────────────────
+  → npm run deploy:staging -- --versie sha-…     met de hand
+```
 
-1. Image ophalen uit GHCR op SHA-tag (nooit `latest` — zie §6)
-2. Migraties draaien tegen staging
-3. **Teruglezen** hoeveel migraties er nu staan. Nul of onveranderd = stoppen.
-4. Applicatie starten
-5. Rookproef: `/health` én een route die de database raakt
+**Het teruglezen is de kern, niet het migreren.** `scripts/migratiestand.js`
+leest de stand uit de database — uitsluitend `SELECT` — en vergelijkt met
+`drizzle/meta/_journal.json`, het bestand dat `migrate()` zelf leest. Wat daarin
+staat is per definitie wat er na een geslaagde uitrol hoort te staan.
 
-Stap 5 is een les van 09-08: een backend zonder tabellen antwoordt vrolijk 200
-op `/health` en 401 op beheerroutes. De rookproef moet iets vragen dat alleen
-kan slagen als de database gevuld is.
+Een getal in de workflow zou verouderen bij de volgende migratie: dan faalt de
+controle om de verkeerde reden, of blijft hij groen terwijl er iets ontbreekt.
+
+**Beproefd, niet aangenomen:**
+
+| Proef | Uitkomst |
+|---|---|
+| Tegen het echte stagingproject | `Migraties op deze database: 26 — Gelijk aan het journal (26)`, exitcode 0 |
+| Database die 11 migraties achterliep | *"De database staat op 15, het journal telt 26 — er zijn migraties NIET toegepast"*, exitcode 1 |
+| Onbereikbare database | exitcode 1 |
+
+Die exitcodes zijn **zonder pipe** gemeten. Met `| tail` gaf de eerste meting 0 —
+dezelfde valkuil als bij `migrate.js` op 10-08, waar een crash door de pipe als
+succes werd gelezen.
+
+**Twee bewuste afwijkingen**, beide toegelicht in de code:
+
+- Geen `eisToestemmingBuitenLokaal` in het leesscript. Die rem beschermt tegen
+  ongewild *schrijven*; aan een vlag wennen voor een leesquery is het echte
+  risico dat het runbook beschrijft. Het doelwit wordt wél altijd gemeld.
+- `--extern` staat expliciet bij de migratie-aanroep, niet als
+  omgevingsvariabele. In de omgeving zetten maakt hem onzichtbaar voor elke
+  volgende stap.
+
+### 3.3b De applicatie tegen Supabase — ✅ GEDAAN, en dit was het punt
+
+Er draait nu een applicatie op saxombp die praat met het Supabase-stagingproject.
+**Voor het eerst gaat MCM2 over een connection pooler.** Dat is de hele reden dat
+staging bij Supabase staat en niet in een container (§1).
+
+Bewezen aan de Supabase-kant:
+
+```
+Actieve verbindingen op de Supabase-stagingdatabase:
+  clm_api_runtime: 1     ← de applicatie op saxombp
+  clm_migrator: 1        ← de leesquery van de meting
+```
+
+**Drie dingen moesten instelbaar worden**, en het derde was een verrassing:
+
+1. `DATABASE_URL` stond vast in het compose-bestand, opgebouwd uit
+   `DB_WACHTWOORD`. Nu een variabele.
+2. De databaseservice staat achter het profiel `lokale-db`. Staging heeft er geen.
+3. `depends_on: db` kon **niet** blijven staan. Compose weigert een heel
+   compose-bestand zodra een service verwijst naar een dienst achter een inactief
+   profiel: *"service api depends on undefined service db: invalid compose
+   project"*. Niet alleen de api start dan niet — er start niets.
+
+Dat derde punt is gemeten met een wegwerp-compose vóórdat het werd toegepast, en
+de oplossing (`deploy/compose.lokale-db.yml` als overlay) op dezelfde manier.
+
+**Regressietest:** acceptatie opnieuw uitgerold met het gewijzigde
+compose-bestand — vier rookproeven groen. Dat was de risicovolle kant.
+
+### 3.3c Waarom het starten van de applicatie handwerk blijft
+
+De uitrol naar saxombp is bewust **niet** geautomatiseerd. Dat is geen
+onvermogen maar een besluit (eigenaar, 2026-08-11), en de reden hoort hier
+vastgelegd.
+
+CI kan niet bij saxombp: de machine staat thuis achter een router, en buiten
+Tailscale bestaat `saxombp.tail4b29b.ts.net` niet eens — een publieke DNS-server
+geeft "non-existent domain".
+
+De officiële Tailscale-action lost dat op, en werkte ook: de runner was
+aantoonbaar in het netwerk zichtbaar. Maar de SSH-verbinding liep op een harde
+regel van Tailscale:
+
+> *"Devices with a tag-based identity can only SSH into other tagged devices;
+> they cannot SSH into devices with a user-based identity."*
+
+Een CI-runner krijgt onvermijdelijk een label; saxombp heeft er geen. Er bestáát
+dus geen geldige regel die dit toestaat — drie pogingen
+(`autogroup:self`, `autogroup:tagged`, een gebruiker als bestemming) waren alle
+drie ongeldig, en de laatste werd door het invoerscherm zelf geweigerd.
+
+De enige oplossing zou zijn saxombp óók te labelen. Dat *"removes the user
+account"* en raakt daarmee de `tailscale serve`-opzet die het HTTPS-adres van
+acceptatie draagt — de enige weg naar de inlog.
+
+**Afgewogen en verworpen.** Het levert één ding op: dat één commando vanzelf
+gaat. En juist dat commando verdwijnt bij een verhuizing naar AWS, waar je een
+image duwt en de dienst het zelf ophaalt. Een stap die altijd faalt is bovendien
+erger dan geen stap: dan wordt elke run rood en leer je rode runs negeren.
+
+De samenvatting van elke CI-run drukt het vervolgcommando af met de juiste SHA
+erin, zodat het niet samengesteld hoeft te worden.
 
 ### 3.4 De uitrol naar productie automatiseren
 
@@ -421,17 +512,29 @@ weet dat het klopt.
 
 ### 4.1 Wat er per omgeving hoort te zijn
 
+*Bijgewerkt 2026-08-11 naar wat er werkelijk staat; teruggelezen, niet gepland.*
+
 | | Acceptatie | Staging | Productie |
 |---|---|---|---|
-| Waar | saxombp:5011 | Supabase `clm-staging` | Supabase `clm-enterprise` |
-| Database | container, wegwerp | Supabase eu-west-1 | Supabase eu-west-1 |
+| Applicatie | saxombp `:5011` / `:3010` | saxombp `:5031` / `:3030` | saxombp `:5021` (procesbewijs) |
+| Database | container 55460 | **Supabase `clm-staging3`** | Supabase `clm-enterprise` |
+| Migraties door | `deploy:acceptatie` | **CI, automatisch** | met de hand — stap 4 |
 | `clm.omgeving` | `wegwerp` | `wegwerp` | `beschermd` |
 | Rollen | migrator + runtime | migrator + runtime | migrator + runtime |
-| RLS | actief | actief | actief |
+| RLS | actief | **actief — geverifieerd** | actief |
 | Backups | nee | nee | dagelijks, met controle |
 | e2e-suites | ja | nee | nooit |
-| Data | wegwerp | testdata | echte data |
-| Wie mag erbij | CI | CI | CI + eigenaar na akkoord |
+| Data | wegwerp | leeg | echte data |
+| Inloggen | ja, via HTTPS | nee — vraagt eigen redirect-URI | nee |
+
+**Dat staging draait, is de applicatie op saxombp; de database staat bij
+Supabase.** Die scheiding is opzet en het is de AWS-vorm: compute los van
+database, elk apart te verhuizen.
+
+> **RLS op staging is niet aangenomen maar gemeten.** Een poging om een tenant
+> in te voegen als `clm_migrator` werd geweigerd met *"new row violates
+> row-level security policy for table tenant"*. Dat is precies wat er hoort te
+> gebeuren zonder tenantcontext.
 
 ### 4.2 Het pauzeerprobleem oplossen
 
@@ -565,7 +668,7 @@ het als eerste staat.
 | 1 | ✅ **Issue #51 — frontend promoveerbaar** — gedaan 10-08 | Nee, ging sowieso door |
 | 2 | ✅ **Staging aanmaken bij Supabase** — gedaan 10-08 | Beslist: optie A |
 | 2b | ✅ **Frontend-image publiceren, frontend in de uitrol** — gedaan 10-08 | Beslist: twee versies, zie hieronder |
-| 3 | Uitrol naar staging automatiseren | Nee |
+| 3 | ✅ **Uitrol naar staging automatiseren** — gedaan 11-08 | Beslist: applicatie start met de hand, zie §3.3c |
 | 4 | Uitrol naar productie automatiseren, met akkoordrem | Nee |
 | 5 | `.env` omleiden naar staging | Nee, maar wel melden wanneer |
 | 6 | `mcm2-productie` op saxombp opheffen | **Ja — onomkeerbaar** |

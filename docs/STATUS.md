@@ -2,12 +2,52 @@
 
 ## Laatst bijgewerkt
 
-**2026-08-10, nacht.** De dag begon met een leeggemaakte productiedatabase en
-eindigde met een **volledig werkende acceptatieomgeving waar je met je
-Microsoft-account op inlogt** — frontend, backend en database, uitgerold vanaf
-een image dat door de kwaliteitspoorten kwam.
+**2026-08-11, middag.** **Stap 3 van het OTAP-plan is af.** Na elke merge op
+`main` draaien de migraties automatisch tegen de Supabase-stagingdatabase, en
+wordt teruggelezen of ze werkelijk geland zijn. Er draait bovendien een
+applicatie tegen die database — **voor het eerst gaat MCM2 over een connection
+pooler**, precies waarvoor staging bestaat.
 
-Zes PR's, alle gemerged:
+```
+merge op main
+  → CI: lint, tests, build
+  → image naar GHCR (SHA-tag)
+  → migraties naar Supabase-staging
+  → migratiestand teruggelezen, vergeleken met het journal   ← automatisch
+  ──────────────────────────────────────────────────────────
+  → npm run deploy:staging -- --versie sha-…                 ← één commando
+```
+
+Vandaag gemerged: **#135** (uitnodigingslink wees naar `localhost`), **#136**
+(migraties naar staging), **#137** (applicatie tegen Supabase), **#139/#140**
+(time-outs, en de Tailscale-stappen er weer uit).
+
+**Van de negen stappen zijn 1, 2, 2b en 3 af.** Volgende is stap 4: uitrol naar
+productie met een akkoordrem.
+
+### Waarom het starten van de applicatie handwerk blijft
+
+Bewust, niet uit onvermogen. CI kan niet bij saxombp — de machine staat thuis
+achter een router, en buiten Tailscale bestaat het adres niet eens. De officiële
+Tailscale-action loste dat op en de runner kwám in het netwerk, maar de
+SSH-verbinding liep op een harde regel:
+
+> *"Devices with a tag-based identity can only SSH into other tagged devices."*
+
+Een CI-runner krijgt onvermijdelijk een label, saxombp heeft er geen. De enige
+oplossing zou zijn saxombp óók te labelen, en dat verwijdert de gebruiker als
+eigenaar — met gevolgen voor de HTTPS-opzet die de inlog draagt.
+
+Afgewogen en verworpen (eigenaar, 11-08): het levert één ding op, en juist dat
+verdwijnt bij een verhuizing naar AWS. Details in §3.3c van het plan.
+
+<details>
+<summary><strong>Wat er op 2026-08-10 gebeurde</strong> — de dag ervoor</summary>
+
+De dag begon met een leeggemaakte productiedatabase en eindigde met een
+**volledig werkende acceptatieomgeving waar je met je Microsoft-account op
+inlogt** — frontend, backend en database, uitgerold vanaf een image dat door de
+kwaliteitspoorten kwam.
 
 | | Wat |
 |---|---|
@@ -19,9 +59,11 @@ Zes PR's, alle gemerged:
 Plus, niet in een PR maar op de server: **HTTPS op acceptatie** via
 `tailscale serve`, waardoor de cookie-verzwakking eruit kon.
 
-**De opbrengst zit niet in de PR's maar in wat de eerste echte uitrol
-blootlegde.** Die faalde, en drie van de vier oorzaken waren stille fouten die
-geen enkele test ving. Zie "Wat de uitrol leerde" hieronder.
+De opbrengst zat niet in de PR's maar in wat de eerste echte uitrol blootlegde.
+Die faalde, en drie van de vier oorzaken waren stille fouten die geen enkele
+test ving. Zie "Wat de uitrol leerde" hieronder.
+
+</details>
 
 ---
 
@@ -61,11 +103,22 @@ Twee lessen die in de code horen:
 ## 🔵 MORGEN BEGINNEN
 
 **Lees eerst:** [`docs/architectuur/plan-otap-straat-met-staging.md`](architectuur/plan-otap-straat-met-staging.md).
-Van de negen stappen zijn **1, 2 en 2b gedaan**. Morgen begint bij **stap 3**:
-de uitrol naar staging automatiseren.
+Van de negen stappen zijn **1, 2, 2b en 3 gedaan**. Volgende is **stap 4**: de
+uitrol naar productie, met vier remmen erin.
 
-Dat was tot gisteren geblokkeerd door twee dingen die nu weg zijn — de frontend
-was niet promoveerbaar (#51) en zijn image werd nergens gepubliceerd (2b).
+| Rem | Waarom |
+|---|---|
+| Handmatig akkoord | Niets naar productie zonder dat de eigenaar drukt |
+| Backup vooraf | Verplicht. Faalt de backup, dan gaat de uitrol niet door |
+| Migratiestand vergelijken met staging | Wijkt het af, dan stoppen |
+| Terugdraaien beproefd | Op deze weg, niet alleen op saxombp |
+
+De derde is nu goedkoop geworden: `scripts/migratiestand.js` bestaat en is
+beproefd op alle drie de uitkomsten.
+
+**Let op bij stap 4.** Productie draait nu nog op `latest` zonder frontend en
+zonder `OIDC_*` — inloggen kan daar niet. Het compose-bestand raakt beide
+omgevingen, dus een uitrol daarheen is een aparte, bewuste handeling.
 
 ### Waar je meteen naar kunt kijken
 
@@ -82,26 +135,34 @@ thuisbasis) en `AlingAdvies (acceptatie)`, aangemaakt via de échte route
 `POST /platform/tenants` — met een spoor in `audit.audit_event`. Dat is precies
 wat bij de vorige AlingAdvies-tenant op productie ontbrak.
 
-### Drie dingen die morgen aandacht vragen
-
-Alle drie gevonden bij de eerste echte uitrol, alle drie vastgelegd:
+### Twee dingen die nog aandacht vragen
 
 | Issue | Wat | Wanneer het pijn doet |
 |---|---|---|
 | **#131** | `mailVerstuurd: true` terwijl het logkanaal `[niet echt verstuurd]` meldt | Bij de eerste echte klantuitnodiging: je denkt dat hij uitgenodigd is |
-| **#132** | De uitnodigingslink wees naar `localhost:5001` — een adres dat op die omgeving niet bestaat | Bij de eerste tenant die via een uitnodiging in gebruik wordt genomen |
 | **#133** | Entra stuurt `"name": "unknown"`; en één persoon kan twee gebruikers worden | Zichtbaar in het scherm en in de audit trail. Blokkeert de straat niet |
 
-#131 en #132 zijn samen erger dan apart: de melding zegt dat de uitnodiging
-verstuurd is (niet waar), en de link die je als terugval krijgt is onbruikbaar.
+~~**#132**~~ — de uitnodigingslink wees naar `localhost:5001` — **opgelost op
+11-08** (PR #135). De link wordt nu gebouwd op `UITNODIGING_BASIS_URL` en wijst
+naar de frontend, want sinds Issue #51 loopt de inlog via het doorgeefluik. Een
+link naar de backend-poort zou het pogingcookie op de verkeerde herkomst zetten.
 
-### Wat productie nog niet heeft
+`PORTAAL_BASIS_URL` ontbrak net zo goed en is meegenomen; die was nooit
+opgevallen omdat er nog geen leverancier is uitgenodigd.
 
-Acceptatie is bijgewerkt, productie niet. Daar draait nog `latest` zonder
-frontend, zonder `OIDC_*` en zonder HTTPS. Inloggen kan daar dus niet.
+### De omgevingen op saxombp
 
-Dat is geen achterstand maar een keuze: het compose-bestand raakt beide
-omgevingen, en een uitrol naar productie hoort een aparte, bewuste handeling te
+Teruggelezen op 2026-08-11:
+
+| | Backend | Frontend | Database |
+|---|---|---|---|
+| acceptatie | `sha-5428bb95` | `sha-635ff211` | container 55460 |
+| **staging** | `sha-ffd27dc9` | `sha-635ff211` | **Supabase `clm-staging3`** |
+| productie | `latest` | — | container 55470 |
+
+**Productie loopt bewust achter.** Daar draait nog `latest` zonder frontend,
+zonder `OIDC_*` en zonder HTTPS — inloggen kan daar dus niet. Dat is stap 4, en
+het compose-bestand raakt beide omgevingen, dus het hoort een aparte handeling te
 zijn.
 
 ### Wat er gisteravond is neergezet: staging
@@ -171,6 +232,60 @@ dan bouwen, dan opnieuw meten. Het verschil is de regressie.
 
 Daarna kan `FRONTEND_MEE` in `scripts/deploy.js` op `true` en de regel
 `profiles:` uit `deploy/docker-compose.omgeving.yml`. Verder verandert er niets.
+
+---
+
+## Wat er op 2026-08-11 is gebouwd
+
+### Stap 3 — migraties automatisch naar staging (#136)
+
+`scripts/migratiestand.js` leest de stand terug uit de database en vergelijkt
+met `drizzle/meta/_journal.json`. Beproefd op alle drie de uitkomsten, met
+**exitcodes zonder pipe gemeten**:
+
+| Toestand | Antwoord |
+|---|---|
+| gelijk | `Gelijk aan het journal (26)` — exitcode 0 |
+| 11 achter | *"De database staat op 15, het journal telt 26"* — exitcode 1 |
+| onbereikbaar | exitcode 1 |
+
+Met `| tail` gaf de eerste meting exitcode 0 — dezelfde valkuil als bij
+`migrate.js` op 10-08.
+
+### Stap 3b — de applicatie tegen Supabase (#137)
+
+Voor het eerst praat MCM2 over een **connection pooler**. Bewezen aan de
+Supabase-kant: `clm_api_runtime: 1` actieve verbinding, terwijl de applicatie op
+saxombp draaide.
+
+Drie dingen moesten instelbaar worden, en het derde was een verrassing: Compose
+weigert een **héél** compose-bestand zodra een service `depends_on` een dienst
+achter een inactief profiel — *"invalid compose project"*, en dan start er
+niets. Gemeten met een wegwerp-compose vóór toepassing, net als de oplossing
+(`compose.lokale-db.yml` als overlay).
+
+Regressietest: acceptatie opnieuw uitgerold met het gewijzigde compose-bestand,
+vier rookproeven groen.
+
+### #132 — de uitnodigingslink (#135)
+
+De link werd gebouwd op `API_BASIS_URL`, een variabele die in geen enkel
+voorbeeldbestand stond en dus nooit gezet werd. Elke uitgerolde omgeving gaf een
+link naar `localhost:5001`.
+
+Hij wijst nu naar de frontend, want sinds Issue #51 loopt de inlog via het
+doorgeefluik. **De aanname eerst gemeten** voordat ik bouwde: een uitnodiging via
+`/api/backend/auth/login` geeft 302 naar Microsoft en zet het token in het
+pogingcookie — 44 tekens langer dan zonder token.
+
+> Die meting ging bijna fout. Mijn eerste poging gebruikte een token van 12
+> tekens en gaf geen verschil, waaruit ik bijna concludeerde dat het token niet
+> meereist. `heeftGeldigeVorm()` eist er 43, dus het werd terecht genegeerd.
+
+### Wat er níét gebouwd is, en waarom
+
+De uitrol naar saxombp automatiseren (#138, teruggedraaid in #140). Zie
+"Waarom het starten van de applicatie handwerk blijft" bovenaan.
 
 ---
 
@@ -313,9 +428,9 @@ handmatig te starten is (PR #122).
 
 | # | Wat | Waarom nu |
 |---|---|---|
-| — | **Geen geautomatiseerde uitrol naar staging en productie** | De gemeenschappelijke oorzaak onder 04-08, 07-08 en 10-08. Acceptatie is sinds 10-08 wél volledig uitgerold, maar met de hand gestart. Dit is **stap 3** en de eerstvolgende taak. Plan: [`plan-otap-straat-met-staging.md`](architectuur/plan-otap-straat-met-staging.md) |
+| — | **Geen geautomatiseerde uitrol naar productie** | De gemeenschappelijke oorzaak onder 04-08, 07-08 en 10-08. Staging gaat sinds 11-08 automatisch (migraties + teruglezen); productie nog niet. Dit is **stap 4**. Plan: [`plan-otap-straat-met-staging.md`](architectuur/plan-otap-straat-met-staging.md) |
 | ~~#51~~ | ~~Frontend promoveerbaar maken~~ | ✅ **Gedaan 10-08.** Bewezen: hetzelfde image tegen twee backends, verschillende antwoorden, geen herbouw |
-| **#132** | Uitnodigingslink wijst naar `localhost` op een uitgerolde omgeving | Het token bestaat maar één keer; een verkeerde link is niet opnieuw uit te geven |
+| ~~#132~~ | ~~Uitnodigingslink wijst naar `localhost`~~ | ✅ **Gedaan 11-08** (PR #135). Twee tests, tegenproef gedraaid |
 | **#131** | `mailVerstuurd: true` terwijl er niets verstuurd is | Vóór de eerste echte klantuitnodiging |
 | **#133** | Naam `unknown` uit Entra; dubbele gebruiker mogelijk | "unknown heeft dit oordeel gegeven" is geen bruikbare audit trail |
 | **#46** | Uploads op een containerschijf: weg bij image-vervanging | **Harde datum**: pilot ~1 september. Dit zijn compliance-bewijsstukken |
