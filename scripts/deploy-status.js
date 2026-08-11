@@ -2,7 +2,7 @@
 'use strict';
 
 /**
- * Wat draait er op acceptatie en productie?
+ * Wat draait er op acceptatie, staging en productie?
  *
  * Leest de werkelijke toestand van de server, niet een bestand dat zegt wat er
  * zou moeten draaien. Dat onderscheid is in dit project twee keer duur geweest:
@@ -30,8 +30,23 @@ const SERVER = 'root@saxombp';
  */
 const FRONTEND_MEE = true;
 
+/**
+ * De drie omgevingen op saxombp. Poorten gelijk aan `OMGEVINGEN` in deploy.js.
+ *
+ * ── Staging stond hier niet in, en dat was een blinde vlek ──────────────────
+ *
+ * Tot 2026-08-11 toonde dit commando alleen acceptatie en productie, terwijl
+ * `mcm2-staging-api-1` en `mcm2-staging-frontend-1` wél draaiden. Wie de status
+ * opvroeg kreeg dus een compleet ogend overzicht waarin een hele omgeving
+ * ontbrak — een controlecommando dat geruststelt over iets dat het niet gemeten
+ * heeft. Dezelfde klasse als Issue #131.
+ *
+ * Gevonden door `docker ps` op de server te vergelijken met wat dit script
+ * afdrukte, bij het bijwerken van de omgevingstabel in STATUS.md.
+ */
 const OMGEVINGEN = [
   { naam: 'acceptatie', project: 'mcm2-acceptatie', api: 5011, frontend: 3010 },
+  { naam: 'staging', project: 'mcm2-staging', api: 5031, frontend: 3030 },
   { naam: 'productie', project: 'mcm2-productie', api: 5021, frontend: 3020 },
 ];
 

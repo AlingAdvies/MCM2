@@ -208,12 +208,21 @@ altijd een goede vraag, en het antwoord hoort concreet te zijn.
 Je hoeft geen foutmeldingen te ontleden. **Kopieer wat je ziet en plak het in de
 chat.** Dat is sneller en betrouwbaarder dan zelf zoeken.
 
-Twee dingen die je wel zelf kunt oplossen:
+Drie dingen die je wel zelf moet doen:
 
 | Situatie | 🧑 Wat jij doet |
 |---|---|
 | Telegram meldt dat Docker uit staat | Docker Desktop starten, daarna Claude vragen de backup in te halen |
 | Er komt al een week geen enkel bericht | Claude vragen te controleren of de melder nog werkt |
+| Claude meldt *"Tailscale SSH requires an additional check"* met een login-link | **Open die link en bevestig.** Eén klik |
+
+> **Over die Tailscale-link.** De toegang tot saxombp verloopt periodiek; dat is
+> een beveiliging van Tailscale zelf, geen storing. Claude kan hem niet voor je
+> aanklikken — het is juist de bedoeling dat een mens dat doet. Zolang je niet
+> bevestigt, blijft elke poging om bij de server te komen wachten.
+>
+> Waargenomen op 2026-08-11: `npm run deploy:status` hing zonder foutmelding,
+> en de reden bleek pas zichtbaar bij een handmatige SSH-poging.
 
 **Wat je nooit hoeft te doen:** een commando verzinnen, een versienummer
 overtypen, of zelf bedenken welke database ergens bij hoort. Vraag het.

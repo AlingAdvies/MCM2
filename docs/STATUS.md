@@ -2,8 +2,17 @@
 
 ## Laatst bijgewerkt
 
-**2026-08-11, avond.** **Stap 3 én stap 4 van het OTAP-plan zijn af.** De keten
-loopt nu van een merge tot aan productie, met vier remmen ervoor.
+**2026-08-11, avond.** **Stappen 3, 4 en 5 van het OTAP-plan zijn af**, plus de
+issues #131, #132 en #133. De keten loopt nu van een merge tot aan productie,
+met vier remmen ervoor — en de laptop wijst niet meer standaard naar de
+klantendatabase.
+
+> **Begin je hier na een `/clear`?** Lees dan eerst
+> [`runbooks/devops-handleiding.md`](runbooks/devops-handleiding.md) als je wilt
+> weten wat de eigenaar doet, en
+> [`runbooks/commandos-en-omgeving.md`](runbooks/commandos-en-omgeving.md) als je
+> zelf een commando gaat draaien. **Let op: `.env` wijst sinds vandaag naar
+> staging, niet meer naar productie.**
 
 ```
 merge op main
@@ -44,7 +53,14 @@ achttien tabellen.
 
 Vandaag gemerged: **#135** (uitnodigingslink wees naar `localhost`), **#136**
 (migraties naar staging), **#137** (applicatie tegen Supabase), **#139/#140**
-(time-outs, en de Tailscale-stappen er weer uit), **#142** (#131 en #133).
+(time-outs, en de Tailscale-stappen er weer uit), **#141** (documentatie na stap
+3), **#142** (issues #131 en #133), **#143** (stap 4), **#144** (stap 5 en de
+DevOps-handleiding).
+
+**De productieworkflow is één keer echt gedraaid** — 11-08, met akkoord van de
+eigenaar. De poort meldde `DOOR`, productie stond al op 26 migraties, en het
+teruglezen bevestigde dat. Bewijs dat de weg werkt, zonder dat er iets op het
+spel stond.
 
 ### Stap 5 is ook af: de laptop wijst niet meer naar productie
 
@@ -240,18 +256,23 @@ opgevallen omdat er nog geen leverancier is uitgenodigd.
 
 ### De omgevingen op saxombp
 
-Teruggelezen op 2026-08-11:
+Teruggelezen op 2026-08-11, eind van de dag:
 
-| | Backend | Frontend | Database |
-|---|---|---|---|
-| acceptatie | `sha-5428bb95` | `sha-635ff211` | container 55460 |
-| **staging** | `sha-ffd27dc9` | `sha-635ff211` | **Supabase `clm-staging3`** |
-| productie | `latest` | — | container 55470 |
+| | Backend | Frontend | Database | Antwoordt |
+|---|---|---|---|---|
+| acceptatie | `sha-5428bb954884` | `sha-635ff21150bd` | container 55460 | ✅ 200 / 200 / 401 |
+| **staging** | draait | draait | **Supabase `clm-staging3`** | niet gemeten — zie hieronder |
+| productie | `latest` | — | container 55470 | ✅ 200 (backend) |
 
 **Productie loopt bewust achter.** Daar draait nog `latest` zonder frontend,
-zonder `OIDC_*` en zonder HTTPS — inloggen kan daar dus niet. Dat is stap 4, en
-het compose-bestand raakt beide omgevingen, dus het hoort een aparte handeling te
-zijn.
+zonder `OIDC_*` en zonder HTTPS — inloggen kan daar dus niet. Dat blijft zo tot
+stap 6, want deze container gaat dan verdwijnen.
+
+> **`npm run deploy:status` kent staging niet.** Het commando toont alleen
+> acceptatie en productie, terwijl `mcm2-staging-api-1` en
+> `mcm2-staging-frontend-1` wel degelijk draaien (gemeten met `docker ps` op
+> 11-08). Een controlecommando met een blinde vlek is een controlecommando dat
+> je op het verkeerde moment geruststelt — **openstaand punt**, klein werk.
 
 ### Wat er gisteravond is neergezet: staging
 
@@ -519,6 +540,7 @@ handmatig te starten is (PR #122).
 | — | ~~**Geen geautomatiseerde uitrol naar productie**~~ | ✅ **Gedaan 11-08** (stap 4). Migraties gaan achter vier remmen langs; de applicatie starten blijft één commando. De remmen zijn op zeven uitkomsten beproefd |
 | — | ~~**`.env` wijst nog naar productie**~~ | ✅ **Gedaan 11-08** (stap 5). Wijst nu naar staging; de rem kijkt naar `clm.omgeving` in plaats van naar de hostnaam |
 | — | **Twee dingen heten "productie"** | `mcm2-productie` op saxombp draait op een eigen lokale database, niet op Supabase. Dat is verwarrend op precies het verkeerde moment. **Stap 6**, en de eerste onomkeerbare stap |
+| — | **`deploy:status` toont staging niet** | Die stack draait wél op saxombp. Een controlecommando dat een omgeving overslaat, stelt gerust over iets dat het niet gemeten heeft — dezelfde klasse als #131. Klein werk |
 | ~~#51~~ | ~~Frontend promoveerbaar maken~~ | ✅ **Gedaan 10-08.** Bewezen: hetzelfde image tegen twee backends, verschillende antwoorden, geen herbouw |
 | ~~#132~~ | ~~Uitnodigingslink wijst naar `localhost`~~ | ✅ **Gedaan 11-08** (PR #135). Twee tests, tegenproef gedraaid |
 | ~~#131~~ | ~~`mailVerstuurd: true` terwijl er niets verstuurd is~~ | ✅ **Gedaan 11-08.** `echtVerstuurd` op de mailgrens; verplicht veld, dus niet te vergeten |
