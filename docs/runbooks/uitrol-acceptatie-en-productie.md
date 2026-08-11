@@ -104,6 +104,32 @@ npm run deploy:acceptatie                          # laatste main-image
 npm run deploy:acceptatie -- --versie sha-abc123def456
 ```
 
+### Staging: migraties gaan vanzelf, de applicatie niet
+
+Na een merge op `main` draait CI de migraties tegen Supabase-staging en leest de
+stand terug. Wat er **niet** vanzelf gaat, is de applicatie vervangen:
+
+```powershell
+npm run deploy:staging -- --versie sha-abc123def456
+```
+
+De samenvatting van elke CI-run drukt dat commando af met de juiste SHA erin, zodat
+je hem niet hoeft samen te stellen.
+
+> **Waarom dat handwerk blijft.** CI kan niet bij saxombp. De machine staat thuis
+> achter een router; buiten Tailscale bestaat `saxombp.tail4b29b.ts.net` niet eens
+> — een publieke DNS-server geeft "non-existent domain".
+>
+> De Tailscale-action lost dat op, maar loopt op een harde regel: *"devices with a
+> tag-based identity can only SSH into other tagged devices."* Een CI-runner
+> krijgt onvermijdelijk een label; saxombp heeft er geen. De enige oplossing is
+> saxombp óók labelen, en dat **verwijdert de gebruiker als eigenaar** — met
+> gevolgen voor de HTTPS-opzet die de inlog draagt.
+>
+> Besluit eigenaar 2026-08-11: niet doen. Het levert alleen op dat één commando
+> vanzelf gaat, en juist dat commando verdwijnt bij een verhuizing naar AWS —
+> daar duw je een image en haalt de dienst het zelf op.
+
 **Verwacht resultaat:** zes stappen, alle groen, eindigend met
 `UITGEROLD — acceptatie draait op <versie>`.
 
