@@ -100,20 +100,39 @@ export class PlatformController {
   /**
    * De URL die de nieuwe beheerder in de mail krijgt.
    *
-   * Wijst naar **deze backend** en niet naar het portaal: `/auth/login` zet het
-   * token in het pogingcookie en stuurt door naar de identity provider. Het
-   * portaal is de leverancierskant en heeft met deze stroom niets te maken.
+   * Wijst naar `/auth/login` en niet naar het portaal: die route zet het token
+   * in het pogingcookie en stuurt door naar de identity provider. Het portaal
+   * is de leverancierskant en heeft met deze stroom niets te maken.
    *
-   * `API_BASIS_URL` en niet `PORTAAL_BASIS_URL`. Ontbreekt de variabele, dan
-   * valt dit terug op de lokale poort — zichtbaar fout in een mail, in plaats
-   * van een lege link waar niemand iets van merkt.
+   * ── Sinds Issue #51 loopt dat via de frontend (Issue #132) ────────────────
+   *
+   * Hier stond `API_BASIS_URL`, met het adres van de backend. Dat klopte zolang
+   * de browser daar rechtstreeks mee praatte; sinds het doorgeefluik doet hij
+   * dat niet meer. Een link naar de backend-poort zou het pogingcookie op de
+   * verkeerde herkomst zetten, en dan is het bij de callback niet meer te
+   * lezen — dezelfde valkuil als bij `OIDC_REDIRECT_URI`.
+   *
+   * `UITNODIGING_BASIS_URL` is daarom het adres van de **frontend**. Het pad
+   * `/api/backend` ervoor is het doorgeefluik.
+   *
+   * ── Waarom de terugval blijft, en waarom hij localhost is ─────────────────
+   *
+   * Ontbreekt de variabele, dan valt dit terug op de lokale frontend. Dat is
+   * zichtbaar fout in een mail naar een klant, in plaats van een lege link waar
+   * niemand iets van merkt. Op 2026-08-10 was dat precies wat er gebeurde: de
+   * variabele bestond nergens, de tenant werd aangemaakt, en de beheerder kreeg
+   * een link naar een adres dat op die server niet bestaat.
+   *
+   * Dat de terugval bestaat is dus geen vangnet maar een leesbare fout. De
+   * echte oplossing is dat `deploy-inrichten.js` deze variabele per omgeving
+   * neerzet — daar volgt hij uit het poortnummer.
    */
   private uitnodigingsLink(token: string): string {
     const basis = (
-      process.env.API_BASIS_URL ?? 'http://localhost:5001'
+      process.env.UITNODIGING_BASIS_URL ?? 'http://localhost:3000'
     ).replace(/\/+$/, '');
 
-    return `${basis}/auth/login?uitnodiging=${encodeURIComponent(token)}`;
+    return `${basis}/api/backend/auth/login?uitnodiging=${encodeURIComponent(token)}`;
   }
 
   @Get('tenants/:id')

@@ -118,6 +118,16 @@ services:
       # staat.
       NA_LOGIN_URL: ${NA_LOGIN_URL}
       NA_LOGOUT_URL: ${NA_LOGOUT_URL}
+      #
+      # Waar links naartoe wijzen die een ontvanger in zijn browser opent
+      # (Issue #132). Beide de frontend: het portaal voor de leverancier, het
+      # doorgeefluik naar /auth/login voor een nieuwe tenantbeheerder.
+      #
+      # Ontbraken tot 2026-08-10. Elke uitgerolde omgeving gaf daardoor een
+      # uitnodigingslink naar localhost — en zo'n token bestaat maar één keer,
+      # dus die link is niet te repareren.
+      PORTAAL_BASIS_URL: ${PORTAAL_BASIS_URL}
+      UITNODIGING_BASIS_URL: ${UITNODIGING_BASIS_URL}
     ports:
       - "${API_POORT}:5001"
     depends_on:

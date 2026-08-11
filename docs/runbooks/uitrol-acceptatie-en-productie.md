@@ -324,6 +324,7 @@ opzet: het script kent het client-secret niet en hoort het niet uit een lokale
 | `OIDC_ISSUER`, `OIDC_TOKEN_ENDPOINT`, `OIDC_JWKS_URI`, `OIDC_CLIENT_ID` | `.env.example` §Identity |
 | `OIDC_CLIENT_SECRET` | de lokale `.env` — nooit in git |
 | `OIDC_REDIRECT_URI` | vooringevuld op de frontend-poort |
+| `PORTAAL_BASIS_URL`, `UITNODIGING_BASIS_URL` | vooringevuld op de frontend-poort. Zie hieronder — dit ging op 10-08 mis |
 | `NA_LOGIN_URL`, `NA_LOGOUT_URL` | vooringevuld; zonder deze valt de backend terug op `/`, en dat is de backend-poort waar geen scherm staat |
 
 ### En dan de stap die niet in code zit
@@ -338,8 +339,41 @@ die lijst:
 | Omgeving | Redirect-URI |
 |---|---|
 | lokaal | `http://localhost:5001/auth/callback` |
-| acceptatie | `http://saxombp:3010/api/backend/auth/callback` |
-| productie | `http://saxombp:3020/api/backend/auth/callback` |
+| acceptatie | `https://saxombp.tail4b29b.ts.net/api/backend/auth/callback` |
+| productie | nog niet ingericht — vraagt eerst HTTPS |
+
+> **Let op de `https`.** Entra accepteert **geen** `http`-adres, behalve op
+> `localhost`. Dat is geen instelling die je omzeilt: het invoerveld weigert de
+> waarde met *"Must start with HTTPS or http://localhost"*.
+>
+> Daarom draait acceptatie sinds 2026-08-10 via `tailscale serve` op
+> `https://saxombp.tail4b29b.ts.net`. Productie heeft dat nog niet, en kan
+> daarom nog geen inlog hebben.
+
+### Waar links naartoe wijzen (Issue #132)
+
+Twee variabelen, allebei het adres van de **frontend**, allebei op 10-08 gemist:
+
+| Variabele | Waarvoor | Pad dat de code erachter zet |
+|---|---|---|
+| `PORTAAL_BASIS_URL` | de leverancier die een vragenlijst invult | `/portal/survey/<token>` |
+| `UITNODIGING_BASIS_URL` | een nieuwe tenantbeheerder | `/api/backend/auth/login?uitnodiging=<token>` |
+
+**Waarom de tweede niet naar de API wijst.** Die link komt uit op `/auth/login`,
+en die route zet het uitnodigingstoken in het pogingcookie. Sinds Issue #51
+praat de browser alleen nog met de frontend; een link naar de API-poort zou dat
+cookie op een andere herkomst zetten dan waar de callback terugkomt, en dan
+mislukt de login op een ontbrekende state. Zelfde valkuil als bij
+`OIDC_REDIRECT_URI`.
+
+**Wat er misging op 10-08.** De code las `API_BASIS_URL` — een variabele die in
+geen enkel voorbeeldbestand stond en dus nooit gezet werd. De eerste tenant op
+acceptatie kreeg daardoor een uitnodigingslink naar `http://localhost:5001`, een
+adres dat op die server niet bestaat.
+
+**Dat is niet te repareren achteraf.** Het token bestaat alleen op het moment
+van aanmaken; er is geen route die het opnieuw toont. Een verkeerde link
+betekent: tenant aangemaakt, beheerder kan er niet in, opnieuw beginnen.
 
 Controleren wat de backend werkelijk meestuurt — niet wat er in het bestand
 staat:

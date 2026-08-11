@@ -301,6 +301,20 @@ function main() {
       `NA_LOGIN_URL=http://saxombp:${o.frontendPoort}/beheer`,
       `NA_LOGOUT_URL=http://saxombp:${o.frontendPoort}/`,
       '',
+      '# ── Waar links naartoe wijzen (Issue #132) ────────────────────────────',
+      '#',
+      '# Beide de FRONTEND, want beide zijn adressen die een ontvanger in zijn',
+      '# browser opent. PORTAAL_BASIS_URL is de leverancierskant',
+      '# (/portal/survey/<token>), UITNODIGING_BASIS_URL de beheerderskant',
+      '# (/api/backend/auth/login?uitnodiging=<token>).',
+      '#',
+      '# Ontbraken tot 2026-08-10 allebei in dit script. Gevolg: elke uitgerolde',
+      '# omgeving gaf een uitnodigingslink naar localhost — een adres dat daar',
+      '# niet bestaat. Het token bestaat maar één keer en is niet opnieuw uit te',
+      '# geven, dus zo’n link is niet te repareren.',
+      `PORTAAL_BASIS_URL=http://saxombp:${o.frontendPoort}`,
+      `UITNODIGING_BASIS_URL=http://saxombp:${o.frontendPoort}`,
+      '',
     ].join('\n');
 
     const schrijf = spawnSync(

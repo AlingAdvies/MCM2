@@ -272,9 +272,56 @@ describe('Platformroutes (e2e, ADR-015)', () => {
 
       expect(uit.uitnodigingslink).toContain('/auth/login?uitnodiging=');
       expect(uit.uitnodigingslink).toContain(uit.uitnodigingstoken);
-      // Naar de backend, niet naar het portaal: /auth/login zet het token in
+      // Naar /auth/login, niet naar het portaal: die route zet het token in
       // het pogingcookie. Het portaal is de leverancierskant.
       expect(uit.uitnodigingslink).not.toContain('/portal/');
+
+      // Via het doorgeefluik van de frontend (Issue #132). Deze regel is de
+      // hele reden dat de test bestaat: de link wees tot 2026-08-10 naar de
+      // backend-poort, en dan zet /auth/login het pogingcookie op een andere
+      // herkomst dan waar de callback terugkomt. Elke login mislukt dan op een
+      // ontbrekende state — een fout die pas opvalt bij de eerste beheerder die
+      // zijn uitnodiging gebruikt.
+      expect(uit.uitnodigingslink).toContain('/api/backend/auth/login');
+    });
+
+    it('bouwt de link op UITNODIGING_BASIS_URL, niet op een vast adres', async () => {
+      // De aanleiding voor Issue #132: er bestond een variabele (API_BASIS_URL)
+      // die nergens gedocumenteerd stond en dus nooit gezet werd. Elke
+      // uitgerolde omgeving gaf daardoor een link naar localhost — een adres
+      // dat daar niet bestaat.
+      //
+      // Deze test faalt zodra iemand het adres opnieuw hardcodeert of de naam
+      // van de variabele wijzigt zonder erbij na te denken.
+      const oud = process.env.UITNODIGING_BASIS_URL;
+      process.env.UITNODIGING_BASIS_URL = 'https://acceptatie.voorbeeld.nl/';
+
+      try {
+        const antwoord = await request(server)
+          .post('/platform/tenants')
+          .set('Cookie', cookieBeheerder)
+          .send({
+            naam: `Basisurltest ${Date.now()}`,
+            adminNaam: 'Linkbeheerder',
+            adminEmail: `basis-${Date.now()}@voorbeeld.nl`,
+          })
+          .expect(201);
+
+        const uit = body(antwoord) as Record<string, string>;
+        aangemaakt.push(uit.tenantId);
+
+        // De afsluitende schuine streep uit de variabele hoort weg te vallen;
+        // anders staat er een dubbele in de link.
+        expect(uit.uitnodigingslink).toMatch(
+          /^https:\/\/acceptatie\.voorbeeld\.nl\/api\/backend\/auth\/login\?uitnodiging=/,
+        );
+      } finally {
+        if (oud === undefined) {
+          delete process.env.UITNODIGING_BASIS_URL;
+        } else {
+          process.env.UITNODIGING_BASIS_URL = oud;
+        }
+      }
     });
 
     it('bewaart het antwoordadres van de tenant', async () => {
