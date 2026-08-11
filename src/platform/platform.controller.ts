@@ -77,14 +77,21 @@ export class PlatformController {
         // laatste kans om de link handmatig door te geven. Zelfde afweging als
         // bij de leverancierstokens.
         uitnodigingslink: link,
-        mailVerstuurd: verzending.verstuurd,
+        // `echtVerstuurd` en niet `verstuurd` (Issue #131).
+        //
+        // Draait het logkanaal — geen RESEND_API_KEY — dan is `verstuurd`
+        // true (er ging niets mis) maar `echtVerstuurd` false (er ging ook
+        // niets uit). Op acceptatie stond hier `"mailVerstuurd": true` en
+        // "heeft een uitnodiging ontvangen", terwijl het log in dezelfde
+        // seconde `[niet echt verstuurd]` zei. Dat is precies de faalvorm
+        // die dit project elders bestrijdt.
+        mailVerstuurd: verzending.echtVerstuurd,
         mailFout: verzending.fout,
-        melding: verzending.verstuurd
-          ? `Tenant aangemaakt. ${invoer.adminNaam} heeft een uitnodiging ` +
-            `ontvangen op ${invoer.adminEmail}.`
-          : `Tenant aangemaakt, maar de uitnodiging kon niet verstuurd worden ` +
-            `(${verzending.fout ?? 'onbekende fout'}). Geef de link hierboven ` +
-            'handmatig door.',
+        melding: this.meldingOverVerzending(
+          verzending,
+          invoer.adminNaam,
+          invoer.adminEmail,
+        ),
       };
     } catch (fout) {
       if (fout instanceof InvoerFout) {
@@ -95,6 +102,47 @@ export class PlatformController {
       }
       throw fout;
     }
+  }
+
+  /**
+   * De zin die de platformbeheerder op zijn scherm krijgt.
+   *
+   * ── Drie uitkomsten, geen twee (Issue #131) ───────────────────────────────
+   *
+   * Hier stond een ternary op `verstuurd`: gelukt of mislukt. Die derde
+   * uitkomst — niets misgegaan, maar er is ook niets verstuurd — viel daardoor
+   * onder "gelukt" en leverde de zin "heeft een uitnodiging ontvangen" op voor
+   * een mail die nooit bestond.
+   *
+   * De middelste zin noemt de oorzaak (geen mailkanaal) én de handeling (geef
+   * de link door). Zonder die twee is "niet verstuurd" een mededeling waar de
+   * lezer niets mee kan.
+   */
+  private meldingOverVerzending(
+    verzending: { verstuurd: boolean; echtVerstuurd: boolean; fout?: string },
+    adminNaam: string,
+    adminEmail: string,
+  ): string {
+    if (verzending.echtVerstuurd) {
+      return (
+        `Tenant aangemaakt. ${adminNaam} heeft een uitnodiging ` +
+        `ontvangen op ${adminEmail}.`
+      );
+    }
+
+    if (verzending.verstuurd) {
+      return (
+        'Tenant aangemaakt, maar er is GEEN mail verstuurd: deze omgeving ' +
+        'heeft geen mailkanaal ingesteld. Geef de link hierboven handmatig ' +
+        `door aan ${adminNaam}.`
+      );
+    }
+
+    return (
+      `Tenant aangemaakt, maar de uitnodiging kon niet verstuurd worden ` +
+      `(${verzending.fout ?? 'onbekende fout'}). Geef de link hierboven ` +
+      'handmatig door.'
+    );
   }
 
   /**

@@ -134,6 +134,50 @@ describe('IdTokenVerificateur', () => {
       expect(identiteit.naam).toBeUndefined();
     });
 
+    it('negeert "unknown" als naam (Issue #133)', async () => {
+      // Waargenomen op 2026-08-10: na een echte federatieve login stuurde
+      // Entra `"name": "unknown"` mee, en die tekst belandde als naam in de
+      // database. In de zijbalk stond "unknown / Beheerder"; in de audit trail
+      // zou "unknown heeft dit oordeel gegeven" komen te staan.
+      const identiteit = await verificateur.verifieer(
+        await maakToken({
+          claims: { oid: OID, name: 'unknown', email: 'kees@alingadvies.nl' },
+        }),
+      );
+
+      // `undefined` en geen verzonnen vervanging: de aanroeper kiest zelf zijn
+      // terugval — voor een gebruikersrij is dat het e-mailadres.
+      expect(identiteit.naam).toBeUndefined();
+      expect(identiteit.email).toBe('kees@alingadvies.nl');
+    });
+
+    it('negeert plaatsvervangers ongeacht hoofdletters en spaties', async () => {
+      for (const waarde of ['Unknown', '  UNKNOWN  ', 'n/a', 'null', '-']) {
+        const identiteit = await verificateur.verifieer(
+          await maakToken({ claims: { oid: OID, name: waarde } }),
+        );
+
+        expect(identiteit.naam).toBeUndefined();
+      }
+    });
+
+    it('laat een echte naam ongemoeid', async () => {
+      // De tegenproef. Zou de filter te breed zijn, dan verdwijnen er namen
+      // van echte mensen — en dat is erger dan het probleem dat hij oplost.
+      for (const waarde of [
+        'Kees Aling',
+        'Robert Unknown',
+        'Nancy Ann',
+        'Naomi Nagel',
+      ]) {
+        const identiteit = await verificateur.verifieer(
+          await maakToken({ claims: { oid: OID, name: waarde } }),
+        );
+
+        expect(identiteit.naam).toBe(waarde);
+      }
+    });
+
     it('accepteert een token binnen de klokspeling', async () => {
       // 10 seconden verlopen, speling is 30: nog geldig. Dit bewijst dat de
       // speling werkt en niet per ongeluk 0 is.

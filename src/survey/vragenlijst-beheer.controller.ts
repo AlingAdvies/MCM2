@@ -544,12 +544,25 @@ export class VragenlijstBeheerController {
         const uitkomst = perResponse.get(u.responseId);
         return {
           ...u,
-          verstuurd: uitkomst?.verstuurd ?? false,
+          // `echtVerstuurd` en niet `verstuurd` — zelfde reden als bij
+          // `PlatformController` (Issue #131). Zonder mailkanaal ging er niets
+          // uit, en dan mag hier geen vinkje staan dat zegt van wel.
+          verstuurd: uitkomst?.echtVerstuurd ?? false,
           verzendFout: uitkomst?.fout,
         };
       }),
-      verzonden: verzending.filter((v) => v.verstuurd).length,
+      verzonden: verzending.filter((v) => v.echtVerstuurd).length,
       mislukt: verzending.filter((v) => !v.verstuurd).length,
+      // Staat dit op `true`, dan is `verzonden` nul zonder dat er iets fout is:
+      // de tokens zijn geldig, maar de links moeten met de hand doorgegeven
+      // worden. Het scherm kan dat dan zeggen in plaats van "0 verstuurd" te
+      // tonen bij een ronde waar niets mis mee is.
+      //
+      // De toets is *geslaagd maar niet echt verstuurd*. Zou hier
+      // `every(v => !v.echtVerstuurd)` staan, dan is dit ook `true` wanneer de
+      // provider álles weigerde — en dan wijst het scherm naar een ontbrekend
+      // mailkanaal terwijl er een heel ander probleem is.
+      geenMailkanaal: verzending.some((v) => v.verstuurd && !v.echtVerstuurd),
     };
   }
 

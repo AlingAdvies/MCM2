@@ -69,8 +69,11 @@ interface Uitnodiging {
 
 interface UitnodigingAntwoord {
   uitnodigingen: Uitnodiging[];
+  /** Alleen échte verzendingen — sinds Issue #131. */
   verzonden: number;
   mislukt: number;
+  /** Waar wanneer er geen mailkanaal is: de links moeten met de hand door. */
+  geenMailkanaal: boolean;
 }
 
 interface RondeAntwoord {
@@ -399,13 +402,24 @@ describe('Ronde-beheerroutes (e2e)', () => {
 
     const body = antwoord.body as UitnodigingAntwoord;
 
-    expect(body.verzonden).toBe(1);
+    // Sinds Issue #131 telt `verzonden` alleen échte verzendingen. Hier stond
+    // `1`, en die één was de leverancier die het logkanaal "verstuurde" — een
+    // mail die nooit bestond. Nul is het eerlijke antwoord.
+    expect(body.verzonden).toBe(0);
+    // `mislukt` blijft 1: dat is VENDOR_2, zonder e-mailadres. Er is een
+    // verschil tussen "niet verstuurd omdat er geen kanaal is" en "niet
+    // verstuurd omdat deze leverancier geen adres heeft", en dat verschil
+    // hoort zichtbaar te blijven.
     expect(body.mislukt).toBe(1);
+    // Het vlaggetje dat het scherm nodig heeft om "0 verstuurd" uit te leggen
+    // bij een ronde waar niets mis mee is.
+    expect(body.geenMailkanaal).toBe(true);
 
     const eerste = body.uitnodigingen.find((u) => u.vendorId === VENDOR_1);
     const tweede = body.uitnodigingen.find((u) => u.vendorId === VENDOR_2);
 
-    expect(eerste?.verstuurd).toBe(true);
+    // Er ging niets uit, dus geen vinkje — ook al ging er niets fout.
+    expect(eerste?.verstuurd).toBe(false);
     expect(eerste?.verzendFout).toBeUndefined();
 
     // Zonder e-mailadres geen uitnodiging — en dat staat er met reden bij.

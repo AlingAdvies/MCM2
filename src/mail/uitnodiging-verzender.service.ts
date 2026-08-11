@@ -54,8 +54,23 @@ export interface VerzendUitkomst {
   readonly responseId: string;
   readonly vendorNaam: string;
   readonly ontvanger?: string;
-  /** Waar of de mail bij de provider is aangenomen. */
+  /**
+   * Waar of de verzending is gelukt — dus: er is niets misgegaan.
+   *
+   * Let op het verschil met `echtVerstuurd`. Draait het logkanaal, dan is dit
+   * `true` en `echtVerstuurd` `false`: er is niets fout gegaan, maar er is ook
+   * niets aangekomen. Wie een mens iets wil melden moet naar `echtVerstuurd`
+   * kijken; wie wil weten of er ingegrepen moet worden, naar `fout`.
+   */
   readonly verstuurd: boolean;
+  /**
+   * Waar of er werkelijk mail is uitgegaan (Issue #131).
+   *
+   * `false` bij het logkanaal — dan is er geen sleutel ingesteld en belandt de
+   * uitnodiging alleen in het log. De link moet dan met de hand doorgegeven
+   * worden, en dat moet de aanroeper kunnen zien zonder het log te lezen.
+   */
+  readonly echtVerstuurd: boolean;
   /** Alleen bij succes: de sleutel voor een latere statusmelding. */
   readonly providerId?: string;
   /** Alleen bij mislukking: wat er misging, in lezersvorm. */
@@ -90,12 +105,30 @@ export class UitnodigingVerzender {
 
     const mislukt = uitkomsten.filter((u) => !u.verstuurd).length;
 
+    // "verstuurd" alleen zeggen als er ook werkelijk iets uit is gegaan
+    // (Issue #131). Zonder mailkanaal was deze regel de laatste plek waar het
+    // nog geruststellend klonk.
+    //
+    // De toets is *geslaagd maar niet echt verstuurd*, niet simpelweg "nul
+    // echte verzendingen". Dat laatste is óók waar als álles mislukte, en dan
+    // wijst deze regel de lezer naar een ontbrekend mailkanaal terwijl de
+    // provider gewoon weigerde — dezelfde soort misleiding als de fout die
+    // deze wijziging repareert.
+    const geslaagdMaarStil = uitkomsten.some(
+      (u) => u.verstuurd && !u.echtVerstuurd,
+    );
+    const staart = geslaagdMaarStil
+      ? ' Let op: er is geen mailkanaal ingesteld, er ging niets de deur uit.'
+      : '';
+
     if (mislukt > 0) {
       this.logger.warn(
-        `${uitkomsten.length - mislukt} van de ${uitkomsten.length} uitnodigingen verstuurd; ${mislukt} mislukt.`,
+        `${uitkomsten.length - mislukt} van de ${uitkomsten.length} uitnodigingen verstuurd; ${mislukt} mislukt.${staart}`,
       );
     } else {
-      this.logger.log(`${uitkomsten.length} uitnodiging(en) verstuurd.`);
+      this.logger.log(
+        `${uitkomsten.length} uitnodiging(en) verstuurd.${staart}`,
+      );
     }
 
     return uitkomsten;
@@ -116,20 +149,27 @@ export class UitnodigingVerzender {
    */
   async verstuurAanBeheerder(gegevens: BeheerderUitnodigingGegevens): Promise<{
     verstuurd: boolean;
+    echtVerstuurd: boolean;
     providerId?: string;
     fout?: string;
     tijdelijk?: boolean;
   }> {
     try {
-      const { providerId } = await this.mail.verstuur(
+      const { providerId, echtVerstuurd } = await this.mail.verstuur(
         stelBeheerderUitnodigingSamen(gegevens),
       );
 
+      // De logregel zegt nu wát er gebeurd is. Vóór Issue #131 stond hier
+      // "verstuurd" ook als het logkanaal draaide — en dat is precies de
+      // geruststellende melding waar het misging.
       this.logger.log(
-        `Uitnodiging voor de beheerder van ${gegevens.tenantNaam} verstuurd.`,
+        echtVerstuurd
+          ? `Uitnodiging voor de beheerder van ${gegevens.tenantNaam} verstuurd.`
+          : `Uitnodiging voor de beheerder van ${gegevens.tenantNaam} NIET verstuurd: ` +
+              'er is geen mailkanaal ingesteld. Geef de link handmatig door.',
       );
 
-      return { verstuurd: true, providerId };
+      return { verstuurd: true, echtVerstuurd, providerId };
     } catch (err) {
       const fout = err instanceof MailVerzendFout;
 
@@ -141,6 +181,7 @@ export class UitnodigingVerzender {
 
       return {
         verstuurd: false,
+        echtVerstuurd: false,
         fout:
           err instanceof Error ? err.message : 'Onbekende fout bij versturen.',
         tijdelijk: fout ? err.tijdelijk : false,
@@ -169,13 +210,14 @@ export class UitnodigingVerzender {
       return {
         ...basis,
         verstuurd: false,
+        echtVerstuurd: false,
         fout: 'Geen e-mailadres bekend bij deze leverancier.',
         tijdelijk: false,
       };
     }
 
     try {
-      const { providerId } = await this.mail.verstuur(
+      const { providerId, echtVerstuurd } = await this.mail.verstuur(
         stelUitnodigingSamen({
           ontvanger: uitnodiging.ontvanger,
           vendorNaam: uitnodiging.vendorNaam,
@@ -187,7 +229,7 @@ export class UitnodigingVerzender {
         }),
       );
 
-      return { ...basis, verstuurd: true, providerId };
+      return { ...basis, verstuurd: true, echtVerstuurd, providerId };
     } catch (err) {
       const fout = err instanceof MailVerzendFout;
 
@@ -200,6 +242,7 @@ export class UitnodigingVerzender {
       return {
         ...basis,
         verstuurd: false,
+        echtVerstuurd: false,
         fout:
           err instanceof Error ? err.message : 'Onbekende fout bij versturen.',
         tijdelijk: fout ? err.tijdelijk : false,

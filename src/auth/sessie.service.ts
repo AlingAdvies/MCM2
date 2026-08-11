@@ -105,6 +105,34 @@ export class SessieService {
     // De vormcontrole staat er vóór de query: een token uit een cookie dat door
     // iets anders gevuld is hoort af te ketsen op zijn vorm, niet op een
     // databaseaanroep.
+    // Issue #133: iemand die al binnen is, klikt op een uitnodiging.
+    //
+    // Dan slaagt sessie_aanmaken() en komt de koppeling er niet eens aan te
+    // pas. Hij logt gewoon in, en de uitgenodigde rij blijft wachten op een
+    // login die nooit komt — twee rijen voor één persoon, precies wat er op
+    // acceptatie stond. Niemand merkt er iets van.
+    //
+    // Koppelen is hier geen optie: de oid zit al aan een andere rij vast, en
+    // migratie 0024 weigert dat terecht (dat zou accountovername zijn). Het
+    // samenvoegen van twee gebruikersrijen raakt beoordelingen, notities en de
+    // audit trail, en hoort dus een bewuste beheerhandeling te zijn — geen
+    // bijverschijnsel van een klik op een link.
+    //
+    // Wat hier wél moet: het zichtbaar maken, zodat de platformbeheerder de
+    // openstaande uitnodiging kan intrekken in plaats van hem te laten staan.
+    if (
+      resultaat.rows.length > 0 &&
+      uitnodiging?.email &&
+      heeftGeldigeUitnodigingsVorm(uitnodiging.uitnodigingstoken)
+    ) {
+      this.logger.warn(
+        'Uitnodigingstoken aangeboden door iemand die al een account heeft. ' +
+          'De uitnodiging blijft openstaan en er is niets gekoppeld; deze ' +
+          'persoon logt in als zijn bestaande gebruiker. Trek de openstaande ' +
+          'uitnodiging in of voeg de gebruikers samen.',
+      );
+    }
+
     if (
       resultaat.rows.length === 0 &&
       uitnodiging?.email &&
@@ -123,6 +151,21 @@ export class SessieService {
 
         resultaat = await this.db.db.execute<SessieRij>(
           sql`SELECT * FROM clm.sessie_aanmaken(${hash}, ${externalSubject}, ${GELDIGHEID_INTERVAL}::interval)`,
+        );
+      } else {
+        // Issue #133: hier gebeurde niets, en dat was niet te zien.
+        //
+        // De functie geeft bewust geen reden terug — die zou verklappen welke
+        // uitnodiging bestaat (migratie 0024). Maar dat er een koppeling is
+        // geprobeerd én mislukt, mag wél in het log: dat is de enige plek waar
+        // een beheerder "ik klik op de link en er gebeurt niets" kan verbinden
+        // aan een oorzaak. Zonder deze regel is een verlopen token niet te
+        // onderscheiden van een verkeerd adres of van een oid die al bestaat.
+        this.logger.warn(
+          'Uitnodigingstoken aangeboden, maar de koppeling is niet gelukt. ' +
+            'Mogelijke oorzaken: de uitnodiging is verlopen of al gebruikt, ' +
+            'het e-mailadres wijkt af, of dit account is al aan een andere ' +
+            'gebruiker gekoppeld. Zie clm.koppel_eerste_login (migratie 0024).',
         );
       }
     }

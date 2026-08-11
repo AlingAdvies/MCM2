@@ -275,7 +275,15 @@ async function voltooi(code, verifier) {
        RETURNING user_id`,
       [
         PLATFORM_TENANT_ID,
-        identiteit.naam ?? 'Platformbeheerder',
+        // Terugval op het e-mailadres en pas dan op een generieke tekst
+        // (Issue #133). Een adres zegt wie iemand is; "Platformbeheerder" zegt
+        // alleen wat hij doet, en dat is in een audit trail met meer dan één
+        // beheerder onbruikbaar.
+        //
+        // `identiteit.naam` is sinds Issue #133 `undefined` wanneer Entra een
+        // plaatsvervanger als "unknown" meestuurt — die kwam hier vroeger
+        // gewoon doorheen omdat hij niet leeg is.
+        identiteit.naam ?? identiteit.email ?? 'Platformbeheerder',
         identiteit.externalSubject,
         identiteit.email ?? null,
       ],

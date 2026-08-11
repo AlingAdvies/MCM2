@@ -52,7 +52,13 @@ class FalendKanaal extends MailKanaal {
       );
     }
     this.verstuurd.push(bericht.aan);
-    return Promise.resolve({ providerId: `id-${this.verstuurd.length}` });
+    // Dit kanaal staat voor een échte provider — vandaar `true`. Het logkanaal
+    // is de enige met `false`, en het verschil tussen die twee is de kern van
+    // Issue #131.
+    return Promise.resolve({
+      providerId: `id-${this.verstuurd.length}`,
+      echtVerstuurd: true,
+    });
   }
 }
 
@@ -256,6 +262,94 @@ describe('UitnodigingVerzender', () => {
         [],
       );
       expect(kanaal.verzonden).toHaveLength(0);
+    });
+  });
+
+  /**
+   * Issue #131: zonder mailkanaal is er niets misgegaan én is er niets
+   * aangekomen. Dat zijn twee verschillende dingen en ze hadden één veld.
+   */
+  describe('zonder mailkanaal — er gaat niets uit', () => {
+    it('meldt de leveranciersuitnodiging als niet echt verstuurd', async () => {
+      const verzender = new UitnodigingVerzender(new LogMailKanaal());
+
+      const [uitkomst] = await verzender.verstuurAllemaal(
+        [uitnodiging(1)],
+        CONTEXT,
+      );
+
+      // Niets misgegaan...
+      expect(uitkomst.verstuurd).toBe(true);
+      expect(uitkomst.fout).toBeUndefined();
+      // ...maar er is ook niets aangekomen.
+      expect(uitkomst.echtVerstuurd).toBe(false);
+    });
+
+    it('meldt de beheerdersuitnodiging als niet echt verstuurd', async () => {
+      // Dit is de waarneming uit de issue: op acceptatie gaf de route
+      // `mailVerstuurd: true` terwijl het log `[niet echt verstuurd]` zei.
+      const verzender = new UitnodigingVerzender(new LogMailKanaal());
+
+      const uitkomst = await verzender.verstuurAanBeheerder({
+        ontvanger: 'kees@alingadvies.nl',
+        beheerderNaam: 'Kees Aling',
+        tenantNaam: 'AlingAdvies (acceptatie)',
+        link: 'https://mcm2.example.nl/api/backend/auth/login?uitnodiging=abc',
+        verlooptOp: '2026-09-01T12:00:00.000Z',
+      });
+
+      expect(uitkomst.verstuurd).toBe(true);
+      expect(uitkomst.echtVerstuurd).toBe(false);
+    });
+  });
+
+  describe('met een echt kanaal', () => {
+    it('meldt de uitnodiging als echt verstuurd', async () => {
+      // De tegenproef: zou `echtVerstuurd` altijd `false` zijn, dan is het
+      // veld waardeloos en meldt een geslaagde verzending straks ten onrechte
+      // dat er niets uitging.
+      const verzender = new UitnodigingVerzender(new FalendKanaal(new Set()));
+
+      const [uitkomst] = await verzender.verstuurAllemaal(
+        [uitnodiging(1)],
+        CONTEXT,
+      );
+
+      expect(uitkomst.echtVerstuurd).toBe(true);
+    });
+
+    it('meldt een mislukte verzending niet als echt verstuurd', async () => {
+      const verzender = new UitnodigingVerzender(
+        new FalendKanaal(new Set(['contact+vendor1@gmail.com'])),
+      );
+
+      const [uitkomst] = await verzender.verstuurAllemaal(
+        [uitnodiging(1)],
+        CONTEXT,
+      );
+
+      expect(uitkomst.verstuurd).toBe(false);
+      expect(uitkomst.echtVerstuurd).toBe(false);
+    });
+
+    it('houdt een geweigerde verzending apart van een ontbrekend mailkanaal', async () => {
+      // Beide leveren `echtVerstuurd: false` op, en het onderscheid zit in
+      // `verstuurd`. Wie die twee door elkaar haalt, meldt "geen mailkanaal
+      // ingesteld" terwijl de provider gewoon weigerde — precies de soort
+      // misleiding die Issue #131 aan de kaak stelt.
+      const geweigerd = await new UitnodigingVerzender(
+        new FalendKanaal(new Set(['contact+vendor1@gmail.com'])),
+      ).verstuurAllemaal([uitnodiging(1)], CONTEXT);
+
+      const stil = await new UitnodigingVerzender(
+        new LogMailKanaal(),
+      ).verstuurAllemaal([uitnodiging(1)], CONTEXT);
+
+      expect(geweigerd[0]).toMatchObject({
+        verstuurd: false,
+        echtVerstuurd: false,
+      });
+      expect(stil[0]).toMatchObject({ verstuurd: true, echtVerstuurd: false });
     });
   });
 });
