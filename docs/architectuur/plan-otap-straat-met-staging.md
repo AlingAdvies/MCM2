@@ -563,13 +563,72 @@ Zodra de uitrol via GitHub loopt, hoort de laptop dat adres niet meer te kennen.
 `.env` gaat naar **staging** wijzen. De productiereferenties leven dan alleen nog
 als GitHub secret.
 
-**Wat er dan nog handmatig moet kunnen** — en dus een andere weg krijgt:
+### ✅ Uitgevoerd 2026-08-11
 
-- Een noodherstel wanneer de straat zelf stuk is
-- Een leesquery om iets te onderzoeken
+| Variabele | Wijst nu naar | Waarom |
+|---|---|---|
+| `DATABASE_URL` | **staging** | de oefendatabase is het nieuwe standaarddoelwit |
+| `MIGRATION_DATABASE_URL` | **staging** | idem |
+| `BACKUP_DATABASE_URL` | productie | **bewust** — een backup van de oefendatabase beschermt niets |
+| `NOOD_PRODUCTIE_URL` | productie | nieuw; **geen enkel script leest deze naam** |
 
-Beide via `scripts/with-migration-url.js`, dat het doelwit expliciet maakt in
-plaats van het uit `.env` te halen. Het commando moet zeggen wat het raakt.
+**Waarom de noodtoegang in `.env` staat en niet alleen bij GitHub.** De
+bescherming zit niet in "onvindbaar" maar in "geen enkel script pakt het
+automatisch op". `dotenv` laadt de variabele wel, maar niets vraagt ernaar — je
+moet hem bewust doorgeven. Het verschil met een GitHub-secret is alleen hoe snel
+je erbij kunt wanneer er iets stuk is, en dat is bij een noodherstel juist het
+punt.
+
+`scripts/with-migration-url.js` bleek hiervoor ongeschikt: dat kopieert
+`MIGRATION_DATABASE_URL` naar `DATABASE_URL` en maakt het doelwit dus níét
+expliciet — het tegenovergestelde van wat §3.5 vroeg.
+
+### De rem moest mee, en dat was het echte werk
+
+`eisToestemmingBuitenLokaal()` kende twee soorten: `localhost` en de rest. Dat
+werkte zolang `.env` naar productie wees. Maar **staging staat óók bij Supabase**,
+dus die rem zou bij élk stagingcommando afgaan. Dan typ je `--extern` erbij
+omdat er anders niets werkt, na twee weken is het een gewoonte, en dan typ je
+hem ook op de dag dat je per ongeluk naar productie wijst.
+
+Een waarschuwing die altijd afgaat, is geen waarschuwing meer — dezelfde les als
+bij de backupmelding die niemand las (2026-08-04).
+
+`eisOnbeschermdeDatabase()` vraagt daarom de database zélf wat hij is
+(`clm.omgeving`, migratie 0019). Die markering zit ín de database, niet in een
+hostnaam of poortnummer dat ernaast staat en niet meer klopt zodra iets
+verhuist.
+
+**De naam is bewust veranderd.** De nieuwe functie is `async`, de oude
+synchroon. Zouden ze hetzelfde heten, dan blijft `if (!eis…(url, …))` draaien —
+met een Promise als uitkomst, en die is altijd waarheidsachtig. De rem zou dan
+stilzwijgend nooit meer afgaan: een beveiliging die verdwijnt zonder één
+foutmelding. Met een nieuwe naam faalt een vergeten aanroeper meteen.
+
+**Twee dingen die het beproeven opleverde** — geen van beide was voorzien:
+
+1. **Een verse container blokkeerde.** `clm.omgeving` ontstaat pas bij migratie
+   0019, dus een lege database zou weigeren op precies het commando dat hem moet
+   vullen. Opgelost met een uitzondering die alléén lokaal geldt: niet-lokaal
+   zonder markering blijft geblokkeerd, want dat kan een kopie van productie zijn
+   van vóór 0019.
+2. **De doorloopstack op poort 55500 werd nergens gemarkeerd.** De migratie ging
+   door (lokaal en leeg), maar `seed-vragenlijsten.js` weigerde een stap later —
+   0019 had de database toen op `beschermd` gezet. `verify:volledig` markeert nu
+   ook die stack.
+
+### Beproefd
+
+| Doelwit | Zonder vlag | Met `--extern` |
+|---|---|---|
+| staging (`wegwerp`) | gaat door | n.v.t. |
+| verse lokale container (geen tabel) | gaat door | n.v.t. |
+| lokaal, gemigreerd, nog `beschermd` | geblokkeerd | gaat door |
+| **productie** (`beschermd`) | **geblokkeerd**, exitcode 1 | gaat door, met "LET OP" |
+
+Exitcodes zonder pipe gemeten. `verify:volledig` groen tot en met de 66
+browsertests — en voor het eerst zonder handmatig variabelen mee te geven, want
+`.env` wijst nu vanzelf naar de goede plek.
 
 ---
 
@@ -738,7 +797,7 @@ het als eerste staat.
 | 2b | ✅ **Frontend-image publiceren, frontend in de uitrol** — gedaan 10-08 | Beslist: twee versies, zie hieronder |
 | 3 | ✅ **Uitrol naar staging automatiseren** — gedaan 11-08 | Beslist: applicatie start met de hand, zie §3.3c |
 | 4 | ✅ **Uitrol naar productie automatiseren, met akkoordrem** — gedaan 11-08 | Beslist: backup blijft bij de eigenaar, CI controleert; applicatie start met de hand |
-| 5 | `.env` omleiden naar staging | Nee, maar wel melden wanneer |
+| 5 | ✅ **`.env` omleiden naar staging** — gedaan 11-08 | Beslist: rem kijkt naar `clm.omgeving`; noodtoegang als `NOOD_PRODUCTIE_URL` |
 | 6 | `mcm2-productie` op saxombp opheffen | **Ja — onomkeerbaar** |
 | 7 | `verify:omgevingen` bouwen | Nee |
 | 8 | Productie opnieuw vullen | Nee |

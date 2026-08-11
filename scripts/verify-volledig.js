@@ -412,6 +412,34 @@ function bouwDatabaseOp() {
 
   console.log('  Migraties toegepast op een lege database.');
 
+  // Markeren als wegwerp, net als bij de verify-container hierboven.
+  //
+  // ── Waarom dit sinds stap 5 (2026-08-11) nodig is ─────────────────────────
+  //
+  // De migratie hierboven ging door omdat een verse database nog geen
+  // `clm.omgeving` heeft en lokaal staat — dat is de uitzondering in
+  // `eisOnbeschermdeDatabase()`. Maar migratie 0019 zet hem daarna op
+  // `beschermd`, en dus weigerde `seed-vragenlijsten.js` een stap later met
+  // "deze database is beschermd".
+  //
+  // Gevonden door de doorloop te draaien, niet door hem te beredeneren: de
+  // stack op 55500 werd nergens gemarkeerd, terwijl die op 55441 dat wél werd.
+  const markering = draai(
+    'node',
+    ['scripts/markeer-wegwerp.js', 'verify:volledig — doorloopstack'],
+    {
+      stil: true,
+      env: {
+        MIGRATION_DATABASE_URL:
+          'postgresql://clm_migrator:otap_pw@localhost:55500/postgres',
+      },
+    },
+  );
+
+  if (!markering.ok) {
+    return { ok: false, reden: markering.uitvoer.trim() };
+  }
+
   // Zie de uitleg hierboven: zonder deze herstart blijft de API onbereikbaar.
   draai('docker', [...COMPOSE, 'restart', 'api'], { stil: true });
 

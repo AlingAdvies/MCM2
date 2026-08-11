@@ -42,7 +42,7 @@ const { Pool } = require('pg');
 
 const {
   meldDoelwit,
-  eisToestemmingBuitenLokaal,
+  eisOnbeschermdeDatabase,
   eisWegwerpdatabase,
 } = require('./db-doelwit.js');
 
@@ -451,9 +451,9 @@ function vragenlijstenLaden() {
 
   // De doelwitvlaggen doorgeven aan het subproces.
   //
-  // `seed-vragenlijsten.js` heeft zijn eigen `eisToestemmingBuitenLokaal()` en
+  // `seed-vragenlijsten.js` heeft zijn eigen `eisOnbeschermdeDatabase()` en
   // kijkt daarvoor naar zijn éígen argv — niet naar die van de aanroeper.
-  // Zonder deze regel stopt het bij een niet-lokaal doelwit terwijl het
+  // Zonder deze regel stopt het bij een beschermde database terwijl het
   // hoofdscript al toestemming heeft gekregen, en dan staan de leveranciers er
   // wél en de vragenlijsten niet.
   //
@@ -1025,7 +1025,9 @@ async function main() {
   // zonder backup (Issue #86).
   meldDoelwit(url, 'Seed demo-tenant');
 
-  if (!eisToestemmingBuitenLokaal(url, { wat: 'Seed demo-tenant' })) {
+  // Sinds stap 5 vraagt de rem de database zelf of hij beschermd is (zie
+  // db-doelwit.js). Staging is `wegwerp` en mag dus zonder vlag.
+  if (!(await eisOnbeschermdeDatabase(url, { wat: 'Seed demo-tenant' }))) {
     process.exit(1);
   }
 

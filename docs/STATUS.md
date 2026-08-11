@@ -46,9 +46,40 @@ Vandaag gemerged: **#135** (uitnodigingslink wees naar `localhost`), **#136**
 (migraties naar staging), **#137** (applicatie tegen Supabase), **#139/#140**
 (time-outs, en de Tailscale-stappen er weer uit), **#142** (#131 en #133).
 
-**Van de negen stappen zijn 1, 2, 2b, 3 en 4 af.** Volgende is stap 5: `.env`
-omleiden naar staging — de grootste veiligheidswinst van het plan, want dan
-wijst de laptop niet meer standaard naar de productiedatabase.
+### Stap 5 is ook af: de laptop wijst niet meer naar productie
+
+**Dit is de grootste veiligheidswinst van het hele plan.** Tot vanmiddag wezen
+`DATABASE_URL` en `MIGRATION_DATABASE_URL` naar de echte klantendatabase. Elk
+databasecommando raakte die — niet omdat iemand dat koos, maar omdat het de
+standaard was. Dat is de gemeenschappelijke oorzaak onder 04-08, 07-08 en 10-08.
+
+| Variabele | Wijst nu naar |
+|---|---|
+| `DATABASE_URL` | **staging** |
+| `MIGRATION_DATABASE_URL` | **staging** |
+| `BACKUP_DATABASE_URL` | productie — bewust, een backup van de oefendatabase beschermt niets |
+| `NOOD_PRODUCTIE_URL` | productie — **geen enkel script leest deze naam** |
+
+**De rem moest mee, en dat was het echte werk.** Hij kende `localhost` en "de
+rest". Maar staging staat óók bij Supabase, dus hij zou bij élk stagingcommando
+afgaan — en dan went `--extern`. Een waarschuwing die altijd afgaat is geen
+waarschuwing meer.
+
+De rem vraagt nu de database zélf wat hij is (`clm.omgeving`, migratie 0019):
+`wegwerp` mag door, `beschermd` eist de vlag. Beproefd op vier doelwitten,
+exitcodes zonder pipe gemeten.
+
+Twee dingen kwamen alleen boven door het te draaien: een verse container
+blokkeerde op het commando dat hem moet vullen, en de doorloopstack op poort
+55500 werd nergens gemarkeerd. Beide opgelost.
+
+**Van de negen stappen zijn 1, 2, 2b, 3, 4 en 5 af.** Volgende is stap 6:
+`mcm2-productie` op saxombp opheffen, zodat er nog maar één ding "productie"
+heet. Dat is de eerste onomkeerbare stap van het plan.
+
+Nieuw: **[`docs/runbooks/devops-handleiding.md`](runbooks/devops-handleiding.md)**
+— uitrollen, terugdraaien, status opvragen en wat er misgaat, geschreven vanuit
+de handeling in plaats van vanuit de techniek.
 
 ### Waarom het starten van de applicatie handwerk blijft
 
@@ -486,7 +517,8 @@ handmatig te starten is (PR #122).
 | # | Wat | Waarom nu |
 |---|---|---|
 | — | ~~**Geen geautomatiseerde uitrol naar productie**~~ | ✅ **Gedaan 11-08** (stap 4). Migraties gaan achter vier remmen langs; de applicatie starten blijft één commando. De remmen zijn op zeven uitkomsten beproefd |
-| — | **`.env` wijst nog naar productie** | Nu de uitrol via GitHub loopt, hoeft de laptop dat adres niet meer te kennen. Dit is **stap 5**, en de grootste veiligheidswinst van het plan — de gemeenschappelijke oorzaak onder 04-08, 07-08 en 10-08 |
+| — | ~~**`.env` wijst nog naar productie**~~ | ✅ **Gedaan 11-08** (stap 5). Wijst nu naar staging; de rem kijkt naar `clm.omgeving` in plaats van naar de hostnaam |
+| — | **Twee dingen heten "productie"** | `mcm2-productie` op saxombp draait op een eigen lokale database, niet op Supabase. Dat is verwarrend op precies het verkeerde moment. **Stap 6**, en de eerste onomkeerbare stap |
 | ~~#51~~ | ~~Frontend promoveerbaar maken~~ | ✅ **Gedaan 10-08.** Bewezen: hetzelfde image tegen twee backends, verschillende antwoorden, geen herbouw |
 | ~~#132~~ | ~~Uitnodigingslink wijst naar `localhost`~~ | ✅ **Gedaan 11-08** (PR #135). Twee tests, tegenproef gedraaid |
 | ~~#131~~ | ~~`mailVerstuurd: true` terwijl er niets verstuurd is~~ | ✅ **Gedaan 11-08.** `echtVerstuurd` op de mailgrens; verplicht veld, dus niet te vergeten |

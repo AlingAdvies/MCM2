@@ -24,7 +24,7 @@ const { sql } = require('drizzle-orm');
 const { drizzle } = require('drizzle-orm/node-postgres');
 const { Pool } = require('pg');
 
-const { meldDoelwit, eisToestemmingBuitenLokaal } = require('./db-doelwit.js');
+const { meldDoelwit, eisOnbeschermdeDatabase } = require('./db-doelwit.js');
 
 const SEEDMAP = path.join(__dirname, '..', 'db', 'seeds');
 
@@ -186,7 +186,10 @@ async function main() {
   // dus productiedata raken (Issue #86).
   meldDoelwit(url, 'Seed vragenlijsten');
 
-  if (!eisToestemmingBuitenLokaal(url, { wat: 'Seed vragenlijsten' })) {
+  // Sinds stap 5 vraagt de rem de database zelf of hij beschermd is, in plaats
+  // van naar de hostnaam te kijken. Staging is `wegwerp` en mag dus zonder
+  // vlag; alleen productie eist `--extern`.
+  if (!(await eisOnbeschermdeDatabase(url, { wat: 'Seed vragenlijsten' }))) {
     process.exit(1);
   }
 

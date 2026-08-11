@@ -72,16 +72,35 @@ niets voor te doen.
 
 ### Waar de controle overal geldt
 
-| Wat | Controle |
-|---|---|
-| e2e-suites (alle 27) | Weigeren te starten tegen `beschermd` |
-| `seed:demo -- --verwijder` | Weigert op `beschermd` |
-| `migrate:deploy` | Alleen de hostcontrole — migreren mág op productie |
-| `seed:vragenlijsten`, `seed:demo` (zonder `--verwijder`) | Alleen de hostcontrole — toevoegen mag |
+*Bijgewerkt bij stap 5 (2026-08-11): de schrijvende scripts kijken niet meer naar
+de hostnaam maar naar `clm.omgeving`.*
 
-**Toevoegen mag op een beschermde database, verwijderen niet.** Dat onderscheid
-is opzet: anders kun je een demo-tenant in productie nooit inrichten. De eis
-geldt waar iets onherstelbaar is.
+| Wat | Controle | Zonder vlag op productie |
+|---|---|---|
+| e2e-suites (alle 34) | markering | weigeren te starten |
+| `seed:demo -- --verwijder` | markering, twee keer | weigert |
+| `migrate:deploy` | markering | **weigert** — was: mocht |
+| `seed:vragenlijsten`, `seed:demo` | markering | **weigert** — was: mocht |
+| `platform:inrichten` | markering | **weigert** — was: mocht |
+| `markeer-wegwerp` | hostnaam | weigert |
+| `migratiestand`, `productie:poort` | geen — lezen alleen | gaan door |
+
+**Wat er veranderde:** vóór stap 5 mocht *toevoegen* op een beschermde database
+zonder vlag, en werd alleen *verwijderen* tegengehouden. Dat onderscheid is
+vervallen: nu `.env` naar staging wijst, is een commando dat toch bij productie
+uitkomt vrijwel altijd een vergissing — en dan hoort het te stoppen, ook als het
+"maar" toevoegt.
+
+Is het géén vergissing, dan is `--extern` genoeg. Dat is één woord extra op een
+handeling die je zelden doet, en het staat in je terminalhistorie.
+
+**`markeer-wegwerp` houdt de hostcontrole**, en dat is geen omissie: dat script
+draait per definitie tegen een database die nog `beschermd` is — dat is wat het
+omzet. Met de nieuwe rem zou het altijd blokkeren.
+
+**Lezen blijft vrij.** `migratiestand.js` en `productie-poort.js` doen
+uitsluitend `SELECT count(*)`. Een leesquery tegen productie is precies wat je
+zonder drempel wilt kunnen doen; een vlag die je daarvoor moet meegeven, went.
 
 `otap-doorloop.js` en `provider-migratietest.js` verwijderen ook, maar hebben de
 controle niet nodig: de eerste praat naar een vast adres binnen zijn eigen
@@ -90,24 +109,80 @@ weggooit.
 
 ---
 
-## ⚠ Het belangrijkste: `.env` wijst naar Supabase
+## `.env` wijst naar STAGING — sinds stap 5 (2026-08-11)
 
 ```
-DATABASE_URL            → clm_api_runtime @ aws-1-eu-west-1.pooler.supabase.com
-MIGRATION_DATABASE_URL  → clm_migrator    @ aws-1-eu-west-1.pooler.supabase.com
+DATABASE_URL            → clm_api_runtime @ clm-staging3   (oefendatabase)
+MIGRATION_DATABASE_URL  → clm_migrator    @ clm-staging3   (oefendatabase)
+BACKUP_DATABASE_URL     → postgres        @ clm-enterprise (PRODUCTIE — bewust)
+NOOD_PRODUCTIE_URL      → clm_migrator    @ clm-enterprise (leest geen enkel script)
 ```
 
-**Dat is de echte database.** Elk commando dat deze variabelen gebruikt en dat je
-draait zónder ze te overschrijven, raakt Supabase.
+**Een commando zonder eigen adres komt nu op staging uit.** Daar kan niets kapot.
 
-Dit is precies waar **Issue #86** op misging: `npm run migrate:deploy` draaide
-tegen productie terwijl een wegwerpcontainer de bedoeling was. Het script meldde
-"Migraties draaien als rol 'clm_migrator'" en daarna "Migraties voltooid" —
-beide waar, geen van beide verklapte het doelwit. Die rol heet lokaal precies zo.
+### Wat hier vóór 11 augustus stond, en waarom het weg moest
 
-**Vóór elk commando dat de database schrijft:** stel vast waar het naartoe gaat.
-Sinds PR #93 noemen de schrijvende scripts hun doelwit zelf en weigeren ze
-buiten lokaal zonder bevestiging. Vertrouw daarop, maar lees de melding.
+Deze paragraaf begon met *"⚠ Het belangrijkste: `.env` wijst naar Supabase"* —
+naar **productie**. Elk databasecommando raakte de echte klantgegevens, niet
+omdat iemand dat koos maar omdat het de standaard was. Dat is de
+gemeenschappelijke oorzaak onder alle drie de incidenten:
+
+- **2026-08-04** — productie liep achter, de dump miste 9 van 18 tabellen (#25)
+- **2026-08-06** — `migrate:deploy` draaide tegen productie (Issue #86). Het
+  script meldde "Migraties draaien als rol 'clm_migrator'" en daarna "Migraties
+  voltooid" — beide waar, geen van beide verklapte het doelwit. Die rol heet
+  lokaal precies zo.
+- **2026-08-07** — vier verzonnen commando's; bijna een migratie op productie
+
+Nu de uitrol via GitHub loopt (stappen 3 en 4), hoeft deze machine het
+productieadres niet meer standaard te kennen.
+
+### Hoe je tóch bij productie komt
+
+Twee keer bewust kiezen:
+
+```powershell
+# 1. het adres meegeven — uit NOOD_PRODUCTIE_URL in .env
+$p = (Get-Content .env | Select-String '^NOOD_PRODUCTIE_URL=').Line -replace '^NOOD_PRODUCTIE_URL=',''
+$env:MIGRATION_DATABASE_URL = $p.Trim('"')
+
+# 2. én de vlag, want productie is 'beschermd'
+node scripts/migrate.js --extern
+```
+
+`NOOD_PRODUCTIE_URL` wordt door **geen enkel script** gelezen. Dat is de hele
+bescherming: `dotenv` laadt hem wel, maar niets vraagt ernaar.
+
+> Sluit je terminal daarna, of maak de variabele leeg. Hij blijft anders gelden
+> voor élk volgend commando in dezelfde sessie.
+
+### De rem: de database zegt zelf wat hij is
+
+Vóór stap 5 keek de rem naar de **hostnaam**: localhost mocht, de rest niet. Dat
+werkte zolang `.env` naar productie wees, maar staging staat óók bij Supabase —
+die rem zou dus bij élk stagingcommando afgaan. Dan typ je `--extern` erbij
+omdat er anders niets werkt, en na twee weken is het een gewoonte.
+
+**Een waarschuwing die altijd afgaat, is geen waarschuwing meer.**
+
+Daarom vraagt de rem nu aan de database zelf wat hij is (`clm.omgeving`,
+migratie 0019):
+
+| Database | Markering | Zonder vlag |
+|---|---|---|
+| staging | `wegwerp` | gaat door |
+| jouw wegwerpcontainers | `wegwerp` | gaat door |
+| verse container, nog niet gemigreerd | *(geen tabel)* | gaat door — **alleen lokaal** |
+| **productie** | **`beschermd`** | **geblokkeerd** |
+| demo (poort 55450) | `beschermd` | geblokkeerd |
+
+Die derde regel is er omdat `clm.omgeving` pas bij migratie 0019 ontstaat: een
+lege container zou anders blokkeren op precies het commando dat hem moet vullen.
+Niet-lokaal en zonder markering blijft geblokkeerd — dat kan een kopie van
+productie zijn van vóór 0019.
+
+**Vóór elk commando dat de database schrijft:** lees de doelwitregel. De
+schrijvende scripts noemen hem zelf, vóór ze iets doen.
 
 ---
 
