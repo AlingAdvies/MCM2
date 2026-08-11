@@ -22,9 +22,19 @@ terugkeert en wanneer, staat in **`docs/runbooks/onderhoudskalender.md`**.
 `MCM2-CLAUDE.md`. Reden: op 2026-08-07 werden in één sessie vier commando's
 aangeroepen die niet bestaan (`npm run migrate`, `migrate:status`,
 `verify:migratieketen`, `node scripts/db-doelwit.js`) en scheelde het weinig of
-er was een migratie tegen de Supabase-productiedatabase gedraaid. Dat komt
-doordat `.env` daarheen wijst. Architectuurregels lezen helpt niet als het
-eerste commando al het verkeerde doelwit raakt.
+er was een migratie tegen de Supabase-productiedatabase gedraaid — `.env` wees
+daarheen. Architectuurregels lezen helpt niet als het eerste commando al het
+verkeerde doelwit raakt.
+
+> Sinds stap 5 (2026-08-11) wijst `.env` naar **staging**, en de rem leest
+> `clm.omgeving` in plaats van de hostnaam. Dat verkleint dit risico maar heft
+> het niet op: het verzinnen van commando's is er niet mee opgelost.
+
+**`docs/runbooks/devops-handleiding.md` is niet voor jou maar voor de
+eigenaar.** Hij typt zelf geen commando's; hij vraagt ze in de chat. Die
+handleiding beschrijft wát hij doet — akkoord geven op GitHub, reageren op een
+Telegram-melding, Docker starten. Verwijs ernaar als hij vraagt hoe iets werkt,
+en houd hem bij wanneer een handeling van hem verandert.
 
 ---
 
@@ -32,18 +42,31 @@ eerste commando al het verkeerde doelwit raakt.
 
 Volledig uitgelegd in het runbook; hier alleen zodat je ze niet mist.
 
-**1. `.env` wijst naar Supabase — de echte database.**
-Elk databasecommando zonder overschreven variabele raakt productie. Zet een
-wegwerpcontainer op (`-p 127.0.0.1:55440:5432`, niet `0.0.0.0`) en overschrijf
-`MIGRATION_DATABASE_URL` / `DATABASE_URL` binnen het commando. Nooit `.env`
-aanpassen.
+**1. `.env` wijst naar STAGING — sinds stap 5 (2026-08-11).**
+Een databasecommando zonder eigen adres komt op de oefendatabase uit, niet meer
+op productie. Voor e2e-werk zet je nog steeds een eigen wegwerpcontainer op
+(`-p 127.0.0.1:55440:5432`, niet `0.0.0.0`) en overschrijf je
+`MIGRATION_DATABASE_URL` / `DATABASE_URL` binnen het commando.
+
+Productie leeft nog als `NOOD_PRODUCTIE_URL` in `.env` — **geen enkel script
+leest die naam**. Erbij komen kost twee bewuste stappen: het adres meegeven én
+`--extern`, want productie is `beschermd`.
 
 **1b. Elke database is `beschermd` tot hij zich als wegwerp meldt.**
-Sinds migratie 0019 staat dat in `clm.omgeving`, en de e2e-suites weigeren te
-draaien tegen alles wat niet `wegwerp` is. Na het opzetten van je eigen
-container: `node scripts/markeer-wegwerp.js "waarvoor"`. **Markeer nooit de
-demo (poort 55450) of Supabase.** Aanleiding: op 2026-08-07 wisten de e2e-tests
-de demo-database leeg omdat `DATABASE_URL` naar 55450 wees.
+Sinds migratie 0019 staat dat in `clm.omgeving`. De e2e-suites weigeren tegen
+alles wat niet `wegwerp` is, en sinds stap 5 geldt dat ook voor de schrijvende
+scripts: `eisOnbeschermdeDatabase()` leest die markering in plaats van de
+hostnaam. Na het opzetten van je eigen container:
+`node scripts/markeer-wegwerp.js "waarvoor"`.
+
+**Markeer nooit de demo (poort 55450) of een Supabase-productiedatabase.**
+Aanleiding: op 2026-08-07 wisten de e2e-tests de demo-database leeg omdat
+`DATABASE_URL` naar 55450 wees.
+
+> Eén uitzondering, bewust: een **lokale** database zonder `clm.omgeving` mag
+> door. Die tabel ontstaat pas bij migratie 0019, dus een verse container zou
+> anders blokkeren op precies het commando dat hem moet vullen. Niet-lokaal
+> zonder markering blijft geblokkeerd.
 
 **2. Verzin nooit een commando — en ook geen kolomnaam of route.**
 Staat het niet in `package.json`, dan bestaat het niet:
