@@ -366,14 +366,31 @@ jobs:
       #
       # Anders is een mislukte uitrol niet te onderscheiden van een netwerk dat
       # niet tot stand kwam, en die twee vragen een heel ander onderzoek.
+      #
+      # ── Waarom hier drie tijdslimieten op staan ────────────────────────────
+      #
+      # `ConnectTimeout` dekt alleen het OPENEN van de verbinding, niet de
+      # authenticatie erna. Op 2026-08-11 bleef deze stap daardoor hangen: de
+      # runner zat aantoonbaar in het Tailscale-netwerk (zichtbaar als
+      # `github-runnervmvrwv9`), maar de SSH-sessie kwam nooit tot stand en er
+      # verscheen geen enkele poging in het log van saxombp.
+      #
+      # Zonder limiet loopt zo'n stap door tot GitHub's maximum van zes uur.
+      # Vandaar `timeout-minutes` op de stap, `timeout 60` op het commando, en
+      # `ServerAliveInterval` zodat een stille verbinding zichzelf opgeeft.
       - name: Is saxombp bereikbaar?
+        timeout-minutes: 3
         run: |
-          ssh -o StrictHostKeyChecking=no -o BatchMode=yes \
-              -o ConnectTimeout=20 root@saxombp \
-              "echo bereikbaar; docker --version" || {
-            echo "::error::saxombp is niet bereikbaar via Tailscale. Staat de auth-key nog geldig, en laat het SSH-beleid deze node toe?"
-            exit 1
-          }
+          timeout 60 ssh \
+            -o StrictHostKeyChecking=no \
+            -o BatchMode=yes \
+            -o ConnectTimeout=20 \
+            -o ServerAliveInterval=5 \
+            -o ServerAliveCountMax=3 \
+            root@saxombp "echo bereikbaar; docker --version" || {
+              echo "::error::saxombp is niet bereikbaar via Tailscale SSH. Zit de runner in het netwerk (stap hierboven), en laat het SSH-beleid van het tailnet deze node toe? Een node zonder tag valt onder de standaardregels; die staan een CI-machine niet altijd toe."
+              exit 1
+            }
 
       # `deploy.js` doet de rest: image ophalen, containers vervangen,
       # rookproef, en bij een falende rookproef terugdraaien naar de vorige
