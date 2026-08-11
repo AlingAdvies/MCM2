@@ -41,6 +41,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "deploy:inrichten": "node scripts/deploy-inrichten.js",
     "deploy:acceptatie": "node scripts/deploy.js acceptatie",
+    "deploy:staging": "node scripts/deploy.js staging",
     "deploy:productie": "node scripts/deploy.js productie",
     "deploy:status": "node scripts/deploy-status.js",
     "verify": "node scripts/verify.js",

@@ -49,6 +49,22 @@ const OMGEVINGEN = [
     project: 'mcm2-acceptatie',
   },
   {
+    // Staging heeft GEEN dbPoort: de database staat bij Supabase
+    // (`clm-staging3`). Dat is de reden dat staging bestaat — productie draait
+    // Postgres bij AWS in Ierland achter een connection pooler, en een
+    // repetitie in een lokale container bewijst het verkeerde (§1 van het
+    // OTAP-plan).
+    //
+    // Gevolg: `DATABASE_URL` en `MIGRATION_DATABASE_URL` staan hier niet
+    // vooringevuld. Die connectiestrings zijn geheimen en horen niet uit een
+    // script te komen — zelfde afweging als bij OIDC_CLIENT_SECRET.
+    naam: 'staging',
+    apiPoort: 5031,
+    frontendPoort: 3030,
+    dbPoort: null,
+    project: 'mcm2-staging',
+  },
+  {
     naam: 'productie',
     apiPoort: 5021,
     frontendPoort: 3020,
@@ -241,6 +257,12 @@ function main() {
       continue;
     }
 
+    // Eén keer genereren en hergebruiken: het wachtwoord staat zowel los in
+    // DB_WACHTWOORD (voor de databasecontainer) als in DATABASE_URL (voor de
+    // applicatie). Twee aanroepen zouden twee verschillende wachtwoorden
+    // opleveren, en dan start de api met een string die nergens op slaat.
+    const dbWachtwoord = o.dbPoort === null ? null : wachtwoord();
+
     const inhoud = [
       `# Omgeving: ${o.naam.toUpperCase()} — aangemaakt ${new Date().toISOString().slice(0, 10)}`,
       '#',
@@ -250,8 +272,30 @@ function main() {
       '# de omgeving niet meer bij zijn eigen data.',
       '',
       `COMPOSE_PROJECT_NAME=${o.project}`,
-      `DB_WACHTWOORD=${wachtwoord()}`,
-      `DB_POORT=${o.dbPoort}`,
+      ...(o.dbPoort === null
+        ? [
+            '# Deze omgeving heeft GEEN eigen databasecontainer — de database',
+            '# staat bij Supabase. DATABASE_URL hieronder moet met de hand',
+            '# ingevuld worden met de runtime-connectiestring; dat is een',
+            '# geheim en hoort niet uit dit script te komen.',
+            '#',
+            '# DB_WACHTWOORD en DB_POORT staan er leeg bij omdat het',
+            '# compose-bestand ze noemt. Zonder die regels waarschuwt docker',
+            '# compose over lege variabelen, en zo n waarschuwing leidt af van',
+            '# meldingen die er wel toe doen.',
+            'DB_WACHTWOORD=',
+            'DB_POORT=',
+            'DATABASE_URL=',
+          ]
+        : [
+            `DB_WACHTWOORD=${dbWachtwoord}`,
+            `DB_POORT=${o.dbPoort}`,
+            '',
+            '# De runtime-rol tegen de eigen databasecontainer. Zelfde',
+            '# wachtwoord als hierboven; alleen omgevingen met een externe',
+            '# database wijken hiervan af.',
+            `DATABASE_URL=postgresql://clm_api_runtime:${dbWachtwoord}@db:5432/postgres`,
+          ]),
       `API_POORT=${o.apiPoort}`,
       `FRONTEND_POORT=${o.frontendPoort}`,
       '',

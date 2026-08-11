@@ -30,7 +30,22 @@
 name: ${COMPOSE_PROJECT_NAME}
 
 services:
+  # ── De lokale database — niet elke omgeving heeft er een ──────────────────
+  #
+  # Acceptatie draait tegen deze container. Staging niet: die praat met een
+  # Supabase-project, en dat is de hele reden dat staging bestaat. Productie
+  # draait Postgres bij AWS in Ierland achter een connection pooler, en een
+  # repetitie in een lokale container bewijst het verkeerde — de pooler is
+  # precies waar het anders gaat (§1 van het OTAP-plan).
+  #
+  # Vandaar het profiel. `docker compose --profile lokale-db` start hem;
+  # zonder dat profiel bestaat de service niet en start er ook geen container.
+  #
+  # Waarom een profiel en niet `--scale db=0`: schalen naar nul laat de
+  # afhankelijkheid in `depends_on` staan, en dan wacht de api op een
+  # healthcheck die nooit komt.
   db:
+    profiles: ["lokale-db"]
     image: postgres:17.6
     environment:
       POSTGRES_PASSWORD: ${DB_WACHTWOORD}
@@ -56,7 +71,14 @@ services:
   api:
     image: ${API_IMAGE}
     environment:
-      DATABASE_URL: postgresql://clm_api_runtime:${DB_WACHTWOORD}@db:5432/postgres
+      # Waar de database staat. Vóór 2026-08-11 stond hier een vaste
+      # connectiestring naar de `db`-service hierboven; dat kon niet meer toen
+      # staging erbij kwam, want die praat met Supabase.
+      #
+      # De omgevingsbestanden van acceptatie en productie vullen dit met
+      # precies de oude waarde — `deploy-inrichten.js` schrijft hem — dus voor
+      # die twee verandert er niets. Staging krijgt de Supabase-URL.
+      DATABASE_URL: ${DATABASE_URL}
       PORT: "5001"
       CORS_ORIGIN: ${FRONTEND_URL}
       # Het sessiecookie draagt standaard de __Host--prefix en Secure; dat
@@ -130,9 +152,17 @@ services:
       UITNODIGING_BASIS_URL: ${UITNODIGING_BASIS_URL}
     ports:
       - "${API_POORT}:5001"
-    depends_on:
-      db:
-        condition: service_healthy
+    # GEEN `depends_on: db` hier, en dat is geen omissie.
+    #
+    # Docker Compose weigert een heel compose-bestand als een service verwijst
+    # naar een dienst achter een inactief profiel: "service api depends on
+    # undefined service db: invalid compose project". Niet alleen de api start
+    # dan niet — het hele project is ongeldig. Gemeten op 2026-08-11.
+    #
+    # Voor omgevingen mét een lokale database staat de afhankelijkheid in
+    # `compose.lokale-db.yml`, dat er als tweede `-f` overheen gelegd wordt.
+    # Staging heeft die overlay niet: daar staat de database bij Supabase en is
+    # er niets om op te wachten.
     restart: unless-stopped
 
   # ── De frontend, promoveerbaar sinds Issue #51 ────────────────────────────

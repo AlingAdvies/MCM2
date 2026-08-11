@@ -107,6 +107,25 @@ const OMGEVINGEN = {
     apiPoort: 5011,
     frontendPoort: 3010,
     bevestiging: false,
+    // Een Postgres-container op deze machine. Mag stuk, wordt weggegooid.
+    lokaleDatabase: true,
+  },
+  staging: {
+    naam: 'staging',
+    project: 'mcm2-staging',
+    apiPoort: 5031,
+    frontendPoort: 3030,
+    bevestiging: false,
+    // GEEN lokale database: staging praat met het Supabase-project
+    // `clm-staging3`. Dat is de hele reden dat staging bestaat — productie
+    // draait Postgres bij AWS in Ierland achter een connection pooler, en een
+    // repetitie in een container bewijst het verkeerde (§1 van het plan).
+    //
+    // De migraties gaan hier niet vanaf deze machine maar vanuit CI; zie de
+    // job `staging` in .github/workflows/ci.yml. Deze uitrol start alleen de
+    // applicatie.
+    lokaleDatabase: false,
+    migratiesOverslaan: true,
   },
   productie: {
     naam: 'productie',
@@ -116,6 +135,7 @@ const OMGEVINGEN = {
     // Productie krijgt nooit een stille uitrol. Ook niet als het "maar een
     // kleine wijziging" is — juist dan.
     bevestiging: true,
+    lokaleDatabase: true,
   },
 };
 
@@ -305,6 +325,16 @@ function start(omgeving, versie, frontendVersie) {
   // image gepubliceerd wordt, en dat is een tijdelijke toestand.
   const schaal = FRONTEND_MEE ? '' : '--scale frontend=0 ';
 
+  // Omgevingen met een eigen databasecontainer krijgen het profiel én de
+  // overlay die de afhankelijkheid legt. Zonder de overlay start de api
+  // voordat Postgres klaar is; zonder het profiel bestaat de container niet.
+  //
+  // Staging krijgt geen van beide: die praat met Supabase. Zie
+  // deploy/compose.lokale-db.yml voor waarom dat twee losse dingen zijn.
+  const db = omgeving.lokaleDatabase
+    ? '--profile lokale-db -f docker-compose.omgeving.yml -f compose.lokale-db.yml'
+    : '-f docker-compose.omgeving.yml';
+
   const zet = [
     `cd ${SERVER_MAP}`,
     `export API_IMAGE=$(grep '^GHCR_API=' ${omgeving.naam}.env | cut -d= -f2):${versie}`,
@@ -312,7 +342,7 @@ function start(omgeving, versie, frontendVersie) {
     // waarschuwt anders over een lege variabele, en zo'n waarschuwing in de
     // uitvoer van een uitrol leidt af van meldingen die er wél toe doen.
     `export FRONTEND_IMAGE=$(grep '^GHCR_FRONTEND=' ${omgeving.naam}.env | cut -d= -f2):${frontendVersie}`,
-    `docker compose --env-file ${omgeving.naam}.env -p ${omgeving.project} -f docker-compose.omgeving.yml up -d ${schaal}`.trim(),
+    `docker compose --env-file ${omgeving.naam}.env -p ${omgeving.project} ${db} up -d ${schaal}`.trim(),
   ].join(' && ');
 
   return opServer(zet);
@@ -575,9 +605,22 @@ async function main() {
   // verzwakken — daar verandert niets aan, en een handmatige
   // `npm run migrate:deploy` op je laptop weigert nog steeds gewoon.
   console.log('');
-  console.log('4/6  Migraties op de database van deze omgeving');
+  console.log(
+    omgeving.migratiesOverslaan
+      ? '4/6  Migraties — overgeslagen'
+      : '4/6  Migraties op de database van deze omgeving',
+  );
 
-  const migreren = opServer(
+  // Staging migreert niet vanaf deze machine. Dat gebeurt in CI, tegen
+  // Supabase, met het teruglezen erin — zie de job `staging` in
+  // .github/workflows/ci.yml.
+  //
+  // Ze hier nóg een keer draaien zou betekenen dat een laptop schrijft naar een
+  // database die de pipeline beheert. Dat is precies de gewoonte die dit plan
+  // probeert af te leren: `.env` op een laptop wijzend naar iets echts.
+  const migreren = omgeving.migratiesOverslaan
+    ? { ok: true, uit: '', fout: '' }
+    : opServer(
     [
       `cd ${SERVER_MAP}`,
       // API_IMAGE en FRONTEND_IMAGE moeten gezet zijn, óók nu we alleen `db`
@@ -644,15 +687,29 @@ async function main() {
   //
   // Dat is dezelfde faalvorm als Issue #86 en migratie 0017: een geruststellende
   // melding over iets dat niet gebeurd is. De enige remedie is teruglezen.
-  const migratiestand = opServer(
-    `docker exec ${omgeving.project}-db-1 psql -U postgres -tAc ` +
-      `"SELECT count(*) FROM drizzle.__drizzle_migrations" 2>/dev/null || echo 0`,
-    { stil: true },
-  );
+  const migratiestand = omgeving.migratiesOverslaan
+    ? { uit: '' }
+    : opServer(
+        `docker exec ${omgeving.project}-db-1 psql -U postgres -tAc ` +
+          `"SELECT count(*) FROM drizzle.__drizzle_migrations" 2>/dev/null || echo 0`,
+        { stil: true },
+      );
 
   const aantalMigraties = Number(migratiestand.uit.trim()) || 0;
 
-  if (aantalMigraties === 0) {
+  // Teruglezen is de kern van deze stap, dus overslaan vraagt een reden. Die
+  // is er: staging heeft geen containerdatabase om in te kijken, en de
+  // CI-job die daar migreert leest de stand zelf terug — met
+  // `scripts/migratiestand.js --volgens-journal`, dat vergelijkt met het
+  // journal in plaats van met een getal dat veroudert.
+  //
+  // Wat hier dus NIET gebeurt: aannemen dat het goed is. Het bewijs staat
+  // ergens anders, en deze melding zegt waar.
+  if (omgeving.migratiesOverslaan) {
+    console.log(
+      `     ${kleur.grijs('teruglezen gebeurt in CI, tegen Supabase')}`,
+    );
+  } else if (aantalMigraties === 0) {
     stop(
       'De migraties meldden succes, maar de database is leeg.',
       `In drizzle.__drizzle_migrations staan ${aantalMigraties} migraties.\n\n` +
@@ -661,9 +718,11 @@ async function main() {
     );
   }
 
-  console.log(
-    `     ${kleur.groen('OK')}   ${aantalMigraties} migraties op de database (teruggelezen, niet aangenomen)`,
-  );
+  if (!omgeving.migratiesOverslaan) {
+    console.log(
+      `     ${kleur.groen('OK')}   ${aantalMigraties} migraties op de database (teruggelezen, niet aangenomen)`,
+    );
+  }
 
   // ── 5. Containers vervangen ─────────────────────────────────────────────
   console.log('');
