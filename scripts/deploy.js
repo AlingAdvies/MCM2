@@ -42,7 +42,14 @@
  *   npm run deploy:productie               vraagt bevestiging
  *   npm run deploy:productie -- --versie sha-abc123def456
  *   npm run deploy:status                  wat draait waar
- *   npm run rollback:acceptatie            vorige versie terug
+ *
+ * Terugdraaien is géén apart script. Het is dezelfde uitrol met de vorige tag:
+ *
+ *   npm run deploy:acceptatie -- --versie sha-<vorige>
+ *
+ * Hier stond `npm run rollback:acceptatie`, en dat bestaat niet — niet in
+ * package.json en nergens anders. Het slotbericht van elke uitrol drukt de
+ * juiste regel af, met beide versies erin.
  *
  * Backend en frontend zijn aparte repositories met eigen SHA's. De frontend
  * krijgt een eigen vlag; laat je hem weg, dan wordt dat `:latest`:
@@ -731,9 +738,25 @@ async function main() {
   const gestart = start(omgeving, versie, frontendVersie);
 
   if (!gestart.ok) {
+    // Hier stond `npm run rollback:<omgeving>` — een script dat niet bestaat.
+    // Dat is niet zomaar een verkeerde verwijzing: deze regel verschijnt op het
+    // moment dat de uitrol al mislukt is, en dan is een commando dat "Missing
+    // script" antwoordt het laatste wat je kunt gebruiken.
+    //
+    // Terugdraaien is in dit project geen apart script maar dezelfde uitrol met
+    // de vorige tag. Die staat hier expliciet in, samengesteld uit wat er
+    // draaide — net als in het slotbericht van een geslaagde uitrol.
+    //
+    // Gevonden op 2026-08-11, bij het bouwen van stap 4.
     stop(
       'De containers konden niet gestart worden.',
-      `${gestart.fout}\n\nTerugdraaien:\n  npm run rollback:${omgeving.naam}`,
+      `${gestart.fout}\n\nTerugdraaien:\n  ` +
+        (vorige
+          ? `npm run deploy:${omgeving.naam} -- --versie ${vorige}` +
+            (FRONTEND_MEE && vorigeFrontend
+              ? ` --frontend-versie ${vorigeFrontend}`
+              : '')
+          : 'er draaide hier nog niets — er is geen vorige versie om naar terug te vallen.'),
     );
   }
 

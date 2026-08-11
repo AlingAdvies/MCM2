@@ -44,6 +44,7 @@
     "deploy:staging": "node scripts/deploy.js staging",
     "deploy:productie": "node scripts/deploy.js productie",
     "deploy:status": "node scripts/deploy-status.js",
+    "productie:poort": "node scripts/productie-poort.js",
     "verify": "node scripts/verify.js",
     "verify:onderhoud": "node scripts/verify-onderhoud.js",
     "verify:schema": "node scripts/verify-schema.js",

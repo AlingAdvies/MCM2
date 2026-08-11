@@ -125,6 +125,15 @@ Volledige lijst uit `package.json`. Er is **geen** `npm run migrate`, **geen**
 | `npm run verify:snel` | Idem, e2e overgeslagen (zegt dat er ook bij) | Nee |
 | `npm run verify:schema` | Schemaconformiteit: draait `test/schema-conformiteit.e2e-spec.ts` | Ja |
 | `npm run verify:onderhoud` | Runbooks geïndexeerd en niet verouderd; `backup-verwachting.json` bij de migratiestand | Nee |
+| `npm run productie:poort` | De drie automatische remmen vóór een uitrol naar productie: is de backup vers en goed, staat staging op de stand van de repository, loopt productie niet vóór | Leest staging én productie |
+
+`productie:poort` **schrijft nergens** — uitsluitend `SELECT count(*)`. Hij
+draait ook vanzelf in de workflow *Uitrol naar productie*, twee keer: vóór het
+akkoord en erna. Los draaien is handig om te kijken of alles klaarstaat.
+
+Verwacht `STAGING_MIGRATION_DATABASE_URL` en `PRODUCTIE_MIGRATION_DATABASE_URL`.
+Ontbreken die, dan blokkeert hij — hij gaat niet stilletjes terugvallen op
+`.env`, want dan zou hij productie met zichzelf vergelijken.
 
 `verify.js` **weigert** te draaien als `DATABASE_URL` niet naar een lokale host
 wijst. Die bescherming werkt; laat hem staan.

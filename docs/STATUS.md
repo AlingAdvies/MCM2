@@ -2,11 +2,8 @@
 
 ## Laatst bijgewerkt
 
-**2026-08-11, middag.** **Stap 3 van het OTAP-plan is af.** Na elke merge op
-`main` draaien de migraties automatisch tegen de Supabase-stagingdatabase, en
-wordt teruggelezen of ze werkelijk geland zijn. Er draait bovendien een
-applicatie tegen die database — **voor het eerst gaat MCM2 over een connection
-pooler**, precies waarvoor staging bestaat.
+**2026-08-11, avond.** **Stap 3 én stap 4 van het OTAP-plan zijn af.** De keten
+loopt nu van een merge tot aan productie, met vier remmen ervoor.
 
 ```
 merge op main
@@ -16,14 +13,42 @@ merge op main
   → migratiestand teruggelezen, vergeleken met het journal   ← automatisch
   ──────────────────────────────────────────────────────────
   → npm run deploy:staging -- --versie sha-…                 ← één commando
+
+Actions → "Uitrol naar productie" (handmatig, met reden)
+  → poort: backup vers? staging op stand? productie niet vóór?
+  → JOUW AKKOORD                                             ← de run staat stil
+  → poort opnieuw (er kan tijd overheen zijn gegaan)
+  → migraties naar Supabase-productie
+  → teruggelezen + rechtencontrole                           ← automatisch
+  ──────────────────────────────────────────────────────────
+  → npm run deploy:productie -- --versie sha-…               ← één commando
 ```
+
+**De vier remmen** — drie in `productie-poort.js`, één op GitHub:
+
+| Rem | Houdt tegen |
+|---|---|
+| Backup vooraf | geen bewijs, ouder dan 36 uur, of de controle meldde problemen |
+| Staging beproefd | staging staat niet op de stand van de repository |
+| Productie niet vóór | productie telt méér migraties dan het journal |
+| Handmatig akkoord | Environment `productie`, required reviewer |
+
+Beproefd op zeven uitkomsten, exitcodes zonder pipe gemeten. Terugdraaien is
+heen-en-terug gedraaid op acceptatie.
+
+**De backuprem was het lastigste stuk**, want CI kan nooit bij de backup op de
+laptop. Opgelost door de omkering: `backup-controle.js` schrijft een bewijs in
+de repository, en de poort leest dat. Bewust uit de *controle* en niet uit
+`backup-dump.js` — op 2026-08-04 waren alle dumps vers en misten er negen van de
+achttien tabellen.
 
 Vandaag gemerged: **#135** (uitnodigingslink wees naar `localhost`), **#136**
 (migraties naar staging), **#137** (applicatie tegen Supabase), **#139/#140**
-(time-outs, en de Tailscale-stappen er weer uit).
+(time-outs, en de Tailscale-stappen er weer uit), **#142** (#131 en #133).
 
-**Van de negen stappen zijn 1, 2, 2b en 3 af.** Volgende is stap 4: uitrol naar
-productie met een akkoordrem.
+**Van de negen stappen zijn 1, 2, 2b, 3 en 4 af.** Volgende is stap 5: `.env`
+omleiden naar staging — de grootste veiligheidswinst van het plan, want dan
+wijst de laptop niet meer standaard naar de productiedatabase.
 
 ### Waarom het starten van de applicatie handwerk blijft
 
@@ -460,7 +485,8 @@ handmatig te starten is (PR #122).
 
 | # | Wat | Waarom nu |
 |---|---|---|
-| — | **Geen geautomatiseerde uitrol naar productie** | De gemeenschappelijke oorzaak onder 04-08, 07-08 en 10-08. Staging gaat sinds 11-08 automatisch (migraties + teruglezen); productie nog niet. Dit is **stap 4**. Plan: [`plan-otap-straat-met-staging.md`](architectuur/plan-otap-straat-met-staging.md) |
+| — | ~~**Geen geautomatiseerde uitrol naar productie**~~ | ✅ **Gedaan 11-08** (stap 4). Migraties gaan achter vier remmen langs; de applicatie starten blijft één commando. De remmen zijn op zeven uitkomsten beproefd |
+| — | **`.env` wijst nog naar productie** | Nu de uitrol via GitHub loopt, hoeft de laptop dat adres niet meer te kennen. Dit is **stap 5**, en de grootste veiligheidswinst van het plan — de gemeenschappelijke oorzaak onder 04-08, 07-08 en 10-08 |
 | ~~#51~~ | ~~Frontend promoveerbaar maken~~ | ✅ **Gedaan 10-08.** Bewezen: hetzelfde image tegen twee backends, verschillende antwoorden, geen herbouw |
 | ~~#132~~ | ~~Uitnodigingslink wijst naar `localhost`~~ | ✅ **Gedaan 11-08** (PR #135). Twee tests, tegenproef gedraaid |
 | ~~#131~~ | ~~`mailVerstuurd: true` terwijl er niets verstuurd is~~ | ✅ **Gedaan 11-08.** `echtVerstuurd` op de mailgrens; verplicht veld, dus niet te vergeten |
