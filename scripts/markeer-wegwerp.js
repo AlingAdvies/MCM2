@@ -35,6 +35,19 @@ if (!url) {
 
 meldDoelwit(url, 'Markeren als wegwerp');
 
+// Bewust de OUDE rem, op hostnaam — dit is het enige script dat hem nog
+// gebruikt (stap 5, 2026-08-11).
+//
+// De nieuwe rem `eisOnbeschermdeDatabase()` vraagt de database wat hij is en
+// weigert bij 'beschermd'. Dat is hier onbruikbaar: dit script dráái je juist
+// tegen een database die nog beschermd is — dat is wat het omzet. Zou hij die
+// rem gebruiken, dan blokkeerde hij altijd, en zou je bij elke verse
+// wegwerpcontainer `--extern` moeten meegeven. Precies de gewenning die stap 5
+// wil voorkomen.
+//
+// De hostcontrole doet hier wél wat hij moet: een database bij Supabase als
+// wegwerp markeren is bijna altijd een vergissing, en anders hoort het
+// zichtbaar te zijn.
 if (!eisToestemmingBuitenLokaal(url, { wat: 'Markeren als wegwerp' })) {
   process.exit(1);
 }

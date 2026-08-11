@@ -15,7 +15,8 @@ faalt als er een runbook bijkomt dat hier niet genoemd wordt.
 
 | Runbook | Waarvoor | Type |
 |---|---|---|
-| [commandos-en-omgeving.md](commandos-en-omgeving.md) | **Lees dit eerst.** Welk commando bestaat er echt, waar praat het naartoe, wat mag nooit. `.env` wijst naar de productiedatabase. | R |
+| [devops-handleiding.md](devops-handleiding.md) | **Begin hier als je iets wilt dóén.** Uitrollen, terugdraaien, status opvragen, wat er misgaat — geschreven vanuit de handeling, niet vanuit de techniek. | D |
+| [commandos-en-omgeving.md](commandos-en-omgeving.md) | Welk commando bestaat er echt, waar praat het naartoe, wat mag nooit. Sinds stap 5 wijst `.env` naar **staging**; productie eist een expliciet adres én `--extern`. | R |
 | [onderhoudskalender.md](onderhoudskalender.md) | Wat er terugkeert en wanneer — automatisch én met de hand. Plus wat nog niet beschreven is. | D |
 
 ---

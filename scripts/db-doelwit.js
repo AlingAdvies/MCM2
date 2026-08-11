@@ -148,6 +148,157 @@ function eisToestemmingBuitenLokaal(url, { wat, vlag = '--extern' }) {
 }
 
 /**
+ * Weigert door te gaan tegen een database die zichzelf `beschermd` noemt.
+ *
+ * ── Waarom dit `eisToestemmingBuitenLokaal` vervangt (stap 5, 2026-08-11) ───
+ *
+ * Die oude rem kende maar twee soorten: 'localhost' en 'de rest'. Dat werkte
+ * zolang `.env` naar productie wees — alles buiten deze machine was dan per
+ * definitie gevaarlijk.
+ *
+ * Sinds stap 5 wijst `.env` naar **staging**, en staging staat óók bij Supabase.
+ * De oude rem zou dus bij élk stagingcommando afgaan. Dan typ je `--extern`
+ * erbij omdat er anders niets werkt, na twee weken is het een gewoonte, en dan
+ * typ je hem ook op de dag dat je per ongeluk naar productie wijst.
+ *
+ * **Een waarschuwing die altijd afgaat, is geen waarschuwing meer.** Dat is
+ * dezelfde les als bij de backupmelding die niemand las (2026-08-04).
+ *
+ * Deze rem vraagt daarom aan de database zelf wat hij is. `clm.omgeving`
+ * (migratie 0019) zegt `wegwerp` of `beschermd`, en die markering zit ín de
+ * database — niet in een hostnaam, poortnummer of variabele die ernaast staat
+ * en niet meer klopt zodra iets verhuist.
+ *
+ * Gevolg: de vlag gaat alleen nog af bij een beschermde database. Precies waar
+ * hij voor bedoeld is, en dus houdt hij zijn betekenis.
+ *
+ * ── Waarom `beschermd` de standaard blijft ─────────────────────────────────
+ *
+ * Een database die zich niet meldt, of waarvan `clm.omgeving` niet te lezen is,
+ * wordt behandeld als productie. Andersom zou juist de database die niemand
+ * heeft ingericht — de nieuwe, de vergetene — vogelvrij zijn.
+ *
+ * ── De naam is bewust veranderd ────────────────────────────────────────────
+ *
+ * Deze functie is `async`, de oude was synchroon. Zou hij hetzelfde heten, dan
+ * blijft `if (!eisToestemmingBuitenLokaal(url, …))` compileren én draaien — met
+ * een Promise als uitkomst, en die is altijd waarheidsachtig. De rem zou dan
+ * stilzwijgend nooit meer afgaan: een beveiliging die verdwijnt zonder één
+ * foutmelding.
+ *
+ * Met een nieuwe naam faalt een vergeten aanroeper meteen en zichtbaar.
+ *
+ * @param {string} url
+ * @param {{ wat: string, vlag?: string }} opties
+ * @returns {Promise<boolean>} false wanneer het script moet stoppen.
+ */
+async function eisOnbeschermdeDatabase(url, { wat, vlag = '--extern' }) {
+  const d = ontleed(url);
+
+  if (!d.leesbaar) {
+    console.error(
+      `\n${wat} kan niet doorgaan: de database-URL is ${d.beschrijving}.\n` +
+        'Controleer de betreffende variabele in .env.\n',
+    );
+    process.exitCode = 1;
+    return false;
+  }
+
+  const { soort, reden } = await leesOmgevingssoort(url);
+
+  if (soort === 'wegwerp') return true;
+
+  // ── Een verse lokale database mag door ────────────────────────────────────
+  //
+  // `clm.omgeving` ontstaat pas bij migratie 0019. Een lege container die je
+  // net hebt opgezet heeft die tabel dus nog niet, en zou zonder deze
+  // uitzondering blokkeren op precies het commando dat hem moet vullen —
+  // `migrate.js`. Dan geef je `--extern` mee bij elke nieuwe wegwerpcontainer,
+  // en juist die gewoonte wil stap 5 voorkomen.
+  //
+  // Het geldt alleen op deze machine. Een NIET-lokale database zonder
+  // markering blijft geblokkeerd: dat kan een kopie van productie zijn van
+  // vóór 0019, en dan hoort de bescherming te zwijgen noch door te laten.
+  //
+  // Gevonden bij het beproeven op 2026-08-11: `verify:volledig` en CI zetten
+  // allebei een verse container op, en die zouden hierop zijn vastgelopen.
+  if (d.lokaal && soort === null) {
+    console.log(
+      `${d.beschrijving} is nog niet gemarkeerd (${reden}), maar staat lokaal. Doorgaan.\n`,
+    );
+    return true;
+  }
+
+  // De uitweg staat ná de controle, zodat er altijd in de uitvoer staat wát er
+  // is overruled — ook als iemand de vlag gewoontegetrouw meegeeft.
+  const toegestaan =
+    process.argv.includes(vlag) || process.env.MCM2_EXTERNE_DB === 'ja';
+
+  const status = soort ? `gemarkeerd als '${soort}'` : `niet leesbaar (${reden})`;
+
+  if (toegestaan) {
+    console.log(
+      `LET OP: ${d.beschrijving} is ${status}, maar ${vlag} is meegegeven. Doorgaan.\n`,
+    );
+    return true;
+  }
+
+  console.error(
+    `\n${wat} GESTOPT — deze database is beschermd.\n\n` +
+      `  Doel:   ${d.beschrijving} (rol '${d.rol}')\n` +
+      `  Status: ${status}\n\n` +
+      'Sinds stap 5 wijst .env naar STAGING. Komt dit commando toch bij een\n' +
+      'beschermde database uit, dan is er een variabele overschreven of staat\n' +
+      'er een ander adres in .env dan je denkt.\n\n' +
+      'Kijk waar het heen gaat — de regel hierboven noemt host en database.\n\n' +
+      `Is het wél de bedoeling, geef dan ${vlag} mee:\n` +
+      `  npm run <script> -- ${vlag}\n`,
+  );
+  process.exitCode = 1;
+  return false;
+}
+
+/**
+ * Leest `clm.omgeving`. Eén plek, zodat beide remmen hetzelfde vaststellen.
+ */
+async function leesOmgevingssoort(url) {
+  // Bewust hier vereist: db-doelwit.js wordt ook geladen door scripts die geen
+  // databaseverbinding maken.
+  const { Client } = require('pg');
+  const client = new Client({
+    connectionString: url,
+    // Supabase en RDS eisen TLS; de pooler biedt een certificaat aan dat niet
+    // in de standaardketen van Node zit. Zonder dit faalt élke controle tegen
+    // staging met een verbindingsfout, en dan lijkt de database beschermd
+    // terwijl hij alleen onbereikbaar is.
+    ssl: /supabase|amazonaws|neon/.test(url)
+      ? { rejectUnauthorized: false }
+      : undefined,
+    connectionTimeoutMillis: 30_000,
+  });
+
+  try {
+    await client.connect();
+    const { rows } = await client.query(
+      'SELECT soort FROM clm.omgeving LIMIT 1',
+    );
+    const soort = rows[0]?.soort ?? null;
+    return { soort, reden: soort ? null : 'clm.omgeving is leeg' };
+  } catch (err) {
+    const melding = err.message ?? String(err);
+
+    return {
+      soort: null,
+      reden: /relation .*omgeving.* does not exist/i.test(melding)
+        ? 'clm.omgeving bestaat niet — migratie 0019 is niet toegepast'
+        : `verbinden mislukte: ${melding}`,
+    };
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+/**
  * Weigert door te gaan tegen een database die niet als wegwerp is gemarkeerd.
  *
  * Voor scripts die gegevens verwijderen of overschrijven. Niet voor scripts die
@@ -174,29 +325,10 @@ function eisToestemmingBuitenLokaal(url, { wat, vlag = '--extern' }) {
 async function eisWegwerpdatabase(url, { wat, vlag = '--ook-beschermd' }) {
   const d = ontleed(url);
 
-  // Bewust hier vereist en niet bovenaan het bestand: db-doelwit.js wordt ook
-  // geladen door scripts die geen databaseverbinding maken, en die hoeven pg
-  // niet te laden.
-  const { Client } = require('pg');
-  const client = new Client({ connectionString: url });
-
-  let soort = null;
-  let reden = null;
-
-  try {
-    await client.connect();
-    const { rows } = await client.query('SELECT soort FROM clm.omgeving LIMIT 1');
-    soort = rows[0]?.soort ?? null;
-    if (!soort) reden = 'clm.omgeving is leeg';
-  } catch (err) {
-    const melding = err.message ?? String(err);
-
-    reden = /relation .*omgeving.* does not exist/i.test(melding)
-      ? 'clm.omgeving bestaat niet — migratie 0019 is niet toegepast'
-      : `verbinden mislukte: ${melding}`;
-  } finally {
-    await client.end().catch(() => {});
-  }
+  // Dezelfde leesfunctie als `eisOnbeschermdeDatabase`. Twee kopieën zouden
+  // kunnen gaan afwijken in wat ze als "onleesbaar" behandelen, en dan
+  // beschermen de twee remmen tegen verschillende dingen.
+  const { soort, reden } = await leesOmgevingssoort(url);
 
   if (soort === 'wegwerp') return true;
 
@@ -234,6 +366,13 @@ async function eisWegwerpdatabase(url, { wat, vlag = '--ook-beschermd' }) {
 module.exports = {
   ontleed,
   meldDoelwit,
+  leesOmgevingssoort,
+  // De rem sinds stap 5: vraagt de database wat hij is.
+  eisOnbeschermdeDatabase,
+  // De oude rem, op hostnaam. Blijft bestaan omdat hij synchroon is en dus
+  // bruikbaar op een plek waar geen databaseverbinding gemaakt kan worden.
+  // Gebruik hem niet voor nieuwe scripts: hij kan staging niet van productie
+  // onderscheiden, want beide staan bij Supabase.
   eisToestemmingBuitenLokaal,
   eisWegwerpdatabase,
 };

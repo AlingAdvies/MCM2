@@ -42,7 +42,7 @@ const { createServer } = require('node:http');
 const { createHash, randomBytes } = require('node:crypto');
 const { Client } = require('pg');
 
-const { meldDoelwit, eisToestemmingBuitenLokaal } = require('./db-doelwit.js');
+const { meldDoelwit, eisOnbeschermdeDatabase } = require('./db-doelwit.js');
 
 /**
  * De thuistenant van het platformbeheer.
@@ -70,10 +70,6 @@ if (!url) {
 
 meldDoelwit(url, 'Platformbeheerder inrichten');
 
-if (!eisToestemmingBuitenLokaal(url, { wat: 'Platformbeheerder inrichten' })) {
-  process.exit(1);
-}
-
 const VERPLICHT = [
   'OIDC_ISSUER',
   'OIDC_TOKEN_ENDPOINT',
@@ -94,6 +90,15 @@ function melding(regel) {
 }
 
 async function main() {
+  // De rem staat binnen main() sinds stap 5: hij vraagt de database zelf of hij
+  // beschermd is, en dat is een asynchrone leesquery. Vóór de inlogserver
+  // start, zodat je niet eerst inlogt om daarna te horen dat het niet mag.
+  if (
+    !(await eisOnbeschermdeDatabase(url, { wat: 'Platformbeheerder inrichten' }))
+  ) {
+    process.exit(1);
+  }
+
   const redirect = new URL(process.env.OIDC_REDIRECT_URI);
   const verifier = randomBytes(32).toString('base64url');
   const challenge = createHash('sha256')

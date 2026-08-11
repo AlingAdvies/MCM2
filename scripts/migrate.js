@@ -33,7 +33,7 @@ const { drizzle } = require('drizzle-orm/node-postgres');
 const { migrate } = require('drizzle-orm/node-postgres/migrator');
 const { Pool } = require('pg');
 
-const { meldDoelwit, eisToestemmingBuitenLokaal } = require('./db-doelwit.js');
+const { meldDoelwit, eisOnbeschermdeDatabase } = require('./db-doelwit.js');
 
 const url = process.env.MIGRATION_DATABASE_URL;
 
@@ -49,11 +49,14 @@ if (!url) {
 // alleen de rolnaam — die lokaal precies zo heet.
 meldDoelwit(url, 'Migraties');
 
-if (!eisToestemmingBuitenLokaal(url, { wat: 'Migraties' })) {
-  process.exit(1);
-}
-
 async function main() {
+  // De rem staat binnen main() en niet erboven, want hij vraagt de database
+  // zélf wat hij is (stap 5) en dat is een asynchrone leesquery. Vóór de
+  // migratiepool, zodat er nog niets gebeurd is als hij weigert.
+  if (!(await eisOnbeschermdeDatabase(url, { wat: 'Migraties' }))) {
+    process.exit(1);
+  }
+
   const pool = new Pool({ connectionString: url });
 
   try {
