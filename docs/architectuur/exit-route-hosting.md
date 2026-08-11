@@ -217,6 +217,39 @@ load balancer leveren zelf TLS — maar tot die tijd hangt de inlog op acceptati
 geldig certificaat nodig, niet als goede gewoonte maar omdat Entra het afdwingt. Dat is een
 eis die eerder onzichtbaar was, en hij geldt voor elke cloudkeuze.
 
+### 2026-08-11: staging praat met Supabase over de pooler — en dat is de AWS-vorm
+
+Er draait sinds vandaag een applicatie op saxombp tegen het Supabase-stagingproject.
+**Compute en database staan daarmee voor het eerst los van elkaar**, en dat is precies hoe het
+bij AWS werkt: een container in App Runner of ECS, een database in RDS, verbonden door één
+connectiestring.
+
+| Onderdeel | Nu | Bij AWS | Wat verandert |
+|---|---|---|---|
+| Compute | container op saxombp | App Runner / ECS | een taakdefinitie in plaats van compose |
+| Database | Supabase over de pooler | RDS Postgres | één connectiestring |
+
+Wat dit **meet** en niet alleen belooft: het gedrag van de applicatie achter een connection
+pooler. Verbindingen worden daar anders vastgehouden dan bij een lokale Postgres, timeouts
+zijn anders, en een migratie die een tabel vergrendelt gedraagt zich anders. Elk probleem dat
+daar zit, kwam anders pas op productie boven.
+
+Bewezen door aan de Supabase-kant te tellen: `clm_api_runtime: 1` actieve verbinding, terwijl
+de applicatie op saxombp draaide.
+
+### Wat de mislukte Tailscale-poging opleverde voor dit document
+
+De uitrol naar saxombp is bewust niet geautomatiseerd (§3.3c van het OTAP-plan). Bij het
+uitzoeken bleek iets dat hier hoort:
+
+**`tailscale serve` is geen leveranciersafhankelijkheid die vrijblijvend is.** Het draagt de
+inlog van acceptatie, en het zit vast aan de identiteit van de machine — een apparaat labelen
+verwijdert de gebruiker als eigenaar, met gevolgen voor die opzet. Dat maakt het minder los
+dan de tabel hierboven suggereert: vervangen kan, maar niet zonder de inlog te raken.
+
+Bij AWS verdwijnt die hele knoop: een load balancer levert TLS en er is geen SSH nodig om
+uit te rollen.
+
 ---
 
 ## 4. De enige echte blokkade: bestandsopslag
