@@ -113,7 +113,7 @@ export class ResendMailKanaal extends MailKanaal {
       );
     }
 
-    return { providerId: data.id };
+    return { providerId: data.id, echtVerstuurd: true };
   }
 
   /**

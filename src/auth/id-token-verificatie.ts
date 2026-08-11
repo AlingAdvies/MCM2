@@ -129,7 +129,7 @@ export class IdTokenVerificateur {
     return {
       externalSubject: oid,
       email: leesTekstClaim(payload, 'email'),
-      naam: leesTekstClaim(payload, 'name'),
+      naam: leesNaamClaim(payload),
       identityTenantId: leesTekstClaim(payload, 'tid'),
       // Bij federatie wijst deze claim naar de identity provider van de
       // gebruiker zelf, niet naar onze CIAM-tenant — voor een AlingAdvies-
@@ -149,4 +149,53 @@ function leesTekstClaim(payload: JWTPayload, naam: string): string | undefined {
   return typeof waarde === 'string' && waarde.trim() !== ''
     ? waarde
     : undefined;
+}
+
+/**
+ * Waarden die Entra invult wanneer hij geen naam heeft (Issue #133).
+ *
+ * Op 2026-08-10 kwam er na een echte federatieve login `"name": "unknown"` uit
+ * de CIAM-tenant, en die tekst belandde als volwaardige naam in de database:
+ * "unknown / Beheerder" linksonder in de zijbalk. `leesTekstClaim()` weerde
+ * alleen lége waarden, en `"unknown"` is niet leeg.
+ *
+ * De oorzaak zit bij de provider — een federatief account bestaat in de
+ * CIAM-tenant alleen als verwijzing naar de eigen organisatie, dus is er geen
+ * profiel om een naam uit te halen. Dat is daar op te lossen, maar dan zijn we
+ * afhankelijk van hoe elke klant zijn tenant inricht. Deze lijst maakt de
+ * applicatie bestand tegen wat er ook binnenkomt.
+ *
+ * Kleinletters en zonder spaties vergeleken, want `"Unknown"` is dezelfde
+ * onzin. Geen brede heuristiek: alleen waarden waarvan is vastgesteld dat een
+ * provider ze als plaatsvervanger gebruikt. Een echte achternaam "Unknown"
+ * bestaat, maar dan als deel van een volledige naam — niet als de hele claim.
+ */
+const NAAM_PLAATSVERVANGERS = new Set([
+  'unknown',
+  'unknown user',
+  'n/a',
+  'na',
+  'null',
+  'undefined',
+  '-',
+]);
+
+/**
+ * De naam uit het token, of `undefined` als er geen bruikbare naam in staat.
+ *
+ * `undefined` en niet een verzonnen vervanging: wie deze functie aanroept weet
+ * zelf wat een goede terugval is. Voor een gebruikersrij is dat het
+ * e-mailadres; voor een scherm iets anders. Hier een keuze maken zou die
+ * afweging weghalen bij wie hem hoort te maken.
+ */
+function leesNaamClaim(payload: JWTPayload): string | undefined {
+  const naam = leesTekstClaim(payload, 'name');
+
+  if (naam === undefined) {
+    return undefined;
+  }
+
+  return NAAM_PLAATSVERVANGERS.has(naam.trim().toLowerCase())
+    ? undefined
+    : naam;
 }

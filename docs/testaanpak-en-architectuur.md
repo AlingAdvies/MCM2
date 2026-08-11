@@ -424,7 +424,9 @@ document maar de reden dat het te vertrouwen is.
 | 2026-08-10 | `pg_isready` meldde "klaar" tijdens de interne herstart van een verse Postgres | twee opeenvolgende **queries**, geen socketcontrole |
 | 2026-08-10 | Frontend met een verkeerd backend-adres gaf **200** op de startpagina | rookproef vraagt óók een beheerroute op via de frontend-poort |
 | 2026-08-10 | `deploy.js` draaide op een compose-bestand dat op de server anders was dan in de repo | sha256-vergelijking als eerste stap van de uitrol |
-| 2026-08-10 | `mailVerstuurd: true` terwijl het logkanaal `[niet echt verstuurd]` meldde | nog open — **Issue #131** |
+| 2026-08-10 | `mailVerstuurd: true` terwijl het logkanaal `[niet echt verstuurd]` meldde | `echtVerstuurd` als **verplicht** veld op `VerzendResultaat` — vergeten kan niet, dat compileert niet |
+| 2026-08-10 | Entra's `"name": "unknown"` belandde als naam in de database — de claimlezer weerde alleen *lege* waarden | lijst plaatsvervangers, mét tegenproef dat `Robert Unknown` blijft staan |
+| 2026-08-11 | Een uitnodiging voor iemand die al een account heeft doet niets, zonder enig spoor | `SessieService` waarschuwt; gemeten op een wegwerpdatabase — **0 rijen**, geen tweede gebruiker |
 | 2026-08-11 | Een migratiescript dat faalt gaf **exitcode 0** door de pipe naar `tail` | exitcodes zonder pipe meten; `scripts/migratiestand.js` faalt aantoonbaar |
 | 2026-08-11 | Compose weigert een héél bestand bij `depends_on` naar een inactief profiel — niet alleen die dienst | overlay `compose.lokale-db.yml`; gemeten met een wegwerp-compose vóór toepassing |
 
@@ -447,6 +449,30 @@ nog open.
 De vierde is een variant van P2: `pg_isready` gaf een antwoord dat waar was op
 het moment van vragen, en onwaar een seconde later. Een controle die maar één
 keer kijkt, meet een momentopname en geen toestand.
+
+### Een testdubbel mag niet vrolijker zijn dan het echte ding
+
+Issue #131 is een nieuwe variant, en hij is leerzaam omdat de opzet er juist
+zorgvuldig uitzag. `LogMailKanaal` is bewust productiecode en geen testhulpje;
+hij valideert adressen even streng als het echte kanaal, en dat is expliciet zo
+opgeschreven — *"zou de testdubbel toegeeflijker zijn dan de echte
+implementatie, dan zijn groene tests geen bewijs"*.
+
+Die regel is toegepast op de **invoer** en vergeten bij de **uitvoer**. Het
+kanaal weigert wat het echte kanaal weigert, maar zijn geslaagde antwoord was
+niet te onderscheiden van een echte verzending. Daardoor was er geen bug in de
+verzendcode én toch een onware melding in het antwoord van de route.
+
+**De les, breder dan mail:** bij een grens met twee implementaties waarvan er
+één niets doet, hoort het verschil in het **resultaattype** te zitten en niet in
+een logregel. Een logregel bereikt alleen wie hem leest; een verplicht veld
+bereikt iedere aanroeper, en een nieuwe implementatie die het vergeet komt langs
+de compiler niet heen.
+
+Dezelfde vraag is te stellen aan elke andere no-op in dit project — bijvoorbeeld
+`scripts/telegram.js`, dat bij ontbrekende configuratie ook stilzwijgend niets
+doet. Daar is de aanroeper een script en niet een route, dus de schade is
+kleiner; het patroon is hetzelfde.
 
 ### Teruglezen als testvorm — nieuw sinds 2026-08-11
 

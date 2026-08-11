@@ -67,6 +67,30 @@ export interface MailBericht {
  */
 export interface VerzendResultaat {
   readonly providerId: string;
+
+  /**
+   * Waar of er werkelijk een bericht het netwerk op is gegaan.
+   *
+   * ── Waarom dit veld bestaat (Issue #131) ──────────────────────────────────
+   *
+   * `LogMailKanaal` verstuurt niets en zegt dat ook — in zijn logregel. Maar
+   * zijn `VerzendResultaat` zag er tot Issue #131 precies zo uit als dat van
+   * een echte verzending, dus kon geen enkele aanroeper het verschil zien.
+   * Gevolg op acceptatie: `"mailVerstuurd": true` en de melding "heeft een
+   * uitnodiging ontvangen", terwijl het log in dezelfde seconde
+   * `[niet echt verstuurd]` zei.
+   *
+   * Dat is dezelfde klasse als Issue #86: een geruststellende melding over
+   * iets dat niet gebeurd is. Op acceptatie onschuldig, op productie niet —
+   * je denkt dat de klant is uitgenodigd en merkt pas na een week dat er
+   * niets uit is gegaan.
+   *
+   * Het veld staat hier en niet bij de aanroeper omdat alleen het kanaal het
+   * weet. Verplicht, niet optioneel: een nieuwe implementatie die het vergeet
+   * te zetten, compileert dan niet — in plaats van stilzwijgend `undefined`
+   * terug te geven, wat als "niet echt" zou lezen terwijl er wél mail uitging.
+   */
+  readonly echtVerstuurd: boolean;
 }
 
 /**

@@ -135,12 +135,44 @@ thuisbasis) en `AlingAdvies (acceptatie)`, aangemaakt via de échte route
 `POST /platform/tenants` — met een spoor in `audit.audit_event`. Dat is precies
 wat bij de vorige AlingAdvies-tenant op productie ontbrak.
 
-### Twee dingen die nog aandacht vragen
+### Twee dingen die nog aandacht vroegen — beide opgelost op 11-08
 
-| Issue | Wat | Wanneer het pijn doet |
-|---|---|---|
-| **#131** | `mailVerstuurd: true` terwijl het logkanaal `[niet echt verstuurd]` meldt | Bij de eerste echte klantuitnodiging: je denkt dat hij uitgenodigd is |
-| **#133** | Entra stuurt `"name": "unknown"`; en één persoon kan twee gebruikers worden | Zichtbaar in het scherm en in de audit trail. Blokkeert de straat niet |
+~~**#131**~~ — `mailVerstuurd: true` terwijl het logkanaal `[niet echt
+verstuurd]` meldde. De oorzaak zat op de grens: `LogMailKanaal` gaf een
+resultaat terug dat er precies zo uitzag als dat van een echte verzending, dus
+kon geen enkele aanroeper het verschil zien. `VerzendResultaat` heeft nu een
+verplicht veld `echtVerstuurd`; een implementatie die het vergeet, compileert
+niet. Beide routes — tenantaanmaak én leveranciersuitnodigingen — lezen dat veld
+in plaats van "er ging niets mis".
+
+Bijvangst tijdens het bouwen: mijn eerste versie leidde "geen mailkanaal" af uit
+*nul echte verzendingen*. Dat is óók waar als de provider álles weigert, en dan
+wijst de melding naar de verkeerde oorzaak — dezelfde soort misleiding als de
+fout die hij moest repareren. De toets is nu *geslaagd maar niet echt
+verstuurd*, met een test die dat onderscheid vastlegt.
+
+~~**#133**~~ — de naam `unknown` uit Entra, en één persoon met twee
+gebruikersrijen.
+
+De naam kwam er doorheen omdat de claimlezer alleen *lege* waarden weerde en
+`"unknown"` niet leeg is. Er is nu een korte lijst plaatsvervangers
+(`unknown`, `n/a`, `null`, `-`, …), hoofdletterongevoelig, met een tegenproef
+die bewijst dat een echte naam als `Robert Unknown` ongemoeid blijft. De
+terugval is het e-mailadres — dat zegt wie iemand is, waar
+"Platformbeheerder" alleen zegt wat hij doet.
+
+De dubbele rij is **gemeten** op een wegwerpdatabase, niet beredeneerd:
+`clm.koppel_eerste_login()` geeft **0 rijen** terug wanneer de oid al bestaat,
+en beide rijen blijven staan met de uitnodiging op `open`. Er ontstaat dus geen
+tweede gebruiker en er wordt niets samengevoegd — de uitnodiging doet
+stilzwijgend niets. Die weigering is terecht (koppelen zou accountovername
+zijn); wat ontbrak was zichtbaarheid. `SessieService` waarschuwt nu in beide
+gevallen: bij een mislukte koppeling én wanneer iemand die al binnen is een
+uitnodiging aanbiedt.
+
+**Samenvoegen doen we bewust niet automatisch.** Dat raakt beoordelingen,
+notities en de audit trail, en hoort een beheerhandeling te zijn — geen
+bijverschijnsel van een klik op een link.
 
 ~~**#132**~~ — de uitnodigingslink wees naar `localhost:5001` — **opgelost op
 11-08** (PR #135). De link wordt nu gebouwd op `UITNODIGING_BASIS_URL` en wijst
@@ -431,8 +463,8 @@ handmatig te starten is (PR #122).
 | — | **Geen geautomatiseerde uitrol naar productie** | De gemeenschappelijke oorzaak onder 04-08, 07-08 en 10-08. Staging gaat sinds 11-08 automatisch (migraties + teruglezen); productie nog niet. Dit is **stap 4**. Plan: [`plan-otap-straat-met-staging.md`](architectuur/plan-otap-straat-met-staging.md) |
 | ~~#51~~ | ~~Frontend promoveerbaar maken~~ | ✅ **Gedaan 10-08.** Bewezen: hetzelfde image tegen twee backends, verschillende antwoorden, geen herbouw |
 | ~~#132~~ | ~~Uitnodigingslink wijst naar `localhost`~~ | ✅ **Gedaan 11-08** (PR #135). Twee tests, tegenproef gedraaid |
-| **#131** | `mailVerstuurd: true` terwijl er niets verstuurd is | Vóór de eerste echte klantuitnodiging |
-| **#133** | Naam `unknown` uit Entra; dubbele gebruiker mogelijk | "unknown heeft dit oordeel gegeven" is geen bruikbare audit trail |
+| ~~#131~~ | ~~`mailVerstuurd: true` terwijl er niets verstuurd is~~ | ✅ **Gedaan 11-08.** `echtVerstuurd` op de mailgrens; verplicht veld, dus niet te vergeten |
+| ~~#133~~ | ~~Naam `unknown` uit Entra; dubbele gebruiker mogelijk~~ | ✅ **Gedaan 11-08.** Plaatsvervangers gefilterd; dubbele rij gemeten — geen tweede gebruiker, wél een stille uitnodiging, nu zichtbaar |
 | **#46** | Uploads op een containerschijf: weg bij image-vervanging | **Harde datum**: pilot ~1 september. Dit zijn compliance-bewijsstukken |
 | — | Geen bewaking die waarschuwt als een omgeving omvalt | Je zou het merken doordat iemand belt |
 | — | Geen incidentplan | NIS2 kent een meldplicht binnen 24 uur; die klok loopt of je een plan hebt of niet |

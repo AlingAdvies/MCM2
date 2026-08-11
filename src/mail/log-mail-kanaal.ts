@@ -72,7 +72,10 @@ export class LogMailKanaal extends MailKanaal {
         `onderwerp="${bericht.onderwerp}"`,
     );
 
-    return Promise.resolve({ providerId });
+    // `echtVerstuurd: false` is het hele punt van Issue #131. De logregel
+    // hierboven zei het al, maar alleen tegen wie het log leest; nu loopt het
+    // door tot in het antwoord van de route.
+    return Promise.resolve({ providerId, echtVerstuurd: false });
   }
 
   /** Alles wat dit kanaal heeft "verstuurd", in volgorde. */

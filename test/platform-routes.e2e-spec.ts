@@ -38,6 +38,9 @@ interface TenantAntwoord {
   naam?: string;
   aantalLeden?: number;
   melding?: string;
+  /** Sinds Issue #131: alleen `true` als er werkelijk mail is uitgegaan. */
+  mailVerstuurd?: boolean;
+  uitnodigingslink?: string;
   verlooptOp?: string;
   reden?: string;
   veld?: string;
@@ -225,8 +228,18 @@ describe('Platformroutes (e2e, ADR-015)', () => {
       expect(uit.naam).toBe('AlingAdvies');
       expect(uit.aantalLeden).toBe(1);
       // De uitnodiging gaat per mail (migratie 0025). In de e2e-run staat geen
-      // RESEND_API_KEY, dus dit is het logkanaal — dat "verstuurt" en meldt.
-      expect(uit.melding).toContain('uitnodiging');
+      // RESEND_API_KEY, dus draait het logkanaal en gaat er níéts uit.
+      //
+      // Sinds Issue #131 zegt het antwoord dat ook. Deze test verwachtte
+      // eerder het woord "uitnodiging" in de melding — dat stond er, in de zin
+      // "heeft een uitnodiging ontvangen", en die zin was onwaar. De melding
+      // hoort nu de oorzaak te noemen én wat de lezer moet doen.
+      expect(uit.melding).toContain('GEEN mail verstuurd');
+      expect(uit.melding).toContain('handmatig door');
+      expect(uit.mailVerstuurd).toBe(false);
+      // De link staat in het antwoord: dat is het enige moment waarop het
+      // token bestaat, en zonder mail de enige manier om hem door te geven.
+      expect(uit.uitnodigingslink).toContain('uitnodiging=');
 
       // De admin bestaat, nog zonder external_subject: die komt bij zijn
       // eerste login. De partiële unieke index staat dat toe (migratie 0009).

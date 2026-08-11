@@ -38,6 +38,16 @@ describe('LogMailKanaal', () => {
     expect(resultaat.providerId.length).toBeGreaterThan(10);
   });
 
+  it('zegt in het resultaat dat er niets echt verstuurd is (Issue #131)', async () => {
+    // Tot Issue #131 zat die wetenschap alleen in de logregel. Het resultaat
+    // zag er precies zo uit als dat van een echte verzending, dus kon de
+    // aanroeper het verschil niet zien — en meldde `mailVerstuurd: true` voor
+    // een mail die nooit bestond.
+    const resultaat = await kanaal.verstuur(BERICHT);
+
+    expect(resultaat.echtVerstuurd).toBe(false);
+  });
+
   it('geeft elk bericht een eigen providerId', async () => {
     // Het providerId is de sleutel waarmee een latere statusmelding gekoppeld
     // wordt (ontwerp §4). Twee berichten met hetzelfde id zouden betekenen dat
