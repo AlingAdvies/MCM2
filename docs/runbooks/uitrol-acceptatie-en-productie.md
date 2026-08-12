@@ -31,22 +31,30 @@ lopen.
 | **T** test | laptop, tijdelijk | — | — | wegwerp 55441 |
 | **A** acceptatie | `saxombp` | 3010 | 5011 | 55460 (127.0.0.1) |
 | **S** staging | `saxombp` | 3030 | 5031 | **Supabase `clm-staging3`** |
-| **P** productie | `saxombp` | 3020 | 5021 | 55470 (127.0.0.1) |
+| **P** productie | `saxombp` | 3020 | 5021 | **Supabase `clm-enterprise`** |
 
 Bereikbaar via Tailscale. Acceptatie ook op
 `https://saxombp.tail4b29b.ts.net`; niet vanaf internet — alleen vanaf je eigen
 apparaten.
 
-> **Staging is de enige omgeving zonder eigen databasecontainer**, en dat is de
-> reden dat hij bestaat. Productie draait Postgres bij AWS in Ierland achter een
-> connection pooler; een repetitie in een lokale container bewijst het verkeerde
-> (§1 van het OTAP-plan). De pooler is precies waar het anders gaat —
-> verbindingen die anders worden vastgehouden, andere timeouts, ander gedrag bij
-> migraties die een tabel vergrendelen.
+> **Staging én productie hebben geen eigen databasecontainer** — beide praten
+> met Supabase. Alleen acceptatie heeft er nog een, en dat is opzet: die mag
+> stuk.
 >
-> **De migraties van staging draaien vanuit CI**, niet vanaf een laptop. Zie de
-> job `staging` in `.github/workflows/ci.yml`; `npm run deploy:staging` slaat
-> die stap over en zegt dat ook.
+> Dat staging bij Supabase staat, is de reden dat hij bestaat. Productie draait
+> Postgres bij AWS in Ierland achter een connection pooler; een repetitie in een
+> lokale container bewijst het verkeerde (§1 van het OTAP-plan). De pooler is
+> precies waar het anders gaat — verbindingen die anders worden vastgehouden,
+> andere timeouts, ander gedrag bij migraties die een tabel vergrendelen.
+>
+> **De migraties draaien vanuit een workflow**, niet vanaf een laptop:
+> staging via de job `staging` in `.github/workflows/ci.yml`, productie via
+> `.github/workflows/productie.yml`. Beide uitrolcommando's slaan die stap over
+> en zeggen dat ook — je ziet `4/6 Migraties — overgeslagen` met de reden erbij.
+>
+> **Tot stap 6 (2026-08-12) had productie wél een eigen container**, op poort
+> 55470. Die was leeg, terwijl de workflow naar Supabase migreerde: twee dingen
+> die "productie" heetten. Zie STATUS.md voor wat daar precies misging.
 
 **Op dezelfde server draait de Saxo-app** onder PM2, op poort 8080 en 8081.
 Die is geen onderdeel van MCM2 en mag nooit geraakt worden. Zowel

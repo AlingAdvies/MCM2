@@ -65,10 +65,21 @@ const OMGEVINGEN = [
     project: 'mcm2-staging',
   },
   {
+    // Sinds stap 6 (2026-08-11) heeft productie net zo min een dbPoort als
+    // staging: de database staat bij Supabase (`clm-enterprise`).
+    //
+    // Hier stond `dbPoort: 55470`, en dat gaf productie een eigen
+    // Postgres-container op saxombp. Ondertussen migreerde
+    // .github/workflows/productie.yml naar Supabase. Twee dingen die
+    // "productie" heten, met de echte klantgegevens op de ene plek en een
+    // draaiende applicatie op de andere.
+    //
+    // De opgeheven container is vóór het verwijderen gemeten: 26 migraties,
+    // 0 tenants, 0 gebruikers, 0 leveranciers. Leeg.
     naam: 'productie',
     apiPoort: 5021,
     frontendPoort: 3020,
-    dbPoort: 55470,
+    dbPoort: null,
     project: 'mcm2-productie',
   },
 ];

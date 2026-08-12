@@ -1,8 +1,8 @@
 # Plan — een OTAP-straat met staging, van nul opnieuw doordacht
 
-**Status:** in uitvoering — **stap 1, 2, 2b en 3 zijn gedaan**. Volgende: stap 4
-(uitrol naar productie met een akkoordrem)
-**Datum:** 2026-08-10, bijgewerkt dezelfde avond
+**Status:** in uitvoering — **stap 1, 2, 2b, 3, 4, 5 en 6 zijn gedaan**.
+Volgende: stap 7 (`verify:omgevingen` bouwen)
+**Datum:** 2026-08-10, bijgewerkt 2026-08-12
 **Eigenaar:** Kees Aling
 **Aanleiding:** de straat die op 09/10-08 op saxombp gebouwd is, loopt niet uit
 op de database die er werkelijk toe doet. Dit plan trekt hem door tot het einde,
@@ -90,6 +90,9 @@ Bij optie A verandert de rol van saxombp, maar hij verdwijnt niet:
 - **Productie (5021) wordt opgeheven.** Die simuleerde iets dat straks echt
   bestaat. Twee dingen die "productie" heten is precies de verwarring die op
   10-08 tot dataverlies leidde.
+  → ✅ **Gedaan 12-08.** De *databasecontainer* is weg; de applicatie op 5021
+  blijft draaien, maar nu tegen Supabase `clm-enterprise`. Zie §"Eén ding heet
+  productie".
 - **De machine blijft de plek** waar gereedschap wordt uitgeprobeerd zonder
   risico. Dat is echte waarde.
 
@@ -639,13 +642,18 @@ weet dat het klopt.
 
 ### 4.1 Wat er per omgeving hoort te zijn
 
-*Bijgewerkt 2026-08-11 naar wat er werkelijk staat; teruggelezen, niet gepland.*
+*Bijgewerkt 2026-08-12 naar wat er werkelijk staat; teruggelezen, niet gepland.*
+
+> **Deze tabel beschreef productie al als Supabase — en dat klopte niet.** Tot
+> stap 6 draaide de applicatie daar tegen een lege lokale container. Het plan
+> beschreef dus de bedoeling terwijl de werkelijkheid afweek, en niemand merkte
+> het omdat er niets in stond. Sinds 12-08 kloppen ze weer op elkaar.
 
 | | Acceptatie | Staging | Productie |
 |---|---|---|---|
-| Applicatie | saxombp `:5011` / `:3010` | saxombp `:5031` / `:3030` | saxombp `:5021` (procesbewijs) |
-| Database | container 55460 | **Supabase `clm-staging3`** | Supabase `clm-enterprise` |
-| Migraties door | `deploy:acceptatie` | **CI, automatisch** | met de hand — stap 4 |
+| Applicatie | saxombp `:5011` / `:3010` | saxombp `:5031` / `:3030` | saxombp `:5021` / `:3020` |
+| Database | container 55460 | **Supabase `clm-staging3`** | **Supabase `clm-enterprise`** |
+| Migraties door | `deploy:acceptatie` | **CI, automatisch** | **workflow, achter vier remmen** |
 | `clm.omgeving` | `wegwerp` | `wegwerp` | `beschermd` |
 | Rollen | migrator + runtime | migrator + runtime | migrator + runtime |
 | RLS | actief | **actief — geverifieerd** | actief |
@@ -751,11 +759,49 @@ Aan de status is dus niet te zien welke code draait. Vanaf nu: **alleen
 SHA-tags in acceptatie, staging en productie.** `latest` blijft bestaan voor
 handmatig gebruik, maar de straat raakt hem niet aan.
 
-### Eén ding heet "productie"
+### Eén ding heet "productie" — ✅ gedaan 2026-08-12
 
 `mcm2-productie` op saxombp wordt opgeheven. Twee dingen die "productie" heten
 is precies de verwarring die op 10-08 tot het verkeerde antwoord op de vraag
 "wat zijn mijn rollen" leidde — en daarmee tot het dataverlies.
+
+**Wat het bij nader inzien was.** Niet alleen een verwarrende naam: de twee
+praatten langs elkaar heen. De workflow uit stap 4 migreerde naar Supabase
+`clm-enterprise`, terwijl `npm run deploy:productie` een applicatie startte
+tegen een lege container op saxombp. Wie het commando draaide dat de workflow
+zélf afdrukt, kreeg een draaiende app op een database waarin niets stond — met
+de volle overtuiging dat productie was uitgerold.
+
+Dat maakte stap 6 dringender dan "opruimen": stap 4 was pas werkelijk af nadat
+dit recht was gezet.
+
+**Uitgevoerd in deze volgorde**, code vóór server zodat terugdraaien mogelijk
+bleef:
+
+1. `deploy.js` — `lokaleDatabase: false` en `migratiesOverslaan: true`, net als
+   staging. De migratiestap meldt nu *"overgeslagen — teruglezen gebeurt in CI"*.
+2. `deploy-inrichten.js` — `dbPoort: null`, waardoor `productie.env` een leeg
+   `DATABASE_URL` krijgt dat met de hand ingevuld moet worden. Zelfde behandeling
+   als staging: een connectiestring is een geheim en hoort niet uit een script.
+3. `productie.env` op de server naar Supabase.
+4. **Acceptatie eerst bijgewerkt** naar `sha-e8e462d6eec8`. Het script waarschuwde
+   terecht dat de versie daar niet beproefd was — precies de rem die OTAP
+   voorschrijft, en die is gerespecteerd in plaats van weggeklikt.
+5. Productie uitgerold op diezelfde versie. Vier rookproeven groen, inclusief het
+   doorgeefluik (401) — voor het eerst mét een frontend.
+6. Container en volume verwijderd.
+
+**Gemeten vóór het verwijderen:** 26 migraties, 0 tenants, 0 gebruikers,
+0 leveranciers, 0 antwoorden, 0 actieve verbindingen. Leeg. Een backup is
+daarom bewust overgeslagen (besluit eigenaar 12-08).
+
+**Teruggelezen na afloop:** onder `mcm2-productie` draaien alleen nog `api` en
+`frontend`; het volume `mcm2-productie_db-data` bestaat niet meer;
+`deploy:status` geeft 200 / 200 / 401 op alle drie de omgevingen.
+
+**Wat hiermee ook opgelost is:** staging en productie zien er nu identiek uit —
+api plus frontend, database bij Supabase, migraties uit een workflow. Alleen
+acceptatie houdt een eigen container, en dat is opzet: die mag stuk.
 
 ### Teruglezen is verplicht, melden is niet genoeg
 
@@ -798,7 +844,7 @@ het als eerste staat.
 | 3 | ✅ **Uitrol naar staging automatiseren** — gedaan 11-08 | Beslist: applicatie start met de hand, zie §3.3c |
 | 4 | ✅ **Uitrol naar productie automatiseren, met akkoordrem** — gedaan 11-08 | Beslist: backup blijft bij de eigenaar, CI controleert; applicatie start met de hand |
 | 5 | ✅ **`.env` omleiden naar staging** — gedaan 11-08 | Beslist: rem kijkt naar `clm.omgeving`; noodtoegang als `NOOD_PRODUCTIE_URL` |
-| 6 | `mcm2-productie` op saxombp opheffen | **Ja — onomkeerbaar** |
+| 6 | ✅ **`mcm2-productie` op saxombp opheffen** — gedaan 12-08 | Akkoord gegeven; database was aantoonbaar leeg, backup bewust overgeslagen |
 | 7 | `verify:omgevingen` bouwen | Nee |
 | 8 | Productie opnieuw vullen | Nee |
 | 9 | Testdata op staging | Nee |

@@ -142,7 +142,29 @@ const OMGEVINGEN = {
     // Productie krijgt nooit een stille uitrol. Ook niet als het "maar een
     // kleine wijziging" is — juist dan.
     bevestiging: true,
-    lokaleDatabase: true,
+    // ── Sinds stap 6 (2026-08-11): GEEN lokale database meer ────────────────
+    //
+    // Hier stond `lokaleDatabase: true`, en dat betekende dat dit commando een
+    // eigen Postgres-container startte op saxombp. Ondertussen migreerde de
+    // productieworkflow naar Supabase `clm-enterprise`, waar de echte
+    // klantgegevens staan.
+    //
+    // Twee dingen heetten dus "productie", en ze praatten langs elkaar heen:
+    // de migraties gingen naar Supabase, de applicatie startte tegen een
+    // container waarin niets stond. Wie het commando draaide dat de workflow
+    // zelf afdrukt, kreeg een draaiende app op een lege database — met de
+    // volle overtuiging dat productie was uitgerold.
+    //
+    // Dat is precies de verwarring die op 2026-08-10 tot het verkeerde antwoord
+    // op "wat zijn mijn rollen" leidde, en daarmee tot het dataverlies.
+    //
+    // Gemeten vóór het opheffen: 26 migraties, 0 tenants, 0 gebruikers,
+    // 0 leveranciers. De container was leeg; er is niets verloren gegaan.
+    lokaleDatabase: false,
+    // Net als staging: de migraties draaien vanuit de workflow
+    // (.github/workflows/productie.yml), niet vanaf deze machine. Deze uitrol
+    // start alleen de applicatie.
+    migratiesOverslaan: true,
   },
 };
 
@@ -618,9 +640,11 @@ async function main() {
       : '4/6  Migraties op de database van deze omgeving',
   );
 
-  // Staging migreert niet vanaf deze machine. Dat gebeurt in CI, tegen
-  // Supabase, met het teruglezen erin — zie de job `staging` in
-  // .github/workflows/ci.yml.
+  // Staging én productie migreren niet vanaf deze machine. Dat gebeurt in een
+  // workflow, tegen Supabase, met het teruglezen erin:
+  //
+  //   staging    → job `staging` in .github/workflows/ci.yml
+  //   productie  → .github/workflows/productie.yml, achter vier remmen
   //
   // Ze hier nóg een keer draaien zou betekenen dat een laptop schrijft naar een
   // database die de pipeline beheert. Dat is precies de gewoonte die dit plan

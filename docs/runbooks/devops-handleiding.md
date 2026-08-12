@@ -2,7 +2,7 @@
 
 **Type:** D — routineoperaties
 **Eigenaar:** de eigenaar (Chris)
-**Laatste update:** 2026-08-11
+**Laatste update:** 2026-08-12
 **Vereiste toegang:** GitHub (AlingAdvies/MCM2), Supabase, Telegram op je telefoon
 
 ---
@@ -255,6 +255,11 @@ het voorstelt — dan is er iets mis.
 | **acceptatie** | uitproberen, zelf inloggen | jij, via `saxombp:3010` |
 | **staging** | repetitie vóór productie | niemand — dit is een generale |
 | **productie** | echte klanten | de klant |
+
+> **Tot 12 augustus heetten er twee dingen "productie".** De echte database bij
+> Supabase, én een lege database op saxombp waar de applicatie tegenaan praatte.
+> Dat is opgeheven: er is er nu één. Als je ergens nog leest over "de
+> productiecontainer op poort 55470" — die bestaat niet meer.
 
 **Waarom staging bestaat:** productie draait bij Amazon in Ierland, achter een
 verbindingslaag die zich anders gedraagt dan een database op je eigen machine.
