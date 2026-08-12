@@ -8,6 +8,41 @@ issues #131, #132 en #133. De keten loopt nu van een merge tot aan productie,
 met vier remmen ervoor — de laptop wijst niet meer standaard naar de
 klantendatabase, en **nog maar één ding heet "productie"**.
 
+### ⚠️ EERST DOEN bij de volgende sessie
+
+**1. Vraag de eigenaar welke AWS-documenten leidend zijn.**
+Er zijn er meerdere in omloop en ze spreken elkaar tegen. In `docs/` staat een
+**niet-gecommitte** implementatiebrief (*"MCM2 AWS Minimaal — implementatiebrief
+voor Claude Code"*, 12-08 19:26) die **één** omgeving kiest met een budgetkader
+van **$20–30/maand**, App Runner in plaats van Fargate, Supabase blijft, GHCR
+blijft, S3 vanaf dag 1.
+
+De eigenaar noemde daarnaast een *"vernieuwde AWS-brief"* en een *"AWS start-up
+brief"*. **Die zijn niet gevonden en niet gelezen.** Vraag ernaar vóór je iets
+met AWS doet — en commit ze, want ongecommitte documenten overleven een
+`/clear` niet.
+
+> **Let op de tegenstrijdigheid.** Het advies in
+> `docs/architectuur/aws-kostenraming-briefing.md` §7 is **drie** omgevingen bij
+> AWS (robuuste, hassle-free OTAP). De implementatiebrief kiest er **één**
+> (budget). Dat laatste is een besluit van de eigenaar en gaat vóór — maar
+> beide documenten zeggen nu nog iets anders. Uitzoeken welke leidend is.
+
+**2. De onbegrepen 401 op `POST /platform/tenants`** — zie hieronder.
+
+**3. Open handelingen van de eigenaar** (kan hij alleen zelf, in de
+Tailscale-beheeromgeving):
+
+| Handeling | Waarom |
+|---|---|
+| `Disable key expiry` op **saxombp** | Lost de terugkerende herauthenticatie op waardoor servercommando's stil blijven hangen. Vraagt géén taggen. |
+| Node **`mcm2-productie`** verwijderen | Ongebruikt, kreeg geen certificaat (bug bij Tailscale). Draait nog op saxombp — proces stoppen + `/var/lib/tailscale-productie` weg + apparaat verwijderen in de beheeromgeving. |
+
+**4. Issue #148 — notificaties per tenant.** Nieuw aangemaakt 12-08, staat nog
+nergens in het plan. De eis: per tenant, nooit bij een andere tenant.
+
+---
+
 ### Stap 8 is BEGONNEN maar niet af
 
 **Wel gelukt:** `kees@alingadvies.nl` is platformbeheerder op productie, met de
