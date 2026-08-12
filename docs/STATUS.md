@@ -2,10 +2,34 @@
 
 ## Laatst bijgewerkt
 
-**2026-08-11, avond.** **Stappen 3, 4 en 5 van het OTAP-plan zijn af**, plus de
+**2026-08-12.** **Stappen 3, 4, 5 en 6 van het OTAP-plan zijn af**, plus de
 issues #131, #132 en #133. De keten loopt nu van een merge tot aan productie,
-met vier remmen ervoor — en de laptop wijst niet meer standaard naar de
-klantendatabase.
+met vier remmen ervoor — de laptop wijst niet meer standaard naar de
+klantendatabase, en **nog maar één ding heet "productie"**.
+
+### Stap 6: de dubbele betekenis van "productie" is weg
+
+Er waren er twee. De workflow migreerde naar Supabase `clm-enterprise` — de
+echte klantgegevens — terwijl `npm run deploy:productie` een applicatie startte
+tegen een **lege Postgres-container** op saxombp. Wie het commando draaide dat
+de workflow zelf afdrukt, kreeg een draaiende app op een database waarin niets
+stond, met de volle overtuiging dat productie was uitgerold.
+
+Dat is precies de verwarring die op 2026-08-10 tot het verkeerde antwoord op
+"wat zijn mijn rollen" leidde, en daarmee tot het dataverlies.
+
+**Wat er is gebeurd**, in deze volgorde:
+
+1. `deploy.js` en `deploy-inrichten.js`: productie heeft geen lokale database
+   meer (`lokaleDatabase: false`, `dbPoort: null`) — net als staging
+2. `productie.env` op de server wijst naar Supabase
+3. acceptatie bijgewerkt naar `sha-e8e462d6eec8`, zodat de OTAP-volgorde klopte
+4. productie uitgerold op diezelfde versie — vier rookproeven groen
+5. de container en zijn volume verwijderd
+
+**Vóór het verwijderen gemeten:** 26 migraties, 0 tenants, 0 gebruikers,
+0 leveranciers, 0 antwoorden, 0 actieve verbindingen. Er is niets verloren
+gegaan. Een backup is daarom bewust overgeslagen (besluit eigenaar).
 
 > **Begin je hier na een `/clear`?** Lees dan eerst
 > [`runbooks/devops-handleiding.md`](runbooks/devops-handleiding.md) als je wilt
@@ -260,16 +284,16 @@ Teruggelezen op 2026-08-11, eind van de dag:
 
 | | Backend | Frontend | Database | Antwoordt |
 |---|---|---|---|---|
-| acceptatie | `sha-5428bb954884` | `sha-635ff21150bd` | container 55460 | ✅ 200 / 200 / 401 |
+| acceptatie | `sha-e8e462d6eec8` | `sha-635ff21150bd` | container 55460 | ✅ 200 / 200 / 401 |
 | **staging** | `sha-ffd27dc9472f` | `sha-635ff21150bd` | **Supabase `clm-staging3`** | ✅ 200 / 200 / 401 |
-| productie | `latest` | — | container 55470 | ✅ 200 (backend) |
+| **productie** | `sha-e8e462d6eec8` | `sha-635ff21150bd` | **Supabase `clm-enterprise`** | ✅ 200 / 200 / 401 |
 
-Staging heeft als enige **geen `db`-container** — die praat met Supabase. Dat is
-precies waarvoor hij bestaat.
+**Staging én productie hebben geen `db`-container meer** — beide praten met
+Supabase. Alleen acceptatie heeft er nog een, en dat is opzet: die mag stuk.
 
-**Productie loopt bewust achter.** Daar draait nog `latest` zonder frontend,
-zonder `OIDC_*` en zonder HTTPS — inloggen kan daar dus niet. Dat blijft zo tot
-stap 6, want deze container gaat dan verdwijnen.
+Productie draait sinds stap 6 (11-08) voor het eerst **op dezelfde versie als
+acceptatie**, mét een frontend. Inloggen kan daar nog steeds niet — geen
+`OIDC_*`, geen HTTPS — maar dat is nu het enige verschil.
 
 > **`deploy:status` toonde staging eerst niet** (PR #145). Het commando liet
 > alleen acceptatie en productie zien terwijl `mcm2-staging-api-1` gewoon
@@ -450,6 +474,10 @@ merge naar main → CI (3 poorten) → image naar GHCR
 | Acceptatie | `saxombp` | `:5011` | 55460 (127.0.0.1) |
 | Productie | `saxombp` | `:5021` | 55470 (127.0.0.1) |
 
+> **Achterhaald sinds stap 6 (2026-08-11):** de databasecontainer op 55470 is
+> opgeheven. Productie praat nu met Supabase `clm-enterprise`, net als staging
+> met `clm-staging3`. Zie de omgevingstabel bovenaan dit document.
+
 Bereikbaar via Tailscale, niet vanaf internet. Docker is op die server
 geïnstalleerd; de Saxo-app op 8080/8081 is aantoonbaar ongemoeid gebleven —
 zelfde PID's voor en na.
@@ -542,7 +570,7 @@ handmatig te starten is (PR #122).
 |---|---|---|
 | — | ~~**Geen geautomatiseerde uitrol naar productie**~~ | ✅ **Gedaan 11-08** (stap 4). Migraties gaan achter vier remmen langs; de applicatie starten blijft één commando. De remmen zijn op zeven uitkomsten beproefd |
 | — | ~~**`.env` wijst nog naar productie**~~ | ✅ **Gedaan 11-08** (stap 5). Wijst nu naar staging; de rem kijkt naar `clm.omgeving` in plaats van naar de hostnaam |
-| — | **Twee dingen heten "productie"** | `mcm2-productie` op saxombp draait op een eigen lokale database, niet op Supabase. Dat is verwarrend op precies het verkeerde moment. **Stap 6**, en de eerste onomkeerbare stap |
+| — | ~~**Twee dingen heten "productie"**~~ | ✅ **Gedaan 12-08** (stap 6). De lege databasecontainer op saxombp is opgeheven; productie praat nu met Supabase. Gemeten vóór het verwijderen: 0 tenants, 0 gebruikers, 0 antwoorden |
 | — | ~~**`deploy:status` toont staging niet**~~ | ✅ **Gedaan 11-08** (PR #145). Toont nu drie omgevingen; beproefd op saxombp, alle rookproeven groen |
 | ~~#51~~ | ~~Frontend promoveerbaar maken~~ | ✅ **Gedaan 10-08.** Bewezen: hetzelfde image tegen twee backends, verschillende antwoorden, geen herbouw |
 | ~~#132~~ | ~~Uitnodigingslink wijst naar `localhost`~~ | ✅ **Gedaan 11-08** (PR #135). Twee tests, tegenproef gedraaid |
