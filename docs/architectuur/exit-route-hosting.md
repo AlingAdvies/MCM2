@@ -2,8 +2,9 @@
 
 **Type:** levend document — geen besluit
 **Eigenaar:** de eigenaar (Chris)
-**Laatste update:** 2026-08-10 — GHCR als imageregister erbij, en "het image draait overal"
-is voor de backend van bewering naar meting gegaan (§3).
+**Laatste update:** 2026-08-12 — notificaties en agendakoppeling toegevoegd (§5b) als nieuwe
+externe afhankelijkheden, mét de regel wanneer iets binnen of buiten hoort. Voor de
+kostenkant: `aws-kostenraming-briefing.md`.
 **Status:** AWS is de waarschijnlijke bestemming, maar staat niet vast (ADR-012). Bizaline
 draait al op AWS; Azure alleen bij zwaarwegende redenen (eigenaar, 2026-08-06).
 
@@ -129,7 +130,9 @@ vullen, dan is dát de plek waar de lock-in zit.
 | Identity | blijft Entra (of Cognito) | blijft Entra | **Los** — OIDC-standaard, ADR-006 |
 | Mail | SES | geen eigen dienst; derde partij | **Los** — één klasse achter `MailKanaal` |
 | CI | blijft GitHub Actions | idem | **Los** |
-| Meldingen | SNS | Azure Monitor | **Los** — `verstuur()` in `telegram.js` |
+| Meldingen (technisch) | SNS | Azure Monitor | **Los** — `verstuur()` in `telegram.js` |
+| **Notificaties (functioneel)** | EventBridge + SQS | Logic Apps + Service Bus | **Los, MITS het bepalen binnen blijft — zie §4b** |
+| **Agendakoppeling** | n.v.t. — praat met Microsoft Graph | idem | **Los** — geen cloudafhankelijkheid |
 | Backup | RDS-snapshots | Azure-backup | **Los** — vervangt `backup-dump.js` |
 
 **Identity verhuist waarschijnlijk helemaal niet.** ADR-006 koos bewust generieke `OIDC_*`-
@@ -314,6 +317,85 @@ naar SES te gaan zou beheereenvoud zijn (één leverancier, één factuur), niet
 
 > **Niet nu beslissen.** Deze paragraaf bestaat om de afweging vast te leggen, niet om hem te
 > maken. Herzien wanneer de bulkfeature gebouwd wordt of het volume boven 3.000/maand komt.
+
+---
+
+## 5b. Notificaties en agenda — nieuw sinds 2026-08-12
+
+*Toegevoegd omdat dit document zichzelf de regel oplegt: een nieuwe externe
+afhankelijkheid zonder regel hier is een gemiste afhankelijkheid. Beide bestaan
+nog niet — dit legt de vorm vast vóórdat er gebouwd wordt.*
+
+### Notificaties: het bepalen blijft binnen, het bezorgen mag naar buiten
+
+De eigenaar wil notificaties aan gebruikers **binnen een tenant** — *"Siemens is
+al 3 weken te laat met antwoorden"*, *"deze beoordeling staat al 12 dagen
+open"* — met als harde eis: **per tenant, en nooit bij een andere tenant.**
+
+Die eis sluit een externe notificatiedienst uit voor het bepalen en bewaren, en
+dat is een lock-in-vraag waard:
+
+| Deel | Waar | Waarom |
+|---|---|---|
+| Bepalen wat er speelt | **binnen** | Vraagt tenantcontext en kennis van het model |
+| Bewaren van de notificatie | **binnen**, tabel met `tenant_id` + RLS | Zelfde grendel als leveranciers en antwoorden |
+| Tonen in het scherm | **binnen** | Komt uit de eigen database |
+| Bezorgen per e-mail | **buiten** (Resend/SES) | Krijgt alleen een adres en een tekst |
+
+**Waarom dit de lock-in juist verkleint.** Tenant-isolatie wordt hier door de
+database afgedwongen (RLS, `clm_api_runtime` zonder `BYPASSRLS` — ADR-008).
+Zou het bepalen naar een externe dienst gaan, dan ligt de scheiding tussen
+tenants buiten je database, bij een leverancier, afgedwongen door hún code. Dan
+zit je vast aan die leverancier op precies het punt waar je het minst vast wilt
+zitten. Bovendien is de inhoud klantgegeven: "Siemens is 3 weken te laat"
+verklapt wie de leveranciers van een tenant zijn en hoe ze presteren.
+
+**Wat er wél naar de cloud gaat:** iets dat periodiek afgaat (EventBridge
+Scheduler of gelijkwaardig) en een wachtrij (SQS). Beide inwisselbaar en beide
+zonder klantdata — die blijft in de database.
+
+**De data is er al** ✅ (gemeten 2026-08-12). Beide voorbeelden zijn te
+berekenen uit bestaande velden: `clm.survey_response.expires_at` versus
+`submitted_at`, en het ontbreken van een rij in `clm.survey_review`.
+
+> **Nagekeken:** ADR-008 noemt een oud `notification`-schema uit de
+> Prisma-tijd. Dat bestaat **niet meer** — 0 tabellen, opgeruimd bij de
+> overgang naar Drizzle. Er ligt geen half ontwerp in de weg.
+
+### De wachtrij die er nog niet is
+
+Notificaties leggen een bestaand gebrek bloot: de app verstuurt mail **tijdens**
+het verzoek. Bij 21 leveranciers gaat dat; bij 100 per tenant (de use case in de
+kostenraming) loopt het vast en weet niemand wat er wel en niet verstuurd is.
+En herinneringen moeten afgaan **als er niemand op een knop drukt** — dat kan de
+huidige opzet niet.
+
+Dat is geen lock-in maar wel bouwwerk, en het staat nog nergens in het plan.
+
+### Agenda: geen cloudafhankelijkheid
+
+Toekomstig: een meeting plannen met een vendor en een collega over een contract.
+Dat praat met **Microsoft Graph** (Outlook-agenda's), niet met AWS of Azure —
+dus het maakt de hosting niet vaster.
+
+Wel dezelfde knip als hierboven: de **koppeling** (*deze afspraak gaat over
+contract X met vendor Y van tenant Z*) hoort binnen, met `tenant_id` en RLS.
+Een agendadienst krijgt een tijdstip, deelnemers en een titel.
+
+> **Let op de titel.** *"Contractevaluatie Siemens — Transdev"* in een
+> agenda-item staat daarna in de mailbox van de vendor. Bij interne collega's
+> prima; naar buiten toe is dat een bewuste keuze.
+
+Graph vraagt aanvullende rechten in dezelfde Entra-app-registratie die nu voor
+inloggen wordt gebruikt. Geen nieuwe leverancier, wel een securityafweging.
+
+### De regel die hieronder ligt
+
+> **Alles wat weet wélke tenant het betreft, blijft binnen. Alles wat alleen een
+> handeling uitvoert, mag erbuiten.**
+
+Resend voert uit. Een agendadienst voert uit. Een notificatiedienst zou moeten
+*weten* — en valt daarom af. Toets elke nieuwe dienst hieraan.
 
 ---
 
