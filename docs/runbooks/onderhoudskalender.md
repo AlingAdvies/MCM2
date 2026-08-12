@@ -87,6 +87,7 @@ npm run backup:controle
 | **Per kwartaal** | Rollback beproeven op acceptatie (laatst: **11-08-2026**, heen en terug, alle rookproeven groen) | Terugdraaien is het onderdeel dat in de praktijk het vaakst nooit getest is — en dat je nodig hebt op het slechtste moment | [uitrol-acceptatie-en-productie.md](uitrol-acceptatie-en-productie.md) |
 | **Wekelijks** | Staging wakker houden: één query tegen `clm-staging3` | Een gratis Supabase-project pauzeert na 7 dagen zonder databaseactiviteit. Pauzeert staging, dan faalt de eerstvolgende uitrol met een verbindingsfout die naar de verkeerde oorzaak wijst. | — (§5) |
 | **Bij elke migratie** | Eerst op staging draaien, dan pas op productie | Staging draait dezelfde Postgres-versie, regio en pooler als productie. Een migratie die daar slaagt, slaagt in productie — dat is de hele reden dat staging niet op saxombp staat. | — (§5) |
+| **Maandelijks** en **na elke uitrol naar productie** | `npm run verify:omgevingen` | Legt de drie omgevingen naast elkaar: migratiestand, tabellen, tenantgrens, rollen, markering. Dit is de controle die op 04-08 gemeld zou hebben dat productie 9 van de 18 tabellen miste. **Draait niet in CI** — de acceptatiedatabase is alleen via saxombp bereikbaar, dus dit is een commando dat gedraaid moet wórden. Vereist Tailscale. | [commandos-en-omgeving.md](commandos-en-omgeving.md) |
 
 ### Gebeurtenisgebonden — geen ritme, maar een trigger
 

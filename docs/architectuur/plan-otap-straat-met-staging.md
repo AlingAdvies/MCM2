@@ -1,7 +1,7 @@
 # Plan — een OTAP-straat met staging, van nul opnieuw doordacht
 
-**Status:** in uitvoering — **stap 1, 2, 2b, 3, 4, 5 en 6 zijn gedaan**.
-Volgende: stap 7 (`verify:omgevingen` bouwen)
+**Status:** in uitvoering — **stap 1, 2, 2b, 3, 4, 5, 6 en 7 zijn gedaan**.
+Volgende: stap 8 (productie opnieuw vullen)
 **Datum:** 2026-08-10, bijgewerkt 2026-08-12
 **Eigenaar:** Kees Aling
 **Aanleiding:** de straat die op 09/10-08 op saxombp gebouwd is, loopt niet uit
@@ -654,13 +654,18 @@ weet dat het klopt.
 | Applicatie | saxombp `:5011` / `:3010` | saxombp `:5031` / `:3030` | saxombp `:5021` / `:3020` |
 | Database | container 55460 | **Supabase `clm-staging3`** | **Supabase `clm-enterprise`** |
 | Migraties door | `deploy:acceptatie` | **CI, automatisch** | **workflow, achter vier remmen** |
-| `clm.omgeving` | `wegwerp` | `wegwerp` | `beschermd` |
+| `clm.omgeving` | `beschermd` ¹ | `wegwerp` | `beschermd` |
 | Rollen | migrator + runtime | migrator + runtime | migrator + runtime |
 | RLS | actief | **actief — geverifieerd** | actief |
 | Backups | nee | nee | dagelijks, met controle |
 | e2e-suites | ja | nee | nooit |
 | Data | wegwerp | leeg | echte data |
 | Inloggen | ja, via HTTPS | nee — vraagt eigen redirect-URI | nee |
+
+¹ **Hier stond `wegwerp`, en dat is op 12-08 gecorrigeerd.** Acceptatie is in
+werkelijkheid `beschermd` en is dat altijd geweest — hij is nooit gemarkeerd.
+De reden voor `wegwerp` was dat de e2e-suites daar zouden draaien, maar die
+zetten hun eigen wegwerpcontainer op. Zie §4.3.
 
 **Dat staging draait, is de applicatie op saxombp; de database staat bij
 Supabase.** Die scheiding is opzet en het is de AWS-vorm: compute los van
@@ -685,20 +690,59 @@ Verdwijnt dit probleem bij een overstap naar Pro ($25/maand voor de organisatie
 plus $10 voor het tweede project), dan kan de wakkerhouder weg. Tot die tijd is
 hij nodig.
 
-### 4.3 Een controle die de omgevingen vergelijkt
+### 4.3 Een controle die de omgevingen vergelijkt — ✅ gedaan 12-08
 
-Nieuw: `npm run verify:omgevingen`. Leest van alle drie de omgevingen en
-vergelijkt:
+`npm run verify:omgevingen` (`scripts/verify-omgevingen.js`). Leest van alle
+drie de omgevingen en vergelijkt:
 
-- Migratiestand — moeten gelijk zijn, of staging vooruit op productie
-- Tabellen — zelfde verzameling
-- RLS — actief op dezelfde tabellen
-- Rollen — `clm_api_runtime` zonder BYPASSRLS
+- Migratiestand — niet vóór op de repository
+- Tabellen — zelfde verzameling, onderling vergeleken
+- Tenantgrens — geen tenanttabel die `clm_api_runtime` kan lezen zónder RLS
+- Rollen — `clm_api_runtime` bestaat en heeft geen BYPASSRLS
 - Markering in `clm.omgeving`
 
 Dit is de controle die op 04-08 had gemeld dat productie 9 tabellen miste, en
 die vandaag had gemeld dat de tenant er wél was. **Alles teruglezen uit de
 database, nooit uit een melding.**
+
+**De stand vandaag:** alle drie 26 migraties, 19 tabellen, 6 rollen.
+
+#### Twee dingen die de eerste run aan het licht bracht
+
+**1. De controle moest anders geformuleerd dan dit plan voorschreef.**
+"RLS actief op dezelfde tabellen" meldde meteen `clm.sessie` op alle drie de
+omgevingen — en dat is een vals alarm. Die tabel heeft bewust géén RLS
+(migratie 0010): een sessie moet opgezocht worden vóórdat de tenantcontext
+bestaat, dus RLS zou daar altijd nul rijen geven. Hij is op een andere manier
+dicht: `clm_api_runtime` heeft er geen rechten op en alle toegang loopt via
+SECURITY DEFINER-functies.
+
+De garantie die telt is dus niet "elke tenanttabel heeft RLS" maar: **de
+applicatierol kan geen tenantgebonden tabel lezen zonder tenantgrens.** Twee
+geldige manieren, en de controle accepteert ze allebei. Was dit blijven staan,
+dan had hij bij elke run drie bekende, correcte situaties gemeld — en een
+waarschuwing die altijd afgaat, is geen waarschuwing meer.
+
+**2. Acceptatie is `beschermd`, niet `wegwerp` — en §4.1 is aangepast.**
+Acceptatie bleek nooit gemarkeerd; er stond nog de standaardtekst uit migratie
+0019. §4.1 schreef `wegwerp` voor omdat daar de e2e-suites zouden draaien. Maar
+die draaien niet tegen acceptatie — ze zetten hun eigen wegwerpcontainer op. De
+reden voor `wegwerp` bestond dus niet.
+
+Daarom is de *verwachting* bijgesteld en niet de database. Acceptatie als
+wegwerp markeren zou een rem losdraaien op een database die op een server
+staat, in ruil voor niets.
+
+#### Wat deze controle niet doet
+
+**Hij draait niet in CI.** De acceptatiedatabase luistert alleen op
+`127.0.0.1:55460` op saxombp — zoals het hoort — en wordt gelezen via
+`ssh … docker exec`. Een CI-runner komt niet op het tailnet (vastgesteld
+09-08, drie pogingen). Voor staging en productie zou CI wél kunnen, maar een
+halve controle die groen meldt is erger dan geen.
+
+Gevolg: dit is een commando dat gedraaid moet wórden. Het staat in de
+onderhoudskalender.
 
 ### 4.4 Wat er nog helemaal niet is
 
@@ -845,7 +889,7 @@ het als eerste staat.
 | 4 | ✅ **Uitrol naar productie automatiseren, met akkoordrem** — gedaan 11-08 | Beslist: backup blijft bij de eigenaar, CI controleert; applicatie start met de hand |
 | 5 | ✅ **`.env` omleiden naar staging** — gedaan 11-08 | Beslist: rem kijkt naar `clm.omgeving`; noodtoegang als `NOOD_PRODUCTIE_URL` |
 | 6 | ✅ **`mcm2-productie` op saxombp opheffen** — gedaan 12-08 | Akkoord gegeven; database was aantoonbaar leeg, backup bewust overgeslagen |
-| 7 | `verify:omgevingen` bouwen | Nee |
+| 7 | ✅ **`verify:omgevingen` bouwen** — gedaan 12-08 | Nee. Twee bevindingen bij de eerste run, zie §4.3 |
 | 8 | Productie opnieuw vullen | Nee |
 | 9 | Testdata op staging | Nee |
 

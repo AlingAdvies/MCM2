@@ -49,7 +49,8 @@
     "verify:onderhoud": "node scripts/verify-onderhoud.js",
     "verify:schema": "node scripts/verify-schema.js",
     "verify:snel": "node scripts/verify.js --snel",
-    "verify:volledig": "node scripts/verify-volledig.js"
+    "verify:volledig": "node scripts/verify-volledig.js",
+    "verify:omgevingen": "node scripts/verify-omgevingen.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

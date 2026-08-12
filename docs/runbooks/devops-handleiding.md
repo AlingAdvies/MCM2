@@ -143,6 +143,7 @@ beproefd op acceptatie, heen en terug.
 | *"wat draait er waar?"* | per omgeving de versie, én of de applicatie antwoordt |
 | *"is de backup in orde?"* | wanneer de laatste was, en of alles erin zit |
 | *"kan er naar productie?"* | of de vier remmen groen staan |
+| *"lopen de omgevingen gelijk?"* | acceptatie, staging en productie naast elkaar — en waar ze afwijken |
 | *"waar staan we?"* | de stand van het project, uit `docs/STATUS.md` |
 
 Er is niets dat je zelf moet opzoeken. Als Claude iets niet weet, gaat hij het
@@ -178,11 +179,24 @@ falen alle drie de dagelijkse taken. Je merkt het aan het Telegram-bericht.
 | elke week | kijken of het levensteken kwam | je telefoon |
 | elke week | staging wakker houden | 🤖 vraag Claude: *"houd staging wakker"* |
 | elke maand | herstelproef met echte controle | 🤖 vraag Claude erom |
+| elke maand, en na elke uitrol naar productie | de omgevingen naast elkaar leggen | 🤖 vraag Claude: *"lopen de omgevingen gelijk?"* |
 | elk kwartaal | terugdraaien beproeven | 🤖 vraag Claude erom |
 
 > **Waarom staging wakker houden?** Een gratis Supabase-project pauzeert na
 > zeven dagen zonder activiteit. Gebeurt dat, dan faalt de eerstvolgende uitrol
 > met een verbindingsfout die naar de verkeerde oorzaak wijst.
+
+> **Waarom de omgevingen naast elkaar leggen?** De drie omgevingen horen
+> dezelfde vorm te hebben: dezelfde tabellen, dezelfde beveiliging, dezelfde
+> stand. Loopt er één uit de pas, dan merk je dat normaal gesproken pas als er
+> iets stukgaat — en dan op het slechtst denkbare moment.
+>
+> Op 4 augustus miste de productiedatabase negen van de achttien tabellen. Dat
+> stond er maanden, en niemand wist het, omdat elke backup er vers uitzag. Deze
+> controle zou dat op dag één gemeld hebben.
+>
+> **Let op:** hiervoor moet Tailscale aanstaan, want één van de drie databases
+> staat achter de server thuis. Claude zegt het als hij er niet bij kan.
 
 ---
 

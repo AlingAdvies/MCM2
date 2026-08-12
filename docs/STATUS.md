@@ -2,10 +2,30 @@
 
 ## Laatst bijgewerkt
 
-**2026-08-12.** **Stappen 3, 4, 5 en 6 van het OTAP-plan zijn af**, plus de
+**2026-08-12.** **Stappen 3, 4, 5, 6 en 7 van het OTAP-plan zijn af**, plus de
 issues #131, #132 en #133. De keten loopt nu van een merge tot aan productie,
 met vier remmen ervoor — de laptop wijst niet meer standaard naar de
 klantendatabase, en **nog maar één ding heet "productie"**.
+
+### Stap 7: de omgevingen zijn naast elkaar te leggen
+
+`npm run verify:omgevingen` leest acceptatie, staging en productie en meldt
+waar ze uiteenlopen: migratiestand, tabellen, tenantgrens, rollen en de
+markering in `clm.omgeving`. Vandaag staan alle drie op 26 migraties, 19
+tabellen en 6 rollen.
+
+Dit is de controle die op 04-08 gemeld zou hebben dat productie 9 van de 18
+tabellen miste. Elk van de vijf controles is apart rood gemaakt op een
+wegwerpcontainer voordat hij groen werd verklaard.
+
+Twee dingen kwamen bij de eerste run boven water, en die staan in §4.3 van het
+plan: de RLS-controle moest anders geformuleerd (`clm.sessie` heeft bewust geen
+RLS en is op een andere manier dicht), en acceptatie blijkt `beschermd` in
+plaats van het `wegwerp` dat §4.1 voorschreef — daar is het plan aangepast, niet
+de database.
+
+**Let op:** deze controle draait niet in CI en moet dus gedraaid wórden. De
+acceptatiedatabase is alleen via saxombp bereikbaar.
 
 ### Stap 6: de dubbele betekenis van "productie" is weg
 

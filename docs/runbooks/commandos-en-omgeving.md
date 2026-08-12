@@ -201,6 +201,26 @@ Volledige lijst uit `package.json`. Er is **geen** `npm run migrate`, **geen**
 | `npm run verify:schema` | Schemaconformiteit: draait `test/schema-conformiteit.e2e-spec.ts` | Ja |
 | `npm run verify:onderhoud` | Runbooks geïndexeerd en niet verouderd; `backup-verwachting.json` bij de migratiestand | Nee |
 | `npm run productie:poort` | De drie automatische remmen vóór een uitrol naar productie: is de backup vers en goed, staat staging op de stand van de repository, loopt productie niet vóór | Leest staging én productie |
+| `npm run verify:omgevingen` | Legt de **drie** omgevingen naast elkaar: migratiestand, tabellen, tenantgrens, rollen, markering in `clm.omgeving` | Leest alle drie |
+
+`verify:omgevingen` **schrijft nergens** — uitsluitend SELECT. Hij repareert dus
+ook niets: hij stelt vast.
+
+Dit is de controle die op 04-08 gemeld zou hebben dat productie 9 van de 18
+tabellen miste. Draai hem maandelijks en na elke uitrol naar productie.
+
+Twee dingen om te weten:
+
+- **Hij draait niet in CI en dat blijft zo.** De acceptatiedatabase luistert
+  alleen op `127.0.0.1:55460` op saxombp — zoals het hoort — en wordt gelezen
+  via `ssh … docker exec`. Een CI-runner komt niet op het tailnet. **Tailscale
+  moet dus aan staan.** Is dat niet zo, gebruik dan
+  `npm run verify:omgevingen -- --zonder-acceptatie`; de andere twee worden dan
+  gewoon vergeleken.
+- **Acceptatie hoort `beschermd` te zijn, niet `wegwerp`.** Dat wijkt af van wat
+  §4.1 van het OTAP-plan lang beweerde. De e2e-suites draaien niet tegen
+  acceptatie maar tegen hun eigen wegwerpcontainer, dus er is geen reden om daar
+  een rem los te draaien. Markeer acceptatie niet.
 
 `productie:poort` **schrijft nergens** — uitsluitend `SELECT count(*)`. Hij
 draait ook vanzelf in de workflow *Uitrol naar productie*, twee keer: vóór het
