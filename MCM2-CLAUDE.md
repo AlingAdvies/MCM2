@@ -287,7 +287,17 @@ Gebruik managed diensten wanneer zij aantoonbaar onderhoudslast verminderen. Voe
 
 ## 10. OTAP en releasebeleid
 
-> **Implementatiestatus:** dit beschrijft het doelbeleid. Werkelijk geïmplementeerd is nu alleen de eerste rij van de Test-stap (format/lint/typecheck via GitHub Actions, `.github/workflows/ci.yml`) — zie ADR-007 en `docs/STATUS.md` voor de actuele stand. Unit/e2e-tests, RLS-tests, migration test, Docker-build en de Acceptatie/Productie-stappen bestaan nog niet.
+> **Implementatiestatus (bijgewerkt 2026-08-12):** dit is grotendeels
+> gerealiseerd. CI draait format/lint/typecheck, unit- en e2e-tests,
+> RLS-tests, Docker-build en publicatie naar GHCR; migraties gaan automatisch
+> naar staging. Uitrol naar productie loopt via de workflow *Uitrol naar
+> productie* met vier remmen, waarvan één een menselijk akkoord is.
+>
+> Wat handwerk blijft: het **starten** van de applicatie na een uitrol — een
+> bewust besluit, zie §3.3c van het OTAP-plan, omdat CI niet bij saxombp kan.
+>
+> De actuele stand staat in `docs/STATUS.md`; de tekst hierboven stond hier
+> maanden verouderd en beschreef een situatie van vóór de OTAP-straat.
 
 Iedere wijziging doorloopt deze route:
 

@@ -2,10 +2,44 @@
 
 ## Laatst bijgewerkt
 
-**2026-08-12.** **Stappen 3, 4, 5, 6 en 7 van het OTAP-plan zijn af**, plus de
+**2026-08-12.** **Stappen 3, 4, 5, 6 en 7 van het OTAP-plan zijn af; stap 8 is
+begonnen maar niet af** (zie hieronder), plus de
 issues #131, #132 en #133. De keten loopt nu van een merge tot aan productie,
 met vier remmen ervoor — de laptop wijst niet meer standaard naar de
 klantendatabase, en **nog maar één ding heet "productie"**.
+
+### Stap 8 is BEGONNEN maar niet af
+
+**Wel gelukt:** `kees@alingadvies.nl` is platformbeheerder op productie, met de
+echte `oid` uit Entra. Daarmee is het kip-eiprobleem doorbroken (punt 2 van
+§5.1). Teruggelezen uit de database, niet uit een melding.
+
+Onderweg bleek dat Issue #133 (`unknown` als naam) wél in de broncode zat maar
+**niet in de gecompileerde `dist/`** op de machine van de eigenaar. Na
+opnieuw bouwen en nogmaals inloggen staat de naam goed.
+
+**Niet gelukt:** de tenant AlingAdvies. `POST /platform/tenants` weigert met
+401, terwijl dezelfde sessie op een GET naar dezelfde route wél doorkomt en de
+sessie aantoonbaar geldig in `clm.sessie` staat. **Oorzaak niet gevonden** —
+dat is het eerste dat de volgende sessie moet uitzoeken. Kijk naar de guard en
+de controller naast elkaar; het verschil zit tussen lezen en schrijven.
+
+**Wat er op productie is veranderd (12-08):**
+
+- OIDC ingericht, dus inloggen werkt — dat wijkt af van §4.1 van het plan, dat
+  "inloggen: nee" voorschreef. Bewust besluit van de eigenaar: zonder inloggen
+  valt niet vast te stellen dát de keten werkt, en demo is een doel.
+- Bereikbaar via `https://saxombp.tail4b29b.ts.net/productie` — een sub-pad,
+  **met een bekend gebrek**: de pagina haalt zijn bestanden op zonder
+  `/productie` ervoor en krijgt die dus van *acceptatie*. Valt nu niet op omdat
+  beide dezelfde frontend-versie draaien. Zie het uitrol-runbook.
+- `SESSIE_COOKIE_INSECURE` staat op `false` en de dubbele URL-regels zijn weg.
+
+**Twee wegen naar een eigen hostnaam per omgeving zijn beproefd en dicht:**
+Tailscale Services vraagt een getagde node (afgewezen door de eigenaar), en een
+tweede Tailscale-node krijgt geen certificaat door een openstaande bug bij
+Tailscale. Er draait nog een ongebruikte node `mcm2-productie`
+(`100.79.136.62`) op saxombp die opgeruimd mag worden.
 
 ### Stap 7: de omgevingen zijn naast elkaar te leggen
 

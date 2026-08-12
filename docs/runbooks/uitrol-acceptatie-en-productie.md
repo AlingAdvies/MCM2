@@ -503,7 +503,18 @@ die lijst:
 |---|---|
 | lokaal | `http://localhost:5001/auth/callback` |
 | acceptatie | `https://saxombp.tail4b29b.ts.net/api/backend/auth/callback` |
-| productie | nog niet ingericht — vraagt eerst HTTPS |
+| productie | `https://saxombp.tail4b29b.ts.net/productie/api/backend/auth/callback` — **voorlopig** |
+
+> **Productie draait sinds 12-08 op een sub-pad, en dat is een tussenoplossing
+> met een bekend gebrek.** De pagina vraagt zijn eigen bestanden op via
+> `/_next/...` zónder `/productie` ervoor, waardoor die bij *acceptatie*
+> terechtkomen. Dat valt nu niet op omdat beide omgevingen dezelfde
+> frontend-versie draaien — zodra ze uiteenlopen, laadt productie de code van
+> acceptatie.
+>
+> De nette oplossing is een **eigen hostnaam per omgeving**, zoals op AWS. Tot
+> die er is: werk je aan de frontend, controleer dan of beide omgevingen nog
+> dezelfde versie draaien.
 
 > **Let op de `https`.** Entra accepteert **geen** `http`-adres, behalve op
 > `localhost`. Dat is geen instelling die je omzeilt: het invoerveld weigert de

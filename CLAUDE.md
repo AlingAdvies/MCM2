@@ -7,6 +7,125 @@
 
 ---
 
+# 0. HET DOEL — lees dit vóór al het andere
+
+*Vastgelegd 2026-08-12, samen met de eigenaar. Dit staat bovenaan omdat het op
+die dag drie keer misging: er werd gebouwd zonder eerst vast te stellen wat het
+doel was en wat er al stond. De eigenaar moest steeds bijsturen.*
+
+**Wat we aan het bouwen zijn:**
+
+> Een omgeving die de **eindsituatie zo goed mogelijk repliceert**, om daarop
+> vast te stellen dat de **geautomatiseerde OTAP en DevOps werkt**.
+
+Dat is het eigenlijke product van dit werk. De features zijn het middel, niet
+het doel.
+
+**Vijf punten, letterlijk zoals afgesproken:**
+
+1. Een omgeving die de eindsituatie (AWS) zo goed mogelijk repliceert.
+2. Daarop aantonen dat de geautomatiseerde OTAP en DevOps werkt.
+3. **Eén echte tenant: AlingAdvies — dat is de eigenaar zelf.** Gevuld met
+   **mock data die behandeld wordt als klantdata**: backup, RLS, `beschermd`,
+   geen e2e-suites erop.
+4. Die tenant dient tegelijk voor **demo**, **test** én **bewijs** dat de
+   keten werkt.
+5. Alles wat gebouwd wordt moet **eenvoudig naar AWS te migreren** zijn.
+
+**Wat dit betekent voor een voorstel:** bouw je iets dat op AWS niet zou
+bestaan (een sub-pad in plaats van een eigen hostnaam, een omgevingsspecifiek
+image), dan beproef je een constructie die straks weg is. Dat is dezelfde fout
+die het plan over staging benoemt: *"een generale repetitie op ander toneel
+bewijst weinig."*
+
+**Waar het werkelijk om gaat is het gedrag, niet de techniek.** Dat de eigenaar
+een wijziging kan doen en die met vertrouwen tot in productie ziet lopen, met
+remmen die afgaan als er iets niet klopt, en dat hij kan terugvallen als het
+misgaat. Dat is wat een klant straks verwacht, en dat is wat nu op de eigen
+tenant beproefd wordt. Volgorde die daaruit volgt: **eerst de keten aantoonbaar
+rond mét data erin, daarna pas de kosmetiek.**
+
+**Twee besluiten van de eigenaar (12-08), zodat ze niet opnieuw gesteld worden:**
+
+| Vraag | Besluit |
+|---|---|
+| Moet het starten van de applicatie ook automatisch? | **Nee — handmatig starten is OK.** Het besluit uit §3.3c van het OTAP-plan blijft staan. |
+| Moet productie inlog krijgen, tegen §4.1 in? | **Ja.** Zonder inloggen valt niet vast te stellen dát de keten werkt, en demo is een expliciet doel. §4.1 is op dit punt achterhaald. |
+| Moet het sub-pad `/productie` opgelost worden? | **Ja.** Een eigen hostnaam per omgeving is de AWS-vorm. |
+
+De tenant komt via de **platformroute**, niet rechtstreeks in de database — het
+auditspoor ís de opbrengst (§5.1 van het plan blijft dus staan).
+
+---
+
+# 0b. DE MIDDELEN — wat er werkelijk is
+
+*Gemeten op 2026-08-12, niet aangenomen. Klopt iets niet meer? Meet opnieuw en
+werk dit bij — een verouderde inventaris is erger dan geen.*
+
+## AWS: er is GEEN account
+
+**AWS is een richting, geen middel.** De kans is groot dat we er komen, maar we
+**staan er nog niet**. Stel nooit iets voor dat een AWS-account veronderstelt
+zonder dat expliciet te benoemen.
+
+## Rekenlaag — één machine
+
+**`saxombp`** — een MacBook Pro uit 2009 (`MacBookPro5,5`) met Ubuntu 22.04.5.
+
+| | |
+|---|---|
+| Processor | Intel Core2 Duo P7550, 2 cores |
+| Geheugen | 7,5 GB (6,3 GB vrij) |
+| Schijf | 106 GB (87 GB vrij) |
+| Belasting | load 0,06 — de machine verveelt zich |
+| Bereikbaar | **alleen via Tailscale** (`100.99.51.53`), tailnet only |
+
+Zes MCM2-containers (~300 MB samen) plus de acceptatiedatabase. Daarnaast
+draait er **alleen de Saxo-app** (poort 8080/8081) — niets anders.
+
+Publiek IP `80.114.79.142` is de thuisrouter, gedeeld met de laptop en
+vermoedelijk niet vast. **Capaciteit is het probleem niet; het feit dat het
+één machine is wel** — geen tweede, geen redundantie.
+
+## Databases — bij Supabase
+
+| Omgeving | Waar | Markering |
+|---|---|---|
+| acceptatie | container op saxombp, `127.0.0.1:55460` | `beschermd` |
+| staging | Supabase `ljdldwfy…`, eu-west-1 | `wegwerp` |
+| productie | Supabase `agojesdo…`, eu-west-1 | `beschermd` |
+
+Beide Supabase-projecten draaien op het **gratis plan** en **pauzeren na 7
+dagen stilte**. Dat is een reëel risico zodra productie voor demo gebruikt
+wordt.
+
+## Bouwstraat en identiteit — in de cloud
+
+- **GitHub** `AlingAdvies/MCM2` — **publiek**, hoofdbranch `main`
+- Workflows `ci.yml` en `productie.yml`; Environment `productie` met een
+  verplichte akkoordgever
+- **GHCR** voor images (token verloopt rond **8 november 2026**)
+- **Microsoft Entra External ID** — CIAM-domein `mcm2ciam.ciamlogin.com`, één
+  app-registratie. Elke omgeving vraagt een eigen redirect-adres.
+
+## Backup en bewaking — op de laptop van de eigenaar
+
+Drie geplande taken op de Windows-laptop: `MCM2 databasebackup`,
+`MCM2 backupcontrole`, `MCM2 backupcontrole volledig`. Dumps gaan naar
+**OneDrive** (`BACKUP_DIR`). Meldingen via **Telegram**.
+
+**Gevolg:** staat die laptop uit, dan draait er geen backup. CI kan er niet bij
+— zie [[mcm2-backupbewijs-omkering]] en het runbook.
+
+## Wat er NIET is
+
+Geen AWS-account. Geen tweede server. Geen bewaking of alarmering. Geen
+incidentplan. Geen sleutelrotatie. Geen eigen hostnaam per omgeving — en dat
+laatste is precies wat de proefopstelling nog niet AWS-vormig maakt.
+
+---
+
 ## Lees deze drie, in deze volgorde, vóór je iets doet
 
 | # | Bestand | Waarvoor |

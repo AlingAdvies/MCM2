@@ -660,7 +660,21 @@ weet dat het klopt.
 | Backups | nee | nee | dagelijks, met controle |
 | e2e-suites | ja | nee | nooit |
 | Data | wegwerp | leeg | echte data |
-| Inloggen | ja, via HTTPS | nee — vraagt eigen redirect-URI | nee |
+| Inloggen | ja, via HTTPS | nee — vraagt eigen redirect-URI | **ja, sinds 12-08** ² |
+
+² **Hier stond "nee", en dat is op 12-08 een besluit van de eigenaar geworden.**
+Het plan en §5.1 spraken elkaar tegen: §5.1 wil de tenant via de platformroute
+(mét auditspoor), en dat vraagt een sessie — dus inloggen. Met het doel erbij
+(*aantonen dat de geautomatiseerde OTAP werkt*, plus demo) wint §5.1: zonder
+inloggen valt niet vast te stellen dát de keten werkt.
+
+Productie draait daarom sinds 12-08 op `https://saxombp.tail4b29b.ts.net/productie`
+met OIDC. **Dat sub-pad is een tussenoplossing met een bekend gebrek** — zie
+`docs/runbooks/uitrol-acceptatie-en-productie.md`. Een eigen hostnaam per
+omgeving is de AWS-vorm en het doel, maar twee wegen daarheen bleken dicht
+(getagde node — afgewezen; tweede Tailscale-node — certificaat faalt op een bug
+bij Tailscale). Besluit van de eigenaar: **eerst de keten rond met data erin,
+daarna de kosmetiek.**
 
 ¹ **Hier stond `wegwerp`, en dat is op 12-08 gecorrigeerd.** Acceptatie is in
 werkelijkheid `beschermd` en is dat altijd geweest — hij is nooit gemarkeerd.
@@ -777,6 +791,32 @@ De database is op 10-08 leeggemaakt. Wat terug moet:
 **Pas nadat de straat werkt.** Dan gebeurt dit langs de goede weg, met een spoor,
 en is het herhaalbaar.
 
+#### Stand 12-08: punt 2 is af, punt 1 loopt vast
+
+**Punt 2 is gedaan.** `kees@alingadvies.nl` is platformbeheerder op productie,
+met de echte `oid` uit Entra, via `scripts/platformbeheerder-inrichten.js`.
+
+**Punt 1 loopt vast op een onbegrepen 401.** `POST /platform/tenants` weigert
+met *"Niet ingelogd of sessie verlopen"*, terwijl:
+
+- de sessie aantoonbaar in `clm.sessie` staat en niet verlopen is
+- een **GET** naar dezelfde route mét hetzelfde cookie er wél doorheen komt
+  (die geeft 404 — de route bestaat alleen als POST)
+
+Het verschil zit dus tussen lezen en schrijven, niet in de sessie. **Oorzaak
+niet gevonden**; dit is het eerste dat opgepakt moet worden. Kijk naar
+`TenantContextGuard` en `PlatformAdminGuard` naast de controller.
+
+> **Waarschuwing bij het oplossen:** de verleiding is om de tenant dan maar
+> rechtstreeks in de database te zetten. Doe dat niet — het auditspoor ís de
+> opbrengst van deze stap. De vorige tenant was er buitenom in gezet, en juist
+> daarom stond er niets in `audit.audit_event`.
+
+**Punt 4 (demo-leveranciers) kan niet zoals beschreven:** `npm run seed:demo`
+eist een `wegwerp`-database en productie is `beschermd`. Dat is de rem uit stap
+5 die correct werkt. Wil de eigenaar demo-data, dan vraagt dat een eigen
+oplossing.
+
 ### 5.2 Testdata voor staging
 
 Staging heeft data nodig, anders bewijst een migratie er niets. Een lege
@@ -890,7 +930,7 @@ het als eerste staat.
 | 5 | ✅ **`.env` omleiden naar staging** — gedaan 11-08 | Beslist: rem kijkt naar `clm.omgeving`; noodtoegang als `NOOD_PRODUCTIE_URL` |
 | 6 | ✅ **`mcm2-productie` op saxombp opheffen** — gedaan 12-08 | Akkoord gegeven; database was aantoonbaar leeg, backup bewust overgeslagen |
 | 7 | ✅ **`verify:omgevingen` bouwen** — gedaan 12-08 | Nee. Twee bevindingen bij de eerste run, zie §4.3 |
-| 8 | Productie opnieuw vullen | Nee |
+| 8 | 🔶 **Productie opnieuw vullen** — begonnen 12-08, **niet af** | Ja: inloggen op productie ingericht (§4.1 wijkt), sub-pad geaccepteerd |
 | 9 | Testdata op staging | Nee |
 
 **Ruwe inschatting:** stap 1 een halve dag; stappen 2–5 samen twee dagen;
