@@ -318,8 +318,27 @@ tailscale status | Select-String saxombp
 Staat er `offline`, dan is de server uit of het netwerk weg. Staat er `active`,
 probeer dan `ssh root@saxombp echo ok`.
 
-Vraagt Tailscale om verificatie in de browser, doe die dan — dat is een
-eenmalige stap per apparaat.
+### Het commando hangt, zonder foutmelding
+
+Dat is bijna altijd **Tailscale SSH dat om herauthenticatie vraagt**:
+
+```
+# Tailscale SSH requires an additional check.
+# To authenticate, visit: https://login.tailscale.com/a/<code>
+```
+
+Open die link en bevestig. Daarna werkt het weer.
+
+> **Dit is periodiek, niet eenmalig per apparaat.** Hier stond eerder dat het
+> een eenmalige stap was; op 2026-08-11 kwam het terug op een machine die de
+> hele dag had gewerkt. De verlooptijd is een instelling van de Tailscale-tenant
+> (`checkPeriod` in de SSH-regel).
+>
+> **Waarom je het niet meteen ziet:** scripts die `ssh` aanroepen met
+> `BatchMode=yes` krijgen die vraag wél, maar tonen hem niet — ze wachten stil
+> tot de time-out. `npm run deploy:status` leek daardoor traag in plaats van
+> geblokkeerd. Hangt een servercommando: draai `ssh root@saxombp "echo ja"` met
+> de hand, dan zie je de link.
 
 ### "Kon image … niet ophalen"
 
