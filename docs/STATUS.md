@@ -261,18 +261,21 @@ Teruggelezen op 2026-08-11, eind van de dag:
 | | Backend | Frontend | Database | Antwoordt |
 |---|---|---|---|---|
 | acceptatie | `sha-5428bb954884` | `sha-635ff21150bd` | container 55460 | ✅ 200 / 200 / 401 |
-| **staging** | draait | draait | **Supabase `clm-staging3`** | niet gemeten — zie hieronder |
+| **staging** | `sha-ffd27dc9472f` | `sha-635ff21150bd` | **Supabase `clm-staging3`** | ✅ 200 / 200 / 401 |
 | productie | `latest` | — | container 55470 | ✅ 200 (backend) |
+
+Staging heeft als enige **geen `db`-container** — die praat met Supabase. Dat is
+precies waarvoor hij bestaat.
 
 **Productie loopt bewust achter.** Daar draait nog `latest` zonder frontend,
 zonder `OIDC_*` en zonder HTTPS — inloggen kan daar dus niet. Dat blijft zo tot
 stap 6, want deze container gaat dan verdwijnen.
 
-> **`npm run deploy:status` kent staging niet.** Het commando toont alleen
-> acceptatie en productie, terwijl `mcm2-staging-api-1` en
-> `mcm2-staging-frontend-1` wel degelijk draaien (gemeten met `docker ps` op
-> 11-08). Een controlecommando met een blinde vlek is een controlecommando dat
-> je op het verkeerde moment geruststelt — **openstaand punt**, klein werk.
+> **`deploy:status` toonde staging eerst niet** (PR #145). Het commando liet
+> alleen acceptatie en productie zien terwijl `mcm2-staging-api-1` gewoon
+> draaide: een controlecommando met een blinde vlek stelt gerust over iets dat
+> het niet gemeten heeft — dezelfde klasse als #131. Gevonden door `docker ps`
+> te vergelijken met wat het script afdrukte.
 
 ### Wat er gisteravond is neergezet: staging
 
@@ -540,7 +543,7 @@ handmatig te starten is (PR #122).
 | — | ~~**Geen geautomatiseerde uitrol naar productie**~~ | ✅ **Gedaan 11-08** (stap 4). Migraties gaan achter vier remmen langs; de applicatie starten blijft één commando. De remmen zijn op zeven uitkomsten beproefd |
 | — | ~~**`.env` wijst nog naar productie**~~ | ✅ **Gedaan 11-08** (stap 5). Wijst nu naar staging; de rem kijkt naar `clm.omgeving` in plaats van naar de hostnaam |
 | — | **Twee dingen heten "productie"** | `mcm2-productie` op saxombp draait op een eigen lokale database, niet op Supabase. Dat is verwarrend op precies het verkeerde moment. **Stap 6**, en de eerste onomkeerbare stap |
-| — | **`deploy:status` toont staging niet** | Die stack draait wél op saxombp. Een controlecommando dat een omgeving overslaat, stelt gerust over iets dat het niet gemeten heeft — dezelfde klasse als #131. Klein werk |
+| — | ~~**`deploy:status` toont staging niet**~~ | ✅ **Gedaan 11-08** (PR #145). Toont nu drie omgevingen; beproefd op saxombp, alle rookproeven groen |
 | ~~#51~~ | ~~Frontend promoveerbaar maken~~ | ✅ **Gedaan 10-08.** Bewezen: hetzelfde image tegen twee backends, verschillende antwoorden, geen herbouw |
 | ~~#132~~ | ~~Uitnodigingslink wijst naar `localhost`~~ | ✅ **Gedaan 11-08** (PR #135). Twee tests, tegenproef gedraaid |
 | ~~#131~~ | ~~`mailVerstuurd: true` terwijl er niets verstuurd is~~ | ✅ **Gedaan 11-08.** `echtVerstuurd` op de mailgrens; verplicht veld, dus niet te vergeten |
