@@ -8,27 +8,121 @@ issues #131, #132 en #133. De keten loopt nu van een merge tot aan productie,
 met vier remmen ervoor — de laptop wijst niet meer standaard naar de
 klantendatabase, en **nog maar één ding heet "productie"**.
 
-### ⚠️ EERST DOEN bij de volgende sessie
+### ⚠️ HIER VERDER — stand 2026-08-13, einde sessie
 
-**1. Vraag de eigenaar welke AWS-documenten leidend zijn.**
-Er zijn er meerdere in omloop en ze spreken elkaar tegen. In `docs/` staat een
-**niet-gecommitte** implementatiebrief (*"MCM2 AWS Minimaal — implementatiebrief
-voor Claude Code"*, 12-08 19:26) die **één** omgeving kiest met een budgetkader
-van **$20–30/maand**, App Runner in plaats van Fargate, Supabase blijft, GHCR
-blijft, S3 vanaf dag 1.
+**Besluit van de eigenaar (13-08): voorlopig GEEN AWS, geen gecompliceerde
+omwegen.** Het plan staat in
+[`architectuur/plan-robuuste-simulatie-zonder-aws.md`](architectuur/plan-robuuste-simulatie-zonder-aws.md)
+— vier stappen, A t/m D. **Lees dat eerst.**
 
-De eigenaar noemde daarnaast een *"vernieuwde AWS-brief"* en een *"AWS start-up
-brief"*. **Die zijn niet gevonden en niet gelezen.** Vraag ernaar vóór je iets
-met AWS doet — en commit ze, want ongecommitte documenten overleven een
-`/clear` niet.
+De AWS-tegenspraak (één omgeving vs. drie) is daarmee **geparkeerd, niet
+opgelost**. Advies dat er lag: drie omgevingsvormen, twee permanente
+rekeningen. Pak het pas op als AWS weer aan de orde is.
 
-> **Let op de tegenstrijdigheid.** Het advies in
-> `docs/architectuur/aws-kostenraming-briefing.md` §7 is **drie** omgevingen bij
-> AWS (robuuste, hassle-free OTAP). De implementatiebrief kiest er **één**
-> (budget). Dat laatste is een besluit van de eigenaar en gaat vóór — maar
-> beide documenten zeggen nu nog iets anders. Uitzoeken welke leidend is.
+#### Stap A staat halverwege — dit is het eerstvolgende werk
 
-**2. De onbegrepen 401 op `POST /platform/tenants`** — zie hieronder.
+**Doel:** de tenant AlingAdvies op productie, met realistische vulling.
+Dat is punt 3 én 4 van het doel in `CLAUDE.md` §0, en de enige echte blokkade.
+
+**Gemeten op productie, 13-08:**
+
+| | |
+|---|---|
+| tenants | **0** |
+| leveranciers | 0 |
+| gebruikers | 1 |
+| platformbeheerders | 1 (jij) |
+| migraties | 26 |
+| markering | `beschermd` |
+
+**Wat er onderweg bleek, en de aanpak verandert:**
+
+**Er is GEEN platformbeheerscherm in de frontend.** Gemeten: `/beheer/platform`,
+`/platform` en `/beheer/tenants` geven alle drie **404**. De route
+`POST /platform/tenants` bestaat alleen in de backend. De eigenaar zag terecht
+dat hij "niet naar platformbeheer kon" — die knop is nooit gebouwd.
+
+Dat verklaart ook de 401 van 12-08: die kwam niet uit een schermklik maar uit
+een handmatige aanroep waarbij het cookie niet meekwam.
+
+**De weg vooruit** (keuze eigenaar 13-08): de tenant via de API aanmaken met
+een sessiecookie uit de browser. De sessie moet van **productie** komen —
+`/productie/beheer`, niet `/beheer`. Door de gedeelde hostnaam is dat verschil
+aan het cookie niet te zien.
+
+```
+1. POST /productie/api/backend/platform/tenants
+     naam        AlingAdvies
+     adminNaam   Kees Maling
+     adminEmail  kees@alingadvies.nl
+   → tenant-id en uitnodigingslink teruglezen
+   → DE LINK BESTAAT MAAR ÉÉN KEER; geen route toont hem opnieuw
+
+2. node scripts/seed-demo-tenant.js --tenant <id> --extern
+   (--extern is nodig: productie is `beschermd`)
+
+3. Terugmeten UIT DE DATABASE, niet uit de melding
+```
+
+`seed-demo-tenant.js` is hier al op gebouwd: `--tenant` vult een **bestaande**
+tenant en weigert er een aan te maken — die hoort via de platformroute te
+ontstaan.
+
+**Overweeg eerst het alternatief:** een script dat zelf inlogt, zoals
+`platformbeheerder-inrichten.js` doet. Dan komt er geen sessiecookie in een
+chat te staan. Kost ~een half uur en is daarna herbruikbaar.
+
+#### Nieuwe bevinding: acceptatie draait oude code
+
+Op `/beheer` staat links onderin nog **`unknown`** als gebruikersnaam. Dat is
+Issue #133, op 11-08 gemerged in `main`. **De fix zit dus in main maar niet op
+acceptatie.**
+
+Waarom dat kan, staat uitgelegd in het plan (§"Waarom een fix in `main` kan
+zitten en niet in een omgeving"): tussen een merge en een draaiende container
+zit een handmatige `deploy`-stap, en niets meet of een omgeving nog op de
+laatste versie draait. Dat laatste is het werkelijke gat, en het hoort in
+**stap B** thuis.
+
+**Openstaande actie:** acceptatie bijwerken naar de huidige `main`, daarna
+controleren of `unknown` weg is.
+
+#### Wat er in deze sessie is afgerond
+
+- `feat/stap7-verify-omgevingen` gemerged naar main (fast-forward,
+  `verify:volledig` groen) en opgeruimd, lokaal én op GitHub
+- De AWS-implementatiebrief gecommit — stond ongecommit en zou een `/clear`
+  niet overleven
+- Backupbewijs van 13-08 gecommit (dump 05:23, 23 tabellen, geen problemen)
+- **De 401 op `POST /platform/tenants` onderzocht** — zie het blok verderop.
+  Kort: het ligt niet in de guard of de controller, maar in het cookietransport
+- **Misleidend label in `verify:volledig` gerepareerd** — stap 6 meldde
+  "productie" over een database die zich als `wegwerp` meldt
+  (branch `fix/verify-omgevingslabel`, gepusht, **nog niet gemerged**)
+
+#### Openstaande branches
+
+| Branch | Stand |
+|---|---|
+| `fix/verify-omgevingslabel` | gepusht, verify groen, **niet gemerged** |
+| `feat/robuuste-simulatie` | het plan + deze STATUS, **niet gepusht** |
+
+---
+
+### Punten die blijven staan
+
+**1. ~~Welke AWS-documenten zijn leidend?~~ — BESLIST op 13-08.**
+Voorlopig geen AWS. De implementatiebrief is gecommit; beide documenten blijven
+staan als naslag. De tegenspraak (één omgeving vs. drie) is **geparkeerd**, niet
+opgelost — pak hem op zodra AWS weer aan de orde is, niet stilzwijgend.
+
+De eigenaar noemde eerder een *"vernieuwde AWS-brief"* en een *"AWS start-up
+brief"*. **Die zijn nooit gevonden.** Vraag ernaar voordat er alsnog met AWS
+begonnen wordt.
+
+**2. ~~De onbegrepen 401 op `POST /platform/tenants`~~ — ONDERZOCHT op 13-08.**
+Niet in de guard of de controller; het is het cookietransport. Zie het
+onderzoeksblok verderop. Blokkeert stap A niet.
 
 **3. Open handelingen van de eigenaar** (kan hij alleen zelf, in de
 Tailscale-beheeromgeving):
@@ -52,6 +146,10 @@ echte `oid` uit Entra. Daarmee is het kip-eiprobleem doorbroken (punt 2 van
 Onderweg bleek dat Issue #133 (`unknown` als naam) wél in de broncode zat maar
 **niet in de gecompileerde `dist/`** op de machine van de eigenaar. Na
 opnieuw bouwen en nogmaals inloggen staat de naam goed.
+
+> **Achterhaald op 13-08:** op **acceptatie** staat `unknown` er nog steeds.
+> De fix zit in `main` maar die omgeving draait er niet op. Zie de bevinding
+> bovenaan en de uitleg in het plan.
 
 **Niet gelukt:** de tenant AlingAdvies. `POST /platform/tenants` weigerde met
 401, terwijl dezelfde sessie op een GET naar dezelfde route wél doorkwam en de
