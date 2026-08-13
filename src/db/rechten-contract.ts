@@ -117,6 +117,19 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   // is dat de veiligste stand.
   'clm.platform_admin': ALLEEN_LEZEN,
 
+  // clm.tenant_register (0026, ADR-017): welke tenants er bestaan. Staat buiten
+  // RLS omdat het bij geen enkele tenant hoort; de afscherming loopt via GRANT.
+  //
+  // Lezen mag, want `GET /platform/tenants` heeft het nodig. Schrijven niet:
+  // het register wordt door een trigger bijgehouden, en een tweede schrijfweg
+  // zou uiteen kunnen lopen met clm.tenant.
+  //
+  // Let op wat deze regel NIET zegt. Élke ingelogde gebruiker draait onder deze
+  // rol, dus dit GRANT alleen zou de tenantnamen aan iedere klant tonen. Wat
+  // dat tegenhoudt is PlatformAdminGuard vóór de route — de databaserol is de
+  // onderste laag, de guard de bovenste.
+  'clm.tenant_register': ALLEEN_LEZEN,
+
   // ── Volledig gesloten ──────────────────────────────────────────────────────
   //
   // clm.sessie (0010): expliciete REVOKE ALL. De sessie wordt opgezocht vóórdat
@@ -194,4 +207,26 @@ export const DEFINER_FUNCTIES: Readonly<Record<string, FunctieContract>> = {
   // Koppelt een oid aan een wachtende gebruikersrij op vertoon van het
   // uitnodigingstoken.
   koppel_eerste_login: DEFINER_STANDAARD,
+
+  // Houdt clm.tenant_register gelijk aan clm.tenant (0026, ADR-017).
+  //
+  // De smalste execute-lijst van alle definer-functies, en dat is opzet: dit is
+  // een trigger. De database roept hem aan, geen applicatierol — clm_api en
+  // clm_admin hebben hem dus niet nodig, anders dan bij DEFINER_STANDAARD.
+  //
+  // Alleen clm_migrator staat er, en dat is niet te vermijden: die maakt de
+  // functie aan en is daarmee eigenaar. Een eigenaar houdt EXECUTE, ook na
+  // `REVOKE ALL … FROM PUBLIC` — die REVOKE haalt wél het impliciete recht van
+  // PUBLIC weg, wat bij een SECURITY DEFINER-functie het punt is.
+  //
+  // Gemeten, niet aangenomen: de eerste versie van dit contract zei `[]` en de
+  // bewakingstest meldde "verwacht [], gevonden [clm_migrator]".
+  //
+  // SECURITY DEFINER is hier nodig omdat de schrijvende rol geen rechten op het
+  // register heeft. De functie is drie regels, raakt alleen het register,
+  // gebruikt geen dynamische SQL en leest niets buiten NEW.
+  tenant_register_bijhouden: {
+    searchPath: 'search_path=clm, pg_temp',
+    execute: ['clm_migrator'],
+  },
 };

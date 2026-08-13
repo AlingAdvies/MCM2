@@ -165,6 +165,52 @@ export const platformAdmin = clm.table('platform_admin', {
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
 });
 
+/**
+ * Welke tenants er bestaan (migratie 0026, ADR-017).
+ *
+ * ── Waarom deze tabel naast clm.tenant staat ────────────────────────────────
+ *
+ * `clm.tenant` heeft RLS met FORCE (0011) en geen enkele applicatierol heeft
+ * BYPASSRLS. Zonder tenantcontext levert een SELECT dus nul rijen — ook voor
+ * platformbeheer. Dat gaf op 2026-08-13 een kip-eiprobleem: elke
+ * platformhandeling vraagt een tenant-id, en er was geen weg om die te vinden.
+ *
+ * Erger nog: die nul rijen zagen eruit als "er staat niets". Precies de
+ * meetfout die op 2026-08-10 tot dataverlies leidde.
+ *
+ * ── Wat hier NIET in hoort ──────────────────────────────────────────────────
+ *
+ * Klantgegevens. Drie kolommen, en dat blijft zo. Toegang tot de gegevens van
+ * een tenant loopt via een tijdelijk `support`-membership (ADR-015), niet via
+ * deze tabel. Komt er ooit een kolom bij die iets over de klant zégt — aantal
+ * gebruikers, laatste activiteit, abonnement — dan is dat een nieuw besluit.
+ *
+ * ── Waarom de sleutel `register_id` heet en niet `tenant_id` ────────────────
+ *
+ * §7 van MCM2-CLAUDE.md zegt: iedere tabel met een `tenant_id`-kolom heeft RLS
+ * nodig, met policies op USING én WITH CHECK. `schema-inventory.ts` leidt
+ * "tenantgebonden" letterlijk uit die kolomnaam af, en drie bewakingstests
+ * maken de run rood als de RLS ontbreekt.
+ *
+ * Die regel is juist en mag niet verzwakt worden voor deze ene tabel. Hier is
+ * de uuid de sleutel van de registerrij, niet de tenant waartoe de rij behoort
+ * — dezelfde reden dat clm.platform_admin geen tenant_id heeft (0020). De naam
+ * `register_id` maakt dat verschil zichtbaar in plaats van het weg te
+ * definiëren.
+ *
+ * De tabel hoort bij geen enkele tenant, staat daarom buiten RLS, en is via
+ * GRANT dicht (rechten-contract: GEEN).
+ *
+ * Wordt bijgehouden door een trigger op clm.tenant, niet door applicatiecode.
+ */
+export const tenantRegister = clm.table('tenant_register', {
+  registerId: uuid('register_id').primaryKey(),
+  name: text('name').notNull(),
+  aangemaaktOp: timestamp('aangemaakt_op', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 // ─── clm schema: vendor-cluster ───────────────────────────────────────────
 
 export const vendor = clm.table(

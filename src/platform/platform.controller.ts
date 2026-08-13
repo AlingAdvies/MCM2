@@ -183,6 +183,27 @@ export class PlatformController {
     return `${basis}/api/backend/auth/login?uitnodiging=${encodeURIComponent(token)}`;
   }
 
+  /**
+   * Welke tenants er bestaan (ADR-017).
+   *
+   * Moet vóór `@Get('tenants/:id')` staan: Nest kiest de eerste route die past,
+   * en `:id` zou een pad zonder id niet vangen — maar de volgorde is hier hoe
+   * dan ook de leesbare: eerst de lijst, dan het detail.
+   *
+   * Geeft id, naam en aanmaakdatum. Geen ledenaantal en geen klantgegevens —
+   * zie `TenantRegel`. Wie in de gegevens van een tenant moet zijn, vraagt
+   * support-toegang aan via `POST tenants/:id/toegang` (ADR-015).
+   */
+  @Get('tenants')
+  async tenantsLijst(@Req() request: RequestMetSessie) {
+    // De sessie is gegarandeerd aanwezig: beide guards hebben gedraaid.
+    const sessie = request.sessie!;
+
+    const tenants = await this.platform.tenantsLijst(sessie.tenantId);
+
+    return { tenants };
+  }
+
   @Get('tenants/:id')
   async tenantLezen(@Param('id') id: string) {
     const tenant = await this.platform.tenantLezen(id);
