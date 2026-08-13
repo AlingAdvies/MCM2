@@ -117,6 +117,44 @@ Een periodieke leesquery houdt ze wakker. Kost een uur.
 
 ---
 
+---
+
+## Waarom een fix in `main` kan zitten en niet in een omgeving
+
+*Vraag van de eigenaar, 13-08. Waargenomen: `unknown` stond nog op acceptatie
+terwijl Issue #133 op 11-08 gemerged was.*
+
+**Er zit geen automatische stap tussen `main` en een draaiende omgeving.**
+
+```
+merge op main → CI → image naar GHCR → migraties naar staging
+──────────────────────────────────────────────────────────────
+→ npm run deploy:staging -- --versie sha-…        ← HANDMATIG
+```
+
+CI bouwt een **image** en zet het klaar in GHCR. Een draaiende container blijft
+draaien op de versie waarmee hij ooit gestart is; een merge raakt hem niet.
+Iemand moet `deploy` draaien. Dat is een bewust besluit (eigenaar, 12-08:
+handmatig starten is OK) — geen tekortkoming.
+
+Bij Issue #133 kwam er een tweede laag bij: de fix zat in de **broncode** maar
+niet in de gecompileerde `dist/` op de machine. Na opnieuw bouwen stond hij er
+wel. Zelfde klasse fout, één niveau dieper.
+
+### Het werkelijke gat
+
+Niet dat uitrollen handwerk is, maar dat **niets meet of een omgeving nog op de
+laatste versie draait**. Vandaag ontdek je dat door toevallig `unknown` op een
+scherm te zien.
+
+Dat is precies wat **stap B** moet opvangen: naast "antwoordt de omgeving nog"
+ook "op welke versie draait hij, en is dat de laatste?". `deploy:status` leest
+de draaiende versie al — die vergelijking is de aanvulling.
+
+> Let op de verwante valkuil: `deploy:status` toonde staging eerst helemaal niet
+> (PR #145). Een controlecommando met een blinde vlek stelt gerust over iets dat
+> het niet gemeten heeft.
+
 ## Wat dit plan bewust NIET doet
 
 | Niet | Waarom |
