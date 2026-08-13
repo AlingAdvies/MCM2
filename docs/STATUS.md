@@ -2,11 +2,71 @@
 
 ## Laatst bijgewerkt
 
-**2026-08-12.** **Stappen 3, 4, 5, 6 en 7 van het OTAP-plan zijn af; stap 8 is
-begonnen maar niet af** (zie hieronder), plus de
-issues #131, #132 en #133. De keten loopt nu van een merge tot aan productie,
-met vier remmen ervoor — de laptop wijst niet meer standaard naar de
-klantendatabase, en **nog maar één ding heet "productie"**.
+**2026-08-13.** Stap A is af (tenant AlingAdvies gevuld op productie) en er
+ligt een **pariteitscontract** — de norm die er drie dagen niet was.
+
+### 🔵 MORGEN BEGINNEN — lees dit eerst
+
+**De kern van 13-08:** na drie dagen werk stelde de eigenaar vast dat er
+structureel iets misging. De oorzaak bleek niet technisch maar normatief:
+**er was geen definitie van "gelijk".** Daardoor was elke afwijking een
+verrassing in plaats van een gedetecteerde overtreding.
+
+Lees in deze volgorde:
+
+| # | Document | Waarvoor |
+|---|---|---|
+| 1 | [`architectuur/pariteitscontract.md`](architectuur/pariteitscontract.md) | **De norm.** Acht indicatoren, wat mag verschillen, wat niet |
+| 2 | [`architectuur/plan-robuuste-simulatie-zonder-aws.md`](architectuur/plan-robuuste-simulatie-zonder-aws.md) | Het vierstappenplan; A is af, B/C/D open |
+
+**Het eerstvolgende werk, en het belangrijkste:**
+
+> **Maak de image-digest zichtbaar per omgeving.**
+
+Dat is het grootste gat uit het contract. Het onderzoek is ondubbelzinnig:
+voor runtime-pariteit is de image-digest doorslaggevend, niet de git-commit.
+Zolang niets meet welke code waar draait, blijft elke bevinding onbetrouwbaar —
+en dat is precies wat de drie dagen kostte.
+
+Concreet: een eindpunt in de applicatie dat zijn eigen image-digest en
+schemaversie teruggeeft, plus een controle die de omgevingen vergelijkt. Dan is
+"welke versie draait waar" voor het eerst beantwoordbaar zonder SSH.
+
+**Daarna:** acceptatie meetbaar maken (nu onbereikbaar vanaf de laptop, SSH
+weigert), `verify:omgevingen` uitbreiden van twee naar acht indicatoren, en
+stap B/C/D uit het plan.
+
+**Twee open branches, beide alleen documentatie, beide gepusht:**
+
+| Branch | Inhoud |
+|---|---|
+| `docs/stap-a-af` | Stand na het vullen van de tenant |
+| `docs/pariteitscontract` | De norm |
+
+**Wat nog steeds openstaat en niet is uitgezocht:**
+
+- **De 500-fout** op `/productie/api/backend/vendors` mét een geldig cookie.
+  Zonder cookie geeft dezelfde route netjes 401. Niet begrepen, niet opgelost.
+- **Inloggen brengt je in Platformbeheer, niet in AlingAdvies.**
+  `clm.sessie_aanmaken()` doet `ORDER BY created_at LIMIT 1`, en alle drie de
+  memberships hebben exact dezelfde `created_at` (13:44:37.848Z, in één
+  transactie ontstaan). Vijf sessies achter elkaar landden alle vijf in
+  Platformbeheer — in de praktijk stabiel, volgens de SQL-standaard niet
+  gegarandeerd. **Gevolg: de gevulde tenant is via de browser niet te zien.**
+  Besluit eigenaar 13-08: intrekken van het Platformbeheer-membership. Nog
+  niet uitgevoerd.
+- **Drie actieve `admin`-memberships voor één gebruiker** terwijl
+  `tenant_membership_een_actief_per_gebruiker` er één toestaat. Niet te rijmen
+  met ADR-015; blokkeert niets, maar kijk hiernaar vóór er een tweede echte
+  gebruiker bijkomt.
+
+---
+
+**Eerdere stand (2026-08-12).** Stappen 3, 4, 5, 6 en 7 van het OTAP-plan zijn
+af; stap 8 is begonnen maar niet af (zie hieronder), plus de issues #131, #132
+en #133. De keten loopt van een merge tot aan productie, met vier remmen
+ervoor — de laptop wijst niet meer standaard naar de klantendatabase, en **nog
+maar één ding heet "productie"**.
 
 ### ✅ STAP A IS AF — de tenant AlingAdvies draait op productie
 
