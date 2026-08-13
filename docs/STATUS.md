@@ -8,6 +8,81 @@ issues #131, #132 en #133. De keten loopt nu van een merge tot aan productie,
 met vier remmen ervoor — de laptop wijst niet meer standaard naar de
 klantendatabase, en **nog maar één ding heet "productie"**.
 
+### ✅ STAP A IS AF — de tenant AlingAdvies draait op productie
+
+*13-08, eind van de dag. Teruggelezen uit de database, niet uit een melding.*
+
+| | |
+|---|---|
+| leveranciers | **21** |
+| contactpersonen | 21 |
+| vragenlijsten | 2 (38 vragen) |
+| rondes | 2 |
+| responses | 6 — 3 `pending`, 3 `submitted` |
+| antwoorden | 26 |
+| oordelen | 4 |
+
+Daarmee zijn **punt 3 en 4 van het doel** (CLAUDE.md §0) van "nee" naar "ja"
+gegaan: één echte tenant, gevuld met mock data die als klantdata behandeld
+wordt, bruikbaar voor demo, test én bewijs.
+
+Tenant-id: `c9f2a68a-73e2-4f64-8e32-e3e010331edb` — dezelfde die op 10-08
+verloren ging. De tenantrij had het opruimen overleefd; alleen de inhoud was
+weg.
+
+**De uitnodigingslinks zijn eenmalig afgedrukt en staan in de sessie van 13-08.**
+De database bewaart alleen een hash; geen route kan ze terugtonen. Zijn ze weg,
+dan is opnieuw seeden de enige weg.
+
+**De drie seed-gebruikers kunnen niet inloggen** — hun `external_subject`
+begint met `demo:`. Dat is opzet: zo is zichtbaar welke gebruikers nep zijn.
+Inloggen doe je als `kees@alingadvies.nl`, admin in deze tenant.
+
+#### Twee meetfouten van dezelfde soort, beide op één dag
+
+Allebei gaven ze **nul** waar iets stond, en allebei zijn ze de vorm van
+2026-08-10:
+
+1. `clm.tenant` gaf 0 tenants → **RLS zonder tenantcontext**. Er stonden er drie.
+2. `clm.survey_review` gaf 0 oordelen → **actor niet gezet**. Er zijn er vier.
+
+De tweede is de subtielere: een tenantcontext alleen is niet genoeg. Op
+`survey_review` staat `clm.current_actor() = 'medewerker'` in de policy — een
+leverancier zit in dezelfde tenant als zijn beoordelaar en mag het oordeel niet
+zien. Zet dus `app.current_actor` mee vóór je concludeert dat er niets staat.
+
+#### Nieuw in `.env`: `PRODUCTIE_RUNTIME_URL`
+
+Het runtime-adres van productie stond nergens meer sinds stap 5 — alleen het
+migratoradres overleefde als `NOOD_PRODUCTIE_URL`. Voor het seeden was het
+nodig: `seed-demo-tenant.js` weigert `clm_migrator`, en terecht, want een seed
+die langs RLS gaat bewijst niets over of de data via de normale weg bereikbaar
+is.
+
+**Geen enkel script leest deze naam** — zelfde bescherming als
+`NOOD_PRODUCTIE_URL`. Erbij komen kost twee bewuste stappen: het adres meegeven
+én `--extern`.
+
+> **De Supabase-pooler-valkuil kwam weer langs, maar kostte nu een minuut.**
+> Na `ALTER ROLE … WITH PASSWORD` gaf de eerste verbindingspoging
+> `password authentication failed`; de tweede, een halve minuut later, werkte.
+> Op 10-08 kostte dit twee uur. Loop je hier weer tegenaan: probeer het gewoon
+> nog een keer vóór je gaat resetten.
+
+#### Wat er nog open staat voor de tenant
+
+- **Er is een derde tenant `demo`** (`a0a1cdc9…`) op productie die nergens in
+  de documentatie voorkomt. Leeg, 1 gebruiker. Besluit eigenaar 13-08: **laten
+  staan**, later beslissen of hij blijft.
+- **Drie actieve `admin`-memberships voor één gebruiker**
+  (`kees@alingadvies.nl`, in AlingAdvies, demo en Platformbeheer) terwijl
+  `tenant_membership_een_actief_per_gebruiker` er één toestaat waar
+  `role <> 'support'`. Niet uitgezocht — het blokkeert niets, maar het is niet
+  te rijmen met ADR-015. Kijk hiernaar vóór er een tweede echte gebruiker
+  bijkomt.
+
+---
+
 ### ⚠️ HIER VERDER — stand 2026-08-13, einde sessie
 
 **Besluit van de eigenaar (13-08): voorlopig GEEN AWS, geen gecompliceerde
@@ -19,7 +94,16 @@ De AWS-tegenspraak (één omgeving vs. drie) is daarmee **geparkeerd, niet
 opgelost**. Advies dat er lag: drie omgevingsvormen, twee permanente
 rekeningen. Pak het pas op als AWS weer aan de orde is.
 
-#### Stap A staat halverwege — dit is het eerstvolgende werk
+#### ~~Stap A staat halverwege~~ — AF, zie het blok hierboven
+
+*Onderstaande beschrijving is van eerder op 13-08 en is achterhaald. Hij blijft
+staan omdat de meting van de uitgangssituatie klopt en omdat er twee dingen in
+staan die de volgende sessie moet weten: dat er géén platformbeheerscherm is,
+en waarom de sessie van productie moet komen.*
+
+**Wat er sindsdien is gebeurd:** het kip-eiprobleem is opgelost met een
+tenantregister (ADR-017, migratie 0026), `GET /platform/tenants` somt de
+tenants op, en de tenant is gevuld.
 
 **Doel:** de tenant AlingAdvies op productie, met realistische vulling.
 Dat is punt 3 én 4 van het doel in `CLAUDE.md` §0, en de enige echte blokkade.
