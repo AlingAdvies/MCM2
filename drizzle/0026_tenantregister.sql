@@ -192,21 +192,21 @@ REVOKE ALL ON clm.tenant_register FROM clm_api;--> statement-breakpoint
 REVOKE ALL ON clm.tenant_register FROM clm_admin;--> statement-breakpoint
 REVOKE ALL ON clm.tenant_register FROM clm_api_runtime;--> statement-breakpoint
 
--- Alleen de migratierol mag erbij. De applicatie leest het register niet
--- rechtstreeks: de platformroute draait onder clm_api_runtime en zou dus ook
--- geen toegang moeten hebben. Dat is opzet — zie de noot hieronder.
 GRANT SELECT, INSERT, UPDATE ON clm.tenant_register TO clm_migrator;--> statement-breakpoint
 
--- ── NOOT VOOR DE VOLGENDE STAP ──────────────────────────────────────────────
+-- ── Leesrecht voor de applicatie, en alleen lezen ───────────────────────────
 --
--- Er is bewust nog GEEN leesrecht voor clm_api_runtime. Daarmee kan de
--- applicatie het register vandaag niet uitlezen, en dat is de veilige stand:
--- een tabel die niemand kan lezen lekt niets.
+-- `GET /platform/tenants` draait onder clm_api_runtime en heeft dit nodig.
 --
--- Zodra `GET /platform/tenants` gebouwd wordt, is één GRANT nodig:
+-- SELECT en niets meer. Het register wordt door een trigger bijgehouden, niet
+-- door de applicatie; INSERT of UPDATE zou een tweede schrijfweg openen die
+-- uiteen kan lopen met clm.tenant. De REVOKE hierboven haalde de automatische
+-- rechten uit 0001 weg — dit zet er precies één voor terug.
 --
---     GRANT SELECT ON clm.tenant_register TO clm_api_runtime;
---
--- Die hoort in de migratie die dat endpoint begeleidt, samen met de
--- verificatie dat PlatformAdminGuard ervoor staat. Hem hier alvast zetten zou
--- rechten uitdelen voor een route die nog niet bestaat.
+-- Waarom dit veilig is ondanks dat élke ingelogde gebruiker onder deze rol
+-- draait: de route zit achter PlatformAdminGuard, die per verzoek in
+-- clm.platform_admin kijkt. De databaserol is de onderste laag, de guard de
+-- bovenste. Zonder de guard zou dit GRANT de tenantnamen aan iedere klant
+-- tonen — dat is de reden dat het GRANT en de route in dezelfde wijziging
+-- horen, en niet los van elkaar worden uitgerold.
+GRANT SELECT ON clm.tenant_register TO clm_api;--> statement-breakpoint

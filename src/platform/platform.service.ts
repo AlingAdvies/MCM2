@@ -43,6 +43,25 @@ export interface TenantOverzicht {
 }
 
 /**
+ * Eén regel uit de tenantlijst (ADR-017).
+ *
+ * Bewust géén `aantalLeden`, anders dan `TenantOverzicht` hierboven. Dat getal
+ * komt uit `clm.tenant_membership`, en die staat achter RLS — per tenant
+ * opvraagbaar, niet over tenants heen. Het hier alsnog willen tonen zou een
+ * tweede leesweg buiten de tenantgrens vragen, en dat is precies wat ADR-015
+ * uitsluit.
+ *
+ * Wie meer wil weten over één tenant gebruikt `GET /platform/tenants/:id`, en
+ * wie in de gegevens moet zijn vraagt support-toegang aan. Deze lijst is de
+ * telefoonlijst, niet het dossier.
+ */
+export interface TenantRegel {
+  readonly tenantId: string;
+  readonly naam: string;
+  readonly aangemaaktOp: Date;
+}
+
+/**
  * Wat het aanmaken oplevert: de tenant plus de uitnodiging voor zijn eerste
  * beheerder.
  *
@@ -264,16 +283,61 @@ export class PlatformService {
   }
 
   /**
-   * Alle tenants, voor het beheerscherm.
+   * Welke tenants er bestaan (ADR-017).
    *
-   * Deze query moet langs RLS heen kijken — een lijst van álle tenants is per
-   * definitie tenant-overstijgend. Dat kan alleen omdat clm.tenant een
-   * policy heeft op current_tenant_id(): zonder context levert hij niets op.
-   * Vandaar de lus over de tenants die de beheerder mag zien, niet één query.
+   * ── Waarom dit uit een apart register komt ────────────────────────────────
    *
-   * Voor nu is dat één tenant per aanroep en dus onbruikbaar als overzicht.
-   * De lijst komt in fase 3, samen met het scherm; hier staat alleen wat de
-   * route vandaag nodig heeft.
+   * `clm.tenant` heeft RLS met FORCE en `clm_api_runtime` heeft geen
+   * BYPASSRLS. Een `SELECT * FROM clm.tenant` levert daarom nul rijen op —
+   * ook voor een platformbeheerder. Dat is geen tekortkoming maar het ontwerp:
+   * de tenantgrens geldt voor iedereen.
+   *
+   * Op 2026-08-13 bleek wat dat kost: `POST /platform/tenants` meldde 409
+   * "bestaat al" terwijl een telling nul gaf. Nul rijen betekende "je mag
+   * niets zien", niet "er staat niets" — dezelfde meetfout die op 2026-08-10
+   * tot dataverlies leidde.
+   *
+   * `clm.tenant_register` staat buiten RLS en bevat uitsluitend id, naam en
+   * aanmaakdatum. Een trigger houdt hem gelijk aan `clm.tenant`.
+   *
+   * ── Waarom dit tóch via withTenant() loopt ────────────────────────────────
+   *
+   * Het register kent geen RLS, dus de tenantcontext doet er niets. Toch gaat
+   * de query er doorheen, om dezelfde reden als in PlatformAdminGuard:
+   * DatabaseService is de enige weg naar de database (ADR-008). Een tweede,
+   * contextloze weg openen zou de uitzondering zijn waarvan dat ontwerp juist
+   * afziet.
+   *
+   * Gemeten op een wegwerpdatabase: met de tenantcontext op één tenant levert
+   * deze query alle registerrijen op. De tenant van de sessie is hier dus
+   * betekenisloos, precies zoals in de guard.
+   */
+  async tenantsLijst(sessieTenantId: string): Promise<TenantRegel[]> {
+    return this.db.withTenant(sessieTenantId, async (tx) => {
+      const { rows } = await tx.execute<{
+        register_id: string;
+        name: string;
+        aangemaakt_op: string;
+      }>(
+        sql`SELECT register_id, name, aangemaakt_op
+              FROM clm.tenant_register
+             ORDER BY name`,
+      );
+
+      return rows.map((rij) => ({
+        tenantId: rij.register_id,
+        naam: rij.name,
+        aangemaaktOp: new Date(rij.aangemaakt_op),
+      }));
+    });
+  }
+
+  /**
+   * Eén tenant, met het aantal leden erbij.
+   *
+   * Anders dan `tenantsLijst()` leest deze wél uit `clm.tenant` zelf, binnen de
+   * tenantcontext van die ene tenant. Dat kan hier omdat de id bekend is — en
+   * dat is precies wat het register mogelijk maakt.
    */
   async tenantLezen(tenantId: string): Promise<TenantOverzicht | null> {
     return this.db.withTenant(tenantId, async (tx) => {

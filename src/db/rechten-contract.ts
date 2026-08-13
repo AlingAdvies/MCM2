@@ -117,6 +117,19 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   // is dat de veiligste stand.
   'clm.platform_admin': ALLEEN_LEZEN,
 
+  // clm.tenant_register (0026, ADR-017): welke tenants er bestaan. Staat buiten
+  // RLS omdat het bij geen enkele tenant hoort; de afscherming loopt via GRANT.
+  //
+  // Lezen mag, want `GET /platform/tenants` heeft het nodig. Schrijven niet:
+  // het register wordt door een trigger bijgehouden, en een tweede schrijfweg
+  // zou uiteen kunnen lopen met clm.tenant.
+  //
+  // Let op wat deze regel NIET zegt. Élke ingelogde gebruiker draait onder deze
+  // rol, dus dit GRANT alleen zou de tenantnamen aan iedere klant tonen. Wat
+  // dat tegenhoudt is PlatformAdminGuard vóór de route — de databaserol is de
+  // onderste laag, de guard de bovenste.
+  'clm.tenant_register': ALLEEN_LEZEN,
+
   // ── Volledig gesloten ──────────────────────────────────────────────────────
   //
   // clm.sessie (0010): expliciete REVOKE ALL. De sessie wordt opgezocht vóórdat
@@ -125,16 +138,6 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   // Bewezen in test/sessie.e2e-spec.ts: een directe SELECT en INSERT geven
   // beide "permission denied".
   'clm.sessie': GEEN,
-
-  // clm.tenant_register (0026, ADR-017): welke tenants er bestaan. Staat buiten
-  // RLS omdat het bij geen enkele tenant hoort, en is daarom via GRANT dicht.
-  //
-  // GEEN en niet ALLEEN_LEZEN, hoewel de platformroute er straks bij moet: er
-  // is vandaag nog geen `GET /platform/tenants` die opsomt. Rechten uitdelen
-  // voor een route die niet bestaat is precies verkeerd om — de migratie die
-  // dat endpoint begeleidt zet het GRANT erbij, samen met de verificatie dat
-  // PlatformAdminGuard ervoor staat.
-  'clm.tenant_register': GEEN,
 
   // ── Audit ──────────────────────────────────────────────────────────────────
   //

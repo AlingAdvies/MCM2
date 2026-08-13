@@ -48,6 +48,16 @@ interface TenantAntwoord {
 
 const body = (res: { body: unknown }) => res.body as TenantAntwoord;
 
+/** Eén regel uit `GET /platform/tenants` (ADR-017). */
+interface TenantRegel {
+  tenantId: string;
+  naam: string;
+  aangemaaktOp: string;
+}
+
+const lijstBody = (res: { body: unknown }) =>
+  (res.body as { tenants: TenantRegel[] }).tenants;
+
 /** Migratierol, altijd naar dezelfde database als DATABASE_URL — zie 0020. */
 function migratieUrl(): string {
   const runtime = process.env.DATABASE_URL;
@@ -201,6 +211,161 @@ describe('Platformroutes (e2e, ADR-015)', () => {
         .set('Cookie', cookieGewoon)
         .expect(403);
     });
+
+    // ── De tenantlijst (ADR-017) ────────────────────────────────────────────
+    //
+    // Deze twee tests dragen meer gewicht dan hun omvang suggereert.
+    //
+    // clm.tenant_register staat buiten RLS en clm_api heeft er SELECT op —
+    // nodig, want de route moet hem lezen. Maar élke ingelogde gebruiker
+    // draait onder diezelfde rol. Wat een klant tegenhoudt is uitsluitend
+    // PlatformAdminGuard vóór de route.
+    //
+    // Valt die guard weg, dan ziet iedere klantbeheerder de namen van alle
+    // andere klanten. De databaselaag vangt dat niet af, dus deze test is de
+    // enige bewaking.
+
+    it('weigert de tenantlijst zonder sessie met 401', async () => {
+      await request(server).get('/platform/tenants').expect(401);
+    });
+
+    it('weigert de tenantlijst voor een gewone tenant-admin met 403', async () => {
+      const antwoord = await request(server)
+        .get('/platform/tenants')
+        .set('Cookie', cookieGewoon)
+        .expect(403);
+
+      expect(JSON.stringify(antwoord.body)).toContain('platformbeheer');
+    });
+  });
+
+  describe('de tenantlijst', () => {
+    it('toont tenants waar de beheerder zelf geen lid van is', async () => {
+      // De kern van ADR-017: de lijst moet lángs de tenantgrens kijken. De
+      // beheerder is lid van zijn eigen tenant; een tenant waar hij géén
+      // membership in heeft hoort er evengoed in te staan. Lukt dat, dan is het
+      // kip-eiprobleem opgelost waarvoor het register bestaat.
+      //
+      // De test maakt die vreemde tenant zélf aan en telt niet op wat andere
+      // suites achterlaten. Alle e2e-suites delen één database en draaien
+      // parallel; een verwachting als "er staat meer dan één tenant in" is dan
+      // afhankelijk van de volgorde. Precies dat maakte deze test los groen en
+      // in de volledige run rood — zie het runbook, "Een nieuwe e2e-suite
+      // schrijven".
+      const naam = `Vreemde tenant (lijst) ${Date.now()}`;
+
+      const gemaakt = await request(server)
+        .post('/platform/tenants')
+        .set('Cookie', cookieBeheerder)
+        .send({
+          naam,
+          adminNaam: 'Vreemde Beheerder',
+          adminEmail: `vreemd-${Date.now()}@voorbeeld.nl`,
+        })
+        .expect(201);
+
+      const uit = body(gemaakt);
+      expect(uit.tenantId).toBeDefined();
+      aangemaakt.push(uit.tenantId!);
+
+      const antwoord = await request(server)
+        .get('/platform/tenants')
+        .set('Cookie', cookieBeheerder)
+        .expect(200);
+
+      const gevonden = lijstBody(antwoord).find(
+        (t) => t.tenantId === uit.tenantId,
+      );
+
+      // De beheerder heeft in deze nieuwe tenant geen membership — de eerste
+      // admin is 'Vreemde Beheerder', niet hijzelf — en ziet hem toch.
+      expect(gevonden).toBeDefined();
+      expect(gevonden?.naam).toBe(naam);
+    }, 20_000);
+
+    it('geeft per tenant een id, een naam en een datum', async () => {
+      const antwoord = await request(server)
+        .get('/platform/tenants')
+        .set('Cookie', cookieBeheerder)
+        .expect(200);
+
+      // De eigen tenant staat er gegarandeerd in; die is in beforeAll gemaakt.
+      // Andere suites vullen dezelfde database, dus toetsen op de vorm van
+      // álle rijen zou meeliften op wat zij toevallig achterlaten.
+      const eigen = lijstBody(antwoord).find(
+        (t) => t.tenantId === TENANT_THUIS,
+      );
+
+      expect(eigen).toBeDefined();
+      expect(eigen?.tenantId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      );
+      expect(typeof eigen?.naam).toBe('string');
+      expect(Number.isNaN(Date.parse(eigen!.aangemaaktOp))).toBe(false);
+    });
+
+    it('lekt geen klantgegevens — alleen deze drie velden', async () => {
+      // Het register is de telefoonlijst, niet het dossier. Komt hier ooit een
+      // veld bij dat iets over de klant zegt (ledenaantal, laatste activiteit,
+      // abonnement), dan is dat een nieuw besluit en geen uitbreiding —
+      // ADR-017. Deze test maakt die grens hard.
+      //
+      // Op de eigen tenant en niet op alle rijen: het antwoordformaat is per
+      // rij hetzelfde, en meeliften op rijen van andere suites maakt de test
+      // afhankelijk van de volgorde.
+      const antwoord = await request(server)
+        .get('/platform/tenants')
+        .set('Cookie', cookieBeheerder)
+        .expect(200);
+
+      const eigen = lijstBody(antwoord).find(
+        (t) => t.tenantId === TENANT_THUIS,
+      );
+
+      expect(eigen).toBeDefined();
+      expect(Object.keys(eigen!).sort()).toEqual([
+        'aangemaaktOp',
+        'naam',
+        'tenantId',
+      ]);
+    });
+
+    it('neemt een nieuw aangemaakte tenant meteen op', async () => {
+      // Bewijst de trigger langs de route in plaats van in de database: een
+      // tenant die via POST ontstaat hoort zonder tussenkomst in de lijst te
+      // staan.
+      const naam = `Lijsttoets ${Date.now()}`;
+
+      const gemaakt = await request(server)
+        .post('/platform/tenants')
+        .set('Cookie', cookieBeheerder)
+        .send({
+          naam,
+          adminNaam: 'Lijst Toetser',
+          adminEmail: `lijsttoets-${Date.now()}@voorbeeld.nl`,
+        })
+        .expect(201);
+
+      const uit = body(gemaakt);
+
+      // Vastleggen vóór de asserties — zelfde reden als in "een tenant
+      // aanmaken": faalt er hierna iets, dan ruimt afterAll deze tenant niet
+      // op en strandt de volgende run op de unieke naamindex.
+      expect(uit.tenantId).toBeDefined();
+      aangemaakt.push(uit.tenantId!);
+
+      const lijst = await request(server)
+        .get('/platform/tenants')
+        .set('Cookie', cookieBeheerder)
+        .expect(200);
+
+      const gevonden = lijstBody(lijst).find(
+        (t) => t.tenantId === uit.tenantId,
+      );
+
+      expect(gevonden).toBeDefined();
+      expect(gevonden?.naam).toBe(naam);
+    }, 20_000);
   });
 
   describe('een tenant aanmaken', () => {
@@ -383,7 +548,21 @@ describe('Platformroutes (e2e, ADR-015)', () => {
     });
 
     it('legt het aanmaken vast in de audit trail', async () => {
-      const tenantId = aangemaakt[0];
+      // Op naam zoeken en niet via `aangemaakt[0]`: die index gaat ervan uit
+      // dat 'AlingAdvies' de eerste tenant van de suite is. Sinds de
+      // tenantlijst (ADR-017) maakt ook een andere test een tenant aan, en dan
+      // verschuift die aanname stilzwijgend — de test faalde dan op de naam in
+      // plaats van op het gedrag dat hij bewaakt.
+      const lijst = await request(server)
+        .get('/platform/tenants')
+        .set('Cookie', cookieBeheerder)
+        .expect(200);
+
+      const tenantId = lijstBody(lijst).find(
+        (t) => t.naam === 'AlingAdvies',
+      )?.tenantId;
+
+      expect(tenantId).toBeDefined();
 
       await client.query('BEGIN');
       await client.query(`SET LOCAL app.current_tenant_id = '${tenantId}'`);
