@@ -126,6 +126,16 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   // beide "permission denied".
   'clm.sessie': GEEN,
 
+  // clm.tenant_register (0026, ADR-017): welke tenants er bestaan. Staat buiten
+  // RLS omdat het bij geen enkele tenant hoort, en is daarom via GRANT dicht.
+  //
+  // GEEN en niet ALLEEN_LEZEN, hoewel de platformroute er straks bij moet: er
+  // is vandaag nog geen `GET /platform/tenants` die opsomt. Rechten uitdelen
+  // voor een route die niet bestaat is precies verkeerd om — de migratie die
+  // dat endpoint begeleidt zet het GRANT erbij, samen met de verificatie dat
+  // PlatformAdminGuard ervoor staat.
+  'clm.tenant_register': GEEN,
+
   // ── Audit ──────────────────────────────────────────────────────────────────
   //
   // Append-only in de striktste zin (§7.7): schrijven mag, wijzigen en
@@ -194,4 +204,26 @@ export const DEFINER_FUNCTIES: Readonly<Record<string, FunctieContract>> = {
   // Koppelt een oid aan een wachtende gebruikersrij op vertoon van het
   // uitnodigingstoken.
   koppel_eerste_login: DEFINER_STANDAARD,
+
+  // Houdt clm.tenant_register gelijk aan clm.tenant (0026, ADR-017).
+  //
+  // De smalste execute-lijst van alle definer-functies, en dat is opzet: dit is
+  // een trigger. De database roept hem aan, geen applicatierol — clm_api en
+  // clm_admin hebben hem dus niet nodig, anders dan bij DEFINER_STANDAARD.
+  //
+  // Alleen clm_migrator staat er, en dat is niet te vermijden: die maakt de
+  // functie aan en is daarmee eigenaar. Een eigenaar houdt EXECUTE, ook na
+  // `REVOKE ALL … FROM PUBLIC` — die REVOKE haalt wél het impliciete recht van
+  // PUBLIC weg, wat bij een SECURITY DEFINER-functie het punt is.
+  //
+  // Gemeten, niet aangenomen: de eerste versie van dit contract zei `[]` en de
+  // bewakingstest meldde "verwacht [], gevonden [clm_migrator]".
+  //
+  // SECURITY DEFINER is hier nodig omdat de schrijvende rol geen rechten op het
+  // register heeft. De functie is drie regels, raakt alleen het register,
+  // gebruikt geen dynamische SQL en leest niets buiten NEW.
+  tenant_register_bijhouden: {
+    searchPath: 'search_path=clm, pg_temp',
+    execute: ['clm_migrator'],
+  },
 };
