@@ -53,11 +53,53 @@ Onderweg bleek dat Issue #133 (`unknown` als naam) wél in de broncode zat maar
 **niet in de gecompileerde `dist/`** op de machine van de eigenaar. Na
 opnieuw bouwen en nogmaals inloggen staat de naam goed.
 
-**Niet gelukt:** de tenant AlingAdvies. `POST /platform/tenants` weigert met
-401, terwijl dezelfde sessie op een GET naar dezelfde route wél doorkomt en de
-sessie aantoonbaar geldig in `clm.sessie` staat. **Oorzaak niet gevonden** —
-dat is het eerste dat de volgende sessie moet uitzoeken. Kijk naar de guard en
-de controller naast elkaar; het verschil zit tussen lezen en schrijven.
+**Niet gelukt:** de tenant AlingAdvies. `POST /platform/tenants` weigerde met
+401, terwijl dezelfde sessie op een GET naar dezelfde route wél doorkwam en de
+sessie aantoonbaar geldig in `clm.sessie` stond.
+
+#### Onderzocht op 13-08: het ligt níét in de guard of de controller
+
+De aanwijzing die hier stond — *"het verschil zit tussen lezen en schrijven"* —
+wijst de verkeerde kant op. In de code bestáát dat verschil niet:
+
+| Meting | Uitkomst |
+|---|---|
+| De guards staan op **klasseniveau** (`platform.controller.ts:43`) | GET en POST passeren exact dezelfde twee guards |
+| `PlatformAdminGuard` gooit uitsluitend `ForbiddenException` | die guard kan **geen 401 geven**, alleen 403 |
+| `TenantContextGuard` is de enige 401-bron, en hangt volledig aan het cookie | geen cookie → 401, ongeacht de methode |
+| GET én POST zonder cookie, gemeten op acceptatie | **beide 401** — symmetrisch |
+| `platform-routes.e2e-spec.ts` doet 10+ keer `POST /platform/tenants` mét cookie | groen in `verify:volledig` van 13-08 |
+
+**De route werkt zodra het cookie meekomt.** De 401 is dus geen
+autorisatiefout maar een **cookie dat de server niet bereikt**.
+
+#### Twee kandidaten, beide gevolg van het sub-pad
+
+1. **`sameSite: 'lax'`** (`src/auth/sessie.ts:110`). Lax stuurt het cookie wél
+   mee bij een GET-navigatie op topniveau en **niet** bij een cross-site POST.
+   Dat is letterlijk een verschil tussen lezen en schrijven — maar het zit in de
+   **browser**, vóór het verzoek de server raakt, niet in onze code.
+2. **Botsende cookienaam.** Acceptatie en productie delen één hostnaam
+   (`saxombp.tail4b29b.ts.net`) en gebruiken dezelfde cookienaam op `path=/`.
+   Ze overschrijven elkaars sessiecookie: wie op acceptatie inlogt, wist de
+   productiesessie.
+
+Daar komt bij dat `deploy-inrichten.js:370-371` `PORTAAL_BASIS_URL` en
+`UITNODIGING_BASIS_URL` op `http://saxombp:<poort>` zet — kaal http met een
+poortnummer, terwijl productie via `https://…/productie` benaderd wordt. Weer
+een andere herkomst.
+
+**Alle drie hebben dezelfde wortel: één hostnaam voor drie omgevingen.** Dit is
+geen los raadsel maar het bekende gebrek van het sub-pad, dat CLAUDE.md §0 al
+aanwijst als niet-AWS-vormig. Een eigen hostnaam per omgeving laat het
+verdwijnen — op AWS bestaat het niet.
+
+**Niet doen:** `sameSite` naar `'none'` zetten om dit weg te nemen. Dat verzwakt
+de CSRF-bescherming voor een probleem dat de omgeving veroorzaakt, niet de code.
+
+**Openstaand:** welke van de twee het was, is niet vastgesteld — de reproductie
+van 12-08 is niet meer te achterhalen. Dat hoeft ook niet vóór de hostnaamkeuze:
+beide verdwijnen ermee.
 
 **Wat er op productie is veranderd (12-08):**
 

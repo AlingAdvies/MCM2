@@ -566,6 +566,39 @@ function maakSessie() {
  * Wat het wél doet is het zichtbaar maken op het moment dat je toch al kijkt.
  * Dat is precies wat er vijf dagen ontbrak.
  */
+/**
+ * Vraagt de database zelf hoe hij heet: `clm.omgeving` (migratie 0019).
+ *
+ * Uitsluitend SELECT, en faalt bewust stil naar '?' — dit is een label in een
+ * melding, geen controle. Een onbereikbare database of een ontbrekende tabel
+ * hoort de doorloop niet te laten omvallen; de stap eronder meldt dat zelf al.
+ *
+ * Zelfde query als scripts/verify-omgevingen.js regel 188.
+ */
+function leesOmgevingsnaam(url) {
+  if (!url) {
+    return '?';
+  }
+
+  // Rechtstreeks spawnSync en NIET draai(): die zet op Windows `shell: true`,
+  // en dan loopt een `-e`-script met aanhalingstekens stuk op de shell. Gemeten
+  // op 2026-08-13: het label bleef '?' terwijl dezelfde query los `wegwerp` gaf.
+  const script =
+    "const{Client}=require('pg');" +
+    'const c=new Client({connectionString:process.env.OMGEVING_URL});' +
+    "c.connect().then(()=>c.query('SELECT soort FROM clm.omgeving LIMIT 1'))" +
+    ".then(r=>{process.stdout.write(r.rows[0]?.soort??'onbekend');return c.end()})" +
+    ".catch(()=>{process.stdout.write('onbereikbaar');return c.end()});";
+
+  const resultaat = spawnSync(process.execPath, ['-e', script], {
+    stdio: 'pipe',
+    encoding: 'utf8',
+    env: { ...process.env, OMGEVING_URL: url },
+  });
+
+  return resultaat.status === 0 ? (resultaat.stdout || '?').trim() : '?';
+}
+
 function controleerOmgevingsdrift() {
   // .env hier inlezen en niet bovenaan het script.
   //
@@ -581,8 +614,17 @@ function controleerOmgevingsdrift() {
   const dotenv = require('dotenv');
   const { parsed } = dotenv.config({ processEnv: {} });
 
+  // Het label komt uit de database zelf, niet uit een aanname hier.
+  //
+  // Hier stond 'productie (DATABASE_URL)'. Dat klopte tot stap 5 (2026-08-11);
+  // sindsdien wijst DATABASE_URL naar STAGING en meldde deze stap dus
+  // "productie: schema komt overeen" over een database die niet gemeten was.
+  // Geruststellen over iets dat je niet gemeten hebt is precies de faalvorm van
+  // #131 en #145 — en hij wordt zes regels hierboven nog benoemd.
+  //
+  // `clm.omgeving` is de bestaande waarheidsbron (migratie 0019, ADR-014).
   const omgevingen = [
-    { naam: 'productie (DATABASE_URL)', url: parsed?.DATABASE_URL },
+    { naam: `DATABASE_URL (${leesOmgevingsnaam(parsed?.DATABASE_URL)})`, url: parsed?.DATABASE_URL },
   ];
 
   const bevindingen = [];
