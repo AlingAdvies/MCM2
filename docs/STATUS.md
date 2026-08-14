@@ -2,15 +2,14 @@
 
 ## Laatst bijgewerkt
 
-**2026-08-13.** Stap A is af (tenant AlingAdvies gevuld op productie) en er
-ligt een **pariteitscontract** — de norm die er drie dagen niet was.
+**2026-08-14.** De image-digest is zichtbaar per omgeving (werkstroom 1 af),
+en de gevulde tenant AlingAdvies is voor het eerst via de browser bereikbaar
+(werkstroom 2 af) — met een tweede identiteit, niet met de oplossing die op
+13-08 nog als besluit stond. Zie **"CORRECTIE OP 13-08"** hieronder: twee van
+de drie punten die gisteren als open genoteerd stonden, bleken bij nameting
+anders te liggen dan opgeschreven.
 
-### 🔵 MORGEN BEGINNEN — lees dit eerst
-
-**De kern van 13-08:** na drie dagen werk stelde de eigenaar vast dat er
-structureel iets misging. De oorzaak bleek niet technisch maar normatief:
-**er was geen definitie van "gelijk".** Daardoor was elke afwijking een
-verrassing in plaats van een gedetecteerde overtreding.
+### 🔵 VOLGENDE KEER BEGINNEN — lees dit eerst
 
 Lees in deze volgorde:
 
@@ -18,47 +17,124 @@ Lees in deze volgorde:
 |---|---|---|
 | 1 | [`architectuur/pariteitscontract.md`](architectuur/pariteitscontract.md) | **De norm.** Acht indicatoren, wat mag verschillen, wat niet |
 | 2 | [`architectuur/plan-robuuste-simulatie-zonder-aws.md`](architectuur/plan-robuuste-simulatie-zonder-aws.md) | Het vierstappenplan; A is af, B/C/D open |
+| 3 | ADR-018 (nog te schrijven — zie onderaan dit blok) | Waarom twee identiteiten, niet twee memberships op één account |
 
-**Het eerstvolgende werk, en het belangrijkste:**
+**Werkstroom 1 — image-digest — is af.** `/health` meldt nu commit,
+bouwtijdstip en de echte image-digests van backend en frontend.
+`verify:omgevingen` heeft er een zesde controle bij. Beproefd: 66/66
+e2e-tests, `verify:volledig` groen, en tegen de drie echte omgevingen gedraaid
+— die melden op dit moment terecht "geen digest", want ze draaien deze code
+nog niet. Pas ná de eerstvolgende uitrol is dit in de praktijk bevestigd, niet
+alleen lokaal. Zie [[mcm2-pariteitscontract]] en de commit
+`feat(pariteit): image-digest zichtbaar per omgeving` op
+`feat/pariteit-image-digest`.
 
-> **Maak de image-digest zichtbaar per omgeving.**
+**Werkstroom 2 — de demo bruikbaar maken — is af, via een andere weg dan
+gepland.** Zie de correctie hieronder.
 
-Dat is het grootste gat uit het contract. Het onderzoek is ondubbelzinnig:
-voor runtime-pariteit is de image-digest doorslaggevend, niet de git-commit.
-Zolang niets meet welke code waar draait, blijft elke bevinding onbetrouwbaar —
-en dat is precies wat de drie dagen kostte.
+**Daarna, in volgorde van waarde:** acceptatie meetbaar maken (nu onbereikbaar
+vanaf de laptop, SSH weigert), `verify:omgevingen` uitbreiden van zes naar
+acht indicatoren (config-hash en identity-config ontbreken nog), en stap B/C/D
+uit het plan.
 
-Concreet: een eindpunt in de applicatie dat zijn eigen image-digest en
-schemaversie teruggeeft, plus een controle die de omgevingen vergelijkt. Dan is
-"welke versie draait waar" voor het eerst beantwoordbaar zonder SSH.
+**Openstaande branch:** `feat/pariteit-image-digest`, gepusht, bevat beide
+werkstromen van vandaag. Nog niet gemerged naar main — dat is de eerste vraag
+bij de volgende sessie.
 
-**Daarna:** acceptatie meetbaar maken (nu onbereikbaar vanaf de laptop, SSH
-weigert), `verify:omgevingen` uitbreiden van twee naar acht indicatoren, en
-stap B/C/D uit het plan.
+---
 
-**Twee open branches, beide alleen documentatie, beide gepusht:**
+### 🟠 CORRECTIE OP 13-08 — twee aannames weerlegd, met bewijs
 
-| Branch | Inhoud |
-|---|---|
-| `docs/stap-a-af` | Stand na het vullen van de tenant |
-| `docs/pariteitscontract` | De norm |
+*14-08. Dit vervangt het blok "Wat nog steeds openstaat" van gisteren. Niet
+schaamteloos — de les zelf staat als [[mcm2-nul-rijen-is-geen-bevinding]] in
+het geheugen en is hier opnieuw van toepassing: wat gisteren als "drie
+memberships" genoteerd stond, was zelf al een meetfout.*
 
-**Wat nog steeds openstaat en niet is uitgezocht:**
+**1. "Drie actieve admin-memberships" — bleek er ÉÉN te zijn.**
 
-- **De 500-fout** op `/productie/api/backend/vendors` mét een geldig cookie.
-  Zonder cookie geeft dezelfde route netjes 401. Niet begrepen, niet opgelost.
-- **Inloggen brengt je in Platformbeheer, niet in AlingAdvies.**
-  `clm.sessie_aanmaken()` doet `ORDER BY created_at LIMIT 1`, en alle drie de
-  memberships hebben exact dezelfde `created_at` (13:44:37.848Z, in één
-  transactie ontstaan). Vijf sessies achter elkaar landden alle vijf in
-  Platformbeheer — in de praktijk stabiel, volgens de SQL-standaard niet
-  gegarandeerd. **Gevolg: de gevulde tenant is via de browser niet te zien.**
-  Besluit eigenaar 13-08: intrekken van het Platformbeheer-membership. Nog
-  niet uitgevoerd.
-- **Drie actieve `admin`-memberships voor één gebruiker** terwijl
-  `tenant_membership_een_actief_per_gebruiker` er één toestaat. Niet te rijmen
-  met ADR-015; blokkeert niets, maar kijk hiernaar vóór er een tweede echte
-  gebruiker bijkomt.
+Op 13-08 stond genoteerd: `kees@alingadvies.nl` had drie actieve
+`admin`-memberships (AlingAdvies, demo, Platformbeheer), in strijd met de
+unieke index. Bij nameting op 14-08, met drie onafhankelijke methoden
+(tenantcontext per tenant met teruglezen van `current_setting`, drie losse
+`INSERT`-proeven op de primary key elk teruggedraaid, en een rechtstreekse
+leesquery als tabel-eigenaar zonder RLS-afhankelijkheid), bleek er telkens
+maar **één** rij te bestaan: `kees@alingadvies.nl`, `admin`, uitsluitend in
+**Platformbeheer**. Geen membership in AlingAdvies, geen membership in demo.
+
+De eerdere meting was zelf een instantie van dezelfde fout die op 13-08 al
+vier keer gebeurde: RLS met een verkeerde of ontbrekende tenantcontext geeft
+een misleidend beeld, niet "er staat niets" en ook niet "er staat meer dan er
+is".
+
+**2. De 500-fout op `/productie/api/backend/vendors` — eenmalig, niet
+structureel.**
+
+De productiecontainer draait sinds 12-08 13:36 ononderbroken en heeft in die
+hele periode **precies één** ERROR-regel gelogd, op 13-08 20:54:31 — een
+gefaalde `clm.sessie_oplossen(...)`-aanroep in `TenantContextGuard`. Dat
+tijdstip valt samen met het moment waarop diezelfde avond `ALTER ROLE …
+WITH PASSWORD` op de runtime-rol is uitgevoerd (zie het blok "Stap A" hierna)
+— exact het bekende Supabase-pooler-patroon: de eerste verbinding na een
+wachtwoordwijziging faalt, de volgende werkt. Dezelfde query is nadien
+herhaaldelijk gereproduceerd, zowel als tabel-eigenaar als als de echte
+runtime-rol `clm_api_runtime`, en werkt foutloos. Niet met 100% zekerheid
+vastgesteld als dé oorzaak — Drizzle logt hier niet de onderliggende
+PostgreSQL-foutcode — maar het is de enige hypothese die bij alle feiten past,
+en er is in twee dagen logs geen tweede signaal.
+
+**3. Waarom "Platformbeheer-membership intrekken" NIET is uitgevoerd.**
+
+Het besluit van 13-08 loste een probleem op dat, met de juiste meting, niet
+bestond: er was geen tweede membership om een conflict mee te veroorzaken.
+Belangrijker: tijdens het bouwen van een keuzescherm (zodat een gebruiker met
+twee actieve memberships zelf kan kiezen bij het inloggen) bleek een
+databaseconstraint die dat sowieso had geblokkeerd: de unieke index
+`tenant_membership_een_actief_per_gebruiker` (migratie 0020, ADR-015) staat
+**maximaal één blijvend (niet-`support`) membership per gebruiker** toe. Eén
+Entra-identiteit kan dus nooit tegelijk blijvend platformbeheerder én
+blijvend tenant-admin zijn — dat is een bewust ontwerp, geen gat.
+
+**De gekozen oplossing: twee identiteiten, niet twee memberships.**
+`cmaling@gmail.com` is ingericht als een tweede, losstaande gebruiker met een
+blijvend `admin`-membership in AlingAdvies, naast de bestaande identiteit
+`kees@alingadvies.nl` die platformbeheerder blijft. De unieke index geldt per
+`user_id`, dus twee identiteiten botsen er niet mee. Beide teruggelezen en
+bevestigd op productie:
+
+| Identiteit | Tenant | Rol |
+|---|---|---|
+| `kees@alingadvies.nl` | Platformbeheer | admin (ongewijzigd) |
+| `cmaling@gmail.com` | AlingAdvies | admin (nieuw) |
+
+**Inloggen als `cmaling@gmail.com`** (federatieve knop, niet het
+wachtwoordveld) toont nu voor het eerst de op 13-08 gevulde tenant via de
+browser.
+
+**Bijvangst: een halfgebouwde oplossing is teruggedraaid, niet uitgerold.**
+Vóór de constraint-ontdekking was er al een migratie (0027), twee nieuwe
+routes en elf tests gebouwd voor een expliciet tenantkeuze-scherm. Die
+oplossing was zelf niet fout — hij werkte, `verify:volledig` stond er groen
+op — maar loste, met de juiste feiten, een probleem op dat met twee losse
+Entra-identiteiten niet meer bestaat. Dat werk is volledig teruggedraaid vóór
+het gecommit werd (geen halve migratie in de geschiedenis). **Nut voor
+later:** mocht er ooit een situatie ontstaan waarin één identiteit
+legitiem tussen rollen moet kunnen wisselen (bijvoorbeeld het bestaande
+`support`-mechanisme van ADR-015, dat wél naast een blijvend membership mag
+bestaan), dan is het patroon nu bekend en beproefd — alleen niet nodig
+gebleken voor dit geval.
+
+**Nieuw script: `scripts/tenant-admin-inrichten.js`**
+(`npm run tenant:admin-inrichten`). Voegt een blijvend admin-membership toe
+aan een *bestaande* tenant via een echte Entra-login — precies het gat tussen
+`tenant-aanmaken.js` (maakt tenant + eerste admin in één stap, alleen bij het
+aanmaken) en `platformbeheerder-inrichten.js` (hetzelfde patroon, voor
+`platform_admin`). Weigert als de gekozen identiteit al een blijvend
+membership elders heeft — de constraint wordt gemeld, niet omzeild.
+
+**Nog altijd niet uitgezocht, en dat is nu wel expliciet klein:**
+`cmaling@gmail.com` staat met `full_name` gelijk aan het e-mailadres in de
+database — Entra gaf geen naam-claim mee voor dit account. Cosmetisch, niet
+blokkerend.
 
 ---
 
@@ -133,13 +209,12 @@ is.
 
 - **Er is een derde tenant `demo`** (`a0a1cdc9…`) op productie die nergens in
   de documentatie voorkomt. Leeg, 1 gebruiker. Besluit eigenaar 13-08: **laten
-  staan**, later beslissen of hij blijft.
-- **Drie actieve `admin`-memberships voor één gebruiker**
-  (`kees@alingadvies.nl`, in AlingAdvies, demo en Platformbeheer) terwijl
-  `tenant_membership_een_actief_per_gebruiker` er één toestaat waar
-  `role <> 'support'`. Niet uitgezocht — het blokkeert niets, maar het is niet
-  te rijmen met ADR-015. Kijk hiernaar vóór er een tweede echte gebruiker
-  bijkomt.
+  staan**, later beslissen of hij blijft. Nog steeds open op 14-08.
+- ~~Drie actieve `admin`-memberships voor één gebruiker~~ — **weerlegd op
+  14-08, zie het correctieblok bovenaan dit document.** Er was er maar één, in
+  Platformbeheer. Opgelost met een tweede identiteit (`cmaling@gmail.com`),
+  niet met een tweede membership op hetzelfde account — dat laatste kan de
+  unieke index sowieso niet toestaan.
 
 ---
 
