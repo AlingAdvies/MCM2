@@ -26,6 +26,8 @@ import {
   leesCookies,
   type RequestMetSessie,
 } from './tenant-context.guard';
+import { DatabaseService } from '../db/database.service';
+import { isPlatformbeheerder } from '../platform/is-platformbeheerder';
 
 /**
  * De drie routes van de inlogflow (Issue #7, spoor 1).
@@ -45,7 +47,10 @@ import {
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
 
-  constructor(private readonly auth: AuthService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly db: DatabaseService,
+  ) {}
 
   /**
    * Begin van de inlogflow: genereer een poging, leg hem in een kortlevend
@@ -186,6 +191,13 @@ export class AuthController {
    * in een antwoord is precies wat de CI-poort van de frontend verbiedt
    * (MCM2-CLAUDE.md §6). Wat er niet in staat, kan ook niet per ongeluk in een
    * URL belanden.
+   *
+   * **`isPlatformbeheerder` staat er wél bij, als losse boolean.** Platform-
+   * beheer is geen tenantrol (`admin`/`reviewer`) maar een aparte tabel
+   * (`clm.platform_admin`, migratie 0020, ADR-015) — vandaar niet in `rol`.
+   * Dit veld bepaalt alleen of het platformbeheerscherm getoond wordt; de
+   * echte grens blijft `PlatformAdminGuard` op elke platformroute. Verbergen
+   * zonder een tweede check op de route zelf zou schijnveiligheid zijn.
    */
   @Get('sessie')
   @UseGuards(TenantContextGuard)
@@ -202,10 +214,17 @@ export class AuthController {
       throw new UnauthorizedException('De gebruiker bestaat niet meer.');
     }
 
+    const isBeheerder = await isPlatformbeheerder(
+      this.db,
+      sessie.tenantId,
+      sessie.userId,
+    );
+
     return {
       naam: profiel.naam,
       tenantNaam: profiel.tenantNaam,
       rol: sessie.role,
+      isPlatformbeheerder: isBeheerder,
     };
   }
 

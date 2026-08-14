@@ -4,10 +4,10 @@ import {
   ForbiddenException,
   Injectable,
 } from '@nestjs/common';
-import { sql } from 'drizzle-orm';
 
 import type { RequestMetSessie } from '../auth/tenant-context.guard';
 import { DatabaseService } from '../db/database.service';
+import { isPlatformbeheerder } from './is-platformbeheerder';
 
 /**
  * Bewaakt de platformroutes: alleen wie in `clm.platform_admin` staat mag hier
@@ -54,18 +54,10 @@ export class PlatformAdminGuard implements CanActivate {
       throw new ForbiddenException('Geen sessie.');
     }
 
-    const isBeheerder = await this.db.withTenant(
+    const isBeheerder = await isPlatformbeheerder(
+      this.db,
       sessie.tenantId,
-      async (tx) => {
-        const { rows } = await tx.execute<{ bestaat: boolean }>(
-          sql`SELECT true AS bestaat
-                FROM clm.platform_admin
-               WHERE user_id = ${sessie.userId}
-                 AND deleted_at IS NULL`,
-        );
-
-        return rows.length > 0;
-      },
+      sessie.userId,
     );
 
     if (!isBeheerder) {

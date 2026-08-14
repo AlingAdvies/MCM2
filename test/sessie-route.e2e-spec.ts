@@ -30,10 +30,31 @@ import { TEST_IDS } from './test-ids';
 
 const TENANT = TEST_IDS['sessie-route'].tenant;
 const USER = TEST_IDS['sessie-route'].user;
+const USER_BEHEERDER = TEST_IDS['sessie-route'].platformbeheerder;
 
 // Uniek per run: external_subject heeft een globale unieke index, dus een vaste
 // waarde laat een tweede run falen op een rij van de vorige.
 const SUBJECT = `oid-sessieroute-${Date.now()}`;
+const SUBJECT_BEHEERDER = `oid-sessieroute-beheer-${Date.now()}`;
+
+/** Migratierol, altijd naar dezelfde database als DATABASE_URL — zie 0020. */
+function migratieUrl(): string {
+  const runtime = process.env.DATABASE_URL;
+  if (!runtime) throw new Error('DATABASE_URL ontbreekt.');
+
+  const doel = new URL(runtime);
+  const expliciet = process.env.MIGRATION_DATABASE_URL;
+
+  if (expliciet) {
+    const gegeven = new URL(expliciet);
+    if (gegeven.host === doel.host && gegeven.pathname === doel.pathname) {
+      return expliciet;
+    }
+  }
+
+  doel.username = 'clm_migrator';
+  return doel.toString();
+}
 
 const TENANT_NAAM = 'Sessieroute-test';
 const VOLLEDIGE_NAAM = 'Sanne Sessie';
@@ -43,6 +64,7 @@ interface SessieBody {
   naam: string;
   tenantNaam: string;
   rol: string;
+  isPlatformbeheerder: boolean;
 }
 
 async function verwijderTestdata(client: Client): Promise<void> {
@@ -56,12 +78,23 @@ async function verwijderTestdata(client: Client): Promise<void> {
   await client.query('COMMIT');
 }
 
+async function verwijderPlatformbeheerder(
+  migratieClient: Client,
+): Promise<void> {
+  await migratieClient.query(
+    'DELETE FROM clm.platform_admin WHERE user_id = $1',
+    [USER_BEHEERDER],
+  );
+}
+
 describe('GET /auth/sessie (e2e)', () => {
   let app: INestApplication<App>;
   let server: App;
   let client: Client;
+  let migratieClient: Client;
   let sessies: SessieService;
   let token: string;
+  let tokenBeheerder: string;
 
   const cookieNaam = cookieInstellingen().naam;
 
@@ -86,7 +119,29 @@ describe('GET /auth/sessie (e2e)', () => {
        VALUES ($1, $2, 'admin')`,
       [USER, TENANT],
     );
+    await client.query(
+      `INSERT INTO clm."user" (user_id, tenant_id, full_name, external_subject)
+       VALUES ($1, $2, $3, $4)`,
+      [USER_BEHEERDER, TENANT, 'Sanne Platformbeheer', SUBJECT_BEHEERDER],
+    );
+    await client.query(
+      `INSERT INTO clm.tenant_membership (user_id, tenant_id, role)
+       VALUES ($1, $2, 'admin')`,
+      [USER_BEHEERDER, TENANT],
+    );
     await client.query('COMMIT');
+
+    // Via de migratierol: de runtime-rol mag clm.platform_admin niet
+    // schrijven (ADR-015, migratie 0020) — zelfde patroon als
+    // platform-routes.e2e-spec.ts.
+    migratieClient = new Client({ connectionString: migratieUrl() });
+    await migratieClient.connect();
+    await verwijderPlatformbeheerder(migratieClient);
+    await migratieClient.query(
+      `INSERT INTO clm.platform_admin (user_id, toelichting)
+       VALUES ($1, 'e2e sessie-route')`,
+      [USER_BEHEERDER],
+    );
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
@@ -102,11 +157,17 @@ describe('GET /auth/sessie (e2e)', () => {
     // Een échte sessie via sessie_aanmaken(), inclusief membershipcontrole.
     const sessie = await sessies.aanmaken(SUBJECT);
     token = sessie!.token;
+
+    const sessieBeheerder = await sessies.aanmaken(SUBJECT_BEHEERDER);
+    tokenBeheerder = sessieBeheerder!.token;
   });
 
   afterAll(async () => {
     await sessies.beeindigen(token);
+    await sessies.beeindigen(tokenBeheerder);
     await app.close();
+    await verwijderPlatformbeheerder(migratieClient);
+    await migratieClient.end();
     await verwijderTestdata(client);
     await client.end();
   });
@@ -124,7 +185,7 @@ describe('GET /auth/sessie (e2e)', () => {
       .expect(401);
   });
 
-  it('geeft de naam, tenantnaam en rol bij een geldige sessie', async () => {
+  it('geeft de naam, tenantnaam, rol en platformbeheerstatus bij een geldige sessie', async () => {
     const antwoord = await request(server)
       .get('/auth/sessie')
       .set('Cookie', `${cookieNaam}=${token}`)
@@ -134,7 +195,18 @@ describe('GET /auth/sessie (e2e)', () => {
       naam: VOLLEDIGE_NAAM,
       tenantNaam: TENANT_NAAM,
       rol: 'admin',
+      isPlatformbeheerder: false,
     });
+  });
+
+  it('meldt isPlatformbeheerder: true voor een echte platformbeheerder', async () => {
+    const antwoord = await request(server)
+      .get('/auth/sessie')
+      .set('Cookie', `${cookieNaam}=${tokenBeheerder}`)
+      .expect(200);
+
+    const body = antwoord.body as SessieBody;
+    expect(body.isPlatformbeheerder).toBe(true);
   });
 
   // ── Wat er níét in mag ───────────────────────────────────────────────────
@@ -155,7 +227,12 @@ describe('GET /auth/sessie (e2e)', () => {
 
     expect(ruw).not.toContain(TENANT);
     expect(ruw).not.toContain(USER);
-    expect(Object.keys(body).sort()).toEqual(['naam', 'rol', 'tenantNaam']);
+    expect(Object.keys(body).sort()).toEqual([
+      'isPlatformbeheerder',
+      'naam',
+      'rol',
+      'tenantNaam',
+    ]);
 
     // Geen enkel veld dat op een UUID lijkt. Vangt ook een id dat onder een
     // andere naam meelift.
