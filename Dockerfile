@@ -53,6 +53,15 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Welke code dit image bevat (pariteitscontract §2, indicator 3). CI vult ze
+# via --build-arg; een lokale build laat ze leeg en het health-endpoint meldt
+# dan null. Bewust ARG→ENV en geen bestand: het hoort bij het artefact en moet
+# op runtime uitleesbaar zijn zonder de container in te gaan.
+ARG BUILD_COMMIT=
+ARG BUILD_TIJDSTIP=
+ENV BUILD_COMMIT=${BUILD_COMMIT}
+ENV BUILD_TIJDSTIP=${BUILD_TIJDSTIP}
+
 COPY --from=deps    /app/node_modules ./node_modules
 COPY --from=builder /app/dist         ./dist
 COPY package.json ./

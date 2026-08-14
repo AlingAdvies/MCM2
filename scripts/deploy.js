@@ -346,8 +346,56 @@ function rookproef(omgeving) {
   return mislukt;
 }
 
+/**
+ * Vraagt de echte image-digests op, ná het pullen.
+ *
+ * ── Waarom dit een aparte stap is en geen build-arg ─────────────────────────
+ *
+ * De tag (`sha-abc123…`) zegt welke code we BEDÓÉLDEN te draaien. De digest
+ * is de inhoudsvingerafdruk van het image zelf — pariteitscontract §2,
+ * indicatoren 1 en 2, en het grootste gat dat het contract benoemt. Die
+ * bestaat pas nadat het image ergens vandaan gehaald is, dus hij kan niet in
+ * de Dockerfile gebakken worden (zie BUILD_COMMIT daar, wat wél kan).
+ *
+ * `docker inspect` op de server, ná de pull van hierboven en vóór het starten
+ * — zo meet dit script exact het image dat zo meteen ook echt gaat draaien,
+ * in plaats van iets af te leiden uit de tag.
+ *
+ * Een mislukte meting stopt de uitrol niet: de digest is bewijsmateriaal voor
+ * verify-omgevingen.js, geen voorwaarde om te mogen draaien. Ontbreekt hij,
+ * dan meldt /health `null` en verify dat als afwijking — precies zoals een
+ * ontbrekende markering dat nu ook doet.
+ */
+function digestsOpvragen(omgeving, versie, frontendVersie) {
+  const apiRes = opServer(
+    [
+      `cd ${SERVER_MAP}`,
+      `image=$(grep '^GHCR_API=' ${omgeving.naam}.env | cut -d= -f2):${versie}`,
+      `docker inspect --format '{{index .RepoDigests 0}}' "$image" 2>/dev/null || true`,
+    ].join(' && '),
+    { stil: true },
+  );
+
+  const resultaat = { api: apiRes.uit.trim() || null, frontend: null };
+
+  if (FRONTEND_MEE) {
+    const frontendRes = opServer(
+      [
+        `cd ${SERVER_MAP}`,
+        `image=$(grep '^GHCR_FRONTEND=' ${omgeving.naam}.env | cut -d= -f2):${frontendVersie}`,
+        `docker inspect --format '{{index .RepoDigests 0}}' "$image" 2>/dev/null || true`,
+      ].join(' && '),
+      { stil: true },
+    );
+
+    resultaat.frontend = frontendRes.uit.trim() || null;
+  }
+
+  return resultaat;
+}
+
 /** Start een omgeving met een bepaalde versie. */
-function start(omgeving, versie, frontendVersie) {
+function start(omgeving, versie, frontendVersie, digests = {}) {
   // Draait de frontend niet mee, dan wordt die dienst geschaald naar nul in
   // plaats van uit het compose-bestand geweerd. `profiles:` is daar weg sinds
   // de frontend promoveerbaar is (Issue #51); wat nu nog ontbreekt is dat het
@@ -364,6 +412,10 @@ function start(omgeving, versie, frontendVersie) {
     ? '--profile lokale-db -f docker-compose.omgeving.yml -f compose.lokale-db.yml'
     : '-f docker-compose.omgeving.yml';
 
+  // Wat de omgeving straks over zichzelf meldt via /health (zie
+  // health.controller.ts). Leeg wanneer de meting niets opleverde — een lege
+  // omgevingsvariabele geeft in de container `process.env.IMAGE_DIGEST ===
+  // ''`, en dat vangt het endpoint met `|| null` af net als een ontbrekende.
   const zet = [
     `cd ${SERVER_MAP}`,
     `export API_IMAGE=$(grep '^GHCR_API=' ${omgeving.naam}.env | cut -d= -f2):${versie}`,
@@ -371,6 +423,8 @@ function start(omgeving, versie, frontendVersie) {
     // waarschuwt anders over een lege variabele, en zo'n waarschuwing in de
     // uitvoer van een uitrol leidt af van meldingen die er wél toe doen.
     `export FRONTEND_IMAGE=$(grep '^GHCR_FRONTEND=' ${omgeving.naam}.env | cut -d= -f2):${frontendVersie}`,
+    `export IMAGE_DIGEST='${digests.api || ''}'`,
+    `export FRONTEND_IMAGE_DIGEST='${digests.frontend || ''}'`,
     `docker compose --env-file ${omgeving.naam}.env -p ${omgeving.project} ${db} up -d ${schaal}`.trim(),
   ].join(' && ');
 
@@ -616,6 +670,8 @@ async function main() {
     `     ${kleur.groen('OK')}   ${FRONTEND_MEE ? 'beide images' : 'backend-image'} opgehaald`,
   );
 
+  const digests = digestsOpvragen(omgeving, versie, frontendVersie);
+
   // ── 4. Migraties ────────────────────────────────────────────────────────
   //
   // Vóór de nieuwe code start. Migraties zijn voorwaarts compatibel, dus de
@@ -759,7 +815,7 @@ async function main() {
   console.log('');
   console.log('5/6  Containers vervangen');
 
-  const gestart = start(omgeving, versie, frontendVersie);
+  const gestart = start(omgeving, versie, frontendVersie, digests);
 
   if (!gestart.ok) {
     // Hier stond `npm run rollback:<omgeving>` — een script dat niet bestaat.
@@ -810,7 +866,16 @@ async function main() {
           (FRONTEND_MEE ? ` met frontend ${vorigeFrontend || 'latest'}` : '') +
           '…',
       );
-      const terug = start(omgeving, vorige, vorigeFrontend || 'latest');
+      // De vorige images staan al lokaal op de server — geen nieuwe pull
+      // nodig — maar hun digest is nog niet gemeten in déze uitrol. Opnieuw
+      // opvragen in plaats van hergebruiken van `digests`, want die hoort bij
+      // de mislukte versie.
+      const vorigeDigests = digestsOpvragen(
+        omgeving,
+        vorige,
+        vorigeFrontend || 'latest',
+      );
+      const terug = start(omgeving, vorige, vorigeFrontend || 'latest', vorigeDigests);
 
       if (terug.ok) {
         opServer('sleep 6', { stil: true });
