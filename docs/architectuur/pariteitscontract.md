@@ -3,6 +3,8 @@
 **Type:** N — norm
 **Eigenaar:** Kees Maling
 **Vastgesteld:** 2026-08-13
+**Status bijgewerkt:** 2026-08-14 — indicatoren 1 en 2 (image-digest) van
+gemeten naar bewezen; zie §2 en §5
 **Geldt voor:** acceptatie, staging, productie — en elke omgeving die erbij komt
 **Onderbouwing:** onderzoek 2026-08-13, twintig bronnen (zie §7)
 
@@ -58,8 +60,8 @@ project werkelijk bestaat.
 
 | # | Indicator | Wat het is | Nu meetbaar? |
 |---|---|---|---|
-| 1 | `BackendImageDigest` | Welk backend-image draait er echt | ❌ **nee** |
-| 2 | `FrontendImageDigest` | Welk frontend-image draait er echt | ❌ **nee** |
+| 1 | `BackendImageDigest` | Welk backend-image draait er echt | ✅ **sinds 14-08** — `/health` + `verify:omgevingen` |
+| 2 | `FrontendImageDigest` | Welk frontend-image draait er echt | ✅ **sinds 14-08** — idem |
 | 3 | `DBSchemaVersion` | Aantal toegepaste migraties | ✅ `verify:omgevingen` |
 | 4 | `RLSPolicyVersion` | Tabellen met RLS, met FORCE, aantal policies | ⚠️ deels |
 | 5 | `ConfigVersionHash` | Welke configuratiesleutels bestaan (namen, niet waarden) | ❌ nee |
@@ -67,10 +69,16 @@ project werkelijk bestaat.
 | 7 | `IdentityConfig` | Entra-tenant, claimsstructuur, rolmapping | ❌ nee |
 | 8 | `MailProvider` | Resend of het logkanaal | ❌ nee |
 
-**`verify:omgevingen` dekt er vandaag twee van de acht volledig.** Dat is geen
-verwijt aan dat script — het is gebouwd vóór deze norm bestond — maar het
-verklaart wel waarom het groen kon staan terwijl de omgevingen niet gelijk
-waren.
+**`verify:omgevingen` dekt er sinds 14-08 zes van de acht.** Indicatoren 1 en 2
+kwamen erbij met een zesde controle die `/health` per omgeving bevraagt en de
+digest teruggeeft die `deploy.js` ná het pullen heeft gemeten — niet de tag die
+de uitrol *bedoelde* te starten, maar wat het image daadwerkelijk is. Beproefd
+tegen een wegwerpcontainer en tegen de drie echte omgevingen; die laatste
+meting meldde op dat moment terecht "geen digest", omdat er nog geen omgeving
+met deze code was uitgerold. Pas ná de eerstvolgende uitrol is dit ook in de
+praktijk bevestigd, niet alleen lokaal.
+
+Nog open: indicator 5 (`ConfigVersionHash`) en 7 (`IdentityConfig`).
 
 ### 2.1 Waarom indicator 1 en 2 het zwaarst wegen
 
@@ -85,7 +93,8 @@ acceptatie draaide een ouder image. Er was geen enkele controle die dat kon
 zien — en dus werd het ontdekt doordat er toevallig `unknown` op een scherm
 stond.
 
-**Dit is het belangrijkste gat in de hele keten.**
+**Dit was het belangrijkste gat in de hele keten — sinds 14-08 gedicht.** Zie
+§2 hierboven en §5 voor wat er nog aan meting ontbreekt.
 
 ### 2.2 Wat er vandaag werkelijk gemeten is
 
@@ -174,20 +183,22 @@ Het onderzoek is scherp over het verschil tussen constateren en afdwingen:
 
 | Moment | Wat er gebeurt | Bestaat het al? |
 |---|---|---|
-| Bij elke uitrol | De acht indicatoren teruglezen ná de deploy | ⚠️ deels — alleen migratiestand |
+| Bij elke uitrol | De acht indicatoren teruglezen ná de deploy | ⚠️ deels — migratiestand + digest |
 | Vóór productie | `productie:poort` blokkeert bij afwijking | ✅ voor de migratiestand |
-| Periodiek | `verify:omgevingen` legt de drie naast elkaar | ✅ maar meet 2 van de 8 |
+| Periodiek | `verify:omgevingen` legt de drie naast elkaar | ✅ meet 6 van de 8 (sinds 14-08) |
 | Continu | Drift melden zodra hij ontstaat | ❌ nee |
 
 ### De volgorde waarin de gaten gedicht worden
 
-**1. Image-digest zichtbaar maken** — het grootste gat. Zonder dit weet je
-nooit welke code waar draait, en blijft elke bevinding onbetrouwbaar.
+~~**1. Image-digest zichtbaar maken**~~ — **gedaan op 14-08.** `/health` meldt
+commit, bouwtijdstip en de gemeten digest van backend en frontend;
+`verify:omgevingen` vergelijkt het als zesde controle. Zie §2.1.
 
 **2. Acceptatie meetbaar maken** — nu onbereikbaar vanaf de laptop. Een
-omgeving die je niet kunt meten, valt buiten dit contract.
+omgeving die je niet kunt meten, valt buiten dit contract. Eerstvolgende werk.
 
-**3. `verify:omgevingen` uitbreiden** van twee naar acht indicatoren.
+**3. `verify:omgevingen` verder uitbreiden** — van zes naar acht indicatoren:
+`ConfigVersionHash` en `IdentityConfig` ontbreken nog.
 
 **4. De hostnaamscheiding** — komt gratis mee bij AWS, en is daar de
 standaardvorm.

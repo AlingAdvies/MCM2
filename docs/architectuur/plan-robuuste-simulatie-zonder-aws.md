@@ -6,6 +6,13 @@
 **Besluit:** geen AWS voorlopig, geen gecompliceerde omwegen
 **Vervangt niet:** `plan-otap-straat-met-staging.md` — dit is het vervolg erop
 
+**Status 2026-08-14:** stap A is niet alleen gevuld maar nu ook **zichtbaar** —
+inloggen als `cmaling@gmail.com` toont de tenant in de browser (zie STATUS.md,
+correctieblok van 14-08). Vooruitlopend op stap C is bovendien **het grootste
+gat uit het pariteitscontract gedicht** (image-digest per omgeving) —
+buiten dit vierstappenplan om, maar wel het werk dat het pariteitscontract als
+eerstvolgende prioriteit aanwees. Stap B en D staan nog open.
+
 ---
 
 ## Waarom dit plan er is

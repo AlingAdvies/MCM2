@@ -27,6 +27,7 @@
     "seed:vragenlijsten": "node scripts/seed-vragenlijsten.js",
     "seed:demo": "node scripts/seed-demo-tenant.js",
     "platform:inrichten": "node scripts/platformbeheerder-inrichten.js",
+    "tenant:admin-inrichten": "node scripts/tenant-admin-inrichten.js",
     "demo": "node scripts/demo-stack.js start",
     "demo:af": "node scripts/demo-stack.js af",
     "demo:status": "node scripts/demo-stack.js status",

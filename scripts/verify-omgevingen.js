@@ -23,7 +23,7 @@
  * Alle drie waren zichtbaar geweest door de omgevingen naast elkaar te leggen.
  * Dat is het enige dat dit script doet.
  *
- * ── Wat het vergelijkt (plan §4.3) ──────────────────────────────────────────
+ * ── Wat het vergelijkt (plan §4.3, en sinds 14-08 het pariteitscontract) ────
  *
  *   1. Migratiestand     niet vóór op de repository
  *   2. Tabellen          dezelfde verzameling in het clm-schema
@@ -31,6 +31,9 @@
  *                        zonder dat er RLS op staat
  *   4. Rollen            clm_api_runtime bestaat en heeft geen BYPASSRLS
  *   5. Markering         clm.omgeving zegt wat er verwacht wordt
+ *   6. Draaiende code    /health meldt een digest, en de omgevingen die
+ *                        hetzelfde zouden moeten zijn, draaien ook hetzelfde
+ *                        image — pariteitscontract §2, indicatoren 1 en 2
  *
  * ── Waarom het geen verwachtingen uit een tabel in dit bestand haalt ────────
  *
@@ -92,6 +95,30 @@ const { Client } = require('pg');
 const SERVER = 'root@saxombp';
 const ACCEPTATIE_CONTAINER = 'mcm2-acceptatie-db-1';
 
+/**
+ * De backend-poorten van elke omgeving op saxombp, gelijk aan `OMGEVINGEN` in
+ * deploy.js en deploy-status.js. Alle drie omgevingen draaien hier — ook
+ * staging en productie, die voor de databasevergelijking hierboven een eigen
+ * Supabase-URL gebruiken. Voor de draaiende códe maakt dat niet uit: die
+ * draait altijd op saxombp, ongeacht waar de data staat.
+ */
+const API_POORT = { acceptatie: 5011, staging: 5031, productie: 5021 };
+
+/** Draait een commando op saxombp via SSH. Zelfde vorm als in deploy.js. */
+function opServer(commando, { stil = false } = {}) {
+  const res = spawnSync(
+    'ssh',
+    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', SERVER, commando],
+    { encoding: 'utf8', stdio: stil ? 'pipe' : ['pipe', 'pipe', 'pipe'] },
+  );
+
+  return {
+    ok: res.status === 0,
+    uit: (res.stdout || '').trim(),
+    fout: (res.stderr || '').trim(),
+  };
+}
+
 const JOURNAL_PAD = path.join(
   __dirname,
   '..',
@@ -130,6 +157,13 @@ const VERWACHTE_MARKERING = {
   staging: 'wegwerp',
   productie: 'beschermd',
 };
+
+/**
+ * Draait de frontend mee op deze omgeving? Gelijk aan FRONTEND_MEE in
+ * deploy.js en deploy-status.js — die vlag geldt voor alle drie tegelijk, dus
+ * hier hetzelfde.
+ */
+const FRONTEND_VERWACHT = { acceptatie: true, staging: true, productie: true };
 
 /**
  * De vijf vragen, als één query per omgeving.
@@ -309,6 +343,40 @@ function leesViaSsh() {
   }
 }
 
+/**
+ * Vraagt /health op via SSH + curl vanaf saxombp zelf, niet vanaf de laptop.
+ *
+ * ── Waarom niet gewoon fetch() naar het adres van de omgeving ───────────────
+ *
+ * Acceptatie is met opzet alleen op `127.0.0.1` op saxombp bereikbaar — zie de
+ * toelichting bij `leesViaSsh`. Een rechtstreeks verzoek vanaf de laptop zou
+ * voor acceptatie dus altijd falen, terwijl voor staging en productie precies
+ * hetzelfde IP-adres wordt gebruikt (thuisrouter, gedeeld, niet vast — zie
+ * CLAUDE.md §0b). Vanaf de server zelf werken alle drie op dezelfde manier,
+ * en dat is ook de weg die deploy-status.js al gebruikt.
+ *
+ * Dit hoort dus bij dezelfde grens als leesViaSsh: dit deel van de controle
+ * werkt alleen vanaf de machine van de eigenaar, niet vanuit CI.
+ */
+function leesHealth(omgevingNaam) {
+  const poort = API_POORT[omgevingNaam];
+
+  const res = opServer(
+    `curl -s --max-time 8 http://localhost:${poort}/health || true`,
+    { stil: true },
+  );
+
+  if (!res.ok || !res.uit) {
+    return { fout: res.fout || 'geen antwoord van /health' };
+  }
+
+  try {
+    return JSON.parse(res.uit);
+  } catch (fout) {
+    return { fout: `onleesbaar antwoord van /health: ${fout.message}` };
+  }
+}
+
 /** Het aantal migraties dat de repository voorschrijft. */
 function journalStand() {
   return JSON.parse(fs.readFileSync(JOURNAL_PAD, 'utf8')).entries.length;
@@ -346,6 +414,20 @@ async function main() {
     ? await leesViaPg(productieUrl)
     : { fout: 'PRODUCTIE_MIGRATION_DATABASE_URL ontbreekt' };
 
+  // Losse meting van de databasevergelijking hierboven: /health komt altijd
+  // van saxombp zelf, ook voor staging en productie — die hebben wel een
+  // eigen Supabase-database maar geen eigen server. Apart gehouden zodat een
+  // falende health-meting de databasemeting van diezelfde omgeving niet
+  // aanmerkt als ONBEREIKBAAR — het zijn twee onafhankelijke wegen naar twee
+  // verschillende vragen.
+  const codeOmgevingen = zonderAcceptatie
+    ? { staging: leesHealth('staging'), productie: leesHealth('productie') }
+    : {
+        acceptatie: leesHealth('acceptatie'),
+        staging: leesHealth('staging'),
+        productie: leesHealth('productie'),
+      };
+
   // ── Het overzicht ─────────────────────────────────────────────────────────
   //
   // Eerst tonen wat er gemeten is, dan pas oordelen. Wie het niet eens is met
@@ -372,6 +454,18 @@ async function main() {
         `${String(o.rollen.length).padStart(2)} rollen  ` +
         `${o.markering ?? '(niet gemarkeerd)'}`,
     );
+
+    // Losse regel, niet ingekort: een digest is lang (sha256:…) en het punt is
+    // juist dat hij met het oog te vergelijken is tussen omgevingen.
+    const c = codeOmgevingen[naam];
+    if (c && !c.fout) {
+      console.log(
+        `  ${''.padEnd(11)} code: ${c.imageDigest ?? '(geen digest)'}` +
+          (FRONTEND_VERWACHT[naam]
+            ? `  frontend: ${c.frontendImageDigest ?? '(geen digest)'}`
+            : ''),
+      );
+    }
   }
 
   const leesbaar = namen.filter((n) => !omgevingen[n].fout);
@@ -475,6 +569,47 @@ async function main() {
     }
   }
 
+  // ── 6. Draaiende code ────────────────────────────────────────────────────
+  //
+  // Dit meldt bewust NIET dat staging en productie hetzelfde image moeten
+  // draaien — dat mogen ze best verschillen: staging beproeft de volgende
+  // versie vóórdat productie hem krijgt (dat is de hele reden dat staging
+  // bestaat). Wat hier wél gecontroleerd wordt: dat elke bereikbare omgeving
+  // een digest kan tónen. Ontbreekt die, dan is de vraag "welke code draait
+  // hier echt" onbeantwoordbaar — precies het gat uit pariteitscontract §2.
+  //
+  // De digests zelf staan in het overzicht hierboven zodra ze gemeten zijn
+  // (zie het printblok verderop); wie ze wil vergelijken kan dat met het oog.
+  const codeNamen = Object.keys(codeOmgevingen);
+
+  for (const naam of codeNamen) {
+    const c = codeOmgevingen[naam];
+
+    if (c.fout) {
+      bevindingen.push(
+        `${naam}: /health is niet te lezen — ${c.fout}\n` +
+          'Zonder dit endpoint is niet vast te stellen welke code hier draait.',
+      );
+      continue;
+    }
+
+    if (!c.imageDigest) {
+      bevindingen.push(
+        `${naam}: /health meldt geen imageDigest.\n` +
+          'Ofwel deze omgeving draait een image van vóór deze meting (zie\n' +
+          '  pariteitscontract), ofwel de uitrol heeft de digest niet kunnen\n' +
+          '  vaststellen. npm run deploy:status laat zien wat er nu draait.',
+      );
+    }
+
+    if (FRONTEND_VERWACHT[naam] && !c.frontendImageDigest) {
+      bevindingen.push(
+        `${naam}: /health meldt geen frontendImageDigest.\n` +
+          '  Zelfde ontbrekende bewijs, maar dan voor de frontend.',
+      );
+    }
+  }
+
   // ── Uitkomst ──────────────────────────────────────────────────────────────
   console.log('');
 
@@ -499,7 +634,7 @@ async function main() {
 
   console.log('─'.repeat(70));
   console.log('');
-  console.log('  GELIJK — de omgevingen komen op alle vijf punten overeen.');
+  console.log('  GELIJK — de omgevingen komen op alle zes punten overeen.');
   console.log('');
 }
 

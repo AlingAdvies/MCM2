@@ -71,6 +71,13 @@ services:
   api:
     image: ${API_IMAGE}
     environment:
+      # De echte vingerafdruk van dit image, gemeten door deploy.js na de pull
+      # (pariteitscontract §2, indicator 1). Meldt /health terug. Leeg wanneer
+      # de meting mislukte — het endpoint maakt daar null van, niet een lege
+      # tekst, want dat is voor verify-omgevingen.js het signaal dat er iets
+      # ontbreekt in plaats van dat er niets afwijkt.
+      IMAGE_DIGEST: ${IMAGE_DIGEST:-}
+      FRONTEND_IMAGE_DIGEST: ${FRONTEND_IMAGE_DIGEST:-}
       # Waar de database staat. Vóór 2026-08-11 stond hier een vaste
       # connectiestring naar de `db`-service hierboven; dat kon niet meer toen
       # staging erbij kwam, want die praat met Supabase.
