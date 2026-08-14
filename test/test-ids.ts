@@ -87,6 +87,7 @@ export const TEST_IDS = {
   'sessie-route': {
     tenant: id('8a'),
     user: id('8b'),
+    platformbeheerder: id('c0'),
   },
   'vendor-detail': {
     tenant: id('8c'),
