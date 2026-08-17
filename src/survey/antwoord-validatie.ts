@@ -478,3 +478,96 @@ export function valideerAntwoorden(
 
   return { geldig: true, antwoorden };
 }
+
+/**
+ * Valideert een concept: een gedeeltelijke set antwoorden, opgeslagen vóórdat
+ * de leverancier indient (ontwerp §7).
+ *
+ * Het verschil met `valideerAntwoorden()` is precies één regel: een
+ * ontbrekende verplichte vraag is hier geen fout. Iemand vult vraag 1 t/m 3
+ * in, slaat op, en gaat later verder met 4 t/m 8 — dat mag een concept niet
+ * blokkeren, anders is "gedeeltelijk opslaan" een lege belofte.
+ *
+ * Wat wél ongewijzigd geldt: elke *aangeleverde* vraag moet volledig geldig
+ * zijn, met dezelfde regels als bij indienen (toelichtingsplicht, geldige
+ * codes, bestandsgrenzen). Ontwerp §7 is daar expliciet over: "een concept
+ * bevat alleen volledig ingevulde antwoorden — een vraag is af of hij staat
+ * er niet in." Dat is ook waarom deze functie dezelfde `toetsAntwoord()`
+ * hergebruikt in plaats van een losse, lichtere regelset: de RLS-policy op
+ * `survey_answer` (migratie 0005) staat toe dat een concept dezelfde rij-vorm
+ * heeft als een ingediend antwoord, en dat blijft alleen waar als beide paden
+ * door dezelfde validatie gaan.
+ *
+ * Een `instruction`-vraag die wél wordt meegestuurd is nog steeds een fout
+ * (er bestaat geen antwoordrij voor een leesblok, concept of niet), en een
+ * onbekende `question_key` ook — beide zijn vormfouten, geen kwestie van
+ * volledigheid.
+ */
+export function valideerConcept(
+  vragen: VraagVoorValidatie[],
+  invoer: unknown,
+  bestandenPerVraag: Map<string, number> = new Map(),
+): ValidatieUitkomst {
+  const fouten: AntwoordFout[] = [];
+
+  if (!Array.isArray(invoer)) {
+    return {
+      geldig: false,
+      fouten: [{ question: '(body)', reason: 'answers_must_be_a_list' }],
+    };
+  }
+
+  const perSleutel = new Map<string, AntwoordInvoer>();
+
+  for (const item of invoer) {
+    if (!isObject(item) || typeof item.questionKey !== 'string') {
+      fouten.push({ question: '(body)', reason: 'invalid_answer_entry' });
+      continue;
+    }
+    if (perSleutel.has(item.questionKey)) {
+      fouten.push({ question: item.questionKey, reason: 'duplicate_answer' });
+      continue;
+    }
+    perSleutel.set(item.questionKey, item);
+  }
+
+  const bekend = new Map(vragen.map((v) => [v.questionKey, v]));
+
+  for (const sleutel of perSleutel.keys()) {
+    if (!bekend.has(sleutel)) {
+      fouten.push({ question: sleutel, reason: 'unknown_question' });
+    }
+  }
+
+  const antwoorden: GeldigAntwoord[] = [];
+
+  for (const vraag of vragen) {
+    const antwoord = perSleutel.get(vraag.questionKey);
+
+    if (vraag.answerType === 'instruction') {
+      if (antwoord !== undefined) {
+        fouten.push({
+          question: vraag.questionKey,
+          reason: 'instruction_has_no_answer',
+        });
+      }
+      continue;
+    }
+
+    // Het enige echte verschil met valideerAntwoorden(): geen antwoord is bij
+    // een concept nooit een fout, ongeacht is_required. Onvolledig is precies
+    // wat een concept per definitie is.
+    if (antwoord === undefined) {
+      continue;
+    }
+
+    const bestanden = bestandenPerVraag.get(vraag.questionKey) ?? 0;
+    toetsAntwoord(vraag, antwoord, bestanden, fouten, antwoorden);
+  }
+
+  if (fouten.length > 0) {
+    return { geldig: false, fouten };
+  }
+
+  return { geldig: true, antwoorden };
+}

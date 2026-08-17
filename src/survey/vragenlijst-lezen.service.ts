@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 
 import { DatabaseService } from '../db/database.service';
+import type { TenantTransaction } from '../db/database.service';
 import type { AntwoordType } from './vragenlijst-schema';
 
 /**
@@ -27,6 +28,27 @@ export interface VraagConfig {
   comment?: string;
 }
 
+/**
+ * Een eerder opgeslagen concept-antwoord op deze vraag (ontwerp §7), of
+ * `null` als er nog niets staat. Dezelfde vorm als `Antwoord` uit het
+ * indien-contract, zodat de frontend het rechtstreeks kan hergebruiken om het
+ * formulier voor te vullen.
+ */
+export interface OpgeslagenAntwoord {
+  answerCode: string | null;
+  answerCodes: string[] | null;
+  answerText: string | null;
+  answerNumber: number | null;
+  comment: string | null;
+}
+
+/** Een eerder geüploade bijlage bij deze vraag. */
+export interface OpgeslagenBijlage {
+  attachmentId: string;
+  bestandsnaam: string;
+  contentType: string;
+}
+
 export interface Vraag {
   questionKey: string;
   title: string;
@@ -36,6 +58,13 @@ export interface Vraag {
   allowsUpload: boolean;
   maxFiles: number;
   config: VraagConfig;
+  /**
+   * Vult het formulier voor bij een herbezoek. `null` als er voor deze vraag
+   * nog niets is opgeslagen — dat is iets anders dan een leeg antwoord, en de
+   * frontend moet het verschil kunnen zien.
+   */
+  savedAnswer: OpgeslagenAntwoord | null;
+  savedAttachments: OpgeslagenBijlage[];
 }
 
 export interface Categorie {
@@ -203,6 +232,15 @@ export class VragenlijstLeesService {
           return null;
         }
 
+        // Twee losse queries in plaats van meejoinen op de hoofdset: een
+        // JOIN met survey_attachment zou de vragenrijen vermenigvuldigen
+        // zodra een vraag meer dan één bijlage heeft, en dat is precies de
+        // fout die de vormconstraint in de andere richting (§4) probeert te
+        // voorkomen. Bij een vragenlijst van hooguit enkele tientallen vragen
+        // wegen twee extra queries niet op tegen die complexiteit.
+        const antwoorden = await this.haalOpgeslagenAntwoorden(tx, responseId);
+        const bijlagen = await this.haalOpgeslagenBijlagen(tx, responseId);
+
         const categorieen = new Map<string, Categorie>();
         const losseVragen: Vraag[] = [];
 
@@ -216,6 +254,8 @@ export class VragenlijstLeesService {
             allowsUpload: rij.allows_upload,
             maxFiles: rij.max_files,
             config: vertaalConfig(rij.config),
+            savedAnswer: antwoorden.get(rij.question_key) ?? null,
+            savedAttachments: bijlagen.get(rij.question_key) ?? [],
           };
 
           if (rij.category_id === null || rij.category_name === null) {
@@ -258,5 +298,79 @@ export class VragenlijstLeesService {
       },
       'leverancier',
     );
+  }
+
+  /**
+   * Eerder opgeslagen antwoorden voor deze response (ontwerp §7), per
+   * question_key. Geldt zowel voor een echt concept als voor een respons die
+   * al ingediend is — in beide gevallen staan de antwoorden in dezelfde
+   * tabel, en de guard bepaalt al of deze route bereikbaar is.
+   */
+  private async haalOpgeslagenAntwoorden(
+    tx: TenantTransaction,
+    responseId: string,
+  ): Promise<Map<string, OpgeslagenAntwoord>> {
+    const resultaat = await tx.execute<{
+      question_key: string;
+      answer_code: string | null;
+      answer_codes: string[] | null;
+      answer_text: string | null;
+      answer_number: string | null;
+      comment: string | null;
+    }>(
+      sql`SELECT q.question_key, a.answer_code, a.answer_codes,
+                 a.answer_text, a.answer_number, a.comment
+            FROM clm.survey_answer a
+            JOIN clm.survey_question q ON q.question_id = a.question_id
+           WHERE a.response_id = ${responseId}`,
+    );
+
+    return new Map(
+      resultaat.rows.map((rij) => [
+        rij.question_key,
+        {
+          answerCode: rij.answer_code,
+          answerCodes: rij.answer_codes,
+          answerText: rij.answer_text,
+          // NUMERIC komt via de driver als string terug.
+          answerNumber:
+            rij.answer_number === null ? null : Number(rij.answer_number),
+          comment: rij.comment,
+        },
+      ]),
+    );
+  }
+
+  /** Eerder geüploade bijlagen voor deze response, per question_key. */
+  private async haalOpgeslagenBijlagen(
+    tx: TenantTransaction,
+    responseId: string,
+  ): Promise<Map<string, OpgeslagenBijlage[]>> {
+    const resultaat = await tx.execute<{
+      question_key: string;
+      attachment_id: string;
+      original_name: string;
+      content_type: string;
+    }>(
+      sql`SELECT q.question_key, a.attachment_id, a.original_name, a.content_type
+            FROM clm.survey_attachment a
+            JOIN clm.survey_question q ON q.question_id = a.question_id
+           WHERE a.response_id = ${responseId}
+           ORDER BY a.created_at`,
+    );
+
+    const perVraag = new Map<string, OpgeslagenBijlage[]>();
+
+    for (const rij of resultaat.rows) {
+      const lijst = perVraag.get(rij.question_key) ?? [];
+      lijst.push({
+        attachmentId: rij.attachment_id,
+        bestandsnaam: rij.original_name,
+        contentType: rij.content_type,
+      });
+      perVraag.set(rij.question_key, lijst);
+    }
+
+    return perVraag;
   }
 }
