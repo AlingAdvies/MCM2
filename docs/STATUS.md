@@ -2,7 +2,71 @@
 
 ## Laatst bijgewerkt
 
-**2026-08-17.** Geen nieuwe werkstroom vandaag, wel drie correcties op de
+**2026-08-17, avond — het sub-pad is stukken kapotter dan gedacht.**
+
+Aanleiding: `cmaling@gmail.com` kon niet inloggen op productie/staging.
+Onderweg drie afzonderlijke, echte bugs gevonden en twee gefixt — maar de
+derde is de belangrijkste, en die wordt hier bewust **niet** gefixt.
+
+**Bug 1 — `prompt=select_account` werkt niet bij Entra External ID +
+federatie.** Microsoft-documentatie bevestigt: bij een bestaande SSO-sessie
+(`ESTSAUTHPERSISTENT`-cookie) lost de STS die silent op vóórdat er ooit een
+keuzescherm getoond wordt — de parameter wordt genegeerd. `prompt=login`
+(forceert `forceAuthn`) is de juiste parameter. **Gefixt en gemerged**
+(`src/auth/auth.service.ts`, commit `368a183`).
+
+**Bug 2 — de "Inloggen"/"Uitloggen"-knop en de survey-uitnodigingslink
+verloren het sub-pad-voorvoegsel.** `saxombp` deelt één hostnaam voor drie
+omgevingen via Tailscale Serve, dat routeert op `/staging`, `/productie` of
+kaal (acceptatie). Drie plekken in de frontend bouwden een `href` met een
+absolute `/`, en Tailscale Serve **strip het voorvoegsel niet** bij het
+doorsturen — het pad blijft in de adresbalk staan, maar de knop wist niet dat
+het er hoorde te staan. Gevolg: iedereen die op "Inloggen" klikte op
+`/productie` of `/staging`, ging altijd naar acceptatie. **Gefixt en
+gemerged** (`src/core/api/subpad.ts`, `MCM2-frontend` commit `1c31e01`), mét
+een nieuwe e2e-test die het aantoont.
+
+**Bug 3 — Next.js' eigen `_next/static/...`-bestanden hebben hetzelfde
+gebrek, en dat kán niet met een knop-fix opgelost worden.** Bij het testen
+van bug 2 op écht staging (schone browser, geen cookies) bleek de hele pagina
+kapot: geen sidebar, geen "Inloggen"-knop, `laden…` dat nooit stopt. Oorzaak:
+Next.js linkt zijn eigen JS-chunks altijd naar het kale pad
+(`/_next/static/chunks/...`), nooit met een voorvoegsel — bevestigd met
+`curl`: 404 zonder `/staging`, 200 mét. Dat laat `AppLayout`'s
+sessie-ophaal-`fetch` überhaupt nooit lopen, dus faalt niet met een 401 maar
+hangt gewoon: de chunk die de fetch-code bevat, laadt niet.
+
+Dit is **niet met code in dit project op te lossen zonder een structurele
+ingreep.** Next.js' `basePath` is build-time vast (bevestigd met
+Next.js-eigen documentatie en meerdere `vercel/next.js`-discussies) — een
+losse `basePath` per omgeving zou een apart image per omgeving vragen, precies
+wat Issue #51 (het `/api/backend`-doorgeefluik) bewust vermeed. De enige
+bekende workaround is `sed`-vervanging van een placeholder bij het opstarten
+van de container — een lapmiddel dat evenveel complexiteit toevoegt als het
+oplost.
+
+**Besluit: geen lapmiddel bouwen.** Dit is het derde, nu onweerlegbare bewijs
+dat het sub-pad-ontwerp zelf het probleem is, niet een van de plekken die het
+raakt. Op een opzet met een eigen hostnaam per omgeving (stap C, zie
+`architectuur/plan-robuuste-simulatie-zonder-aws.md` én het nieuwe
+`01-niet-aws-otap-opzet.md`) bestaat dit probleem niet: `_next/static/...`
+wijst dan altijd naar de enige server op die hostnaam. Bug 1 en 2 blijven
+gefixt en gemerged — ze zijn juist en nuttig zodra stap C er is, en bug 2's
+fix helpt al gedeeltelijk (interne `<Link>`-navigatie binnen een eenmaal
+geladen pagina blijft werken). Maar **bug 3 bevestigt dat stap C niet langer
+uitgesteld kan worden als productie/staging voor demo of test met een schone
+sessie bereikt moet worden** — tot dusver werkte inloggen toevallig soms
+doordat de browser de JS-chunks al gecachet had van een eerder bezoek aan het
+kale pad.
+
+**Verder nog gerepareerd, terzijde:** het wachtwoord van de `clm_migrator`-rol
+op productie was verlopen/gewijzigd zonder dat `.env` én de GitHub-secret
+`PRODUCTIE_MIGRATION_DATABASE_URL` waren bijgewerkt — blokkeerde de
+productie-poort. Beide bijgewerkt naar het huidige, werkende wachtwoord.
+
+---
+
+**2026-08-17, ochtend.** Geen nieuwe werkstroom, wel drie correcties op de
 stand van 14-08 die hieronder bleven liggen:
 
 1. `feat/pariteit-image-digest` is inmiddels **wél gemerged** — de melding
