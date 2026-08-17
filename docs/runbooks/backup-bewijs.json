@@ -1,16 +1,18 @@
 {
-  "gecontroleerdOp": "2026-08-14T05:30:08.423Z",
-  "dumpGemaaktOp": "2026-08-14T05:00:13.686Z",
-  "dumpNaam": "mcm2-2026-08-14_05-00-02.dump",
-  "dumpBytes": 127827,
+  "gecontroleerdOp": "2026-08-17T09:03:43.381Z",
+  "dumpGemaaktOp": "2026-08-17T08:31:34.036Z",
+  "dumpNaam": "mcm2-2026-08-17_08-31-14.dump",
+  "dumpBytes": 128035,
   "lagen": [
     "A",
-    "B"
+    "B",
+    "C"
   ],
   "goed": true,
   "problemen": [],
   "bevindingen": [
-    "Laatste dump: mcm2-2026-08-14_05-00-02.dump (0 uur oud)",
-    "Compleet: 24 tabellen"
+    "Laatste dump: mcm2-2026-08-17_08-31-14.dump (0 uur oud)",
+    "Compleet: 24 tabellen",
+    "Herstelproef: 24 tabellen teruggezet"
   ]
 }
