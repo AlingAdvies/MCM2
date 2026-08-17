@@ -102,6 +102,16 @@ export class AuthService {
       // query-parameter terug, niet als fragment. Een fragment bereikt de
       // server nooit.
       response_mode: 'query',
+      // Zonder dit gaat Microsoft bij een nog actieve browser-sessie
+      // stilzwijgend door met het laatst gebruikte account — geen keuzescherm,
+      // geen wachtwoordveld voor een ander account. Gevonden op 2026-08-17:
+      // een gebruiker met twee identiteiten (platformbeheerder + tenant-admin,
+      // zie ADR-018) kwam op de "Inloggen"-knop keer op keer bij het verkeerde
+      // account terecht, terwijl een los diagnostisch script met deze
+      // parameter er wel meteen een keuzescherm bij toonde. Dit raakt iedereen
+      // met meer dan één Microsoft-account in dezelfde browser, niet alleen
+      // die ene situatie.
+      prompt: 'select_account',
     });
 
     return {
