@@ -114,6 +114,17 @@ describe('Antwoord-concept opslaan (e2e)', () => {
   const dienIn = (token: string, answers: unknown) =>
     request(server).post(`/survey/respond?t=${token}`).send({ answers });
 
+  interface VraagUitAntwoord {
+    questionKey: string;
+    savedAnswer: {
+      answerCode: string | null;
+      comment: string | null;
+    } | null;
+  }
+
+  const vragen = (token: string) =>
+    request(server).get(`/survey/respond/questions?t=${token}`);
+
   async function opgeslagenAntwoorden(
     responseId: string,
   ): Promise<Map<string, { code: string | null; comment: string | null }>> {
@@ -213,6 +224,26 @@ describe('Antwoord-concept opslaan (e2e)', () => {
     const antwoorden = await opgeslagenAntwoorden(responseId);
     expect(antwoorden.get('q1')?.code).toBe('yes');
     expect(antwoorden.get('q2')?.code).toBe('no');
+  });
+
+  it('geeft een opgeslagen concept terug bij een nieuw bezoek aan de link', async () => {
+    // De kern van teruglezen: opslaan zonder dit is een doodlopend pad — de
+    // leverancier ziet zijn eigen werk niet terug bij het opnieuw openen.
+    const { token } = await maakRonde([
+      { key: 'q1', type: 'yes_no' },
+      { key: 'q2', type: 'yes_no' },
+    ]);
+
+    await bewaar(token, [{ questionKey: 'q1', answerCode: 'yes' }]).expect(200);
+
+    const res = await vragen(token).expect(200);
+    const body = res.body as { questions: VraagUitAntwoord[] };
+
+    const q1 = body.questions.find((v) => v.questionKey === 'q1');
+    const q2 = body.questions.find((v) => v.questionKey === 'q2');
+
+    expect(q1?.savedAnswer?.answerCode).toBe('yes');
+    expect(q2?.savedAnswer).toBeNull();
   });
 
   it('accepteert een lege set zonder iets weg te schrijven', async () => {
