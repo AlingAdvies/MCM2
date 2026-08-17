@@ -2,6 +2,29 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-17.** Geen nieuwe werkstroom vandaag, wel drie correcties op de
+stand van 14-08 die hieronder bleven liggen:
+
+1. `feat/pariteit-image-digest` is inmiddels **wél gemerged** — de melding
+   "nog niet gemerged" hieronder is achterhaald. Zie de commits
+   `2514b76` (merge) en, ná die datum, `bbc7869`/`69ed1fb`
+   (`feat(auth): isPlatformbeheerder op GET /auth/sessie`, ook 14-08 maar
+   niet eerder in dit bestand beschreven): `GET /auth/sessie` geeft nu een
+   `isPlatformbeheerder`-boolean terug, zodat de frontend het
+   platformbeheerscherm kan tonen zonder een aparte route te bevragen.
+   Zuiver zichtbaarheid — `PlatformAdminGuard` blijft de echte grens op elke
+   platformroute.
+2. **De backup liep drie dagen niet.** Laatste dump was 15-08, de controle
+   van vandaag meldde terecht `"goed": false, "problemen": ["verouderd"]`.
+   Oorzaak: de laptop stond uit op het geplande tijdstip — geen fout in de
+   taak zelf. Hersteld: zie het backupbewijs van vandaag.
+3. Er ligt een nieuw, extern aangeleverd ontwerpdocument
+   [`01-niet-aws-otap-opzet.md`](01-niet-aws-otap-opzet.md) — eigen hostnamen
+   per omgeving via Caddy + DNS, wat het bekende sub-pad-probleem (stap C)
+   zou oplossen. Nog niet beoordeeld of ingepast in het vierstappenplan.
+
+---
+
 **2026-08-14.** De image-digest is zichtbaar per omgeving (werkstroom 1 af),
 en de gevulde tenant AlingAdvies is voor het eerst via de browser bereikbaar
 (werkstroom 2 af) — met een tweede identiteit, niet met de oplossing die op
@@ -37,9 +60,9 @@ vanaf de laptop, SSH weigert), `verify:omgevingen` uitbreiden van zes naar
 acht indicatoren (config-hash en identity-config ontbreken nog), en stap B/C/D
 uit het plan.
 
-**Openstaande branch:** `feat/pariteit-image-digest`, gepusht, bevat beide
-werkstromen van vandaag. Nog niet gemerged naar main — dat is de eerste vraag
-bij de volgende sessie.
+**Openstaande branch:** ~~`feat/pariteit-image-digest`, gepusht, bevat beide
+werkstromen van vandaag. Nog niet gemerged naar main~~ — **inmiddels gemerged,
+zie het blok van 17-08 hierboven.**
 
 ---
 
