@@ -2,6 +2,34 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-18, avond — Transdev als eerste echte tenant; AWS-inrichting loopt.**
+
+Twee sporen tegelijk in gang gezet:
+
+**1. AWS-inrichting (nieuw account "AlingAdvies", 727732213368).**
+IAM-gebruiker `MCM2-Deploy` + groep `mcm2-deploy-group` aangemaakt. Onderweg
+twee fouten gevonden en hersteld: verkeerde policy (`AmazonS3ExpressFullAccess`
+i.p.v. `AmazonS3FullAccess`) en de gebruiker bleek niet in de groep te zitten
+(gaf overal "access denied" ondanks zichtbare `IAMFullAccess` — opgelost door
+als root in te loggen). S3-bucket `mcm2-deploy-eu-west-1` (eu-west-1) staat.
+**Volgende AWS-stap: Secrets Manager** (database-URL's, Entra client secret,
+sessie-secret — waarden komen uit `.env`, niet uit deze chat).
+
+**2. Besluit: MCM2 wordt multi-tenant, Transdev is de eerste echte klant**
+(niet mock zoals AlingAdvies — herziening van het 12-08-uitgangspunt "één
+tenant"). Tenant **"Transdev_IT_Survey"** aangemaakt op **acceptatie**
+(`tenant_id 9878b187-99de-4ce3-8ec2-64909d29b9a1`), eerste beheerder
+`cmaling+TransdevIT@gmail.com`, inloggen bevestigd werkend. Bewust nog niet op
+productie: het sub-pad-probleem hieronder (Bug 3) is niet opgelost, en een
+echte klant hoort daar niet tegenaan te lopen — Transdev verhuist naar de
+definitieve productieomgeving zodra AWS/App Runner met eigen hostnamen staat.
+
+**Morgen eerst:** vragenlijst (8 Transdev-vragen) inrichten als ronde binnen
+de Transdev_IT_Survey-tenant, dan een testvendor-flow (indienen → beoordelen)
+eenmaal doorlopen.
+
+---
+
 **2026-08-17, avond — het sub-pad is stukken kapotter dan gedacht.**
 
 Aanleiding: `cmaling@gmail.com` kon niet inloggen op productie/staging.
