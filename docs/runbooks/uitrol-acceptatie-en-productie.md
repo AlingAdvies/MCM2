@@ -6,6 +6,18 @@
 **Vereiste toegang:** Tailscale (voor `saxombp`), GitHub, deze repository
 **Raakt:** Issue #12, #18, #51, ADR-012
 
+> ⚠️ **VEROUDERD VOOR PRODUCTIE, sinds 2026-08-19.** Productie draait niet
+> meer op `saxombp` — het staat nu op AWS ECS Express Mode (zie
+> `docs/STATUS.md` en het projectgeheugen `mcm2-besluit-18-08-naar-aws`).
+> Alles hieronder over `mcm2-productie`, poort 3020/5021,
+> `ssh root@saxombp ... docker compose -p mcm2-productie`, en de
+> `productie.yml`-workflow beschrijft de OUDE route en werkt niet meer voor
+> productie-uitrol. **Acceptatie blijft ongewijzigd op saxombp** — die
+> onderdelen van dit runbook kloppen nog. Dit bestand wordt herschreven
+> zodra de AWS-migratie (frontend-service, custom domain, CI/CD-koppeling)
+> volledig af is; tot dan: voor een productie-uitrol niet dit runbook
+> volgen, eerst navragen hoe de ECS-deploy nu werkt.
+
 ---
 
 ## Waarvoor dit bestaat

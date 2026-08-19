@@ -4,6 +4,12 @@
 **Eigenaar:** de eigenaar (Chris)
 **Laatste update:** 2026-08-10
 
+> ⚠️ **Let op sinds 2026-08-19:** productie draait niet meer op `saxombp` maar
+> op AWS ECS Express Mode. Runbooks die uitrol/deploy naar productie
+> beschrijven (`uitrol-acceptatie-en-productie.md`, `devops-handleiding.md`)
+> zijn op dat punt verouderd — ze dragen zelf een waarschuwingsblok. Staging
+> en acceptatie blijven ongewijzigd op saxombp. Zie `docs/STATUS.md`.
+
 Elk runbook beschrijft één handeling: wat je doet, wat je mag verwachten, en wat
 je doet als het anders uitpakt. Deze index is de enige plek waar ze allemaal
 staan — [verify:onderhoud](onderhoudskalender.md#4-hoe-dit-document-actueel-blijft)
