@@ -24,9 +24,12 @@ productie: het sub-pad-probleem hieronder (Bug 3) is niet opgelost, en een
 echte klant hoort daar niet tegenaan te lopen — Transdev verhuist naar de
 definitieve productieomgeving zodra AWS/App Runner met eigen hostnamen staat.
 
-**Morgen eerst:** vragenlijst (8 Transdev-vragen) inrichten als ronde binnen
-de Transdev_IT_Survey-tenant, dan een testvendor-flow (indienen → beoordelen)
-eenmaal doorlopen.
+**Bewuste keuze 18-08 avond: eerst AWS afmaken en in de lucht krijgen, vóór de
+Transdev-vragenlijst wordt ingericht.** Die vragenlijst-stap staat klaar
+(tenant + eerste beheerder werken al) maar is geparkeerd tot AWS/App Runner
+met eigen hostnamen draait — reden: geen zin verder te bouwen op een tenant
+die toch naar de nieuwe productieomgeving verhuist. **Morgen eerst: Secrets
+Manager** (zie hierboven), dan de rest van het AWS-stappenplan.
 
 ---
 
