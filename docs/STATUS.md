@@ -2,6 +2,37 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-19, avond — `mcm2-api` draait op ECS Express Mode. App Runner was
+een doodlopende weg (accepteert sinds 30-04-2026 geen nieuwe klanten meer).**
+
+Vandaag grotendeels besteed aan de eerste ECS-service werkend krijgen, met
+vijf losse, elk-voor-zich-opgeloste configuratiefouten onderweg: een
+regio-inconsistentie (een secret per ongeluk in `us-east-1` i.p.v.
+`eu-west-1`), de task execution role miste zowel de basis-AWS-managed-policy
+(`AmazonECSTaskExecutionRolePolicy`, voor logs/ECR-pull) als expliciete
+Secrets Manager/SSM-rechten, `DATABASE_URL` miste de `:json-key::`-syntax
+die nodig is omdat de secret als key/value-paar is opgeslagen (gaf
+`ENOTFOUND base` — de container kreeg de hele secret-JSON als connection-
+string), en de ontdekking dat de gewone "Update service"-knop een nieuw
+aangemaakte task-definitie-revisie NEGEERT — dat moet via het dropdown-
+menu-item "Update with custom task definition" met een expliciet
+revisienummer. Volledige uitleg en het "waarom dit niet vanzelf werkte" per
+fout staat in het projectgeheugen (`mcm2-besluit-18-08-naar-aws`).
+
+**Resultaat, bevestigd in CloudWatch Logs**: `mcm2-api` draait, verbonden met
+de productie-Supabase-database als de juiste, minst bevoorrechte rol
+`clm_api_runtime` (eerst per ongeluk `clm_migrator` — direct gecorrigeerd
+met de al aanwezige `PRODUCTIE_RUNTIME_URL` uit `.env`).
+
+**Morgen eerst**: dezelfde service-opzet herhalen voor `mcm2-frontend` (nu
+met alle vijf lessen direct toegepast, zou sneller moeten gaan). Daarna:
+custom domain `clm.alingadvies.nl` koppelen (het huidige DNS A-record naar
+saxombp moet vervangen worden door een CNAME + ACM-validatie), de vier
+placeholder-URL's in `mcm2-api` bijwerken naar de echte productie-URL,
+CloudWatch Logs-retentie, AWS Budget-alert.
+
+---
+
 **2026-08-18, avond — Transdev als eerste echte tenant; AWS-inrichting loopt.**
 
 Twee sporen tegelijk in gang gezet:
