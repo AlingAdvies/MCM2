@@ -158,13 +158,21 @@ jobs:
             --task-definition default-mcm2-api \
             --query taskDefinition > api-task-definition.json
 
+      # `github.sha` is de VOLLEDIGE 40-teken hash; ci.yml publiceert images
+      # met alleen de eerste 12 tekens (`sha-${GITHUB_SHA::12}`). Zonder deze
+      # stap zoekt de volgende stap een tag die nooit gepubliceerd is —
+      # gemeten op 2026-08-20, `CannotPullContainerError: ... not found`.
+      - name: Standaard image-tag bepalen (korte SHA, zoals ci.yml publiceert)
+        id: standaard_versie
+        run: echo "tag=sha-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+
       - name: Nieuwe image-tag in de task-definitie zetten
         id: api-task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: api-task-definition.json
           container-name: Main
-          image: ghcr.io/alingadvies/mcm2/api:${{ inputs.versie != '' && inputs.versie || format('sha-{0}', github.sha) }}
+          image: ghcr.io/alingadvies/mcm2/api:${{ inputs.versie != '' && inputs.versie || steps.standaard_versie.outputs.tag }}
 
       - name: mcm2-api uitrollen
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
