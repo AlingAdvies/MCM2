@@ -2,6 +2,38 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-20, avond — eerste volautomatische AWS-deploy geslaagd via
+GitHub Actions, na drie fouten onderweg (alle drie opgelost).**
+
+Nieuwe workflow `productie-aws.yml`: zelfde vier-remmen-patroon als de
+bestaande `productie.yml` (saxombp), nu uitgebreid met de daadwerkelijke
+ECS-uitrol — dat kon bij saxombp niet automatisch (Tailscale-beperking),
+bij AWS wel. Authenticatie via OIDC (IAM Identity Provider + rol
+`GitHubActions-MCM2-ECS-Deploy`), geen langlevende AWS-sleutel.
+
+Vier testruns nodig: (1) geblokkeerd door de bestaande, terecht werkende
+backup-rem — verse backup gedraaid; (2) OIDC-fout door een verkeerde
+sub-claim-vorm in de trust policy (deze repo gebruikt de nieuwere
+numerieke vorm); (3) `CannotPullContainerError` door een bug in de
+workflow (volledige SHA i.p.v. de korte, gepubliceerde tag) — ECS draaide
+zelf automatisch terug, geen downtime; (4) workflow volledig geslaagd,
+maar de site gaf daarna 503 omdat een eerder (20-08 ochtend) handmatig
+aangemaakte listener-regel met een vast target-group-ARN naar de inmiddels
+omgewisselde, lege kant van het blue/green-paar bleef wijzen. Structureel
+gefixt door die regel te vervangen door een OR-conditie op de bestaande,
+door Express Mode zelf beheerde regel — dezelfde aanpak die al goed stond
+voor de `/auth/*`-routing. Volledige toedracht in het projectgeheugen
+(`mcm2-besluit-18-08-naar-aws`).
+
+**Resultaat, geverifieerd:** `clm.alingadvies.nl` en de login-flow werken
+weer, en zijn nu bestand tegen een volgende deploy zonder handmatig
+ingrijpen.
+
+**Volgende sessie eerst:** devops-handleiding schrijven (nu de keten
+end-to-end bewezen werkt, inclusief de geautomatiseerde deploy).
+
+---
+
 **2026-08-20, middag — login werkt volledig end-to-end op AWS.**
 
 Bevestigd: ingelogd als `kees@alingadvies.nl` op
