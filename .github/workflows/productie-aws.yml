@@ -1,0 +1,270 @@
+name: Uitrol naar AWS-productie
+
+# ── Verhouding tot productie.yml ─────────────────────────────────────────────
+#
+# `productie.yml` rolt uit naar saxombp en draait bewust ALLEEN de migraties
+# automatisch — de container starten bleef daar handwerk, omdat een
+# GitHub-runner via Tailscale niet bij een apparaat met een gebruikersidentiteit
+# kan (zie de toelichting bovenaan die workflow).
+#
+# Die beperking geldt niet voor AWS: ECS heeft een gewone AWS-API die een
+# workflow met de juiste IAM-rol probleemloos mag aanroepen. Deze workflow rolt
+# daarom VOLLEDIG automatisch uit — migraties én de nieuwe containerversie —
+# achter dezelfde vier remmen als productie.yml (§3.4 van het OTAP-plan):
+#
+#   1. handmatig akkoord      GitHub Environment `productie`, required reviewer
+#   2. backup vooraf          productie-poort.js leest het backup-bewijs
+#   3. migratiestand          vóór, ná, én vergeleken met staging
+#   4. terugdraaien           de vorige image-tag staat in de samenvatting
+#
+# ── Authenticatie: OIDC, geen langlevende sleutel ────────────────────────────
+#
+# GitHub wisselt per run een kortlevend token uit met AWS via de IAM Identity
+# Provider `token.actions.githubusercontent.com` (ingericht 2026-08-20). Er
+# staat geen AWS-sleutel in GitHub Secrets — alleen de rol-ARN, die zelf geen
+# toegang geeft zonder een geldig GitHub-token voor deze repo op de
+# `main`-branch (zie de trust policy op de rol `GitHubActions-MCM2-ECS-Deploy`).
+
+on:
+  workflow_dispatch:
+    inputs:
+      versie:
+        description: "Backend-image, bijv. sha-abc123def456 (leeg = laatste van main)"
+        required: false
+        default: ""
+      frontend_versie:
+        description: "Frontend-image, bijv. sha-987fed654321 (leeg = laatste van main)"
+        required: false
+        default: ""
+      reden:
+        description: "Waarom rol je uit? Komt in de samenvatting en het akkoordverzoek."
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: eu-west-1
+  ECS_CLUSTER: default
+
+jobs:
+  # ── Rem 2 en 3 ─────────────────────────────────────────────────────────────
+  #
+  # Zelfde poort als productie.yml, hergebruikt zonder wijziging. Draait vóór
+  # het akkoord: blokkeert deze job, dan is er niemand lastiggevallen met een
+  # vraag die toch nergens toe kon leiden.
+  poort:
+    name: Poort — backup en migratiestanden
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Dependencies installeren
+        run: npm ci
+
+      - name: De drie automatische remmen
+        env:
+          STAGING_MIGRATION_DATABASE_URL: ${{ secrets.STAGING_MIGRATION_DATABASE_URL }}
+          PRODUCTIE_MIGRATION_DATABASE_URL: ${{ secrets.PRODUCTIE_MIGRATION_DATABASE_URL }}
+        run: node scripts/productie-poort.js
+
+      - name: Migratiestand van productie vóór de uitrol
+        id: voor
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.PRODUCTIE_MIGRATION_DATABASE_URL }}
+        run: |
+          VOOR=$(node scripts/migratiestand.js | grep -oE '[0-9]+$' | head -1)
+          echo "aantal=$VOOR" >> "$GITHUB_OUTPUT"
+          echo "Productie stond op $VOOR migraties."
+    outputs:
+      voor: ${{ steps.voor.outputs.aantal }}
+
+  # ── Rem 1: het akkoord, gevolgd door de daadwerkelijke uitrol ───────────────
+  #
+  # De `environment`-regel is de hele rem. GitHub pauzeert deze job en stuurt
+  # een verzoek naar de reviewers van de Environment `productie`.
+  uitrollen:
+    name: Migraties en ECS-uitrol
+    runs-on: ubuntu-latest
+    needs: [poort]
+    environment: productie
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: "npm"
+
+      - name: Dependencies installeren
+        run: npm ci
+
+      # Tussen de poort en het akkoord kan tijd zitten — een akkoord kan een dag
+      # blijven wachten. Opnieuw toetsen kost seconden en sluit uit dat het
+      # akkoord ergens anders over ging dan wat er nu gebeurt.
+      - name: De remmen opnieuw, ná het akkoord
+        env:
+          STAGING_MIGRATION_DATABASE_URL: ${{ secrets.STAGING_MIGRATION_DATABASE_URL }}
+          PRODUCTIE_MIGRATION_DATABASE_URL: ${{ secrets.PRODUCTIE_MIGRATION_DATABASE_URL }}
+        run: node scripts/productie-poort.js
+
+      - name: Migraties draaien tegen productie
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.PRODUCTIE_MIGRATION_DATABASE_URL }}
+        run: node scripts/migrate.js --extern
+
+      # Teruglezen, niet de melding geloven — zelfde discipline als productie.yml.
+      - name: Migratiestand teruglezen en vergelijken met de repository
+        env:
+          MIGRATION_DATABASE_URL: ${{ secrets.PRODUCTIE_MIGRATION_DATABASE_URL }}
+        run: node scripts/migratiestand.js --volgens-journal
+
+      - name: AWS-credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ secrets.AWS_GITHUB_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # ── mcm2-api ────────────────────────────────────────────────────────────
+      #
+      # `--query taskDefinition` haalt precies de vorm op die render/deploy
+      # verwachten; de extra ECS-velden die describe-task-definition meegeeft
+      # (status, revisie, registeredAt, ...) horen daar niet bij een nieuwe
+      # registratie en worden door render-task-definition genegeerd noch nodig.
+      - name: Vorige image-tag van mcm2-api onthouden (voor de samenvatting)
+        id: vorige_api
+        run: |
+          VORIGE=$(aws ecs describe-task-definition \
+            --task-definition default-mcm2-api \
+            --query 'taskDefinition.containerDefinitions[0].image' \
+            --output text)
+          echo "image=$VORIGE" >> "$GITHUB_OUTPUT"
+
+      - name: Huidige task-definitie van mcm2-api ophalen
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition default-mcm2-api \
+            --query taskDefinition > api-task-definition.json
+
+      - name: Nieuwe image-tag in de task-definitie zetten
+        id: api-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: api-task-definition.json
+          container-name: Main
+          image: ghcr.io/alingadvies/mcm2/api:${{ inputs.versie != '' && inputs.versie || format('sha-{0}', github.sha) }}
+
+      - name: mcm2-api uitrollen
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.api-task-def.outputs.task-definition }}
+          service: mcm2-api
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      # ── mcm2-frontend (service web-23bd) ───────────────────────────────────
+      - name: Vorige image-tag van mcm2-frontend onthouden (voor de samenvatting)
+        id: vorige_frontend
+        run: |
+          VORIGE=$(aws ecs describe-task-definition \
+            --task-definition default-web-23bd \
+            --query 'taskDefinition.containerDefinitions[0].image' \
+            --output text)
+          echo "image=$VORIGE" >> "$GITHUB_OUTPUT"
+
+      - name: Huidige task-definitie van mcm2-frontend ophalen
+        run: |
+          aws ecs describe-task-definition \
+            --task-definition default-web-23bd \
+            --query taskDefinition > frontend-task-definition.json
+
+      - name: Nieuwe image-tag in de task-definitie zetten
+        id: frontend-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: frontend-task-definition.json
+          container-name: Main
+          image: ghcr.io/alingadvies/mcm2-frontend/web:${{ inputs.frontend_versie != '' && inputs.frontend_versie || 'latest' }}
+
+      - name: mcm2-frontend uitrollen
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.frontend-task-def.outputs.task-definition }}
+          service: web-23bd
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+
+      # Slaagt de uitrol maar faalt dit, dan staan de rechten verkeerd — merk je
+      # anders pas wanneer de applicatie draait en elk scherm een fout geeft.
+      - name: De runtime-rol kan bij zijn eigen gegevens
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTIE_DATABASE_URL }}
+        run: |
+          node -e "
+            const {Client} = require('pg');
+            const c = new Client({
+              connectionString: process.env.DATABASE_URL,
+              ssl: { rejectUnauthorized: false },
+              connectionTimeoutMillis: 30000,
+            });
+            c.connect()
+              .then(() => c.query('SELECT count(*)::int AS n FROM clm.tenant'))
+              .then((r) => {
+                console.log('clm_api_runtime leest clm.tenant: ' + r.rows[0].n + ' rijen');
+                return c.end();
+              })
+              .catch((e) => { console.error('MISLUKT: ' + e.message); process.exit(1); });
+          "
+
+      # ── Rem 4: terugdraaien ────────────────────────────────────────────────
+      #
+      # `if: always()` omdat juist een MISLUKTE run de weg terug moet tonen.
+      # Terugdraaien op AWS is dezelfde workflow met `versie`/`frontend_versie`
+      # op de vorige tag — er is geen apart script, in tegenstelling tot
+      # `deploy.js` bij saxombp.
+      - name: Samenvatting
+        if: always()
+        env:
+          VERSIE: ${{ inputs.versie }}
+          FRONTEND: ${{ inputs.frontend_versie }}
+          REDEN: ${{ inputs.reden }}
+          VOOR: ${{ needs.poort.outputs.voor }}
+          VORIGE_API: ${{ steps.vorige_api.outputs.image }}
+          VORIGE_FRONTEND: ${{ steps.vorige_frontend.outputs.image }}
+        run: |
+          {
+            echo "### AWS-productie — uitgerold"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Reden | $REDEN |"
+            echo "| Commit | \`${GITHUB_SHA::12}\` |"
+            echo "| Migraties vóór | $VOOR |"
+            echo "| Migraties ná | teruggelezen, gelijk aan het journal |"
+            echo "| mcm2-api, vorige image | \`$VORIGE_API\` |"
+            echo "| mcm2-frontend, vorige image | \`$VORIGE_FRONTEND\` |"
+            echo ""
+            echo "#### Als het misgaat"
+            echo ""
+            echo "Terugdraaien is dezelfde workflow, met \`versie\`/\`frontend_versie\`"
+            echo "op de vorige tags hierboven. Geen apart script — de vier remmen"
+            echo "gelden dan opnieuw, wat bewust is: een rollback is ook een uitrol."
+            echo ""
+            echo "> Let op: een teruggedraaide **applicatie** draait tegen een database"
+            echo "> die de nieuwe migraties al heeft. Dat gaat goed zolang migraties"
+            echo "> achterwaarts verdraagzaam zijn — kolommen toevoegen wel, kolommen"
+            echo "> verwijderen niet. Staat er een verwijderende migratie in, dan is"
+            echo "> terugzetten van de backup de weg, niet de rollback."
+          } >> "$GITHUB_STEP_SUMMARY"
