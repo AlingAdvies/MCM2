@@ -11,6 +11,13 @@ de verkeerde database zou hebben gedraaid.
 Node/npm-scripts uit `package.json`, `netstat`/`taskkill`/`findstr` in
 `C:\Windows\system32`, image `postgres:17.6` lokaal aanwezig.
 
+> ⚠️ **Deels verouderd sinds 2026-08-19.** De database-doelwit-logica hieronder
+> (`beschermd`/`wegwerp`, `.env` naar staging, `--extern`) blijft geldig —
+> die gaat over Supabase, niet over waar de app draait. Maar verwijzingen naar
+> **productie op `saxombp`** (SSH, `docker compose -p mcm2-productie`, poort
+> 3020/5021) zijn achterhaald: productie draait nu op AWS ECS Express Mode.
+> Zie `docs/STATUS.md`.
+
 > **`psql` staat NIET op deze machine.** Er is geen PostgreSQL-client op de host
 > geïnstalleerd. Elke `psql`-aanroep hieronder loopt daarom via
 > `docker exec <container> psql …`. Een kaal `psql ...` faalt met

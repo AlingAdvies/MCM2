@@ -2,6 +2,119 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-20, middag — login werkt volledig end-to-end op AWS.**
+
+Bevestigd: ingelogd als `kees@alingadvies.nl` op
+`clm.alingadvies.nl/beheer/leveranciers`, "Live"-badge (echte backend).
+Onderweg een omweg gemaakt (een apart sub-domein `api.clm.alingadvies.nl`
+voor de API) die niet nodig bleek — de frontend heeft al een eigen
+doorgeefluik (`/api/backend/*`, ADR-012/Issue #51) dat alles naar
+`mcm2-api` doorstuurt, inclusief de OAuth-callback. `OIDC_REDIRECT_URI`
+staat nu correct op `https://clm.alingadvies.nl/api/backend/auth/callback`.
+Volledige toedracht in het projectgeheugen (`mcm2-besluit-18-08-naar-aws`,
+sectie 20-08 middag).
+
+**Open todo — opruimen:** het overbodige sub-domein `api.clm.alingadvies.nl`
+verwijderen: DNS-record bij mijndomein.nl, ACM-certificaat, en de
+OR-conditie met `api.clm.alingadvies.nl` op listener-regel 44990 van
+`ecs-express-gateway-alb-c6b07d03`. Functioneel niet nodig, kost niets om
+te laten staan, maar is ruis.
+
+**Open todo — devops-handleiding:** de eigenaar wil een volledig
+referentiedocument: welke URL's, secrets en infrastructuur nodig zijn om
+de app in AWS aan de praat te krijgen én te houden. Hoort thuis in
+`docs/runbooks/`.
+
+---
+
+**2026-08-20, ochtend — `mcm2-frontend` draait ook op ECS Express Mode.
+Login staat klaar om getest te worden zodra het domein gekoppeld is.**
+
+Zelfde ECS-opzet als gisteren herhaald voor de frontend (repo
+`AlingAdvies/MCM2-frontend`, image `ghcr.io/alingadvies/mcm2-frontend/web:latest`,
+service-naam werd automatisch `web-23bd`). Eén nieuwe fout onderweg:
+"Server Reference ID did not match the expected format" in CloudWatch —
+Next.js self-hosted op meerdere instanties genereert zonder een vaste
+`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` per instantie een eigen sleutel voor
+Server Actions. Bevestigd via de officiële Next.js-documentatie, niet
+gegokt. Fix: plaintext-secret aangemaakt en als env var gekoppeld — daarna
+`✓ Ready in 799ms` in de logs, geen fouten meer.
+
+Frontend-URL: `https://we-0d50abb730584356b38804a7f1ae0868.ecs.eu-west-1.on.aws`
+— pagina laadt, inlogflow start, Microsoft weigert de login (verwacht: het
+ECS-adres staat nog niet als redirect-URI bij Entra, en `mcm2-api`'s
+`OIDC_REDIRECT_URI` staat nog op een placeholder).
+
+**Bewust besluit:** eerst het domein `clm.alingadvies.nl` koppelen aan ECS,
+dán pas Entra en de vier placeholder-URL's bijwerken — voorkomt dat de
+Entra-registratie twee keer aangepast moet worden. Dat is het eerstvolgende
+werk. Volledige stappenlijst in het projectgeheugen
+(`mcm2-besluit-18-08-naar-aws`, sectie 2026-08-20).
+
+---
+
+**2026-08-19, avond — `mcm2-api` draait op ECS Express Mode. App Runner was
+een doodlopende weg (accepteert sinds 30-04-2026 geen nieuwe klanten meer).**
+
+Vandaag grotendeels besteed aan de eerste ECS-service werkend krijgen, met
+vijf losse, elk-voor-zich-opgeloste configuratiefouten onderweg: een
+regio-inconsistentie (een secret per ongeluk in `us-east-1` i.p.v.
+`eu-west-1`), de task execution role miste zowel de basis-AWS-managed-policy
+(`AmazonECSTaskExecutionRolePolicy`, voor logs/ECR-pull) als expliciete
+Secrets Manager/SSM-rechten, `DATABASE_URL` miste de `:json-key::`-syntax
+die nodig is omdat de secret als key/value-paar is opgeslagen (gaf
+`ENOTFOUND base` — de container kreeg de hele secret-JSON als connection-
+string), en de ontdekking dat de gewone "Update service"-knop een nieuw
+aangemaakte task-definitie-revisie NEGEERT — dat moet via het dropdown-
+menu-item "Update with custom task definition" met een expliciet
+revisienummer. Volledige uitleg en het "waarom dit niet vanzelf werkte" per
+fout staat in het projectgeheugen (`mcm2-besluit-18-08-naar-aws`).
+
+**Resultaat, bevestigd in CloudWatch Logs**: `mcm2-api` draait, verbonden met
+de productie-Supabase-database als de juiste, minst bevoorrechte rol
+`clm_api_runtime` (eerst per ongeluk `clm_migrator` — direct gecorrigeerd
+met de al aanwezige `PRODUCTIE_RUNTIME_URL` uit `.env`).
+
+**Morgen eerst**: dezelfde service-opzet herhalen voor `mcm2-frontend` (nu
+met alle vijf lessen direct toegepast, zou sneller moeten gaan). Daarna:
+custom domain `clm.alingadvies.nl` koppelen (het huidige DNS A-record naar
+saxombp moet vervangen worden door een CNAME + ACM-validatie), de vier
+placeholder-URL's in `mcm2-api` bijwerken naar de echte productie-URL,
+CloudWatch Logs-retentie, AWS Budget-alert.
+
+---
+
+**2026-08-18, avond — Transdev als eerste echte tenant; AWS-inrichting loopt.**
+
+Twee sporen tegelijk in gang gezet:
+
+**1. AWS-inrichting (nieuw account "AlingAdvies", 727732213368).**
+IAM-gebruiker `MCM2-Deploy` + groep `mcm2-deploy-group` aangemaakt. Onderweg
+twee fouten gevonden en hersteld: verkeerde policy (`AmazonS3ExpressFullAccess`
+i.p.v. `AmazonS3FullAccess`) en de gebruiker bleek niet in de groep te zitten
+(gaf overal "access denied" ondanks zichtbare `IAMFullAccess` — opgelost door
+als root in te loggen). S3-bucket `mcm2-deploy-eu-west-1` (eu-west-1) staat.
+**Volgende AWS-stap: Secrets Manager** (database-URL's, Entra client secret,
+sessie-secret — waarden komen uit `.env`, niet uit deze chat).
+
+**2. Besluit: MCM2 wordt multi-tenant, Transdev is de eerste echte klant**
+(niet mock zoals AlingAdvies — herziening van het 12-08-uitgangspunt "één
+tenant"). Tenant **"Transdev_IT_Survey"** aangemaakt op **acceptatie**
+(`tenant_id 9878b187-99de-4ce3-8ec2-64909d29b9a1`), eerste beheerder
+`cmaling+TransdevIT@gmail.com`, inloggen bevestigd werkend. Bewust nog niet op
+productie: het sub-pad-probleem hieronder (Bug 3) is niet opgelost, en een
+echte klant hoort daar niet tegenaan te lopen — Transdev verhuist naar de
+definitieve productieomgeving zodra AWS/App Runner met eigen hostnamen staat.
+
+**Bewuste keuze 18-08 avond: eerst AWS afmaken en in de lucht krijgen, vóór de
+Transdev-vragenlijst wordt ingericht.** Die vragenlijst-stap staat klaar
+(tenant + eerste beheerder werken al) maar is geparkeerd tot AWS/App Runner
+met eigen hostnamen draait — reden: geen zin verder te bouwen op een tenant
+die toch naar de nieuwe productieomgeving verhuist. **Morgen eerst: Secrets
+Manager** (zie hierboven), dan de rest van het AWS-stappenplan.
+
+---
+
 **2026-08-17, avond — het sub-pad is stukken kapotter dan gedacht.**
 
 Aanleiding: `cmaling@gmail.com` kon niet inloggen op productie/staging.
