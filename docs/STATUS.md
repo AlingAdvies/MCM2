@@ -2,6 +2,32 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-20, ochtend — `mcm2-frontend` draait ook op ECS Express Mode.
+Login staat klaar om getest te worden zodra het domein gekoppeld is.**
+
+Zelfde ECS-opzet als gisteren herhaald voor de frontend (repo
+`AlingAdvies/MCM2-frontend`, image `ghcr.io/alingadvies/mcm2-frontend/web:latest`,
+service-naam werd automatisch `web-23bd`). Eén nieuwe fout onderweg:
+"Server Reference ID did not match the expected format" in CloudWatch —
+Next.js self-hosted op meerdere instanties genereert zonder een vaste
+`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` per instantie een eigen sleutel voor
+Server Actions. Bevestigd via de officiële Next.js-documentatie, niet
+gegokt. Fix: plaintext-secret aangemaakt en als env var gekoppeld — daarna
+`✓ Ready in 799ms` in de logs, geen fouten meer.
+
+Frontend-URL: `https://we-0d50abb730584356b38804a7f1ae0868.ecs.eu-west-1.on.aws`
+— pagina laadt, inlogflow start, Microsoft weigert de login (verwacht: het
+ECS-adres staat nog niet als redirect-URI bij Entra, en `mcm2-api`'s
+`OIDC_REDIRECT_URI` staat nog op een placeholder).
+
+**Bewust besluit:** eerst het domein `clm.alingadvies.nl` koppelen aan ECS,
+dán pas Entra en de vier placeholder-URL's bijwerken — voorkomt dat de
+Entra-registratie twee keer aangepast moet worden. Dat is het eerstvolgende
+werk. Volledige stappenlijst in het projectgeheugen
+(`mcm2-besluit-18-08-naar-aws`, sectie 2026-08-20).
+
+---
+
 **2026-08-19, avond — `mcm2-api` draait op ECS Express Mode. App Runner was
 een doodlopende weg (accepteert sinds 30-04-2026 geen nieuwe klanten meer).**
 
