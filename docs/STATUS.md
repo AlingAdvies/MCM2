@@ -2,6 +2,31 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-20, middag — login werkt volledig end-to-end op AWS.**
+
+Bevestigd: ingelogd als `kees@alingadvies.nl` op
+`clm.alingadvies.nl/beheer/leveranciers`, "Live"-badge (echte backend).
+Onderweg een omweg gemaakt (een apart sub-domein `api.clm.alingadvies.nl`
+voor de API) die niet nodig bleek — de frontend heeft al een eigen
+doorgeefluik (`/api/backend/*`, ADR-012/Issue #51) dat alles naar
+`mcm2-api` doorstuurt, inclusief de OAuth-callback. `OIDC_REDIRECT_URI`
+staat nu correct op `https://clm.alingadvies.nl/api/backend/auth/callback`.
+Volledige toedracht in het projectgeheugen (`mcm2-besluit-18-08-naar-aws`,
+sectie 20-08 middag).
+
+**Open todo — opruimen:** het overbodige sub-domein `api.clm.alingadvies.nl`
+verwijderen: DNS-record bij mijndomein.nl, ACM-certificaat, en de
+OR-conditie met `api.clm.alingadvies.nl` op listener-regel 44990 van
+`ecs-express-gateway-alb-c6b07d03`. Functioneel niet nodig, kost niets om
+te laten staan, maar is ruis.
+
+**Open todo — devops-handleiding:** de eigenaar wil een volledig
+referentiedocument: welke URL's, secrets en infrastructuur nodig zijn om
+de app in AWS aan de praat te krijgen én te houden. Hoort thuis in
+`docs/runbooks/`.
+
+---
+
 **2026-08-20, ochtend — `mcm2-frontend` draait ook op ECS Express Mode.
 Login staat klaar om getest te worden zodra het domein gekoppeld is.**
 
