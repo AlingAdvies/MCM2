@@ -1,6 +1,6 @@
 # Roadmap — Vendor IT survey en contractmanagement
 
-**Type:** roadmap — geordend, nog niet vastgelegd als issues
+**Type:** roadmap — overzicht; elk punt heeft een gekoppeld GitHub issue (§2–§4)
 **Eigenaar:** de eigenaar (Chris)
 **Opgesteld:** 2026-08-21, uit `docs/opmerkingen Vendor IT survey.txt`
 **Geldt voor:** MCM2 in generieke zin — niet Transdev-specifiek, ook al zijn de
@@ -14,6 +14,13 @@ door een echte gebruiker gebruikt gaat worden, niet alleen intern getest.
 > uitgewerkt wordt tot een GitHub issue, hoort dat issue-nummer hier
 > teruggekoppeld te worden — anders raken dit document en de backlog uit de
 > pas.
+
+**Koppeling met GitHub Issues.** Dit document is het overzicht; de issues zijn
+de detailwerklijst. Elk punt hieronder heeft een `→ #nummer`-verwijzing naar
+het issue waar de uitwerking, discussie en voortgang staan. Het statusbord
+(`docs/STATUSBORD.md`) toont deze issues onder `thema:product-kern` en
+`thema:beheermenu` — dit document geeft de samenhang die het statusbord niet
+laat zien.
 
 ---
 
@@ -56,7 +63,7 @@ precies waarom #24 de bredere modules bewust "later" noemt.
 
 ## 2. Vragenlijst en uitnodiging
 
-### 2.1 Geen link naar de uitstuurder in de vragenlijst zelf
+### 2.1 Geen link naar de uitstuurder in de vragenlijst zelf → [#153](https://github.com/AlingAdvies/MCM2/issues/153)
 
 **Bevinding:** een leverancier die de vragenlijst invult, ziet nergens een
 verwijzing naar wie de uitnodiging heeft verstuurd of waar hij met vragen
@@ -73,7 +80,7 @@ vragenlijst? Neem contact op met [naam/adres]"), gevuld met dezelfde waarde
 als het antwoordadres uit de tenantinstellingen — of, als dat leeg is, de
 contactpersoon-tekst die daar al voor bestaat (zie §5).
 
-### 2.2 "Rondes" is een verwarrende naam voor wat er nu gebeurt
+### 2.2 "Rondes" is een verwarrende naam voor wat er nu gebeurt → [#154](https://github.com/AlingAdvies/MCM2/issues/154)
 
 **Bevinding:** in `/beheer/vragenlijsten` heet elke uitnodiging een "ronde".
 Feitelijk is een herhaalde meting (dezelfde vragenlijst, periodiek opnieuw
@@ -90,7 +97,7 @@ verzending van een vragenlijst) wél moet heten — bijvoorbeeld "verzending" of
 feature. Dit is een kleine wijziging (UI-tekst + eventueel een kolomnaam) als
 hij nu gebeurt, en een grotere migratie als hij later moet.
 
-### 2.3 Nieuwe feature: vragenlijst-bouwer
+### 2.3 Nieuwe feature: vragenlijst-bouwer → [#155](https://github.com/AlingAdvies/MCM2/issues/155)
 
 **Bevinding:** tenant-beheerders kunnen nu geen eigen vragenlijsten
 samenstellen — de acht Transdev-vragen zijn een vaste seed.
@@ -124,7 +131,7 @@ is, zodat dit niet als losse vraag blijft rondzweven.
 Dit is het grootste nieuwe blok, en het correspondeert met stap 3
 ("contractmanagement") uit de grove volgorde.
 
-### 3.1 Contractbeheerder / contactpersoon ontbreekt als veld
+### 3.1 Contractbeheerder / contactpersoon ontbreekt als veld → [#156](https://github.com/AlingAdvies/MCM2/issues/156)
 
 **Bevinding:** bij een leverancier is er geen veld voor wie er intern
 verantwoordelijk is voor het contract of het contact met die leverancier.
@@ -133,7 +140,7 @@ verantwoordelijk is voor het contract of het contact met die leverancier.
 tabel als één leverancier meerdere contractbeheerders kan hebben — dat is een
 scope-vraag die nog niet beantwoord is).
 
-### 3.2 Contractveld, gekoppeld aan leverancierstype en/of vragenlijst
+### 3.2 Contractveld, gekoppeld aan leverancierstype en/of vragenlijst → [#157](https://github.com/AlingAdvies/MCM2/issues/157)
 
 **Bevinding:** er moet een contractveld komen dat linkt naar het type
 leverancier en/of naar de vragenlijst die voor dat type geldt.
@@ -145,7 +152,7 @@ rond `vendor` en `survey_run`/`vragenlijst`, en verdient een eigen ontwerpstap
 vóór er code komt — het is precies het soort keuze waar het
 intake-protocol voor bedoeld is wanneer dit wordt opgepakt.
 
-### 3.3 Bulk-upload voor leveranciersstamdata
+### 3.3 Bulk-upload voor leveranciersstamdata → [#158](https://github.com/AlingAdvies/MCM2/issues/158)
 
 **Bevinding:** er moet een manier zijn om leveranciers in bulk te importeren,
 niet één voor één.
@@ -168,7 +175,7 @@ niet één voor één.
   net als tenant-aanmaak dat al doet. Zonder dat is een verkeerde import
   achteraf niet te herleiden.
 
-### 3.4 Leverancierstype makkelijk aanvinken vanuit de lijst
+### 3.4 Leverancierstype makkelijk aanvinken vanuit de lijst → [#159](https://github.com/AlingAdvies/MCM2/issues/159)
 
 **Bevinding:** vanuit de leverancierslijst moet het type leverancier snel
 aan te vinken zijn, zonder elke leverancier apart te openen.
@@ -177,7 +184,7 @@ aan te vinken zijn, zonder elke leverancier apart te openen.
 rijen in de lijstweergave. Relatief kleine UI-uitbreiding op een bestaand
 scherm.
 
-### 3.5 Bulk-upload voor contractdata
+### 3.5 Bulk-upload voor contractdata → [#160](https://github.com/AlingAdvies/MCM2/issues/160)
 
 **Bevinding:** los van de leveranciersstamdata moet er ook bulk-upload zijn
 voor contractdata: leverancier, begindatum, einddatum.
@@ -187,7 +194,7 @@ feature toegepast op een ander gegevenstype, en kan vermoedelijk dezelfde
 import-mechaniek (preview, matching, audit) hergebruiken zodra die eenmaal
 gebouwd is voor leveranciers.
 
-### 3.6 Compliance-status: vrij tekstveld → koppeling met beoordelingsuitkomst?
+### 3.6 Compliance-status: vrij tekstveld → koppeling met beoordelingsuitkomst? → [#161](https://github.com/AlingAdvies/MCM2/issues/161)
 
 **Bevinding:** de compliance-status bij een leverancier is nu een vrij
 invulbaar tekstveld. De vraag is of dat gekoppeld moet worden aan de
@@ -209,7 +216,7 @@ een automatische overschrijving? Dat verschil bepaalt de hele aanpak.
 
 ## 4. Instellingen
 
-### 4.1 Bug: tenantnaam ontbreekt in de instellingentekst
+### 4.1 Bug: tenantnaam ontbreekt in de instellingentekst → [#162](https://github.com/AlingAdvies/MCM2/issues/162)
 
 **Bevinding:** in de tenantinstellingen staat de tekst:
 
@@ -245,21 +252,27 @@ bewust ook voor demo/bewijs gebruikt — dit is daar een voorbeeld van.
 
 ---
 
-## 6. Voorgestelde volgende stap
+## 6. Alle tien punten zijn nu issues — voorgestelde volgorde
 
-Geen van de punten hierboven is nu al een GitHub issue. Voorstel:
+Aangemaakt 21-08, elk met een `thema:*`-label zodat ze meelopen in het
+statusbord:
 
-1. **§4.1 (tenantnaam-bug)** eerst en los oppakken — klein, geen ontwerpvraag.
-2. **§2.2 (naamgeving "ronde")** vroeg beslissen, vóórdat er meer code op de
-   huidige naam gebouwd wordt — voorkomt een latere naamsbotsing.
-3. De rest van §2 en §3 wachten op een keuze: welke van deze punten hoort bij
-   "stap 1: een goede vragenlijst" (dus nu) en welke bij "stap 3:
-   contractmanagement" (dus later)? Dat onderscheid bepaalt de volgorde
-   waarin ze als issue worden aangemaakt.
+| Issue | Sectie | Voorstel volgorde |
+|---|---|---|
+| [#162](https://github.com/AlingAdvies/MCM2/issues/162) | §4.1 — tenantnaam-bug | Eerst — klein, geen ontwerpvraag |
+| [#154](https://github.com/AlingAdvies/MCM2/issues/154) | §2.2 — naamgeving "ronde" | Vroeg — voorkomt een latere naamsbotsing |
+| [#153](https://github.com/AlingAdvies/MCM2/issues/153) | §2.1 — contactinfo in vragenlijst | Bij stap 1 (goede vragenlijst) |
+| [#155](https://github.com/AlingAdvies/MCM2/issues/155) | §2.3 — vragenlijst-bouwer | Bij stap 1 (goede vragenlijst) |
+| [#156](https://github.com/AlingAdvies/MCM2/issues/156) | §3.1 — contractbeheerder-veld | Bij stap 3 (contractmanagement) |
+| [#157](https://github.com/AlingAdvies/MCM2/issues/157) | §3.2 — contractveld/type-koppeling | Bij stap 3, na §3.1 (ontwerpstap eerst) |
+| [#158](https://github.com/AlingAdvies/MCM2/issues/158) | §3.3 — bulk-upload leveranciers | Bij stap 3 |
+| [#160](https://github.com/AlingAdvies/MCM2/issues/160) | §3.5 — bulk-upload contracten | Bij stap 3, na §3.3 (hergebruikt de mechaniek) |
+| [#159](https://github.com/AlingAdvies/MCM2/issues/159) | §3.4 — leverancierstype aanvinken | Bij stap 3, kleine UI-uitbreiding |
+| [#161](https://github.com/AlingAdvies/MCM2/issues/161) | §3.6 — compliance-status koppeling | Open vraag, geen datum — eerst besluiten wat het moet worden |
 
-**Wat dit document bewust niet doet:** de punten al aan een fase toewijzen.
-Dat is een prioriteringskeuze die bij de eigenaar hoort te liggen, niet iets
-om hier aan te nemen.
+**Wat dit document bewust niet doet:** de volgorde hierboven als vaststaand
+behandelen. Het is een voorstel; de eigenaar bepaalt de daadwerkelijke
+volgorde via het statusbord en de issues zelf.
 
 ---
 
