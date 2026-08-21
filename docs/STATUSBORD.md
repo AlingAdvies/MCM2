@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-08-21 10:07 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-08-21 10:08 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -25,7 +25,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ## Per thema
 
-### Product — vragenlijst, leveranciers, contracten, meldingen (9)
+### Product — vragenlijst, leveranciers, contracten, meldingen (13)
 
 - [#23](https://github.com/AlingAdvies/MCM2/issues/23) `before-production` — MVM_V2-frontend-inconsistenties oplossen (tenant demo vs. transdev, vendors-lijstpagina)
 - [#52](https://github.com/AlingAdvies/MCM2/issues/52) — Restrisico virusscan vastleggen als bewuste beslissing, met opschalingsvoorwaarde
@@ -36,12 +36,17 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#155](https://github.com/AlingAdvies/MCM2/issues/155) — Nieuwe feature: vragenlijst-bouwer voor tenant-beheerders
 - [#156](https://github.com/AlingAdvies/MCM2/issues/156) — Veld voor contractbeheerder/contactpersoon ontbreekt bij leverancier
 - [#157](https://github.com/AlingAdvies/MCM2/issues/157) — Contractveld ontbreekt, gekoppeld aan leverancierstype en/of vragenlijst
+- [#158](https://github.com/AlingAdvies/MCM2/issues/158) — Bulk-upload voor leveranciersstamdata
+- [#159](https://github.com/AlingAdvies/MCM2/issues/159) — Leverancierstype makkelijk aanvinken vanuit de leverancierslijst
+- [#160](https://github.com/AlingAdvies/MCM2/issues/160) — Bulk-upload voor contractdata (leverancier, begin-/einddatum)
+- [#161](https://github.com/AlingAdvies/MCM2/issues/161) — Compliance-status: vrij tekstveld → koppeling met beoordelingsuitkomst?
 
-### Beheermenu (3)
+### Beheermenu (4)
 
 - [#75](https://github.com/AlingAdvies/MCM2/issues/75) `before-production` — Beheermenu: gebruikers en rechten per tenant
 - [#76](https://github.com/AlingAdvies/MCM2/issues/76) `before-production` — Beheermenu: e-mailinstellingen (SMTP) per tenant, wachtwoord versleuteld opgeslagen
 - [#77](https://github.com/AlingAdvies/MCM2/issues/77) `before-production` — Beheermenu: uitnodigingen versturen — handpicked en in bulk op leverancierscriteria
+- [#162](https://github.com/AlingAdvies/MCM2/issues/162) — Bug: tenantnaam ontbreekt in de tenantinstellingen-tekst (hardcoded 'AlingAdvies')
 
 ### AWS / productie-infrastructuur (5)
 
@@ -91,4 +96,4 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ---
 
-**Totaal open:** 40
+**Totaal open:** 45
