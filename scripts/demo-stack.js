@@ -308,6 +308,67 @@ function databaseKlaarzetten(vers) {
   return { ok: true };
 }
 
+const MIGRATION_URL = `postgresql://clm_migrator:pw@localhost:${DB_POORT}/postgres`;
+
+/**
+ * Vergelijkt de migratiestand van de demo-database met het journal, en
+ * werkt bij als er verschil is.
+ *
+ * ── Waarom dit hier zit ──────────────────────────────────────────────────
+ *
+ * Gemeten op 2026-08-21: de demo-database liep 7 migraties achter (20 van
+ * 27) zonder dat er enig signaal was. Dat gaf een 500-fout op een query
+ * naar een tabel die nog niet bestond — een fout die op het eerste gezicht
+ * leek op "sessie verlopen", maar in werkelijkheid een stille
+ * infrastructuur-achterstand was. `verify:omgevingen` bewaakt dit al voor
+ * acceptatie/staging/productie; de demo-database had die bewaking niet.
+ *
+ * ── Waarom "voltooid" niet genoeg is ─────────────────────────────────────
+ *
+ * migrate.js meldt "Migraties voltooid" ook wanneer er niets te doen was.
+ * Na een daadwerkelijke migratie wordt daarom opnieuw gemeten — dezelfde
+ * discipline als scripts/deploy.js, en de kernregel van dit project.
+ */
+function migratieBijwerken() {
+  const eerste = draai('node', ['scripts/migratiestand.js', '--volgens-journal'], {
+    env: { MIGRATION_DATABASE_URL: MIGRATION_URL },
+  });
+
+  if (eerste.ok) {
+    return { ok: true, bijgewerkt: false };
+  }
+
+  console.log('  Demo-database loopt achter op de migraties — bijwerken…');
+
+  const migratie = draai('node', ['scripts/migrate.js', '--extern'], {
+    env: { MIGRATION_DATABASE_URL: MIGRATION_URL },
+  });
+
+  if (!migratie.ok) {
+    return {
+      ok: false,
+      reden:
+        `de migratie op de demo-database is mislukt:\n` +
+        `${migratie.uitvoer.trim().split('\n').slice(-15).join('\n')}`,
+    };
+  }
+
+  const tweede = draai('node', ['scripts/migratiestand.js', '--volgens-journal'], {
+    env: { MIGRATION_DATABASE_URL: MIGRATION_URL },
+  });
+
+  if (!tweede.ok) {
+    return {
+      ok: false,
+      reden:
+        `de migratie meldde succes, maar de stand klopt na afloop nog steeds niet:\n` +
+        `${tweede.uitvoer.trim().split('\n').slice(-10).join('\n')}`,
+    };
+  }
+
+  return { ok: true, bijgewerkt: true };
+}
+
 // ── Backend en frontend ─────────────────────────────────────────────────────
 
 /**
@@ -658,6 +719,17 @@ function start(vers) {
   if (!db.ok) {
     console.error(`\nGestopt: ${db.reden}`);
     return false;
+  }
+
+  const migratie = migratieBijwerken();
+
+  if (!migratie.ok) {
+    console.error(`\nGestopt: ${migratie.reden}`);
+    return false;
+  }
+
+  if (migratie.bijgewerkt) {
+    console.log('  Migraties bijgewerkt en geverifieerd.');
   }
 
   console.log('\n3/5  Backend starten');
