@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-08-21 10:10 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-08-21 11:32 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -16,7 +16,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ## Op prioriteit, over alle thema's heen
 
-**P0 — voor elke volgende regel productiecode** — 2 open
+**P0 — voor elke volgende regel productiecode** — 3 open
 **Vóór de pilot** — 6 open
 **Vóór bredere productie** — 12 open
 **Later — bewust uitgesteld** — 1 open
@@ -65,8 +65,9 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#46](https://github.com/AlingAdvies/MCM2/issues/46) — Duurzame objectopslag voor uploads + ingeplande dump buiten de brondraaimachine
 - [#48](https://github.com/AlingAdvies/MCM2/issues/48) — Pilot-runbook en alerting: wie kijkt wanneer naar welk signaal
 
-### OTAP en CI/CD (6)
+### OTAP en CI/CD (7)
 
+- [#165](https://github.com/AlingAdvies/MCM2/issues/165) `p0` — OTAP-fout: geen betrouwbare manier om een feature te zien/testen vóór mergen
 - [#18](https://github.com/AlingAdvies/MCM2/issues/18) `before-production` — Volledige OTAP-doorloop minimaal één keer bewezen
 - [#20](https://github.com/AlingAdvies/MCM2/issues/20) `before-production` — Dockerfile hardenen: npm ci, multi-stage build, non-root user
 - [#22](https://github.com/AlingAdvies/MCM2/issues/22) `before-production` — Dependabot-configuratie
@@ -96,4 +97,4 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ---
 
-**Totaal open:** 45
+**Totaal open:** 46
