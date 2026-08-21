@@ -1,3 +1,4 @@
+import { isGeldigMailadres } from '../mail/mail-adres';
 import type {
   ContactInvoer,
   NieuweVendor,
@@ -120,12 +121,30 @@ function kvkNummer(waarde: unknown): string | null {
 }
 
 /**
+ * Een topleveldomein van één teken bestaat niet ('transdev.n' i.p.v.
+ * 'transdev.nl') en een domein dat op een streepje of punt eindigt is altijd
+ * een afgekapte invoer. Dit is geen RFC-controle maar een gerichte vangst op
+ * de vergissing die bij overtypen/plakken uit een spreadsheet het vaakst
+ * voorkomt: het laatste stukje van het adres ontbreekt of is half getypt.
+ */
+const VERDACHT_DOMEIN = /\.[a-z]$|[-.]$/i;
+
+/**
  * Een e-mailadres moet er plausibel uitzien.
  *
  * Bewust geen strenge RFC-controle: die is berucht om geldige adressen af te
  * wijzen, en de echte controle is toch of er een e-mail aankomt. Wat hier
  * wordt gevangen is de vergissing — een naam in het e-mailveld, een ontbrekend
- * apenstaartje.
+ * apenstaartje, of een afgekapt domein.
+ *
+ * Hergebruikt `isGeldigMailadres` (ook gebruikt door het mailkanaal en de
+ * tenant-instellingen) zodat één adres niet op het ene scherm wordt geweigerd
+ * en op het andere doorgelaten. De extra domeincontrole hier is bewust niet in
+ * die gedeelde functie gezet: die moet ruim blijven voor het mailkanaal zelf
+ * (aflevering is daar de echte controle, zie mail-adres.ts), terwijl
+ * leveranciersinvoer — vaak handmatig getypt of uit een lijst geplakt — baat
+ * heeft bij het vangen van een overduidelijke tikfout vóórdat de uitnodiging
+ * de deur uitgaat.
  */
 function emailAdres(waarde: unknown): string | null {
   const tekst = optioneleTekst(waarde, 'E-mailadres', MAX_KORT);
@@ -134,7 +153,7 @@ function emailAdres(waarde: unknown): string | null {
     return null;
   }
 
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tekst)) {
+  if (!isGeldigMailadres(tekst) || VERDACHT_DOMEIN.test(tekst)) {
     throw new InvoerFout('contact.email', 'Dit lijkt geen geldig e-mailadres.');
   }
 
