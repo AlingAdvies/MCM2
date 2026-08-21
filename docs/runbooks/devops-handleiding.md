@@ -2,15 +2,14 @@
 
 **Type:** D — routineoperaties
 **Eigenaar:** de eigenaar (Chris)
-**Laatste update:** 2026-08-12
-**Vereiste toegang:** GitHub (AlingAdvies/MCM2), Supabase, Telegram op je telefoon
+**Laatste update:** 2026-08-21
+**Vereiste toegang:** GitHub (AlingAdvies/MCM2), AWS-console (account
+AlingAdvies, 727732213368), Telegram op je telefoon
 
-> ⚠️ **VEROUDERD VOOR PRODUCTIE, sinds 2026-08-19.** Productie draait sinds
-> vandaag op AWS ECS Express Mode, niet meer op `saxombp`. Verwijzingen naar
-> "de GitHub Environment `productie`-akkoordknop" en de bestaande
-> uitrol-workflow beschrijven het OUDE mechanisme — dat moet nog gekoppeld
-> worden aan de nieuwe AWS-deploy. Acceptatie/staging op saxombp zijn
-> ongewijzigd. Zie `docs/STATUS.md` voor de actuele stand.
+> **Sinds 2026-08-19 draait productie op AWS (ECS Express Mode), niet meer
+> op `saxombp`.** Acceptatie en staging blijven ongewijzigd op `saxombp`.
+> Deze handleiding is bijgewerkt naar de nieuwe situatie — waar iets over
+> `saxombp` gaat, staat dat er nu expliciet bij.
 
 ---
 
@@ -67,7 +66,9 @@ allemaal hetzelfde:
 ### Moment 2 — GitHub vraagt je akkoord voor productie
 
 **Je krijgt een e-mail van GitHub** met "Deployment review requested", en de
-run staat stil tot jij drukt.
+run staat stil tot jij drukt. Dit gebeurt zowel bij een uitrol naar
+AWS-productie (workflow `productie-aws.yml`) als, voor acceptatie/staging op
+`saxombp`, bij de oudere workflow `productie.yml`.
 
 **Wat jij doet:**
 
@@ -79,6 +80,13 @@ run staat stil tot jij drukt.
 **Waar je op let vóór je drukt:** in de logs van de stap ervóór staat een blok
 dat eindigt met `DOOR — de drie automatische remmen geven groen licht`. Staat
 daar `GEBLOKKEERD`, dan is de knop er niet eens — dan hoef je niets te doen.
+
+**Voor AWS-productie duurt het na jouw akkoord langer dan je gewend bent van
+vroeger** — reken op zo'n 35-40 minuten voordat de run helemaal groen is. Dat
+komt doordat de workflow nu ook echt de nieuwe versie naar AWS uitrolt en
+wacht tot die daar aantoonbaar gezond draait, in plaats van te stoppen na de
+migraties. Je hoeft niet te wachten of iets te doen — de run loopt vanzelf
+door.
 
 ### Moment 3 — Je wilt zelf iets uitgerold hebben
 
@@ -98,7 +106,7 @@ openen, wachten tot de controles groen zijn, mergen, en de applicatie starten.
 🧑 **Jouw enige moment:** Claude vraagt je of de pull request gemerged mag
 worden. Dat is een vraag in de chat, geen knop op GitHub.
 
-### Naar productie — daar komt jouw akkoord bij
+### Naar productie (AWS) — daar komt jouw akkoord bij
 
 🤖 **Vraag Claude:** *"ik wil versie X naar productie"*
 
@@ -107,14 +115,24 @@ Wat er dan gebeurt, in volgorde:
 | | Wie | Wat |
 |---|---|---|
 | 1 | 🤖 CLAUDE | controleert of de backup vers genoeg is, en commit het bewijs |
-| 2 | 🤖 CLAUDE | start de workflow op GitHub |
+| 2 | 🤖 CLAUDE | start de workflow `productie-aws.yml` op GitHub |
 | 3 | ⚙️ VANZELF | de poort draait: backup, staging, productiestand |
 | 4 | 🧑 **JIJ** | **akkoord geven** — zie moment 2 hierboven |
 | 5 | ⚙️ VANZELF | de poort draait nog eens, dan de migraties |
-| 6 | 🤖 CLAUDE | start de applicatie met het commando uit de samenvatting |
+| 6 | ⚙️ VANZELF | AWS rolt de nieuwe versie uit — eerst de API, dan de website — en wacht tot beide aantoonbaar gezond zijn |
 
 **Stap 4 is het enige moment waarop het op jou wacht.** Alles daarvoor en
-daarna loopt door.
+daarna loopt vanzelf door, inclusief het daadwerkelijk starten van de nieuwe
+versie — dat hoef je (anders dan vroeger bij `saxombp`) niet meer apart aan
+Claude te vragen.
+
+### Naar acceptatie/staging (saxombp) — het starten blijft handwerk
+
+Voor acceptatie en staging draait de applicatie nog op `saxombp`, niet op
+AWS. Daar geldt onveranderd: na het mergen start de container niet vanzelf.
+
+🤖 **Vraag Claude:** *"start [acceptatie/staging] op met versie X"* — dat is
+het commando uit de samenvatting van de vorige stap.
 
 ### Wat je nooit hoeft te onthouden
 
@@ -128,16 +146,22 @@ twaalf tekens lang en één cijfer verkeerd betekent "image niet gevonden".
 
 🤖 **Vraag Claude:** *"draai de laatste uitrol terug"*
 
-Claude weet welke versie er daarvóór draaide — dat staat in de logs van de
-vorige uitrol — en zet die terug.
+Claude weet welke versie er daarvóór draaide — dat staat in de samenvatting
+van de vorige uitrol — en zet die terug.
+
+**Voor AWS-productie is een rollback gewoon dezelfde workflow opnieuw**, met
+de vorige versienummers ingevuld. Er is geen apart terugdraai-commando. Dat
+betekent ook: **jouw akkoord (moment 2) is bij een rollback opnieuw nodig** —
+bewust, want een rollback is ook een uitrol en verdient dezelfde rem.
 
 🧑 **Wat jij moet weten:** terugdraaien zet de **applicatie** terug, niet de
 **database**. Zijn er bij die uitrol kolommen verwijderd, dan is terugzetten van
 de backup de weg. Claude zegt het als dat aan de orde is; je hoeft het niet zelf
 te beoordelen.
 
-**Hoe snel:** een rollback duurt ongeveer een minuut. Hij is op 11 augustus
-beproefd op acceptatie, heen en terug.
+**Hoe snel:** op `saxombp` (acceptatie/staging) duurt een rollback ongeveer een
+minuut. Op AWS-productie duurt het net zo lang als een gewone uitrol
+(35-40 minuten), omdat het dezelfde volledige workflow is.
 
 ---
 
@@ -184,14 +208,17 @@ falen alle drie de dagelijkse taken. Je merkt het aan het Telegram-bericht.
 | Wanneer | Wat | Hoe |
 |---|---|---|
 | elke week | kijken of het levensteken kwam | je telefoon |
-| elke week | staging wakker houden | 🤖 vraag Claude: *"houd staging wakker"* |
+| elke week | staging én productie wakker houden | 🤖 vraag Claude: *"houd staging en productie wakker"* |
 | elke maand | herstelproef met echte controle | 🤖 vraag Claude erom |
 | elke maand, en na elke uitrol naar productie | de omgevingen naast elkaar leggen | 🤖 vraag Claude: *"lopen de omgevingen gelijk?"* |
 | elk kwartaal | terugdraaien beproeven | 🤖 vraag Claude erom |
 
-> **Waarom staging wakker houden?** Een gratis Supabase-project pauzeert na
-> zeven dagen zonder activiteit. Gebeurt dat, dan faalt de eerstvolgende uitrol
-> met een verbindingsfout die naar de verkeerde oorzaak wijst.
+> **Waarom wakker houden?** Beide Supabase-projecten (staging én productie)
+> draaien op het gratis plan en pauzeren na zeven dagen zonder activiteit.
+> Gebeurt dat, dan faalt de eerstvolgende uitrol — of erger, dan pauzeert de
+> database waar klanten/demo tegenaan praten — met een verbindingsfout die
+> naar de verkeerde oorzaak wijst. Voor productie is dit risico groter dan
+> vroeger: die wordt nu ook voor demo gebruikt (zie `CLAUDE.md` §0).
 
 > **Waarom de omgevingen naast elkaar leggen?** De drie omgevingen horen
 > dezelfde vorm te hebben: dezelfde tabellen, dezelfde beveiliging, dezelfde
@@ -237,10 +264,13 @@ Drie dingen die je wel zelf moet doen:
 | Er komt al een week geen enkel bericht | Claude vragen te controleren of de melder nog werkt |
 | Claude meldt *"Tailscale SSH requires an additional check"* met een login-link | **Open die link en bevestig.** Eén klik |
 
-> **Over die Tailscale-link.** De toegang tot saxombp verloopt periodiek; dat is
-> een beveiliging van Tailscale zelf, geen storing. Claude kan hem niet voor je
-> aanklikken — het is juist de bedoeling dat een mens dat doet. Zolang je niet
-> bevestigt, blijft elke poging om bij de server te komen wachten.
+> **Over die Tailscale-link.** Dit speelt alleen bij **acceptatie en staging**
+> (die draaien nog op `saxombp`) — nooit bij productie, want die staat op AWS
+> en is via de gewone AWS-console/API bereikbaar. De toegang tot saxombp
+> verloopt periodiek; dat is een beveiliging van Tailscale zelf, geen storing.
+> Claude kan hem niet voor je aanklikken — het is juist de bedoeling dat een
+> mens dat doet. Zolang je niet bevestigt, blijft elke poging om bij de server
+> te komen wachten.
 >
 > Waargenomen op 2026-08-11: `npm run deploy:status` hing zonder foutmelding,
 > en de reden bleek pas zichtbaar bij een handmatige SSH-poging.
@@ -268,15 +298,22 @@ het voorstelt — dan is er iets mis.
 
 ## 9. Achtergrond — alleen als je wilt weten waarom
 
-### Er zijn vier omgevingen
+### Er zijn vier omgevingen, en ze draaien niet allemaal op dezelfde plek
 
-| | Waarvoor | Wie komt eraan |
-|---|---|---|
-| **lokaal** | ontwikkelen | Claude, op je laptop |
-| **acceptatie** | uitproberen, zelf inloggen | jij, via `saxombp:3010` |
-| **staging** | repetitie vóór productie | niemand — dit is een generale |
-| **productie** | echte klanten | de klant |
+| | Waarvoor | Draait op | Wie komt eraan |
+|---|---|---|---|
+| **lokaal** | ontwikkelen | jouw laptop | Claude, op je laptop |
+| **acceptatie** | uitproberen, zelf inloggen | `saxombp` (thuisserver) | jij, via `saxombp:3010` |
+| **staging** | repetitie vóór productie | `saxombp` (thuisserver) | niemand — dit is een generale |
+| **productie** | echte klanten + demo | **AWS** (ECS Express Mode, Ierland), `clm.alingadvies.nl` | de klant, en jij voor demo |
 
+> **Sinds 19 augustus draait productie niet meer op `saxombp`.** De
+> applicatie (`mcm2-api` + `mcm2-frontend`) draait sinds die dag op Amazon
+> Web Services. De productiedatabase zelf stond al bij Supabase en is niet
+> verhuisd — alleen de server die ertegenaan praat, is nu bij Amazon in
+> plaats van bij jou thuis. Acceptatie en staging zijn ongewijzigd op
+> `saxombp` blijven staan.
+>
 > **Tot 12 augustus heetten er twee dingen "productie".** De echte database bij
 > Supabase, én een lege database op saxombp waar de applicatie tegenaan praatte.
 > Dat is opgeheven: er is er nu één. Als je ergens nog leest over "de
@@ -284,8 +321,9 @@ het voorstelt — dan is er iets mis.
 
 **Waarom staging bestaat:** productie draait bij Amazon in Ierland, achter een
 verbindingslaag die zich anders gedraagt dan een database op je eigen machine.
-Staging draait op precies diezelfde opzet. Een migratie die dáár slaagt, slaagt
-in productie — dat is het hele punt.
+Staging draait op `saxombp` op een vergelijkbare opzet — geen exacte kopie meer
+van de omgeving, maar wel van de database en de migraties. Een migratie die
+op staging slaagt, slaagt op productie — dat blijft het hele punt.
 
 ### Waarom er remmen op productie zitten
 
