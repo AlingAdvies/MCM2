@@ -2,6 +2,91 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-21, avond — eerste feature end-to-end door de volledige,
+geautomatiseerde OTAP-keten: van issue tot productie, inclusief een nieuw
+gebouwd preview-mechanisme.**
+
+Grote, meerledige sessie. Kernresultaat: issue #154 (rondes groeperen per
+vragenlijst in `/beheer/vragenlijsten`) is de eerste wijziging die de hele
+sinds 19-08 bestaande AWS-keten daadwerkelijk heeft doorlopen — brainstormen
+→ spec → plan → implementatie → preview → merge → staging → productie —
+en dat leverde onderweg een structureel gat aan het licht dat ook is
+gedicht.
+
+**Issue-hygiëne eerst.** 46 open issues teruggebracht naar 44 (en later
+meer): elf achterhaalde issues gesloten met bewijs (Prisma/Drizzle-spike,
+tweede-identiteitsmechanisme, oude PR's, token-mechanisme — allemaal al
+lang gebouwd maar nooit afgesloten), zes bijgewerkt naar de actuele stand
+zonder te sluiten (#1, #30, #15, #16, #58 — backup/wachtwoordrotatie,
+bewust nog open met reden). Acht thema-labels aangemaakt en toegekend aan
+alle open issues; `scripts/statusbord.js` + een GitHub Action gebouwd die
+`docs/STATUSBORD.md` automatisch actueel houdt.
+
+**Roadmap ↔ issues gekoppeld.** Tien punten uit
+`docs/architectuur/roadmap-vendor-it-survey.md` (losse bevindingen uit het
+testen op productie: contractbeheerder-veld, bulk-upload, vragenlijst-
+bouwer, compliance-status-koppeling, de tenantnaam-bug) omgezet naar
+issues #153–#162, met verwijzingen in beide richtingen.
+
+**#154 volledig doorlopen — het echte werk van vandaag.** Via
+brainstorming vastgesteld: puur een frontend-weergavewijziging (groeperen
+per vragenlijst-titel, uitklapbaar, tijdsaanduiding i.p.v. het woord
+"ronde"), bewust geen database- of backend-wijziging. Spec en plan
+geschreven en gecommit (`docs/superpowers/specs/2026-08-21-rondes-
+weergave-design.md`), geïmplementeerd in vijf taken in
+`MCM2-frontend`, geverifieerd met een echte browsertest tegen de
+demo-stack (geen regressie t.o.v. main, zelfs één bestaande faalgeval
+gerepareerd).
+
+**Tijdens het previewen: een structureel OTAP-gat blootgelegd (issue
+#165).** Drie problemen tegelijk: een `#`-fragment-token dat afkapte bij
+kopiëren/plakken, een demo-database die 7 migraties bleek achter te lopen
+(20 van 27 — gaf een misleidende 500 die op "sessie verlopen" leek), en een
+onopgemerkte branch-mismatch tussen de backend- en frontend-repo. Door de
+eigenaar expliciet tot hoogste prioriteit verklaard: *"dit MOET in één keer
+goed, geen gokken of experimenten."*
+
+**Opgelost met een ontworpen, beproefde uitbreiding van
+`scripts/demo-stack.js`** (spec + plan geschreven, daarna geïmplementeerd
+in AlingAdvies/MCM2#168): `npm run demo -- --branch <naam>` voor expliciete
+branch-keuze, altijd zichtbare `Backend: .../Frontend: ...`-regels, en
+automatische migratiecontrole/-herstel bij het opstarten. Tijdens de
+verificatie zelf nog twee echte bugs gevonden en gefixt (opdracht-
+herkenning brak zonder `--branch`; `--format=%h %s` brak op Windows door
+shell-argumentsplitsing) — precies waarom Task 4 (daadwerkelijk draaien,
+niet alleen syntaxcontrole) in het plan stond.
+
+**Nieuwe, blijvende werkafspraak vastgelegd** (memory
+`mcm2-demo-link-incognito-hard-reload`): bij elke frontend-only wijziging
+altijd proactief een preview aanbieden, en die altijd volgens de exacte,
+bewezen procedure — inclusief de link altijd met "open in incognito" +
+"Ctrl+Shift+R vooraf" erbij, wat een eerdere sessie van verwarrende
+foutmeldingen voorkwam.
+
+**De volledige keten daadwerkelijk doorlopen, niet alleen getest:**
+1. PR AlingAdvies/MCM2-frontend#14 gemerged (na een CI-fix: Prettier-
+   formattering, gevonden omdat de eerdere lokale controle alleen `build`
+   draaide, niet de losse `format`/`lint`/`typecheck`-poorten die CI
+   gebruikt — precies het bekende "verschillende commando's, verschillende
+   uitkomst"-patroon uit §15a).
+2. `npm run deploy:staging` — alle zes stappen groen, rookproef bevestigd
+   met een onafhankelijke `curl`.
+3. Productie-uitrol aangevraagd via `productie-aws.yml`, akkoord gegeven,
+   workflow volledig groen in ~28 minuten.
+4. **Onafhankelijk bevestigd:** `curl https://clm.alingadvies.nl/api/
+   backend/health` toont commit `bcfc127` — dezelfde die op staging
+   draaide. Met eigen ogen bekeken door de eigenaar in productie.
+
+**Terzijde, tijdens het mergen:** de `statusbord`-bot-workflow botste één
+keer op een race condition (drie snel-achter-elkaar gemergede PR's tijdens
+de bot-run zelf, `fetch first`-afwijzing). Onschuldig, handmatig hersteld.
+
+**Sessie afgesloten 21-08 avond.** Volgende sessie: geen expliciete
+volgende stap afgesproken — het statusbord (`docs/STATUSBORD.md`) en de
+roadmap zijn het startpunt.
+
+---
+
 **2026-08-20, avond — eerste volautomatische AWS-deploy geslaagd via
 GitHub Actions, na drie fouten onderweg (alle drie opgelost).**
 
