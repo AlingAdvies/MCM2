@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-08-21 09:55 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-08-21 10:02 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -27,7 +27,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ### Product — vragenlijst, leveranciers, contracten, meldingen (5)
 
-- [#13](https://github.com/AlingAdvies/MCM2/issues/13) `before-pilot` — E-mailverzending via Transdev-eigen SMTP
+- [#13](https://github.com/AlingAdvies/MCM2/issues/13) `before-pilot` — Uitnodigingslinks makkelijk kopieerbaar maken (procesworkaround i.p.v. Transdev-SMTP)
 - [#23](https://github.com/AlingAdvies/MCM2/issues/23) `before-production` — MVM_V2-frontend-inconsistenties oplossen (tenant demo vs. transdev, vendors-lijstpagina)
 - [#52](https://github.com/AlingAdvies/MCM2/issues/52) — Restrisico virusscan vastleggen als bewuste beslissing, met opschalingsvoorwaarde
 - [#83](https://github.com/AlingAdvies/MCM2/issues/83) — Gearchiveerde testrondes stapelen op in de demo-database
