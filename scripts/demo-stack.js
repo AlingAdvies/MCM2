@@ -34,10 +34,11 @@
  * controleerPoorten().
  *
  * Gebruik:
- *   npm run demo            opzetten (data blijft staan)
- *   npm run demo -- --vers  database eerst weggooien en opnieuw opbouwen
- *   npm run demo:af         backend en frontend stoppen, database laten staan
- *   npm run demo:status     draait het, en wat zit erin?
+ *   npm run demo                       opzetten (data blijft staan)
+ *   npm run demo -- --vers             database eerst weggooien en opnieuw opbouwen
+ *   npm run demo -- --branch <naam>    eerst deze branch uitchecken in MCM2-frontend
+ *   npm run demo:af                    backend en frontend stoppen, database laten staan
+ *   npm run demo:status                draait het, en wat zit erin?
  */
 
 const { spawn, spawnSync } = require('node:child_process');
@@ -308,6 +309,67 @@ function databaseKlaarzetten(vers) {
   return { ok: true };
 }
 
+const MIGRATION_URL = `postgresql://clm_migrator:pw@localhost:${DB_POORT}/postgres`;
+
+/**
+ * Vergelijkt de migratiestand van de demo-database met het journal, en
+ * werkt bij als er verschil is.
+ *
+ * ── Waarom dit hier zit ──────────────────────────────────────────────────
+ *
+ * Gemeten op 2026-08-21: de demo-database liep 7 migraties achter (20 van
+ * 27) zonder dat er enig signaal was. Dat gaf een 500-fout op een query
+ * naar een tabel die nog niet bestond — een fout die op het eerste gezicht
+ * leek op "sessie verlopen", maar in werkelijkheid een stille
+ * infrastructuur-achterstand was. `verify:omgevingen` bewaakt dit al voor
+ * acceptatie/staging/productie; de demo-database had die bewaking niet.
+ *
+ * ── Waarom "voltooid" niet genoeg is ─────────────────────────────────────
+ *
+ * migrate.js meldt "Migraties voltooid" ook wanneer er niets te doen was.
+ * Na een daadwerkelijke migratie wordt daarom opnieuw gemeten — dezelfde
+ * discipline als scripts/deploy.js, en de kernregel van dit project.
+ */
+function migratieBijwerken() {
+  const eerste = draai('node', ['scripts/migratiestand.js', '--volgens-journal'], {
+    env: { MIGRATION_DATABASE_URL: MIGRATION_URL },
+  });
+
+  if (eerste.ok) {
+    return { ok: true, bijgewerkt: false };
+  }
+
+  console.log('  Demo-database loopt achter op de migraties — bijwerken…');
+
+  const migratie = draai('node', ['scripts/migrate.js', '--extern'], {
+    env: { MIGRATION_DATABASE_URL: MIGRATION_URL },
+  });
+
+  if (!migratie.ok) {
+    return {
+      ok: false,
+      reden:
+        `de migratie op de demo-database is mislukt:\n` +
+        `${migratie.uitvoer.trim().split('\n').slice(-15).join('\n')}`,
+    };
+  }
+
+  const tweede = draai('node', ['scripts/migratiestand.js', '--volgens-journal'], {
+    env: { MIGRATION_DATABASE_URL: MIGRATION_URL },
+  });
+
+  if (!tweede.ok) {
+    return {
+      ok: false,
+      reden:
+        `de migratie meldde succes, maar de stand klopt na afloop nog steeds niet:\n` +
+        `${tweede.uitvoer.trim().split('\n').slice(-10).join('\n')}`,
+    };
+  }
+
+  return { ok: true, bijgewerkt: true };
+}
+
 // ── Backend en frontend ─────────────────────────────────────────────────────
 
 /**
@@ -378,6 +440,74 @@ function frontendStarten() {
   });
 
   return { ok: true, pid };
+}
+
+/**
+ * Checkt een specifieke branch uit in de MCM2-frontend-map, als die is
+ * opgegeven.
+ *
+ * ── Waarom dit bestaat ───────────────────────────────────────────────────
+ *
+ * Vóór deze functie startte de frontend altijd vanuit wat er toevallig in
+ * MCM2-frontend stond uitgecheckt — een impliciete aanname die op
+ * 2026-08-21 tot een onopgemerkte branch-mismatch leidde tussen de
+ * backend- en frontend-repo. Deze functie maakt de keuze expliciet in
+ * plaats van impliciet.
+ *
+ * Zonder --branch verandert er niets: de functie doet dan niets en geeft
+ * ok:true terug, precies het gedrag van vóór deze wijziging.
+ */
+function frontendBranchWisselen(branch) {
+  if (!branch) {
+    return { ok: true };
+  }
+
+  const checkout = draai('git', ['-C', FRONTEND, 'checkout', branch]);
+
+  if (!checkout.ok) {
+    return {
+      ok: false,
+      reden:
+        `kon niet naar branch '${branch}' wisselen in MCM2-frontend:\n` +
+        `${checkout.uitvoer.trim()}\n\n` +
+        `Bestaat de branch? Staan er ongecommitte wijzigingen in de weg?\n` +
+        `Controleer met: git -C "${FRONTEND}" status`,
+    };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Leest de actieve branch en laatste commit van een repository.
+ *
+ * ── Waarom dit altijd draait, niet alleen met --branch ────────────────────
+ *
+ * Het probleem van 2026-08-21 was niet "er is geen manier om een branch te
+ * kiezen" maar "er is geen manier om te zíen wat er draait" — die twee zijn
+ * verschillend. Zonder --branch blijft de keuze impliciet, maar de
+ * zichtbaarheid hoeft dat niet te zijn.
+ */
+function huidigeBranchInfo(pad) {
+  const branch = draai('git', ['-C', pad, 'branch', '--show-current']);
+
+  // `%x09` (een tab) in plaats van een letterlijke spatie in de
+  // format-string. `draai()` gebruikt `shell: true` op Windows, en dan
+  // splitst cmd.exe een argument met een spatie erin in tweeën — '%h %s'
+  // kwam bij git aan als twee losse argumenten ('%h' en '%s'), en git las
+  // '%s' vervolgens als een (onbestaand) revisie-argument. Gemeten:
+  // "fatal: ambiguous argument '%s': unknown revision".
+  const commit = draai('git', ['-C', pad, 'log', '-1', '--format=%h%x09%s']);
+
+  if (!branch.ok || !commit.ok) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    branch: branch.uitvoer.trim() || '(detached HEAD)',
+    commit: commit.uitvoer.trim().replace('\t', ' '),
+  };
 }
 
 /**
@@ -622,7 +752,7 @@ function controleerKeten(token) {
 
 // ── Opdrachten ──────────────────────────────────────────────────────────────
 
-function start(vers) {
+function start(vers, frontendBranch) {
   fs.mkdirSync(WERKMAP, { recursive: true });
 
   console.log('\n1/5  Poorten vrijmaken');
@@ -660,6 +790,17 @@ function start(vers) {
     return false;
   }
 
+  const migratie = migratieBijwerken();
+
+  if (!migratie.ok) {
+    console.error(`\nGestopt: ${migratie.reden}`);
+    return false;
+  }
+
+  if (migratie.bijgewerkt) {
+    console.log('  Migraties bijgewerkt en geverifieerd.');
+  }
+
   console.log('\n3/5  Backend starten');
 
   const backend = backendStarten();
@@ -670,6 +811,13 @@ function start(vers) {
   }
 
   console.log('\n4/5  Frontend starten');
+
+  const branchWissel = frontendBranchWisselen(frontendBranch);
+
+  if (!branchWissel.ok) {
+    console.error(`\nGestopt: ${branchWissel.reden}`);
+    return false;
+  }
 
   const frontend = frontendStarten();
 
@@ -747,6 +895,23 @@ function start(vers) {
     console.log(
       `    ${lijst.name} v${lijst.version} — ${lijst.aantalVragen} vragen, ${lijst.aantalRondes} ronde(s)`,
     );
+  }
+
+  const backendInfo = huidigeBranchInfo(path.join(__dirname, '..'));
+  const frontendInfo = huidigeBranchInfo(FRONTEND);
+
+  console.log('');
+  if (backendInfo.ok) {
+    console.log(`  Backend:  ${backendInfo.branch} @ ${backendInfo.commit}`);
+
+    if (backendInfo.branch !== 'main') {
+      console.log(
+        '    Let op: backend staat niet op main — dit is geen standaard-previewcombinatie.',
+      );
+    }
+  }
+  if (frontendInfo.ok) {
+    console.log(`  Frontend: ${frontendInfo.branch} @ ${frontendInfo.commit}`);
   }
 
   const link = `http://localhost:${WEB_POORT}/demo-aanmelden#${sessie.token}`;
@@ -891,7 +1056,26 @@ function status() {
 
 function main() {
   const argumenten = process.argv.slice(2);
-  const opdracht = argumenten.find((a) => !a.startsWith('--')) ?? 'start';
+
+  // De waarde van --branch staat als los argument ná de vlag, en is dus
+  // zelf geen `--`-argument. Zonder deze uitsluiting zou `opdracht.find()`
+  // hieronder een branchnaam als 'feat/154-iets' kunnen aanzien voor de
+  // opdracht (af/status/test/start), simpelweg omdat hij niet met `--`
+  // begint.
+  //
+  // `branchIndex` is -1 wanneer --branch ontbreekt, en dan mag
+  // `branchIndex + 1` (dus 0) niet als "uit te sluiten index" gelden — dat
+  // zou anders per ongeluk het eerste échte argument overslaan, wat
+  // precies de opdracht zelf is (bijv. 'af'). Vandaar de expliciete
+  // branchIndex !== -1-voorwaarde in de uitsluiting hieronder.
+  const branchIndex = argumenten.indexOf('--branch');
+  const frontendBranch =
+    branchIndex !== -1 ? argumenten[branchIndex + 1] : undefined;
+
+  const opdracht =
+    argumenten.find(
+      (a, i) => !a.startsWith('--') && !(branchIndex !== -1 && i === branchIndex + 1),
+    ) ?? 'start';
 
   const uitkomst =
     opdracht === 'af'
@@ -900,7 +1084,7 @@ function main() {
         ? status()
         : opdracht === 'test'
           ? test()
-          : start(argumenten.includes('--vers'));
+          : start(argumenten.includes('--vers'), frontendBranch);
 
   process.exit(uitkomst ? 0 : 1);
 }
