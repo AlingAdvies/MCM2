@@ -490,7 +490,14 @@ function frontendBranchWisselen(branch) {
  */
 function huidigeBranchInfo(pad) {
   const branch = draai('git', ['-C', pad, 'branch', '--show-current']);
-  const commit = draai('git', ['-C', pad, 'log', '-1', '--format=%h %s']);
+
+  // `%x09` (een tab) in plaats van een letterlijke spatie in de
+  // format-string. `draai()` gebruikt `shell: true` op Windows, en dan
+  // splitst cmd.exe een argument met een spatie erin in tweeën — '%h %s'
+  // kwam bij git aan als twee losse argumenten ('%h' en '%s'), en git las
+  // '%s' vervolgens als een (onbestaand) revisie-argument. Gemeten:
+  // "fatal: ambiguous argument '%s': unknown revision".
+  const commit = draai('git', ['-C', pad, 'log', '-1', '--format=%h%x09%s']);
 
   if (!branch.ok || !commit.ok) {
     return { ok: false };
@@ -499,7 +506,7 @@ function huidigeBranchInfo(pad) {
   return {
     ok: true,
     branch: branch.uitvoer.trim() || '(detached HEAD)',
-    commit: commit.uitvoer.trim(),
+    commit: commit.uitvoer.trim().replace('\t', ' '),
   };
 }
 
