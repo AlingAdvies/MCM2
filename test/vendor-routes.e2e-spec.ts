@@ -371,6 +371,54 @@ describe('Vendorroutes (e2e)', () => {
         .expect(400);
     });
 
+    it.each([
+      ['een afgekapte domeinextensie', 'jan@transdev.n'],
+      ['een domein dat op een punt eindigt', 'jan@transdev.'],
+      ['een domein dat op een streepje eindigt', 'jan@transdev-'],
+    ])('weigert een e-mailadres met %s', async (_omschrijving, email) => {
+      // Dit zijn geen ongeldige e-mailadressen in de zin van isGeldigMailadres
+      // (die is bewust ruim, zie mail-adres.ts) — het zijn de tikfouten die
+      // ontstaan bij handmatig overtypen of plakken uit een spreadsheet, en
+      // die de leverancier stilzwijgend nooit een uitnodiging laten ontvangen.
+      const antwoord = await request(server)
+        .post('/vendors')
+        .set('Cookie', cookieA)
+        .send({
+          name: 'Tikfouttest B.V.',
+          contact: { fullName: 'Jan Jansen', email },
+        })
+        .expect(400);
+
+      expect((antwoord.body as { veld?: string }).veld).toBe('contact.email');
+    });
+
+    it('accepteert een e-mailadres met een samengesteld domein', async () => {
+      // Tegenproef: de strengere domeincontrole mag geen geldige adressen
+      // raken, zoals een .co.uk-adres of een subdomein.
+      const aanmaak = await request(server)
+        .post('/vendors')
+        .set('Cookie', cookieA)
+        .send({
+          name: 'Geldig Domein B.V.',
+          contact: {
+            fullName: 'Jan Jansen',
+            email: 'jan@voorbeeld.co.uk',
+          },
+        })
+        .expect(201);
+
+      const lijst = await request(server)
+        .get('/vendors')
+        .set('Cookie', cookieA)
+        .expect(200);
+
+      const gevonden = alsLijst(lijst.body).vendors.find(
+        (v) => v.vendorId === alsAangemaakt(aanmaak.body).vendorId,
+      );
+
+      expect(gevonden).toBeDefined();
+    });
+
     it('meldt een half ingevulde contactpersoon in plaats van hem te negeren', async () => {
       // E-mail wél, naam niet: dat is een vergeten veld, geen bewuste keuze
       // om de contactpersoon weg te laten. Stilzwijgend negeren zou betekenen
