@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-08-21 09:49 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-08-21 09:55 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -17,7 +17,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 ## Op prioriteit, over alle thema's heen
 
 **P0 — voor elke volgende regel productiecode** — 2 open
-**Vóór de pilot** — 12 open
+**Vóór de pilot** — 7 open
 **Vóór bredere productie** — 12 open
 **Later — bewust uitgesteld** — 1 open
 
@@ -25,9 +25,8 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ## Per thema
 
-### Product — vragenlijst, leveranciers, contracten, meldingen (6)
+### Product — vragenlijst, leveranciers, contracten, meldingen (5)
 
-- [#9](https://github.com/AlingAdvies/MCM2/issues/9) `before-pilot` — Certificaat-upload via het token-mechanisme
 - [#13](https://github.com/AlingAdvies/MCM2/issues/13) `before-pilot` — E-mailverzending via Transdev-eigen SMTP
 - [#23](https://github.com/AlingAdvies/MCM2/issues/23) `before-production` — MVM_V2-frontend-inconsistenties oplossen (tenant demo vs. transdev, vendors-lijstpagina)
 - [#52](https://github.com/AlingAdvies/MCM2/issues/52) — Restrisico virusscan vastleggen als bewuste beslissing, met opschalingsvoorwaarde
@@ -40,9 +39,8 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#76](https://github.com/AlingAdvies/MCM2/issues/76) `before-production` — Beheermenu: e-mailinstellingen (SMTP) per tenant, wachtwoord versleuteld opgeslagen
 - [#77](https://github.com/AlingAdvies/MCM2/issues/77) `before-production` — Beheermenu: uitnodigingen versturen — handpicked en in bulk op leverancierscriteria
 
-### AWS / productie-infrastructuur (6)
+### AWS / productie-infrastructuur (5)
 
-- [#12](https://github.com/AlingAdvies/MCM2/issues/12) `before-pilot` — Kleine AWS-acceptatieomgeving opzetten
 - [#17](https://github.com/AlingAdvies/MCM2/issues/17) `before-pilot` — Logging/monitoring-basislaag vóór de pilot
 - [#21](https://github.com/AlingAdvies/MCM2/issues/21) `before-production` — Volledige AWS-beveiligingsdiensten groep 1 (WAF, GuardDuty, KMS, CloudTrail, SNS, malware-scan)
 - [#57](https://github.com/AlingAdvies/MCM2/issues/57) `before-production` — Platformbeheer-toegang tot klant-tenants: industry standards onderzoeken vóór definitieve keuze
@@ -58,9 +56,8 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#46](https://github.com/AlingAdvies/MCM2/issues/46) — Duurzame objectopslag voor uploads + ingeplande dump buiten de brondraaimachine
 - [#48](https://github.com/AlingAdvies/MCM2/issues/48) — Pilot-runbook en alerting: wie kijkt wanneer naar welk signaal
 
-### OTAP en CI/CD (7)
+### OTAP en CI/CD (6)
 
-- [#11](https://github.com/AlingAdvies/MCM2/issues/11) `before-pilot` — CI-workflow uitbreiden met test/build/Docker-build (na ORM-spike)
 - [#18](https://github.com/AlingAdvies/MCM2/issues/18) `before-production` — Volledige OTAP-doorloop minimaal één keer bewezen
 - [#20](https://github.com/AlingAdvies/MCM2/issues/20) `before-production` — Dockerfile hardenen: npm ci, multi-stage build, non-root user
 - [#22](https://github.com/AlingAdvies/MCM2/issues/22) `before-production` — Dependabot-configuratie
@@ -68,10 +65,8 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#51](https://github.com/AlingAdvies/MCM2/issues/51) — Frontend-image promoveerbaar maken: API-URL runtime i.p.v. ingebakken bij build
 - [#53](https://github.com/AlingAdvies/MCM2/issues/53) — OTAP-doorloop periodiek automatiseren zonder cross-repo koppeling
 
-### Toegangsmechanisme (tokens, guards) (3)
+### Toegangsmechanisme (tokens, guards) (1)
 
-- [#8](https://github.com/AlingAdvies/MCM2/issues/8) `before-pilot` — Tijdgebonden, niet-raadbaar, éénmalig-bruikbaar token-mechanisme
-- [#10](https://github.com/AlingAdvies/MCM2/issues/10) `before-pilot` — Token-isolatietest (incl. bestandsupload) als verplichte CI-poort
 - [#47](https://github.com/AlingAdvies/MCM2/issues/47) — Eén Playwright-browsertest van de volledige UC1-flow (token → upload → indienen)
 
 ### Database, migraties, RLS (6)
@@ -92,4 +87,4 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ---
 
-**Totaal open:** 41
+**Totaal open:** 36
