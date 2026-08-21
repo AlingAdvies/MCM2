@@ -1055,13 +1055,19 @@ function main() {
   // hieronder een branchnaam als 'feat/154-iets' kunnen aanzien voor de
   // opdracht (af/status/test/start), simpelweg omdat hij niet met `--`
   // begint.
+  //
+  // `branchIndex` is -1 wanneer --branch ontbreekt, en dan mag
+  // `branchIndex + 1` (dus 0) niet als "uit te sluiten index" gelden — dat
+  // zou anders per ongeluk het eerste échte argument overslaan, wat
+  // precies de opdracht zelf is (bijv. 'af'). Vandaar de expliciete
+  // branchIndex !== -1-voorwaarde in de uitsluiting hieronder.
   const branchIndex = argumenten.indexOf('--branch');
   const frontendBranch =
     branchIndex !== -1 ? argumenten[branchIndex + 1] : undefined;
 
   const opdracht =
     argumenten.find(
-      (a, i) => !a.startsWith('--') && i !== branchIndex + 1,
+      (a, i) => !a.startsWith('--') && !(branchIndex !== -1 && i === branchIndex + 1),
     ) ?? 'start';
 
   const uitkomst =
