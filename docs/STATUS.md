@@ -30,7 +30,13 @@ weer, en zijn nu bestand tegen een volgende deploy zonder handmatig
 ingrijpen.
 
 **Volgende sessie eerst:** devops-handleiding schrijven (nu de keten
-end-to-end bewezen werkt, inclusief de geautomatiseerde deploy).
+end-to-end bewezen werkt, inclusief de geautomatiseerde deploy). —
+**GEDAAN, 2026-08-21**: `docs/runbooks/devops-handleiding.md` herschreven
+naar de AWS-situatie (productie draait sinds 19-08 op ECS Express Mode, niet
+meer op saxombp; rollback is dezelfde workflow opnieuw, geen apart script;
+akkoordmoment duurt nu 35-40 min i.p.v. saxombp's snellere doorloop).
+Acceptatie/staging-instructies (saxombp) ongewijzigd, expliciet gemarkeerd
+waar ze afwijken.
 
 ---
 

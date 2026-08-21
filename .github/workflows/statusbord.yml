@@ -1,0 +1,70 @@
+name: Statusbord bijwerken
+
+# ── Waarom dit bestaat ────────────────────────────────────────────────────────
+#
+# `docs/STATUSBORD.md` is een afgeleide weergave van de open issues
+# (scripts/statusbord.js), bedoeld om in één oogopslag te zien wat er per
+# thema en prioriteit openstaat. Een afgeleid document dat niet vanzelf
+# meebeweegt met zijn bron is binnen een paar weken misleidend — precies het
+# probleem dat het moest oplossen. Deze workflow houdt het daarom vanzelf
+# actueel, in plaats van dat iemand moet onthouden het commando te draaien.
+#
+# ── De bot-commit op main ─────────────────────────────────────────────────────
+#
+# Dit is een bewuste, expliciet afgesproken uitzondering (2026-08-21) op de
+# regel "nooit rechtstreeks op main werken". Hij geldt uitsluitend voor dit
+# ene, automatisch gegenereerde bestand — nooit voor code, migraties of
+# applicatiegedrag. Als dit bestand ooit meer dan een afgeleide weergave
+# wordt, hoort de uitzondering opnieuw beoordeeld te worden.
+
+on:
+  issues:
+    types: [opened, closed, reopened, labeled, unlabeled, edited]
+  # Vangnet: issues die buiten deze repository-events om veranderen (een label
+  # dat via een script elders wordt gezet, bijvoorbeeld) missen anders een
+  # trigger. Eén keer per dag is genoeg voor een document dat toch al geen
+  # minuut-precisie belooft.
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: read
+
+jobs:
+  bijwerken:
+    name: Statusbord regenereren
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js instellen
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+
+      - name: Dependencies installeren
+        run: npm ci
+
+      - name: Statusbord genereren
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run statusbord
+
+      # Alleen committen als het bestand echt veranderd is — anders staat er
+      # elke dag een lege commit met alleen een nieuw tijdstempel, en dat
+      # verdrinkt de commits die wél iets zeggen.
+      - name: Wijziging committen als er een is
+        run: |
+          if git diff --quiet -- docs/STATUSBORD.md; then
+            echo "Geen wijziging — niets te committen."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/STATUSBORD.md
+          git commit -m "chore(statusbord): automatisch bijgewerkt naar de huidige issue-stand"
+          git push
