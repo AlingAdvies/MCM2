@@ -890,6 +890,23 @@ function start(vers, frontendBranch) {
     );
   }
 
+  const backendInfo = huidigeBranchInfo(path.join(__dirname, '..'));
+  const frontendInfo = huidigeBranchInfo(FRONTEND);
+
+  console.log('');
+  if (backendInfo.ok) {
+    console.log(`  Backend:  ${backendInfo.branch} @ ${backendInfo.commit}`);
+
+    if (backendInfo.branch !== 'main') {
+      console.log(
+        '    Let op: backend staat niet op main — dit is geen standaard-previewcombinatie.',
+      );
+    }
+  }
+  if (frontendInfo.ok) {
+    console.log(`  Frontend: ${frontendInfo.branch} @ ${frontendInfo.commit}`);
+  }
+
   const link = `http://localhost:${WEB_POORT}/demo-aanmelden#${sessie.token}`;
 
   console.log('');
