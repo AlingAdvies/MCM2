@@ -34,10 +34,11 @@
  * controleerPoorten().
  *
  * Gebruik:
- *   npm run demo            opzetten (data blijft staan)
- *   npm run demo -- --vers  database eerst weggooien en opnieuw opbouwen
- *   npm run demo:af         backend en frontend stoppen, database laten staan
- *   npm run demo:status     draait het, en wat zit erin?
+ *   npm run demo                       opzetten (data blijft staan)
+ *   npm run demo -- --vers             database eerst weggooien en opnieuw opbouwen
+ *   npm run demo -- --branch <naam>    eerst deze branch uitchecken in MCM2-frontend
+ *   npm run demo:af                    backend en frontend stoppen, database laten staan
+ *   npm run demo:status                draait het, en wat zit erin?
  */
 
 const { spawn, spawnSync } = require('node:child_process');
@@ -442,6 +443,67 @@ function frontendStarten() {
 }
 
 /**
+ * Checkt een specifieke branch uit in de MCM2-frontend-map, als die is
+ * opgegeven.
+ *
+ * ── Waarom dit bestaat ───────────────────────────────────────────────────
+ *
+ * Vóór deze functie startte de frontend altijd vanuit wat er toevallig in
+ * MCM2-frontend stond uitgecheckt — een impliciete aanname die op
+ * 2026-08-21 tot een onopgemerkte branch-mismatch leidde tussen de
+ * backend- en frontend-repo. Deze functie maakt de keuze expliciet in
+ * plaats van impliciet.
+ *
+ * Zonder --branch verandert er niets: de functie doet dan niets en geeft
+ * ok:true terug, precies het gedrag van vóór deze wijziging.
+ */
+function frontendBranchWisselen(branch) {
+  if (!branch) {
+    return { ok: true };
+  }
+
+  const checkout = draai('git', ['-C', FRONTEND, 'checkout', branch]);
+
+  if (!checkout.ok) {
+    return {
+      ok: false,
+      reden:
+        `kon niet naar branch '${branch}' wisselen in MCM2-frontend:\n` +
+        `${checkout.uitvoer.trim()}\n\n` +
+        `Bestaat de branch? Staan er ongecommitte wijzigingen in de weg?\n` +
+        `Controleer met: git -C "${FRONTEND}" status`,
+    };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Leest de actieve branch en laatste commit van een repository.
+ *
+ * ── Waarom dit altijd draait, niet alleen met --branch ────────────────────
+ *
+ * Het probleem van 2026-08-21 was niet "er is geen manier om een branch te
+ * kiezen" maar "er is geen manier om te zíen wat er draait" — die twee zijn
+ * verschillend. Zonder --branch blijft de keuze impliciet, maar de
+ * zichtbaarheid hoeft dat niet te zijn.
+ */
+function huidigeBranchInfo(pad) {
+  const branch = draai('git', ['-C', pad, 'branch', '--show-current']);
+  const commit = draai('git', ['-C', pad, 'log', '-1', '--format=%h %s']);
+
+  if (!branch.ok || !commit.ok) {
+    return { ok: false };
+  }
+
+  return {
+    ok: true,
+    branch: branch.uitvoer.trim() || '(detached HEAD)',
+    commit: commit.uitvoer.trim(),
+  };
+}
+
+/**
  * Wacht tot beide echt antwoorden.
  *
  * Op een HTTP-antwoord pollen en niet op "het proces draait": een Next.js-
@@ -683,7 +745,7 @@ function controleerKeten(token) {
 
 // ── Opdrachten ──────────────────────────────────────────────────────────────
 
-function start(vers) {
+function start(vers, frontendBranch) {
   fs.mkdirSync(WERKMAP, { recursive: true });
 
   console.log('\n1/5  Poorten vrijmaken');
@@ -742,6 +804,13 @@ function start(vers) {
   }
 
   console.log('\n4/5  Frontend starten');
+
+  const branchWissel = frontendBranchWisselen(frontendBranch);
+
+  if (!branchWissel.ok) {
+    console.error(`\nGestopt: ${branchWissel.reden}`);
+    return false;
+  }
 
   const frontend = frontendStarten();
 
@@ -963,7 +1032,20 @@ function status() {
 
 function main() {
   const argumenten = process.argv.slice(2);
-  const opdracht = argumenten.find((a) => !a.startsWith('--')) ?? 'start';
+
+  // De waarde van --branch staat als los argument ná de vlag, en is dus
+  // zelf geen `--`-argument. Zonder deze uitsluiting zou `opdracht.find()`
+  // hieronder een branchnaam als 'feat/154-iets' kunnen aanzien voor de
+  // opdracht (af/status/test/start), simpelweg omdat hij niet met `--`
+  // begint.
+  const branchIndex = argumenten.indexOf('--branch');
+  const frontendBranch =
+    branchIndex !== -1 ? argumenten[branchIndex + 1] : undefined;
+
+  const opdracht =
+    argumenten.find(
+      (a, i) => !a.startsWith('--') && i !== branchIndex + 1,
+    ) ?? 'start';
 
   const uitkomst =
     opdracht === 'af'
@@ -972,7 +1054,7 @@ function main() {
         ? status()
         : opdracht === 'test'
           ? test()
-          : start(argumenten.includes('--vers'));
+          : start(argumenten.includes('--vers'), frontendBranch);
 
   process.exit(uitkomst ? 0 : 1);
 }
