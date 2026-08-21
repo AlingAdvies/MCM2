@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-08-21 09:46 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-08-21 09:49 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -16,7 +16,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ## Op prioriteit, over alle thema's heen
 
-**P0 — voor elke volgende regel productiecode** — 3 open
+**P0 — voor elke volgende regel productiecode** — 2 open
 **Vóór de pilot** — 12 open
 **Vóór bredere productie** — 12 open
 **Later — bewust uitgesteld** — 1 open
@@ -74,9 +74,8 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#10](https://github.com/AlingAdvies/MCM2/issues/10) `before-pilot` — Token-isolatietest (incl. bestandsupload) als verplichte CI-poort
 - [#47](https://github.com/AlingAdvies/MCM2/issues/47) — Eén Playwright-browsertest van de volledige UC1-flow (token → upload → indienen)
 
-### Database, migraties, RLS (7)
+### Database, migraties, RLS (6)
 
-- [#3](https://github.com/AlingAdvies/MCM2/issues/3) `p0` — tsconfig.json naar strict-mode, module-systeem-inconsistentie oplossen
 - [#14](https://github.com/AlingAdvies/MCM2/issues/14) `before-pilot` — REVOKE UPDATE, DELETE op audit.audit_event voor de runtime-rol
 - [#16](https://github.com/AlingAdvies/MCM2/issues/16) `before-pilot` — Export- en reminder-acties krijgen expliciet meegegeven tenantId
 - [#49](https://github.com/AlingAdvies/MCM2/issues/49) — max_files structureel afdwingen: quotarij met atomaire reservering (kale trigger volstaat niet)
@@ -93,4 +92,4 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ---
 
-**Totaal open:** 42
+**Totaal open:** 41
