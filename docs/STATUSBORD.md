@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-08-21 09:39 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-08-21 09:46 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -16,9 +16,9 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ## Op prioriteit, over alle thema's heen
 
-**P0 — voor elke volgende regel productiecode** — 4 open
-**Vóór de pilot** — 14 open
-**Vóór bredere productie** — 13 open
+**P0 — voor elke volgende regel productiecode** — 3 open
+**Vóór de pilot** — 12 open
+**Vóór bredere productie** — 12 open
 **Later — bewust uitgesteld** — 1 open
 
 ---
@@ -58,14 +58,13 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#46](https://github.com/AlingAdvies/MCM2/issues/46) — Duurzame objectopslag voor uploads + ingeplande dump buiten de brondraaimachine
 - [#48](https://github.com/AlingAdvies/MCM2/issues/48) — Pilot-runbook en alerting: wie kijkt wanneer naar welk signaal
 
-### OTAP en CI/CD (8)
+### OTAP en CI/CD (7)
 
 - [#11](https://github.com/AlingAdvies/MCM2/issues/11) `before-pilot` — CI-workflow uitbreiden met test/build/Docker-build (na ORM-spike)
 - [#18](https://github.com/AlingAdvies/MCM2/issues/18) `before-production` — Volledige OTAP-doorloop minimaal één keer bewezen
 - [#20](https://github.com/AlingAdvies/MCM2/issues/20) `before-production` — Dockerfile hardenen: npm ci, multi-stage build, non-root user
 - [#22](https://github.com/AlingAdvies/MCM2/issues/22) `before-production` — Dependabot-configuratie
 - [#59](https://github.com/AlingAdvies/MCM2/issues/59) `before-production` — npm audit: 29 kwetsbaarheden in devDependencies (0 in productie) — opschonen bij de eerste major-onderhoudsronde
-- [#98](https://github.com/AlingAdvies/MCM2/issues/98) `before-production` — START HIER — vijf openstaande PR's mergen in vaste volgorde (na de Actions-storing van 2026-08-06)
 - [#51](https://github.com/AlingAdvies/MCM2/issues/51) — Frontend-image promoveerbaar maken: API-URL runtime i.p.v. ingebakken bij build
 - [#53](https://github.com/AlingAdvies/MCM2/issues/53) — OTAP-doorloop periodiek automatiseren zonder cross-repo koppeling
 
@@ -85,16 +84,13 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#65](https://github.com/AlingAdvies/MCM2/issues/65) — Aparte eigenaarsrol voor SECURITY DEFINER-functies, zodat FORCE RLS overal kan
 - [#96](https://github.com/AlingAdvies/MCM2/issues/96) — db:generate is onbruikbaar: snapshots lopen tot 0007 terwijl er 16 migraties zijn
 
-### Overig (7)
+### Overig (4)
 
 - [#1](https://github.com/AlingAdvies/MCM2/issues/1) `p0` — Wachtwoordrotatie van de postgres-beheerrol
-- [#7](https://github.com/AlingAdvies/MCM2/issues/7) `p0` — Interne vs. externe identiteit: twee aparte toegangsmechanismen
-- [#5](https://github.com/AlingAdvies/MCM2/issues/5) `before-pilot` — BLOKKEREND BESLUIT: spike Prisma 6 vs. Drizzle tegen survey-schema
-- [#6](https://github.com/AlingAdvies/MCM2/issues/6) `before-pilot` — Definitieve ORM-implementatie op basis van de Prisma/Drizzle-spike
 - [#15](https://github.com/AlingAdvies/MCM2/issues/15) `before-pilot` — Resterende open Transdev-klantvragen beantwoorden (OV-4, OV-6, OV-7, OV-8, OV-9)
 - [#24](https://github.com/AlingAdvies/MCM2/issues/24) `later` — Later-lijst: uitgestelde items zonder concrete trigger
 - [#54](https://github.com/AlingAdvies/MCM2/issues/54) — Unittestlaag voor pure functies (bestandsvalidatie, antwoordvalidatie, opslagsleutel)
 
 ---
 
-**Totaal open:** 46
+**Totaal open:** 42
