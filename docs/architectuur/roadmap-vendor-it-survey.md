@@ -80,22 +80,26 @@ vragenlijst? Neem contact op met [naam/adres]"), gevuld met dezelfde waarde
 als het antwoordadres uit de tenantinstellingen — of, als dat leeg is, de
 contactpersoon-tekst die daar al voor bestaat (zie §5).
 
-### 2.2 "Rondes" is een verwarrende naam voor wat er nu gebeurt → [#154](https://github.com/AlingAdvies/MCM2/issues/154)
+### 2.2 "Rondes" is een verwarrende naam voor wat er nu gebeurt → [#154](https://github.com/AlingAdvies/MCM2/issues/154) — **AFGEROND, in productie 21-08**
 
 **Bevinding:** in `/beheer/vragenlijsten` heet elke uitnodiging een "ronde".
 Feitelijk is een herhaalde meting (dezelfde vragenlijst, periodiek opnieuw
 uitgestuurd om trends te zien) een aparte, latere feature — en die naam is nu
 al bezet door iets anders.
 
-**Risico als dit blijft staan:** wanneer de echte "rondes"-feature (herhaalde
-meting) gebouwd wordt, is de naam al in gebruik voor iets anders. Dat is een
-UI-tekst-wijziging nu, of een verwarrende naamsbotsing later.
+**Gekozen oplossing, uitgewerkt via brainstorming (zie
+`docs/superpowers/specs/2026-08-21-rondes-weergave-design.md`):** een puur
+frontend-wijziging, geen database-/functionaliteitswijziging. Het scherm
+groepeert de bestaande data per vragenlijst-titel, uitklapbaar. Ingeklapt
+toont de groep de titel + samengevoegde voortgang; uitgeklapt de individuele
+verzendingen met een tijdsaanduiding in plaats van het woord "ronde". De
+sectiekop is "Verzendingen" geworden. Backend, database en interne
+servicenamen (`RondeBeheerService` e.d.) blijven ongewijzigd — dat bleef
+bewust intern.
 
-**Voorstel:** vroeg beslissen hoe het huidige concept (één uitnodiging =
-verzending van een vragenlijst) wél moet heten — bijvoorbeeld "verzending" of
-"uitvraag" — en "ronde" vrijhouden voor de latere, echte herhaalde-meting-
-feature. Dit is een kleine wijziging (UI-tekst + eventueel een kolomnaam) als
-hij nu gebeurt, en een grotere migratie als hij later moet.
+**Bevestigd in productie (21-08):** gemerged via
+AlingAdvies/MCM2-frontend#14, doorgelopen via staging, uitgerold naar
+`clm.alingadvies.nl`, met eigen ogen bekeken door de eigenaar.
 
 ### 2.3 Nieuwe feature: vragenlijst-bouwer → [#155](https://github.com/AlingAdvies/MCM2/issues/155)
 
@@ -260,7 +264,7 @@ statusbord:
 | Issue | Sectie | Voorstel volgorde |
 |---|---|---|
 | [#162](https://github.com/AlingAdvies/MCM2/issues/162) | §4.1 — tenantnaam-bug | Eerst — klein, geen ontwerpvraag |
-| [#154](https://github.com/AlingAdvies/MCM2/issues/154) | §2.2 — naamgeving "ronde" | Vroeg — voorkomt een latere naamsbotsing |
+| [#154](https://github.com/AlingAdvies/MCM2/issues/154) | §2.2 — naamgeving "ronde" | **Afgerond, in productie 21-08** |
 | [#153](https://github.com/AlingAdvies/MCM2/issues/153) | §2.1 — contactinfo in vragenlijst | Bij stap 1 (goede vragenlijst) |
 | [#155](https://github.com/AlingAdvies/MCM2/issues/155) | §2.3 — vragenlijst-bouwer | Bij stap 1 (goede vragenlijst) |
 | [#156](https://github.com/AlingAdvies/MCM2/issues/156) | §3.1 — contractbeheerder-veld | Bij stap 3 (contractmanagement) |
