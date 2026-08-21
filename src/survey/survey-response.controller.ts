@@ -7,6 +7,7 @@ import {
   NotFoundException,
   PayloadTooLargeException,
   Post,
+  Put,
   Query,
   Req,
   UnprocessableEntityException,
@@ -17,6 +18,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 
+import { AntwoordConceptService } from './antwoord-concept.service';
 import { AntwoordIndienService } from './antwoord-indienen.service';
 import { BijlageService } from './bijlage.service';
 import { MAX_BESTANDSGROOTTE } from './bestand-validatie';
@@ -42,6 +44,7 @@ export class SurveyResponseController {
     private readonly tokens: SurveyTokenService,
     private readonly vragenlijst: VragenlijstLeesService,
     private readonly indienen: AntwoordIndienService,
+    private readonly concept: AntwoordConceptService,
     private readonly bijlagen: BijlageService,
   ) {}
 
@@ -104,6 +107,53 @@ export class SurveyResponseController {
     }
 
     return lijst;
+  }
+
+  /**
+   * Slaat antwoorden op vóórdat er wordt ingediend (ontwerp §7).
+   *
+   * Geen automatisch tussenopslaan — de leverancier roept dit expliciet aan,
+   * met een eigen knop (§1b). Een gedeeltelijke set is toegestaan: vraag 1
+   * t/m 3 opslaan en later verdergaan met de rest mag, maar wat wél wordt
+   * meegestuurd moet net zo geldig zijn als bij indienen (dezelfde
+   * toelichtingsplicht, dezelfde bestandsregels).
+   *
+   * Drie uitkomsten, bewust dezelfde als bij indienen op één na — er is geen
+   * `ingediend`, want dat is precies wat dit endpoint niet doet:
+   *
+   *   200  opgeslagen
+   *   422  de antwoorden die wél zijn meegestuurd voldoen niet
+   *   410  al ingediend, verlopen of ronde gesloten
+   *
+   * Idempotent in de praktijk: twee keer hetzelfde opslaan overschrijft
+   * zichzelf via `ON CONFLICT ... DO UPDATE` in de servicelaag.
+   */
+  @Put('answers')
+  @HttpCode(200)
+  async bewaarConcept(
+    @Req() request: RequestMetToken,
+    @Body() body: { answers?: unknown } | undefined,
+  ) {
+    const context = request.surveyToken!;
+
+    const uitkomst = await this.concept.bewaar(
+      context.tenantId,
+      context.responseId,
+      body?.answers ?? [],
+    );
+
+    if (uitkomst.status === 'ongeldig') {
+      throw new UnprocessableEntityException({
+        status: 'invalid',
+        errors: uitkomst.fouten,
+      });
+    }
+
+    if (uitkomst.status === 'niet-meer-open') {
+      throw new GoneException('Deze vragenlijst is al ingediend.');
+    }
+
+    return { status: 'opgeslagen' as const };
   }
 
   /**

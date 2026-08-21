@@ -341,6 +341,9 @@ export const TEST_IDS = {
     reviewerA: id('22'),
     adminB: id('23'),
   },
+  'antwoord-concept-opslaan': {
+    tenant: id('24'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */

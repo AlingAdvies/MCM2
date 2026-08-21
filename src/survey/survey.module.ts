@@ -6,6 +6,7 @@ import { SurveyAuditService } from './survey-audit.service';
 import { SurveyResponseController } from './survey-response.controller';
 import { SurveyTokenGuard } from './survey-token.guard';
 import { SurveyTokenService } from './survey-token.service';
+import { AntwoordConceptService } from './antwoord-concept.service';
 import { AntwoordIndienService } from './antwoord-indienen.service';
 import { BestandOpslagService } from './bestand-opslag.service';
 import { BijlageService } from './bijlage.service';
@@ -54,6 +55,7 @@ import { VragenlijstLeesService } from './vragenlijst-lezen.service';
     VragenlijstImportService,
     VragenlijstLeesService,
     AntwoordIndienService,
+    AntwoordConceptService,
     BestandOpslagService,
     BijlageService,
   ],
@@ -70,6 +72,7 @@ import { VragenlijstLeesService } from './vragenlijst-lezen.service';
     VragenlijstImportService,
     VragenlijstLeesService,
     AntwoordIndienService,
+    AntwoordConceptService,
     BestandOpslagService,
     BijlageService,
   ],

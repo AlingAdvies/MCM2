@@ -2,7 +2,216 @@
 
 ## Laatst bijgewerkt
 
-**2026-08-17.** Geen nieuwe werkstroom vandaag, wel drie correcties op de
+**2026-08-20, avond — eerste volautomatische AWS-deploy geslaagd via
+GitHub Actions, na drie fouten onderweg (alle drie opgelost).**
+
+Nieuwe workflow `productie-aws.yml`: zelfde vier-remmen-patroon als de
+bestaande `productie.yml` (saxombp), nu uitgebreid met de daadwerkelijke
+ECS-uitrol — dat kon bij saxombp niet automatisch (Tailscale-beperking),
+bij AWS wel. Authenticatie via OIDC (IAM Identity Provider + rol
+`GitHubActions-MCM2-ECS-Deploy`), geen langlevende AWS-sleutel.
+
+Vier testruns nodig: (1) geblokkeerd door de bestaande, terecht werkende
+backup-rem — verse backup gedraaid; (2) OIDC-fout door een verkeerde
+sub-claim-vorm in de trust policy (deze repo gebruikt de nieuwere
+numerieke vorm); (3) `CannotPullContainerError` door een bug in de
+workflow (volledige SHA i.p.v. de korte, gepubliceerde tag) — ECS draaide
+zelf automatisch terug, geen downtime; (4) workflow volledig geslaagd,
+maar de site gaf daarna 503 omdat een eerder (20-08 ochtend) handmatig
+aangemaakte listener-regel met een vast target-group-ARN naar de inmiddels
+omgewisselde, lege kant van het blue/green-paar bleef wijzen. Structureel
+gefixt door die regel te vervangen door een OR-conditie op de bestaande,
+door Express Mode zelf beheerde regel — dezelfde aanpak die al goed stond
+voor de `/auth/*`-routing. Volledige toedracht in het projectgeheugen
+(`mcm2-besluit-18-08-naar-aws`).
+
+**Resultaat, geverifieerd:** `clm.alingadvies.nl` en de login-flow werken
+weer, en zijn nu bestand tegen een volgende deploy zonder handmatig
+ingrijpen.
+
+**Volgende sessie eerst:** devops-handleiding schrijven (nu de keten
+end-to-end bewezen werkt, inclusief de geautomatiseerde deploy).
+
+---
+
+**2026-08-20, middag — login werkt volledig end-to-end op AWS.**
+
+Bevestigd: ingelogd als `kees@alingadvies.nl` op
+`clm.alingadvies.nl/beheer/leveranciers`, "Live"-badge (echte backend).
+Onderweg een omweg gemaakt (een apart sub-domein `api.clm.alingadvies.nl`
+voor de API) die niet nodig bleek — de frontend heeft al een eigen
+doorgeefluik (`/api/backend/*`, ADR-012/Issue #51) dat alles naar
+`mcm2-api` doorstuurt, inclusief de OAuth-callback. `OIDC_REDIRECT_URI`
+staat nu correct op `https://clm.alingadvies.nl/api/backend/auth/callback`.
+Volledige toedracht in het projectgeheugen (`mcm2-besluit-18-08-naar-aws`,
+sectie 20-08 middag).
+
+**Open todo — opruimen:** het overbodige sub-domein `api.clm.alingadvies.nl`
+verwijderen: DNS-record bij mijndomein.nl, ACM-certificaat, en de
+OR-conditie met `api.clm.alingadvies.nl` op listener-regel 44990 van
+`ecs-express-gateway-alb-c6b07d03`. Functioneel niet nodig, kost niets om
+te laten staan, maar is ruis.
+
+**Open todo — devops-handleiding:** de eigenaar wil een volledig
+referentiedocument: welke URL's, secrets en infrastructuur nodig zijn om
+de app in AWS aan de praat te krijgen én te houden. Hoort thuis in
+`docs/runbooks/`.
+
+---
+
+**2026-08-20, ochtend — `mcm2-frontend` draait ook op ECS Express Mode.
+Login staat klaar om getest te worden zodra het domein gekoppeld is.**
+
+Zelfde ECS-opzet als gisteren herhaald voor de frontend (repo
+`AlingAdvies/MCM2-frontend`, image `ghcr.io/alingadvies/mcm2-frontend/web:latest`,
+service-naam werd automatisch `web-23bd`). Eén nieuwe fout onderweg:
+"Server Reference ID did not match the expected format" in CloudWatch —
+Next.js self-hosted op meerdere instanties genereert zonder een vaste
+`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` per instantie een eigen sleutel voor
+Server Actions. Bevestigd via de officiële Next.js-documentatie, niet
+gegokt. Fix: plaintext-secret aangemaakt en als env var gekoppeld — daarna
+`✓ Ready in 799ms` in de logs, geen fouten meer.
+
+Frontend-URL: `https://we-0d50abb730584356b38804a7f1ae0868.ecs.eu-west-1.on.aws`
+— pagina laadt, inlogflow start, Microsoft weigert de login (verwacht: het
+ECS-adres staat nog niet als redirect-URI bij Entra, en `mcm2-api`'s
+`OIDC_REDIRECT_URI` staat nog op een placeholder).
+
+**Bewust besluit:** eerst het domein `clm.alingadvies.nl` koppelen aan ECS,
+dán pas Entra en de vier placeholder-URL's bijwerken — voorkomt dat de
+Entra-registratie twee keer aangepast moet worden. Dat is het eerstvolgende
+werk. Volledige stappenlijst in het projectgeheugen
+(`mcm2-besluit-18-08-naar-aws`, sectie 2026-08-20).
+
+---
+
+**2026-08-19, avond — `mcm2-api` draait op ECS Express Mode. App Runner was
+een doodlopende weg (accepteert sinds 30-04-2026 geen nieuwe klanten meer).**
+
+Vandaag grotendeels besteed aan de eerste ECS-service werkend krijgen, met
+vijf losse, elk-voor-zich-opgeloste configuratiefouten onderweg: een
+regio-inconsistentie (een secret per ongeluk in `us-east-1` i.p.v.
+`eu-west-1`), de task execution role miste zowel de basis-AWS-managed-policy
+(`AmazonECSTaskExecutionRolePolicy`, voor logs/ECR-pull) als expliciete
+Secrets Manager/SSM-rechten, `DATABASE_URL` miste de `:json-key::`-syntax
+die nodig is omdat de secret als key/value-paar is opgeslagen (gaf
+`ENOTFOUND base` — de container kreeg de hele secret-JSON als connection-
+string), en de ontdekking dat de gewone "Update service"-knop een nieuw
+aangemaakte task-definitie-revisie NEGEERT — dat moet via het dropdown-
+menu-item "Update with custom task definition" met een expliciet
+revisienummer. Volledige uitleg en het "waarom dit niet vanzelf werkte" per
+fout staat in het projectgeheugen (`mcm2-besluit-18-08-naar-aws`).
+
+**Resultaat, bevestigd in CloudWatch Logs**: `mcm2-api` draait, verbonden met
+de productie-Supabase-database als de juiste, minst bevoorrechte rol
+`clm_api_runtime` (eerst per ongeluk `clm_migrator` — direct gecorrigeerd
+met de al aanwezige `PRODUCTIE_RUNTIME_URL` uit `.env`).
+
+**Morgen eerst**: dezelfde service-opzet herhalen voor `mcm2-frontend` (nu
+met alle vijf lessen direct toegepast, zou sneller moeten gaan). Daarna:
+custom domain `clm.alingadvies.nl` koppelen (het huidige DNS A-record naar
+saxombp moet vervangen worden door een CNAME + ACM-validatie), de vier
+placeholder-URL's in `mcm2-api` bijwerken naar de echte productie-URL,
+CloudWatch Logs-retentie, AWS Budget-alert.
+
+---
+
+**2026-08-18, avond — Transdev als eerste echte tenant; AWS-inrichting loopt.**
+
+Twee sporen tegelijk in gang gezet:
+
+**1. AWS-inrichting (nieuw account "AlingAdvies", 727732213368).**
+IAM-gebruiker `MCM2-Deploy` + groep `mcm2-deploy-group` aangemaakt. Onderweg
+twee fouten gevonden en hersteld: verkeerde policy (`AmazonS3ExpressFullAccess`
+i.p.v. `AmazonS3FullAccess`) en de gebruiker bleek niet in de groep te zitten
+(gaf overal "access denied" ondanks zichtbare `IAMFullAccess` — opgelost door
+als root in te loggen). S3-bucket `mcm2-deploy-eu-west-1` (eu-west-1) staat.
+**Volgende AWS-stap: Secrets Manager** (database-URL's, Entra client secret,
+sessie-secret — waarden komen uit `.env`, niet uit deze chat).
+
+**2. Besluit: MCM2 wordt multi-tenant, Transdev is de eerste echte klant**
+(niet mock zoals AlingAdvies — herziening van het 12-08-uitgangspunt "één
+tenant"). Tenant **"Transdev_IT_Survey"** aangemaakt op **acceptatie**
+(`tenant_id 9878b187-99de-4ce3-8ec2-64909d29b9a1`), eerste beheerder
+`cmaling+TransdevIT@gmail.com`, inloggen bevestigd werkend. Bewust nog niet op
+productie: het sub-pad-probleem hieronder (Bug 3) is niet opgelost, en een
+echte klant hoort daar niet tegenaan te lopen — Transdev verhuist naar de
+definitieve productieomgeving zodra AWS/App Runner met eigen hostnamen staat.
+
+**Bewuste keuze 18-08 avond: eerst AWS afmaken en in de lucht krijgen, vóór de
+Transdev-vragenlijst wordt ingericht.** Die vragenlijst-stap staat klaar
+(tenant + eerste beheerder werken al) maar is geparkeerd tot AWS/App Runner
+met eigen hostnamen draait — reden: geen zin verder te bouwen op een tenant
+die toch naar de nieuwe productieomgeving verhuist. **Morgen eerst: Secrets
+Manager** (zie hierboven), dan de rest van het AWS-stappenplan.
+
+---
+
+**2026-08-17, avond — het sub-pad is stukken kapotter dan gedacht.**
+
+Aanleiding: `cmaling@gmail.com` kon niet inloggen op productie/staging.
+Onderweg drie afzonderlijke, echte bugs gevonden en twee gefixt — maar de
+derde is de belangrijkste, en die wordt hier bewust **niet** gefixt.
+
+**Bug 1 — `prompt=select_account` werkt niet bij Entra External ID +
+federatie.** Microsoft-documentatie bevestigt: bij een bestaande SSO-sessie
+(`ESTSAUTHPERSISTENT`-cookie) lost de STS die silent op vóórdat er ooit een
+keuzescherm getoond wordt — de parameter wordt genegeerd. `prompt=login`
+(forceert `forceAuthn`) is de juiste parameter. **Gefixt en gemerged**
+(`src/auth/auth.service.ts`, commit `368a183`).
+
+**Bug 2 — de "Inloggen"/"Uitloggen"-knop en de survey-uitnodigingslink
+verloren het sub-pad-voorvoegsel.** `saxombp` deelt één hostnaam voor drie
+omgevingen via Tailscale Serve, dat routeert op `/staging`, `/productie` of
+kaal (acceptatie). Drie plekken in de frontend bouwden een `href` met een
+absolute `/`, en Tailscale Serve **strip het voorvoegsel niet** bij het
+doorsturen — het pad blijft in de adresbalk staan, maar de knop wist niet dat
+het er hoorde te staan. Gevolg: iedereen die op "Inloggen" klikte op
+`/productie` of `/staging`, ging altijd naar acceptatie. **Gefixt en
+gemerged** (`src/core/api/subpad.ts`, `MCM2-frontend` commit `1c31e01`), mét
+een nieuwe e2e-test die het aantoont.
+
+**Bug 3 — Next.js' eigen `_next/static/...`-bestanden hebben hetzelfde
+gebrek, en dat kán niet met een knop-fix opgelost worden.** Bij het testen
+van bug 2 op écht staging (schone browser, geen cookies) bleek de hele pagina
+kapot: geen sidebar, geen "Inloggen"-knop, `laden…` dat nooit stopt. Oorzaak:
+Next.js linkt zijn eigen JS-chunks altijd naar het kale pad
+(`/_next/static/chunks/...`), nooit met een voorvoegsel — bevestigd met
+`curl`: 404 zonder `/staging`, 200 mét. Dat laat `AppLayout`'s
+sessie-ophaal-`fetch` überhaupt nooit lopen, dus faalt niet met een 401 maar
+hangt gewoon: de chunk die de fetch-code bevat, laadt niet.
+
+Dit is **niet met code in dit project op te lossen zonder een structurele
+ingreep.** Next.js' `basePath` is build-time vast (bevestigd met
+Next.js-eigen documentatie en meerdere `vercel/next.js`-discussies) — een
+losse `basePath` per omgeving zou een apart image per omgeving vragen, precies
+wat Issue #51 (het `/api/backend`-doorgeefluik) bewust vermeed. De enige
+bekende workaround is `sed`-vervanging van een placeholder bij het opstarten
+van de container — een lapmiddel dat evenveel complexiteit toevoegt als het
+oplost.
+
+**Besluit: geen lapmiddel bouwen.** Dit is het derde, nu onweerlegbare bewijs
+dat het sub-pad-ontwerp zelf het probleem is, niet een van de plekken die het
+raakt. Op een opzet met een eigen hostnaam per omgeving (stap C, zie
+`architectuur/plan-robuuste-simulatie-zonder-aws.md` én het nieuwe
+`01-niet-aws-otap-opzet.md`) bestaat dit probleem niet: `_next/static/...`
+wijst dan altijd naar de enige server op die hostnaam. Bug 1 en 2 blijven
+gefixt en gemerged — ze zijn juist en nuttig zodra stap C er is, en bug 2's
+fix helpt al gedeeltelijk (interne `<Link>`-navigatie binnen een eenmaal
+geladen pagina blijft werken). Maar **bug 3 bevestigt dat stap C niet langer
+uitgesteld kan worden als productie/staging voor demo of test met een schone
+sessie bereikt moet worden** — tot dusver werkte inloggen toevallig soms
+doordat de browser de JS-chunks al gecachet had van een eerder bezoek aan het
+kale pad.
+
+**Verder nog gerepareerd, terzijde:** het wachtwoord van de `clm_migrator`-rol
+op productie was verlopen/gewijzigd zonder dat `.env` én de GitHub-secret
+`PRODUCTIE_MIGRATION_DATABASE_URL` waren bijgewerkt — blokkeerde de
+productie-poort. Beide bijgewerkt naar het huidige, werkende wachtwoord.
+
+---
+
+**2026-08-17, ochtend.** Geen nieuwe werkstroom, wel drie correcties op de
 stand van 14-08 die hieronder bleven liggen:
 
 1. `feat/pariteit-image-digest` is inmiddels **wél gemerged** — de melding

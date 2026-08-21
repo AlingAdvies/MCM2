@@ -5,6 +5,13 @@
 **Laatste update:** 2026-08-12
 **Vereiste toegang:** GitHub (AlingAdvies/MCM2), Supabase, Telegram op je telefoon
 
+> ⚠️ **VEROUDERD VOOR PRODUCTIE, sinds 2026-08-19.** Productie draait sinds
+> vandaag op AWS ECS Express Mode, niet meer op `saxombp`. Verwijzingen naar
+> "de GitHub Environment `productie`-akkoordknop" en de bestaande
+> uitrol-workflow beschrijven het OUDE mechanisme — dat moet nog gekoppeld
+> worden aan de nieuwe AWS-deploy. Acceptatie/staging op saxombp zijn
+> ongewijzigd. Zie `docs/STATUS.md` voor de actuele stand.
+
 ---
 
 ## Hoe dit werkt

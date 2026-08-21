@@ -1,33 +1,18 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
-import type { SQL } from 'drizzle-orm';
 
 import { DatabaseService } from '../db/database.service';
-import type { TenantTransaction } from '../db/database.service';
 import { SurveyAuditService } from './survey-audit.service';
 import { valideerAntwoorden } from './antwoord-validatie';
-import type {
-  AntwoordFout,
-  GeldigAntwoord,
-  VraagVoorValidatie,
-} from './antwoord-validatie';
-import type { AntwoordType } from './vragenlijst-schema';
+import type { AntwoordFout } from './antwoord-validatie';
+import { schrijfAntwoorden } from './antwoord-wegschrijven';
+import { haalVragen, naarValidatievraag, telBestanden } from './vraag-opzoeken';
 
 /** Waarom een indiening niet is doorgegaan. Bepaalt de HTTP-status. */
 export type IndienUitkomst =
   | { status: 'ingediend' }
   | { status: 'ongeldig'; fouten: AntwoordFout[] }
   | { status: 'niet-meer-open' };
-
-interface VraagRij extends Record<string, unknown> {
-  question_id: string;
-  question_key: string;
-  answer_type: string;
-  is_required: boolean;
-  allows_upload: boolean;
-  max_files: number;
-  config: Record<string, unknown> | null;
-}
 
 /**
  * Neemt een volledige indiening aan: valideren, wegschrijven, afsluiten.
@@ -59,7 +44,7 @@ export class AntwoordIndienService {
       .withTenant<IndienUitkomst>(
         tenantId,
         async (tx) => {
-          const vragen = await this.haalVragen(tx, responseId);
+          const vragen = await haalVragen(tx, responseId);
 
           // Geen vragen betekent: er valt niets in te dienen. Behandeld als
           // "niet meer open" in plaats van als lege geldige indiening — anders
@@ -68,7 +53,7 @@ export class AntwoordIndienService {
             return { status: 'niet-meer-open' };
           }
 
-          const bestanden = await this.telBestanden(tx, responseId);
+          const bestanden = await telBestanden(tx, responseId);
 
           const uitkomst = valideerAntwoorden(
             vragen.map(naarValidatievraag),
@@ -87,7 +72,7 @@ export class AntwoordIndienService {
             vragen.map((v) => [v.question_key, v.question_id]),
           );
 
-          await this.schrijfAntwoorden(
+          await schrijfAntwoorden(
             tx,
             tenantId,
             responseId,
@@ -148,95 +133,6 @@ export class AntwoordIndienService {
         throw fout;
       });
   }
-
-  private async haalVragen(
-    tx: TenantTransaction,
-    responseId: string,
-  ): Promise<VraagRij[]> {
-    // Van response naar template, nooit andersom — dezelfde regel als in
-    // VragenlijstLeesService. Hiermee is stap 4 uit ontwerp §5 automatisch
-    // gedekt: `vragen` bevat uitsluitend de vragen van déze run, dus een
-    // question_key van een andere template is per definitie onbekend.
-    const resultaat = await tx.execute<VraagRij>(
-      sql`SELECT q.question_id, q.question_key, q.answer_type, q.is_required,
-                 q.allows_upload, q.max_files, q.config
-            FROM clm.survey_response r
-            JOIN clm.survey_run      run ON run.run_id    = r.run_id
-            JOIN clm.survey_question q   ON q.template_id = run.template_id
-           WHERE r.response_id = ${responseId}
-           ORDER BY q.position`,
-    );
-
-    return resultaat.rows;
-  }
-
-  /** Aantal reeds geüploade bijlagen per question_key. */
-  private async telBestanden(
-    tx: TenantTransaction,
-    responseId: string,
-  ): Promise<Map<string, number>> {
-    const resultaat = await tx.execute<{
-      question_key: string;
-      aantal: string;
-    }>(
-      sql`SELECT q.question_key, count(*)::text AS aantal
-            FROM clm.survey_attachment a
-            JOIN clm.survey_question q ON q.question_id = a.question_id
-           WHERE a.response_id = ${responseId}
-           GROUP BY q.question_key`,
-    );
-
-    return new Map(
-      resultaat.rows.map((rij) => [rij.question_key, Number(rij.aantal)]),
-    );
-  }
-
-  /**
-   * Schrijft de antwoorden weg.
-   *
-   * `ON CONFLICT ... DO UPDATE` omdat er al een concept kan staan (§7): de
-   * leverancier vulde vraag 1 t/m 3 in, sloeg op, en dient later alles in. Een
-   * gewone INSERT zou dan botsen op UNIQUE (response_id, question_id).
-   */
-  private async schrijfAntwoorden(
-    tx: TenantTransaction,
-    tenantId: string,
-    responseId: string,
-    antwoorden: GeldigAntwoord[],
-    idPerSleutel: Map<string, string>,
-  ): Promise<void> {
-    for (const antwoord of antwoorden) {
-      const questionId = idPerSleutel.get(antwoord.questionKey);
-
-      if (!questionId) {
-        // De validatie heeft al vastgesteld dat elke sleutel bekend is; komt
-        // hij hier alsnog niet uit de map, dan is er iets grondiger mis.
-        throw new Error(
-          `Vraag '${antwoord.questionKey}' is gevalideerd maar heeft geen question_id — dit is een programmeerfout.`,
-        );
-      }
-
-      await tx.execute(
-        sql`INSERT INTO clm.survey_answer
-                (tenant_id, response_id, question_id, answer_type,
-                 answer_code, answer_codes, answer_text, answer_number, comment)
-            VALUES (${tenantId}, ${responseId}, ${questionId},
-                    ${antwoord.answerType},
-                    ${antwoord.answerCode},
-                    ${codesAlsArray(antwoord.answerCodes)},
-                    ${antwoord.answerText},
-                    ${antwoord.answerNumber},
-                    ${antwoord.comment})
-            ON CONFLICT (response_id, question_id) DO UPDATE
-               SET answer_code   = EXCLUDED.answer_code,
-                   answer_codes  = EXCLUDED.answer_codes,
-                   answer_text   = EXCLUDED.answer_text,
-                   answer_number = EXCLUDED.answer_number,
-                   comment       = EXCLUDED.comment,
-                   updated_at    = now()`,
-      );
-    }
-  }
 }
 
 /**
@@ -251,33 +147,4 @@ class NietMeerOpenError extends Error {
     super('De response stond niet meer open.');
     this.name = 'NietMeerOpenError';
   }
-}
-
-/**
- * Zet een lijst codes om naar iets dat Postgres als `text[]` accepteert.
- *
- * Drizzle geeft een JS-array door als `record` — de INSERT faalt dan met
- * "column answer_codes is of type text[] but expression is of type record".
- * De omweg via een JSON-array met `jsonb_array_elements_text` is bewust: een
- * array-literal opbouwen zou quoting vereisen van komma's, aanhalingstekens en
- * accolades die in een optiecode kunnen voorkomen, en dat is precies het soort
- * handwerk waar een injectiefout in sluipt.
- */
-function codesAlsArray(codes: string[] | null): SQL {
-  if (codes === null) {
-    return sql`NULL::text[]`;
-  }
-
-  return sql`ARRAY(SELECT jsonb_array_elements_text(${JSON.stringify(codes)}::jsonb))`;
-}
-
-function naarValidatievraag(rij: VraagRij): VraagVoorValidatie {
-  return {
-    questionKey: rij.question_key,
-    answerType: rij.answer_type as AntwoordType,
-    isRequired: rij.is_required,
-    allowsUpload: rij.allows_upload,
-    maxFiles: rij.max_files,
-    config: rij.config ?? {},
-  };
 }
