@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-08-21 10:03 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-08-21 10:07 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -25,12 +25,17 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ## Per thema
 
-### Product — vragenlijst, leveranciers, contracten, meldingen (4)
+### Product — vragenlijst, leveranciers, contracten, meldingen (9)
 
 - [#23](https://github.com/AlingAdvies/MCM2/issues/23) `before-production` — MVM_V2-frontend-inconsistenties oplossen (tenant demo vs. transdev, vendors-lijstpagina)
 - [#52](https://github.com/AlingAdvies/MCM2/issues/52) — Restrisico virusscan vastleggen als bewuste beslissing, met opschalingsvoorwaarde
 - [#83](https://github.com/AlingAdvies/MCM2/issues/83) — Gearchiveerde testrondes stapelen op in de demo-database
 - [#148](https://github.com/AlingAdvies/MCM2/issues/148) — Notificaties per tenant: signaleren wat blijft liggen
+- [#153](https://github.com/AlingAdvies/MCM2/issues/153) — Vragenlijst toont geen contact-/afzenderinfo voor de leverancier
+- [#154](https://github.com/AlingAdvies/MCM2/issues/154) — "Ronde" is een verwarrende naam die straks bezet is voor de echte herhaalde-meting-feature
+- [#155](https://github.com/AlingAdvies/MCM2/issues/155) — Nieuwe feature: vragenlijst-bouwer voor tenant-beheerders
+- [#156](https://github.com/AlingAdvies/MCM2/issues/156) — Veld voor contractbeheerder/contactpersoon ontbreekt bij leverancier
+- [#157](https://github.com/AlingAdvies/MCM2/issues/157) — Contractveld ontbreekt, gekoppeld aan leverancierstype en/of vragenlijst
 
 ### Beheermenu (3)
 
@@ -86,4 +91,4 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ---
 
-**Totaal open:** 35
+**Totaal open:** 40
