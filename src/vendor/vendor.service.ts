@@ -59,6 +59,8 @@ export interface Contactpersoon {
   email: string | null;
   phone: string | null;
   jobTitle: string | null;
+  /** Vrije notitie, bv. "is vervanger van X voor IT-zaken". */
+  roleDescription: string | null;
   isPrimary: boolean;
 }
 
@@ -118,6 +120,7 @@ export interface ContactInvoer {
   email?: string | null;
   phone?: string | null;
   jobTitle?: string | null;
+  roleDescription?: string | null;
   isPrimary?: boolean;
 }
 
@@ -155,6 +158,7 @@ interface ContactRij extends Record<string, unknown> {
   email: string | null;
   phone: string | null;
   job_title: string | null;
+  role_description: string | null;
   is_primary: boolean;
 }
 
@@ -530,14 +534,16 @@ export class VendorService {
         const resultaat = await tx.execute<ContactRij>(
           sql`INSERT INTO clm.vendor_contact
                 (vendor_id, tenant_id, full_name, email, phone, job_title,
-                 is_primary)
+                 role_description, is_primary)
             VALUES (${vendorId}, ${tenantId},
                     ${invoer.fullName!.trim()},
                     ${leegIsNull(invoer.email)},
                     ${leegIsNull(invoer.phone)},
                     ${leegIsNull(invoer.jobTitle)},
+                    ${leegIsNull(invoer.roleDescription)},
                     ${wordtPrimair})
-            RETURNING contact_id, full_name, email, phone, job_title, is_primary`,
+            RETURNING contact_id, full_name, email, phone, job_title,
+                      role_description, is_primary`,
         );
 
         const c = resultaat.rows[0];
@@ -549,6 +555,7 @@ export class VendorService {
           email: c.email,
           phone: c.phone,
           jobTitle: c.job_title,
+          roleDescription: c.role_description,
           isPrimary: c.is_primary,
         };
       },
@@ -601,6 +608,11 @@ export class VendorService {
         if (invoer.jobTitle !== undefined) {
           zetten.push(sql`job_title = ${leegIsNull(invoer.jobTitle)}`);
         }
+        if (invoer.roleDescription !== undefined) {
+          zetten.push(
+            sql`role_description = ${leegIsNull(invoer.roleDescription)}`,
+          );
+        }
         if (invoer.isPrimary !== undefined) {
           zetten.push(sql`is_primary = ${invoer.isPrimary}`);
         }
@@ -616,7 +628,8 @@ export class VendorService {
         }
 
         const resultaat = await tx.execute<ContactRij>(
-          sql`SELECT contact_id, full_name, email, phone, job_title, is_primary
+          sql`SELECT contact_id, full_name, email, phone, job_title,
+                     role_description, is_primary
               FROM clm.vendor_contact
              WHERE contact_id = ${contactId}`,
         );
@@ -629,6 +642,7 @@ export class VendorService {
           email: c.email,
           phone: c.phone,
           jobTitle: c.job_title,
+          roleDescription: c.role_description,
           isPrimary: c.is_primary,
         };
       },
@@ -711,7 +725,8 @@ export class VendorService {
     }
 
     const contacten = await tx.execute<ContactRij>(
-      sql`SELECT contact_id, full_name, email, phone, job_title, is_primary
+      sql`SELECT contact_id, full_name, email, phone, job_title,
+                 role_description, is_primary
             FROM clm.vendor_contact
            WHERE vendor_id = ${vendorId} AND deleted_at IS NULL
            ORDER BY is_primary DESC, full_name`,
@@ -737,6 +752,7 @@ export class VendorService {
         email: c.email,
         phone: c.phone,
         jobTitle: c.job_title,
+        roleDescription: c.role_description,
         isPrimary: c.is_primary,
       })),
     };

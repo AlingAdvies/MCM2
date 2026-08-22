@@ -28,6 +28,7 @@ import type {
 const MAX_NAAM = 200;
 const MAX_KORT = 100;
 const MAX_URL = 500;
+const MAX_NOTITIE = 2000;
 
 export class InvoerFout extends Error {
   constructor(
@@ -325,6 +326,13 @@ export function leesContact(
   }
   if ('jobTitle' in ruw) {
     invoer.jobTitle = optioneleTekst(ruw.jobTitle, 'Functie', MAX_KORT);
+  }
+  if ('roleDescription' in ruw) {
+    invoer.roleDescription = optioneleTekst(
+      ruw.roleDescription,
+      'Notitie',
+      MAX_NOTITIE,
+    );
   }
 
   if ('isPrimary' in ruw) {
