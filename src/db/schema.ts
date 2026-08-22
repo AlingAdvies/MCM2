@@ -38,6 +38,11 @@ export const complianceStatus = ref.table('compliance_status', {
   label: text('label').notNull(),
 });
 
+export const contractStatus = ref.table('contract_status', {
+  code: text('code').primaryKey(),
+  label: text('label').notNull(),
+});
+
 // ─── clm schema: fundament ────────────────────────────────────────────────
 
 export const tenant = clm.table(
@@ -331,6 +336,74 @@ export const surveyTemplate = clm.table(
       t.version,
     ),
     index('survey_template_tenant_id_idx').on(t.tenantId),
+  ],
+);
+
+// ─── clm schema: contractmanagement ────────────────────────────────────────
+// Zie docs/superpowers/specs/2026-08-22-contractmanagement-design.md.
+
+export const contract = clm.table(
+  'contract',
+  {
+    contractId: uuid('contract_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    vendorId: uuid('vendor_id')
+      .notNull()
+      .references(() => vendor.vendorId, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    contractNumber: text('contract_number'),
+    // NULL betekent "gebruik de is_primary-contactpersoon van de vendor" —
+    // applicatielogica, geen database-default. Zie spec §2.1.
+    vendorContactId: uuid('vendor_contact_id').references(
+      () => vendorContact.contactId,
+      { onDelete: 'set null' },
+    ),
+    ownerUserId: uuid('owner_user_id').references(() => user.userId, {
+      onDelete: 'set null',
+    }),
+    // Kent geen 'verlopend' — dat is berekend uit end_date, nooit
+    // opgeslagen. Zie spec §2.3.
+    statusCode: text('status_code').references(() => contractStatus.code, {
+      onDelete: 'set null',
+    }),
+    valueEur: numeric('value_eur', { precision: 15, scale: 2 }),
+    startDate: date('start_date'),
+    endDate: date('end_date'),
+    note: text('note'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('contract_tenant_id_idx').on(t.tenantId),
+    index('contract_vendor_id_idx').on(t.vendorId),
+  ],
+);
+
+export const contractSurveyTemplate = clm.table(
+  'contract_survey_template',
+  {
+    contractId: uuid('contract_id')
+      .notNull()
+      .references(() => contract.contractId, { onDelete: 'cascade' }),
+    surveyTemplateId: uuid('survey_template_id')
+      .notNull()
+      .references(() => surveyTemplate.templateId, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('contract_survey_template_pkey').on(
+      t.contractId,
+      t.surveyTemplateId,
+    ),
+    index('contract_survey_template_tenant_id_idx').on(t.tenantId),
   ],
 );
 
