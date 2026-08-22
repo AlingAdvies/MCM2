@@ -2,6 +2,96 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-22 — contractmanagement gebouwd (backend + frontend), sessie
+bewust vroeg gestopt op "UI needs work"; §1c toegevoegd aan MCM2-CLAUDE.md
+na vergelijking met MVM_V2.**
+
+Twee delen. **Deel 1 (overdag): contractmanagement.** Backend en frontend
+zijn allebei volledig gebouwd op basis van `docs/opmerkingen Vendor IT
+survey.txt` (21/20 augustus-secties): datamodel (`clm.contract`,
+`ref.contract_status`, `clm.contract_survey_template` met een
+`wachtlijst`-vlag), API, en een scherm ingebed op de leveranciersdetail-
+pagina (niet als losse toppagina — dat was een bewuste keuze na
+vergelijking met MVM_V2's Contract 360-patroon, dat wél top-level is).
+Backend staat op branch `docs/contractmanagement-design`
+(16 commits, migraties 0027+0028, alle e2e groen), frontend op
+`feat/contractmanagement-scherm` (9 commits, Playwright groen). **Beide
+branches zijn bewust geparkeerd, niet gemerged** — de eigenaar vond de UI
+na meerdere preview-rondes nog niet goed genoeg en wilde niet mergen vóór
+dat opgelost is. Onderweg is een echt gat gedicht: een survey-template
+koppelen aan een contract had eerst geen zichtbaar pad naar een echte
+uitnodiging — dat is opgelost door `survey_run.contract_id` (een kolom die
+sinds migratie 0007 ongebruikt bestond) daadwerkelijk te vullen, plus
+directe "nu uitnodigen"-links per gekoppelde template.
+
+Aan het eind van de dag zette de eigenaar vier losse observaties in de
+opmerkingen-txt, sectie **"21 augustus III"** — dit zijn de openstaande
+punten voor de volgende sessie, in volgorde:
+
+1. **Dichtheid.** Stamgegevens/classificatie/contactpersonen op
+   `/beheer/leveranciers/[id]` zijn te veel uitgesponnen — drie brede
+   kaarten onder elkaar, elk met eigen `p-6` en interne grid, terwijl de
+   doelgroep op een groot pc-scherm werkt. Grootste, meest zichtbare
+   impact — als eerste oppakken.
+2. **Fold-out contactformulier.** Het "Contactpersoon toevoegen"-
+   formulier in `Contactpersonen` (huidige component,
+   `MCM2-frontend/src/app/beheer/leveranciers/[id]/page.tsx`) staat altijd
+   open onderaan de lijst. Moet een inklapbare fold-out worden — kleine,
+   geïsoleerde wijziging, goed te combineren met punt 1 want maakt meteen
+   ruimte vrij.
+3. **Contractrijen direct openklikbaar.** Nu alleen via een aparte
+   edit-knop te bewerken; moet in-place uitklapbaar worden, met daarin
+   zowel bestaande als toekomstige velden zichtbaar. Grotere wijziging,
+   raakt de structuur van `ContractRij`.
+4. **Koppeling vs. wachtlijst — nog geen echte bug, wel verwarrend.**
+   De eigenaar dacht een databug te zien (Microsoft/M365-contract niet
+   zichtbaar op de wachtlijst van zijn survey). Uitgezocht: geen bug — de
+   `wachtlijst`-checkbox stond simpelweg uit terwijl de
+   template-koppeling wél bestond. Dit is dus een UX-onderscheid dat niet
+   duidelijk genoeg overkomt, geen datafout. **Openstaande vraag aan de
+   eigenaar, nog niet beantwoord:** is dit met een visuele verduidelijking
+   op te lossen (bijv. koppeling toont automatisch als "wachtlijst aan"
+   i.p.v. een aparte losse checkbox), of moet het default-gedrag zelf
+   anders (automatisch aan i.p.v. uit bij koppelen)? Dit moet als eerste
+   met de eigenaar besproken worden vóór er gebouwd wordt — niet zelf
+   invullen.
+
+**Deel 2 (avond, na de stop-instructie): §1c toegevoegd aan
+`MCM2-CLAUDE.md`.** De eigenaar merkte op dat frontend-adviezen bij MCM2
+wisselender van kwaliteit zijn dan destijds bij MVM_V2, en vroeg om
+MVM_V2's instructiebestand te lezen op wat MCM2 zou kunnen overnemen.
+Bevinding: het verschil zat niet in vaardigheid maar in vastlegging —
+MVM_V2's `CLAUDE.md` normeert dichtheid expliciet, verplicht een intake
+per nieuw datascherm (velden, bewerken=aanmaken-symmetrie, vervolgstap,
+rol, navigatieplek), en houdt een groeiende "Bekende beslissingen"-tabel
+bij. MCM2 had daar niets van — vandaar dat elk scherm de smaak opnieuw
+moest raden. Tokengebruik zelf bleek al goed (geen hardcoded hex-kleuren
+gevonden in `src/app`), dus dát was niet het probleem.
+
+Toegevoegd:
+- **§1c in `MCM2-CLAUDE.md`** — dichtheidsregel, verplichte mini-intake
+  vóór een nieuw datascherm, vaste toetsvraag per scherm, verwijzing naar
+  het bestaande `design-tokens.ts`.
+- **`docs/architectuur/ui-beslissingen.md`** — nieuw, de groeiende tabel;
+  bevat al drie patronen uit deze sessie plus de vier open punten hierboven
+  als "nog niet vastgelegd".
+- **`docs/architectuur/evaluatie-schermen-2026-08-22.md`** — de bestaande
+  schermen getoetst aan §1c. Bevestigt 3 van de 4 punten uit "21 augustus
+  III" met concrete regelverwijzingen, en geeft de aanbevolen volgorde
+  (dichtheid → fold-out → uitklapbare rij → koppeling/wachtlijst) die
+  hierboven ook staat.
+
+**Voor de volgende sessie, als de eigenaar zegt "we gaan verder waar we
+gebleven zijn":** pak bovenstaande vier punten in de gegeven volgorde op.
+Begin met een korte bevestiging van deze samenvatting (niet blind
+doorbouwen) en stel bij punt 4 eerst de open vraag aan de eigenaar voordat
+er iets gebouwd wordt. Beide branches (`docs/contractmanagement-design`,
+`feat/contractmanagement-scherm`) blijven het werkgebied — geen nieuwe
+branch nodig, wél opnieuw het git-ritueel (merge- of parkeer-vraag) zodra
+er weer gepusht wordt.
+
+---
+
 **2026-08-21, avond — eerste feature end-to-end door de volledige,
 geautomatiseerde OTAP-keten: van issue tot productie, inclusief een nieuw
 gebouwd preview-mechanisme.**
