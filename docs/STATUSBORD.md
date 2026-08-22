@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-08-22 11:20 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-08-22 13:37 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -25,7 +25,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ## Per thema
 
-### Product — vragenlijst, leveranciers, contracten, meldingen (13)
+### Product — vragenlijst, leveranciers, contracten, meldingen (15)
 
 - [#23](https://github.com/AlingAdvies/MCM2/issues/23) `before-production` — MVM_V2-frontend-inconsistenties oplossen (tenant demo vs. transdev, vendors-lijstpagina)
 - [#52](https://github.com/AlingAdvies/MCM2/issues/52) — Restrisico virusscan vastleggen als bewuste beslissing, met opschalingsvoorwaarde
@@ -40,6 +40,8 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#160](https://github.com/AlingAdvies/MCM2/issues/160) — Bulk-upload voor contractdata (leverancier, begin-/einddatum)
 - [#161](https://github.com/AlingAdvies/MCM2/issues/161) — Compliance-status: vrij tekstveld → koppeling met beoordelingsuitkomst?
 - [#170](https://github.com/AlingAdvies/MCM2/issues/170) — Uitklaplijst 'rondes' (#154): kolommen vendornaam en e-mailadres contactpersoon toevoegen
+- [#171](https://github.com/AlingAdvies/MCM2/issues/171) — Contracten opnemen in de navigatie (linkerbalk)
+- [#172](https://github.com/AlingAdvies/MCM2/issues/172) — Dashboard: 'Start' hernoemen en overzicht van bijna-verlopen contracten
 
 ### Beheermenu (4)
 
@@ -96,4 +98,4 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ---
 
-**Totaal open:** 45
+**Totaal open:** 47
