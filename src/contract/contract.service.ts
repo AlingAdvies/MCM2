@@ -22,6 +22,8 @@ export interface ContractSamenvatting {
   statusCode: string | null;
   startDate: string | null;
   endDate: string | null;
+  vendorContactNaam: string | null;
+  ownerGebruikerNaam: string | null;
   createdAt: string;
 }
 
@@ -43,7 +45,9 @@ export interface ContractDetail {
   name: string;
   contractNumber: string | null;
   vendorContactId: string | null;
+  vendorContactNaam: string | null;
   ownerUserId: string | null;
+  ownerGebruikerNaam: string | null;
   statusCode: string | null;
   valueEur: string | null;
   startDate: string | null;
@@ -77,6 +81,8 @@ interface ContractRij extends Record<string, unknown> {
   status_code: string | null;
   start_date: string | null;
   end_date: string | null;
+  vendor_contact_naam: string | null;
+  owner_naam: string | null;
   created_at: Date | string;
 }
 
@@ -86,7 +92,9 @@ interface ContractDetailRij extends Record<string, unknown> {
   name: string;
   contract_number: string | null;
   vendor_contact_id: string | null;
+  vendor_contact_naam: string | null;
   owner_user_id: string | null;
+  owner_naam: string | null;
   status_code: string | null;
   value_eur: string | null;
   start_date: string | null;
@@ -124,11 +132,15 @@ export class ContractService {
       tenantId,
       async (tx) => {
         const resultaat = await tx.execute<ContractRij>(
-          sql`SELECT contract_id, name, contract_number, status_code,
-                     start_date, end_date, created_at
-                FROM clm.contract
-               WHERE vendor_id = ${vendorId} AND deleted_at IS NULL
-               ORDER BY created_at DESC`,
+          sql`SELECT c.contract_id, c.name, c.contract_number, c.status_code,
+                     c.start_date, c.end_date, c.created_at,
+                     vc.full_name AS vendor_contact_naam,
+                     u.full_name AS owner_naam
+                FROM clm.contract c
+                LEFT JOIN clm.vendor_contact vc ON vc.contact_id = c.vendor_contact_id
+                LEFT JOIN clm."user" u ON u.user_id = c.owner_user_id
+               WHERE c.vendor_id = ${vendorId} AND c.deleted_at IS NULL
+               ORDER BY c.created_at DESC`,
         );
 
         return resultaat.rows.map((r) => ({
@@ -138,6 +150,8 @@ export class ContractService {
           statusCode: r.status_code,
           startDate: r.start_date,
           endDate: r.end_date,
+          vendorContactNaam: r.vendor_contact_naam,
+          ownerGebruikerNaam: r.owner_naam,
           createdAt: alsTekst(r.created_at),
         }));
       },
@@ -398,13 +412,18 @@ export class ContractService {
     contractId: string,
   ): Promise<ContractDetail | null> {
     const resultaat = await tx.execute<ContractDetailRij>(
-      sql`SELECT contract_id, vendor_id, name, contract_number,
-                 vendor_contact_id, owner_user_id, status_code, value_eur,
-                 start_date, end_date, note, created_at, updated_at
-            FROM clm.contract
-           WHERE contract_id = ${contractId}
-             AND vendor_id = ${vendorId}
-             AND deleted_at IS NULL`,
+      sql`SELECT c.contract_id, c.vendor_id, c.name, c.contract_number,
+                 c.vendor_contact_id, c.owner_user_id, c.status_code,
+                 c.value_eur, c.start_date, c.end_date, c.note,
+                 c.created_at, c.updated_at,
+                 vc.full_name AS vendor_contact_naam,
+                 u.full_name AS owner_naam
+            FROM clm.contract c
+            LEFT JOIN clm.vendor_contact vc ON vc.contact_id = c.vendor_contact_id
+            LEFT JOIN clm."user" u ON u.user_id = c.owner_user_id
+           WHERE c.contract_id = ${contractId}
+             AND c.vendor_id = ${vendorId}
+             AND c.deleted_at IS NULL`,
     );
 
     const rij = resultaat.rows[0];
@@ -419,7 +438,9 @@ export class ContractService {
       name: rij.name,
       contractNumber: rij.contract_number,
       vendorContactId: rij.vendor_contact_id,
+      vendorContactNaam: rij.vendor_contact_naam,
       ownerUserId: rij.owner_user_id,
+      ownerGebruikerNaam: rij.owner_naam,
       statusCode: rij.status_code,
       valueEur: rij.value_eur,
       startDate: rij.start_date,
