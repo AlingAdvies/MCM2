@@ -51,6 +51,7 @@ const {
   vendor3: VENDOR_3,
   vendorB: VENDOR_B,
   vendorWeg: VENDOR_WEG,
+  contract1: CONTRACT_1,
 } = TEST_IDS['ronde-beheer-routes'];
 
 const SUBJECT_ADMIN_A = `oid-rb-a-${Date.now()}`;
@@ -83,10 +84,45 @@ interface RondeAntwoord {
   surveyKind: string;
   isTest: boolean;
   closesAt: string | null;
+  contractId: string | null;
+}
+
+/**
+ * Migratierol, altijd naar dezelfde database als DATABASE_URL.
+ *
+ * Nodig omdat clm_api_runtime geen DELETE heeft op clm.contract
+ * (NIET_VERWIJDEREN in rechten-contract.ts — een contract wordt zacht
+ * verwijderd). Testopruiming ruimt hard op, dus heeft de migratierol nodig
+ * voor die ene tabel — zelfde patroon als contract-routes.e2e-spec.ts.
+ */
+function migratieUrl(): string {
+  const runtime = process.env.DATABASE_URL;
+  if (!runtime) throw new Error('DATABASE_URL ontbreekt.');
+  const doel = new URL(runtime);
+  const expliciet = process.env.MIGRATION_DATABASE_URL;
+  if (expliciet) {
+    const gegeven = new URL(expliciet);
+    if (gegeven.host === doel.host && gegeven.pathname === doel.pathname) {
+      return expliciet;
+    }
+  }
+  doel.username = 'clm_migrator';
+  return doel.toString();
 }
 
 async function verwijderTestdata(client: Client): Promise<void> {
+  const migratieClient = new Client({ connectionString: migratieUrl() });
+  await migratieClient.connect();
+
   for (const tenant of [tenantA, tenantB]) {
+    await migratieClient.query('BEGIN');
+    await migratieClient.query(`SET LOCAL app.current_tenant_id = '${tenant}'`);
+    await migratieClient.query(
+      'DELETE FROM clm.contract WHERE tenant_id = $1',
+      [tenant],
+    );
+    await migratieClient.query('COMMIT');
+
     await client.query('BEGIN');
     await client.query(`SET LOCAL app.current_tenant_id = '${tenant}'`);
     for (const tabel of [
@@ -107,6 +143,8 @@ async function verwijderTestdata(client: Client): Promise<void> {
     }
     await client.query('COMMIT');
   }
+
+  await migratieClient.end();
 }
 
 describe('Ronde-beheerroutes (e2e)', () => {
@@ -238,6 +276,13 @@ describe('Ronde-beheerroutes (e2e)', () => {
       [VENDOR_WEG],
     );
 
+    // Voor de contractId-koppeling: een contract bij VENDOR_1.
+    await client.query(
+      `INSERT INTO clm.contract (contract_id, tenant_id, vendor_id, name)
+       VALUES ($1, $2, $3, 'Testcontract voor rondes')`,
+      [CONTRACT_1, tenantA, VENDOR_1],
+    );
+
     await client.query('COMMIT');
 
     // Tenant B: eigen vragenlijst en eigen leverancier.
@@ -325,6 +370,27 @@ describe('Ronde-beheerroutes (e2e)', () => {
       .expect(201);
 
     expect((antwoord.body as RondeAntwoord).closesAt).not.toBeNull();
+  });
+
+  it('neemt een contractId over en geeft hem terug', async () => {
+    const antwoord = await request(server)
+      .post('/admin/survey/runs')
+      .set('Cookie', cookieAdminA)
+      .send({ templateId: TEMPLATE_A, contractId: CONTRACT_1 })
+      .expect(201);
+
+    expect((antwoord.body as RondeAntwoord).contractId).toBe(CONTRACT_1);
+  });
+
+  it('geeft 404 bij een onbekend contractId', async () => {
+    await request(server)
+      .post('/admin/survey/runs')
+      .set('Cookie', cookieAdminA)
+      .send({
+        templateId: TEMPLATE_A,
+        contractId: '00000000-0000-0000-0000-000000000000',
+      })
+      .expect(404);
   });
 
   it('weigert een sluitdatum in het verleden', async () => {

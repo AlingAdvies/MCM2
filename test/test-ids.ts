@@ -169,6 +169,7 @@ export const TEST_IDS = {
     vendor3: '00000000-0000-0000-0000-0000000000cf',
     vendorB: '00000000-0000-0000-0000-0000000000d4',
     vendorWeg: '00000000-0000-0000-0000-0000000000d5',
+    contract1: id('2e'),
   },
   // Fase C2 — beoordelen. Staarten d6 t/m db; da is al vergeven, vandaar de
   // sprong. Gecontroleerd tegen alleTestIds(), niet gegokt.
