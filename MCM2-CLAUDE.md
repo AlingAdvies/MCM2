@@ -81,6 +81,83 @@ geheugen te herhalen.
 - Dit voorkomt dat een al opgeloste klasse fout een tweede keer wordt
   gemaakt, alleen op een nieuwe tabel — precies het patroon van vandaag.
 
+### 1c. Frontend-smaak is net zo goed een regel als een backend-regel
+
+*Vastgelegd 2026-08-22, na een vergelijking met MVM_V2. Daar leverde
+frontend-werk consequent bruikbare, dichte schermen op; bij MCM2 wisselde
+de kwaliteit per scherm. Het verschil zat niet in vaardigheid maar in
+vastlegging: MVM_V2's `CLAUDE.md` normeert dichtheid, verplicht een
+intake per datascherm, en houdt een groeiende tabel van UI-beslissingen
+bij. MCM2's instructies normeerden dat nergens — met als gevolg dat elk
+scherm de smaak opnieuw moest raden. Dit hoofdstuk kopieert dat patroon,
+toegesneden op MCM2.*
+
+**Design tokens — al aanwezig, blijft de enige bron van waarheid.**
+`MCM2-frontend/src/shared/design-tokens.ts` is letterlijk overgenomen uit
+MVM_V2 (zie het bestand zelf). Nooit een kleur, font-size of spacing-
+waarde hardcoden in een component — altijd `tokens`, `typography`,
+`spacing` of `statusConfig` uit dat bestand, of de Tailwind-klassen die
+eruit zijn afgeleid. Wijk je hiervan af, benoem dat expliciet en waarom.
+
+**Informatiedichtheid — de standaard, niet de uitzondering.**
+De doelgroep werkt op een pc met een groot scherm. Standaard geldt:
+
+- Gebruik de volle breedte van het scherm; geen onnodig witruimte of
+  smalle centrale kolommen op een breed scherm.
+- Tabelrijen: 6–8px verticale padding (`spacing.tableRowPaddingY`), niet
+  de royalere default-padding van een ongestylede component.
+- Bij een verzameling gerelateerde gegevens (stamgegevens, classificatie,
+  contactpersonen, contractvelden): een compacte, ingedikte weergave is
+  het startpunt. Ruim uitgesponnen kaarten met veel lucht ertussen zijn de
+  uitzondering, niet de standaard — kies daar expliciet voor en benoem
+  waarom.
+- Twijfel je of iets dicht genoeg is: vergelijk met een bestaand dicht
+  scherm in deze repo (bijvoorbeeld de contractentabel), niet met een
+  generieke aanname over "nette" spacing.
+
+**Verplichte mini-intake vóór een nieuw datascherm.**
+Voordat je een nieuw scherm of formulier bouwt dat een entiteit toont,
+aanmaakt of bewerkt (vendor, contract, contactpersoon, vragenlijst,
+gebruiker, etc.), beantwoord — kort, voor jezelf of hardop tegen de
+eigenaar — deze vragen. Dit is geen bureaucratie maar het voorkomt precies
+de gaten die tot nu toe steeds achteraf ontdekt werden (een niet-
+vooringevulde bewerkmodus, een ontbrekend pad naar de volgende stap, een
+actie die alleen bij aanmaken kon en niet bij bewerken):
+
+1. **Velden**: welke zijn verplicht, welke optioneel, en welke worden
+   afgeleid/berekend?
+2. **Bewerken = aanmaken**: als een gebruiker een bestaand record opent
+   om te bewerken, staan dan alle bestaande waarden vooringevuld? Kan
+   alles wat bij aanmaken kan (zoals een gekoppelde contactpersoon
+   toevoegen) ook bij bewerken?
+3. **Vervolgstap**: als dit scherm een record aanmaakt dat later een
+   actie triggert (een uitnodiging versturen, een survey koppelen), is er
+   een zichtbaar, direct pad naar die actie — niet alleen een vlag die
+   ergens anders passief wordt afgelezen?
+4. **Wie mag dit zien/bewerken**: is er een rol- of tenantbeperking?
+5. **Waar in de navigatie**: hoort dit in een bestaand scherm thuis (zoals
+   de contractensectie op de leveranciersdetailpagina) of is het een
+   nieuwe toppagina?
+
+Bij twijfel: vraag het de eigenaar, kort en concreet — net als bij een
+architectuurkeuze (§1a). Sla deze intake alleen bewust over bij een
+zuivere bugfix of een cosmetische wijziging.
+
+**Vaste toetsvraag bij elk scherm.**
+Analoog aan MVM_V2's Contract 360-toets: *"Ziet de gebruiker in één
+oogopslag wat hij moet weten en kan hij van daaruit direct verder?"* Een
+scherm dat wel de juiste data toont maar geen actie mogelijk maakt
+(bijvoorbeeld: een gekoppelde vragenlijst zien, zonder een knop om hem
+te versturen) is niet compleet, ook al zijn alle velden gevuld.
+
+**Groeiende tabel van UI-beslissingen — bijhouden vanaf nu.**
+Zodra een sessie een frontend-patroon vaststelt (een component-indeling,
+een interactiepatroon zoals fold-out-formulieren, een tabel- versus
+lijstweergave), leg die vast in `docs/architectuur/ui-beslissingen.md`
+in plaats van hem opnieuw te laten ontdekken in een volgende sessie.
+Format: één regel per beslissing, met datum en korte reden — zoals de
+"Bekende beslissingen"-tabel in MVM_V2's `CLAUDE.md`.
+
 ---
 
 ## 2. Productdoel
