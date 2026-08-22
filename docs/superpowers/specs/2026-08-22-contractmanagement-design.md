@@ -37,6 +37,14 @@ schermen/UI (aparte implementatiestap), niet de bulk-upload (issue #160,
 bouwt hier bovenop maar is een apart ontwerp), niet de vragenlijst-bouwer
 (issue #155, ongerelateerd).
 
+**Notitieveld bij contactpersoon (opmerking 21-08, punt 2b) — geen nieuwe
+kolom nodig.** `clm.vendor_contact.role_description` bestaat al in het schema
+(`src/db/schema.ts:277`) en dekt precies het gevraagde gebruik (bv. "is
+vervanger van X voor IT-zaken"). Het veld wordt alleen nergens in de UI
+getoond of ingevuld — dat is een implementatiedetail van het contactpersoon-
+scherm, niet een datamodel-wijziging, en hoort dus bij de implementatiestap
+van deze spec, niet bij een nieuwe migratie.
+
 ---
 
 ## 2. Datamodel
@@ -224,7 +232,9 @@ implementatiestap (via `writing-plans`) kan direct volgen op dit document.
 
 ## Bronnen
 
-- `docs/opmerkingen Vendor IT survey.txt`, 21 augustus, punt 2/2a/2b/2c
+- `docs/opmerkingen Vendor IT survey.txt`, 21 augustus, punt 2/2a/2b/2c —
+  2b (notitie bij contactpersoon) bleek al gedekt door het bestaande
+  `vendor_contact.role_description`, zie §1
 - `docs/architectuur/roadmap-vendor-it-survey.md` §3.1–3.2 (issues #156, #157)
 - `drizzle/0007_contract_op_survey_run.sql` — de vooraf klaargezette kolom
   en de reden waarom
