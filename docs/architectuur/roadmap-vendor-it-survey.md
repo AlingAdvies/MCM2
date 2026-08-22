@@ -305,6 +305,23 @@ al te bestaan als `vendor_contact.role_description` — alleen nog niet
 zichtbaar in de UI. Geen apart issue, wordt meegenomen in de
 contractmanagement-implementatie. Zie de spec §1 voor detail.
 
+### 7.1 Vervolgwensen ná de preview (21-08 II) → [#171](https://github.com/AlingAdvies/MCM2/issues/171), [#172](https://github.com/AlingAdvies/MCM2/issues/172)
+
+Bij het bekijken van de eerste preview van de Contracten-sectie (22-08)
+kwamen vier nieuwe punten naar boven. Twee daarvan (contactpersoon en
+survey-koppeling direct bij het aanmaken van een contract) waren klein
+genoeg om nog in dezelfde bouwronde mee te nemen — zie
+`docs/superpowers/plans/2026-08-22-contractmanagement-ui.md`, uitgebreid
+met een Task 12. De andere twee raken schermen buiten het
+vendor-detailscherm (sidebar, startscherm) en zijn losse issues geworden:
+
+- [#171](https://github.com/AlingAdvies/MCM2/issues/171) — Contracten ook
+  in de linkerbalk/navigatie opnemen, niet alleen bereikbaar via een
+  leverancier.
+- [#172](https://github.com/AlingAdvies/MCM2/issues/172) — "Start"
+  hernoemen naar "Dashboard", met een overzicht van contracten die binnen
+  90 dagen verlopen (ook zonder ingevulde status).
+
 ## 8. Productidee: (intake)leveranciersbeoordeling o.b.v. Z-CERT-vragenlijst
 
 **Bevinding (21-08, uit de opmerkingen):** een productidee, geen uitgewerkte
