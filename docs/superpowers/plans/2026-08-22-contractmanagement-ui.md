@@ -2735,10 +2735,901 @@ SELECT run_id, contract_id FROM clm.survey_run WHERE contract_id IS NOT NULL ORD
 
 ---
 
+## Task 14: Tabelweergave, contactpersoon-bij-bewerken, en de wachtlijst
+
+**Toegevoegd 22-08, tijdens de derde preview-ronde.** Drie punten uit
+spec §7–9 (`docs/superpowers/specs/2026-08-22-contractmanagement-ui-design.md`).
+De grootste van de drie is §9 (de wachtlijst): nieuwe migratie, nieuw
+backend-veld, nieuw scherm. Blijft binnen dezelfde twee branches.
+
+### 14.1 Backend: `wachtlijst`-kolom op de koppeltabel
+
+**Files (backend):**
+- Create: `drizzle/0028_contract_survey_wachtlijst.sql`
+- Modify: `drizzle/meta/_journal.json`
+- Modify: `src/db/schema.ts`
+- Modify: `src/contract/contract.service.ts`
+- Modify: `src/contract/contract-invoer.ts`
+- Modify: `src/contract/contract.controller.ts`
+- Test: uitbreiding van `test/contract-routes.e2e-spec.ts`
+
+- [ ] **Step 1: Controleer het volgende migratienummer**
+
+```bash
+ls drizzle/*.sql | tail -3
+```
+
+Dit plan gaat uit van `0028`; pas aan als er ondertussen een andere
+migratie is bijgekomen (zie de waarschuwing bovenaan het vorige plan,
+Task 1).
+
+- [ ] **Step 2: Schrijf de migratie**
+
+```sql
+-- =============================================================================
+-- clm.contract_survey_template krijgt een wachtlijst-kolom.
+--
+-- Spec: docs/superpowers/specs/2026-08-22-contractmanagement-ui-design.md §9.
+--
+-- Uitvinkbaar door de beheerder, geen automatisch proces dat hem zet of
+-- wist: een leverancier "op de wachtlijst" voor de volgende ronde van een
+-- vragenlijst betekent alleen dat hij voorgeselecteerd wordt zodra iemand
+-- bewust een nieuwe ronde start via het nieuwe wachtlijst-scherm — nooit
+-- dat er vanzelf iets verstuurd wordt.
+--
+-- Geen nieuwe tabel: de wachtlijst-status hoort per definitie bij een
+-- specifieke contract-template-koppeling, en die koppeling bestaat al
+-- sinds migratie 0027.
+-- =============================================================================
+
+ALTER TABLE clm.contract_survey_template
+    ADD COLUMN wachtlijst boolean NOT NULL DEFAULT false;--> statement-breakpoint
+
+COMMENT ON COLUMN clm.contract_survey_template.wachtlijst IS
+    'Staat deze leverancier klaar om voorgesteld te worden bij de volgende ronde van deze vragenlijst? Uitvinkbaar door de beheerder, nooit automatisch gezet. Zie spec §9.';
+```
+
+- [ ] **Step 3: Voeg de migratie toe aan `drizzle/meta/_journal.json`**
+
+Zelfde patroon als eerder — nieuwe entry ná de laatste, `when` één hoger,
+`tag: "0028_contract_survey_wachtlijst"`.
+
+- [ ] **Step 4: Draai de migratie tegen de wegwerpcontainer**
+
+```bash
+MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres" npm run migrate:deploy
+```
+
+Lees terug, niet vertrouwen op de melding:
+
+```bash
+docker exec mcm2test psql -U postgres -d postgres -c "SELECT column_name, data_type, column_default FROM information_schema.columns WHERE table_schema='clm' AND table_name='contract_survey_template' AND column_name='wachtlijst';"
+```
+
+- [ ] **Step 5: Werk `src/db/schema.ts` bij**
+
+In de `contractSurveyTemplate`-tabeldefinitie, ná `tenantId`:
+
+```typescript
+    wachtlijst: boolean('wachtlijst').notNull().default(false),
+```
+
+(`boolean` staat al geïmporteerd bovenaan het bestand — hergebruiken.)
+
+- [ ] **Step 6: `ContractService` — wachtlijst lezen en schrijven**
+
+`surveyTemplates()` en `zetSurveyTemplates()` in
+`src/contract/contract.service.ts` uitbreiden. Het antwoord wordt een
+lijst van objecten in plaats van alleen id's:
+
+```typescript
+export interface SurveyTemplateKoppeling {
+  templateIds: string[];
+  /** Welke van de gekoppelde templates ook op de wachtlijst staan. */
+  wachtlijstTemplateIds: string[];
+}
+```
+
+In `surveyTemplates()`, de query uitbreiden:
+
+```typescript
+        const resultaat = await tx.execute<{
+          survey_template_id: string;
+          wachtlijst: boolean;
+        }>(
+          sql`SELECT survey_template_id, wachtlijst
+             FROM clm.contract_survey_template
+             WHERE contract_id = ${contractId}
+             ORDER BY created_at`,
+        );
+
+        return {
+          templateIds: resultaat.rows.map((r) => r.survey_template_id),
+          wachtlijstTemplateIds: resultaat.rows
+            .filter((r) => r.wachtlijst)
+            .map((r) => r.survey_template_id),
+        };
+```
+
+In `zetSurveyTemplates()`, de methode krijgt een derde parameter en de
+INSERT wordt uitgebreid:
+
+```typescript
+  async zetSurveyTemplates(
+    tenantId: string,
+    vendorId: string,
+    contractId: string,
+    templateIds: string[],
+    wachtlijstTemplateIds: string[],
+  ): Promise<SurveyTemplateKoppeling | null> {
+```
+
+```typescript
+        for (const templateId of templateIds) {
+          await tx.execute(
+            sql`INSERT INTO clm.contract_survey_template
+                  (contract_id, survey_template_id, tenant_id, wachtlijst)
+                VALUES (${contractId}, ${templateId}, ${tenantId},
+                        ${wachtlijstTemplateIds.includes(templateId)})`,
+          );
+        }
+```
+
+En de return-waarde:
+
+```typescript
+        return { templateIds, wachtlijstTemplateIds };
+```
+
+**Nieuwe methode: leveranciers op de wachtlijst voor een template.**
+Nodig voor het nieuwe scherm (14.3). Toevoegen aan `ContractService`:
+
+```typescript
+  /**
+   * Leveranciers die op de wachtlijst staan voor de volgende ronde van
+   * deze vragenlijst-template, via een gekoppeld contract. Eén leverancier
+   * met meerdere contracten op de wachtlijst voor dezelfde template komt
+   * hier maar één keer voor (DISTINCT) — de UI toont een leverancier, geen
+   * contract.
+   */
+  async wachtlijstVoorTemplate(
+    tenantId: string,
+    templateId: string,
+  ): Promise<{ vendorId: string; vendorNaam: string }[]> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const resultaat = await tx.execute<{
+          vendor_id: string;
+          name: string;
+        }>(
+          sql`SELECT DISTINCT v.vendor_id, v.name
+             FROM clm.contract_survey_template cst
+             JOIN clm.contract c ON c.contract_id = cst.contract_id
+             JOIN clm.vendor v ON v.vendor_id = c.vendor_id
+             WHERE cst.survey_template_id = ${templateId}
+               AND cst.wachtlijst = true
+               AND c.deleted_at IS NULL
+               AND v.deleted_at IS NULL
+             ORDER BY v.name`,
+        );
+
+        return resultaat.rows.map((r) => ({
+          vendorId: r.vendor_id,
+          vendorNaam: r.name,
+        }));
+      },
+      'medewerker',
+    );
+  }
+```
+
+- [ ] **Step 7: Invoer-validatie en route**
+
+In `src/contract/contract-invoer.ts`, `leesSurveyTemplateKoppeling`
+hernoemen/uitbreiden zodat hij beide lijsten teruggeeft:
+
+```typescript
+export interface SurveyTemplateKoppelingInvoer {
+  templateIds: string[];
+  wachtlijstTemplateIds: string[];
+}
+
+export function leesSurveyTemplateKoppeling(
+  body: unknown,
+): SurveyTemplateKoppelingInvoer {
+  if (typeof body !== 'object' || body === null) {
+    throw new InvoerFout('body', 'Er is geen koppeling meegestuurd.');
+  }
+
+  const ruw = body as Record<string, unknown>;
+
+  function leesIdLijst(veld: string): string[] {
+    if (!(veld in ruw)) return [];
+    const waarde = ruw[veld];
+    if (!Array.isArray(waarde)) {
+      throw new InvoerFout(veld, `${veld} moet een lijst zijn.`);
+    }
+    for (const w of waarde) {
+      if (typeof w !== 'string' || !UUID_PATROON_KOPPELING.test(w)) {
+        throw new InvoerFout(veld, "Een van de id's is ongeldig.");
+      }
+    }
+    return [...new Set(waarde as string[])];
+  }
+
+  if (!('templateIds' in ruw)) {
+    throw new InvoerFout('templateIds', 'templateIds is verplicht.');
+  }
+
+  return {
+    templateIds: leesIdLijst('templateIds'),
+    wachtlijstTemplateIds: leesIdLijst('wachtlijstTemplateIds'),
+  };
+}
+```
+
+Dit vervangt de bestaande functie-body volledig — pas de aanroepende
+code in `ContractController` aan op het nieuwe returntype (Step 8).
+
+In `src/contract/contract.controller.ts`:
+
+```typescript
+  @Put(':id/survey-templates')
+  @VereistRol('admin')
+  async zetSurveyTemplates(
+    @Req() request: RequestMetSessie,
+    @Param('vendorId') vendorId: string,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const sessie = request.sessie!;
+
+    let invoer: SurveyTemplateKoppelingInvoer;
+
+    try {
+      invoer = leesSurveyTemplateKoppeling(body);
+    } catch (err) {
+      throw alsHttpFout(err);
+    }
+
+    const koppeling = await this.contracts
+      .zetSurveyTemplates(
+        sessie.tenantId,
+        leesUuid(vendorId),
+        leesUuid(id),
+        invoer.templateIds,
+        invoer.wachtlijstTemplateIds,
+      )
+      .catch(alsRefFout);
+
+    if (!koppeling) {
+      throw new NotFoundException('Contract niet gevonden.');
+    }
+
+    return koppeling;
+  }
+```
+
+Importeer `SurveyTemplateKoppelingInvoer` uit `./contract-invoer`.
+
+- [ ] **Step 8: Nieuwe route: wachtlijst per template**
+
+Nieuwe route in `ContractController`, of — beter passend, want dit gaat
+niet over één specifiek contract — een nieuwe kleine controller-methode
+op `VragenlijstBeheerController` (`src/survey/vragenlijst-beheer.controller.ts`,
+waar `GET /admin/survey/templates` al staat). Voeg toe:
+
+```typescript
+  /** Leveranciers die op de wachtlijst staan voor de volgende ronde. */
+  @Get('templates/:id/wachtlijst')
+  async wachtlijst(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+  ) {
+    const sessie = request.sessie!;
+    const leveranciers = await this.contracten.wachtlijstVoorTemplate(
+      sessie.tenantId,
+      id,
+    );
+    return { leveranciers };
+  }
+```
+
+**Nodig:** `ContractService` injecteren in `VragenlijstBeheerController`
+— controleer de constructor van die controller (er staat al een
+`ContractmanagerService` in, zie `src/survey/vragenlijst-beheer.controller.ts`
+regel 88-89 — dat is een ándere service, niet verwarren). Voeg
+`ContractService` toe als nieuwe constructor-parameter, en `ContractModule`
+als import in `SurveyModule` (zoek de juiste module met
+`grep -rn "VragenlijstBeheerController" src/survey/*.module.ts`).
+
+- [ ] **Step 9: Compileer, draai de e2e-suite, breid tests uit**
+
+```bash
+npx tsc --noEmit
+```
+
+Breid `test/contract-routes.e2e-spec.ts` uit met een test voor
+`wachtlijstTemplateIds` (koppel met wachtlijst=true, haal op, controleer
+dat het terugkomt) en een nieuwe test-suite-toevoeging of los bestand voor
+`GET /admin/survey/templates/:id/wachtlijst` — volg het patroon van de
+bestaande `contract-routes`-suite voor tenant-opzet/opruimen.
+
+```bash
+DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" \
+MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres" \
+npx jest --config test/jest-e2e.json --forceExit
+```
+
+- [ ] **Step 10: Prettier, lint, commit**
+
+```bash
+git add drizzle/0028_contract_survey_wachtlijst.sql drizzle/meta/_journal.json src/db/schema.ts src/contract/contract.service.ts src/contract/contract-invoer.ts src/contract/contract.controller.ts src/survey/vragenlijst-beheer.controller.ts test/contract-routes.e2e-spec.ts
+git commit -m "feat(contract): wachtlijst-vlag op de survey-templatekoppeling
+
+Uitvinkbaar, geen automatisch proces. Nieuwe route
+GET /admin/survey/templates/:id/wachtlijst geeft de leveranciers terug die
+voor deze template klaarstaan via een gekoppeld contract.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+```
+
+### 14.2 Frontend: contractenlijst als tabel
+
+**Files (`MCM2-frontend`):**
+- Modify: `src/app/beheer/leveranciers/[id]/page.tsx`
+
+- [ ] **Step 1: Vervang de `<ul>`/`<li>`-lijst in `Contracten` door een tabel**
+
+In de `Contracten`-component, het blok met `<ul className="mb-6 divide-y ...">`
+vervangen door een `<table>` met kolomkoppen Naam, Contractnummer,
+Contactpersoon, Contractbeheerder, Status, Begin–Einde, en een lege
+actiekolom. Volg het tabelpatroon van `src/app/beheer/vragenlijsten/page.tsx`
+(regels rond 190–244: `<thead>` met `text-xs uppercase tracking-wide
+text-ink-muted`, `<tr>` met `border-b border-line last:border-0`) — zelfde
+klassen, zelfde structuur, alleen andere kolommen.
+
+`ContractRij` blijft de rijcomponent, maar rendert nu `<tr>`/`<td>` in
+niet-bewerkstand in plaats van `<li>`; in bewerkstand (het formulier)
+blijft een volle-breedte rij met `colSpan` over alle kolommen, zodat het
+formulier niet in een smalle kolom geperst wordt:
+
+```typescript
+  if (bewerkt) {
+    return (
+      <tr data-testid="contract-rij">
+        <td colSpan={7} className="px-4 py-4">
+          {/* bestaande formulier-inhoud, ongewijzigd */}
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <tr data-testid="contract-rij" className="border-b border-line last:border-0">
+      <td className="px-4 py-2.5 text-sm font-medium text-ink">{contract.name}</td>
+      <td className="px-4 py-2.5 text-xs text-ink-muted">{contract.contractNumber ?? '—'}</td>
+      <td className="px-4 py-2.5 text-xs text-ink-muted">{contract.vendorContactNaam ?? '—'}</td>
+      <td className="px-4 py-2.5 text-xs text-ink-muted">{contract.ownerGebruikerNaam ?? '—'}</td>
+      <td className="px-4 py-2.5">
+        {contract.statusCode && (
+          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${CONTRACT_STATUS_KLEUR[contract.statusCode] ?? 'bg-slate-100 text-slate-700'}`}>
+            {CONTRACT_STATUS_LABEL[contract.statusCode] ?? contract.statusCode}
+          </span>
+        )}
+      </td>
+      <td className="px-4 py-2.5 text-xs">
+        <div className="text-ink-muted">{contract.startDate ?? '—'} – {contract.endDate ?? '—'}</div>
+        <EindeIndicator contract={contract} />
+      </td>
+      <td className="px-4 py-2.5">
+        {/* bewerken/verwijderen-knoppen, ongewijzigd uit de huidige versie */}
+      </td>
+    </tr>
+  );
+```
+
+Pas de omringende `Contracten`-component aan: de `<ul>` wrapper wordt
+`<table className="w-full text-sm">` met `<thead>`/`<tbody>`, zelfde
+`rounded border border-line`-omkadering als nu.
+
+- [ ] **Step 2: Compileer, prettier, lint**
+
+```bash
+npx tsc --noEmit
+npx prettier --write "src/app/beheer/leveranciers/[id]/page.tsx"
+npx eslint "src/app/beheer/leveranciers/[id]/page.tsx" --max-warnings=0
+```
+
+- [ ] **Step 3: Draai de bestaande `e2e/contracten.spec.ts` — geen enkele test hoort te breken**
+
+De `data-testid`-attributen blijven ongewijzigd (`contract-rij`,
+`contract-status`, etc.), dus de bestaande tests moeten zonder aanpassing
+slagen. Dit is de eerste concrete controle dat de tabel-ombouw niets
+breekt.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add "src/app/beheer/leveranciers/[id]/page.tsx"
+git commit -m "feat(contract): contractenlijst als tabel i.p.v. kaarten
+
+Compacter bij meerdere contracten per leverancier — kolommen i.p.v.
+gestapelde velden. data-testid's ongewijzigd, geen bestaande test raakt.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+```
+
+### 14.3 Frontend: contactpersoon + notitie bij bewerken, en het wachtlijst-scherm
+
+**Files (`MCM2-frontend`):**
+- Modify: `src/app/beheer/leveranciers/[id]/page.tsx`
+- Modify: `src/core/services/contractService.ts`
+- Modify: `src/core/models/contract.ts`
+- Modify: `src/core/services/vragenlijstService.ts`
+- Modify: `src/core/models/vragenlijst.ts`
+- Create: `src/app/beheer/vragenlijsten/[id]/wachtlijst/page.tsx`
+- Modify: `src/app/beheer/vragenlijsten/page.tsx`
+
+- [ ] **Step 1: Modellen uitbreiden**
+
+`src/core/models/contract.ts`:
+
+```typescript
+export interface ContractInvoer {
+  // ... bestaande velden ongewijzigd ...
+}
+
+/** Wat het koppelingsblok opstuurt. */
+export interface SurveyTemplateKoppelingInvoer {
+  templateIds: string[];
+  wachtlijstTemplateIds: string[];
+}
+
+export interface SurveyTemplateKoppeling {
+  templateIds: string[];
+  wachtlijstTemplateIds: string[];
+}
+```
+
+`src/core/models/vragenlijst.ts`, nieuw:
+
+```typescript
+export interface WachtlijstLeverancier {
+  vendorId: string;
+  vendorNaam: string;
+}
+```
+
+- [ ] **Step 2: Services uitbreiden**
+
+`src/core/services/contractService.ts`: `haalGekoppeldeTemplates` en
+`zetGekoppeldeTemplates` aanpassen aan het nieuwe antwoordformaat
+(`SurveyTemplateKoppeling` i.p.v. `string[]`):
+
+```typescript
+export async function haalGekoppeldeTemplates(
+  vendorId: string,
+  contractId: string,
+): Promise<SurveyTemplateKoppeling> {
+  if (gebruiktMockData) {
+    return {
+      templateIds: mockKoppelingen.get(contractId) ?? [],
+      wachtlijstTemplateIds: [],
+    };
+  }
+  return haalOp<SurveyTemplateKoppeling>(
+    `/vendors/${vendorId}/contracts/${contractId}/survey-templates`,
+  );
+}
+
+export async function zetGekoppeldeTemplates(
+  vendorId: string,
+  contractId: string,
+  invoer: SurveyTemplateKoppelingInvoer,
+): Promise<{ ok: true } | { ok: false; melding: string }> {
+  if (gebruiktMockData) {
+    mockKoppelingen.set(contractId, invoer.templateIds);
+    return { ok: true };
+  }
+  try {
+    await zetData(
+      `/vendors/${vendorId}/contracts/${contractId}/survey-templates`,
+      invoer,
+    );
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof ApiFout) return { ok: false, melding: err.message };
+    return { ok: false, melding: 'Er ging iets mis.' };
+  }
+}
+```
+
+**Let op:** dit wijzigt de signatuur van `zetGekoppeldeTemplates` (was:
+`(vendorId, contractId, templateIds: string[])`). Werk alle aanroepen in
+`page.tsx` bij naar het nieuwe object-argument — zoek ze op met
+`grep -n "zetGekoppeldeTemplates" "src/app/beheer/leveranciers/[id]/page.tsx"`,
+gok niet hoeveel aanroepplekken er zijn.
+
+`src/core/services/vragenlijstService.ts`, nieuw:
+
+```typescript
+export async function haalWachtlijst(
+  templateId: string,
+): Promise<WachtlijstLeverancier[]> {
+  if (gebruiktMockData) return [];
+  const antwoord = await haalOp<{ leveranciers: WachtlijstLeverancier[] }>(
+    `/admin/survey/templates/${templateId}/wachtlijst`,
+  );
+  return antwoord.leveranciers;
+}
+```
+
+- [ ] **Step 3: `SurveyTemplateKoppelingBlok` — wachtlijst-checkbox erbij**
+
+In `SurveyTemplateKoppelingBlok`, naast elke bestaande checkbox een tweede,
+kleinere checkbox "wachtlijst voor volgende ronde" — alleen actief te
+zetten als de hoofdcheckbox aan staat:
+
+```typescript
+  const [gekoppeld, setGekoppeld] = useState<Set<string>>(new Set());
+  const [wachtlijst, setWachtlijst] = useState<Set<string>>(new Set());
+
+  // In de useEffect die haalGekoppeldeTemplates aanroept:
+  const koppeling = await haalGekoppeldeTemplates(vendorId, contractId);
+  setGekoppeld(new Set(koppeling.templateIds));
+  setWachtlijst(new Set(koppeling.wachtlijstTemplateIds));
+```
+
+Bij het uitvinken van de hoofdcheckbox: ook uit `wachtlijst` verwijderen
+(een niet-gekoppelde template kan niet op de wachtlijst staan). In
+`schakel()`:
+
+```typescript
+  function schakel(templateId: string) {
+    setGelukt(false);
+    setGekoppeld((vorig) => {
+      const nieuw = new Set(vorig);
+      if (nieuw.has(templateId)) {
+        nieuw.delete(templateId);
+        setWachtlijst((w) => {
+          const nw = new Set(w);
+          nw.delete(templateId);
+          return nw;
+        });
+      } else {
+        nieuw.add(templateId);
+      }
+      return nieuw;
+    });
+  }
+
+  function schakelWachtlijst(templateId: string) {
+    setGelukt(false);
+    setWachtlijst((vorig) => {
+      const nieuw = new Set(vorig);
+      if (nieuw.has(templateId)) nieuw.delete(templateId);
+      else nieuw.add(templateId);
+      return nieuw;
+    });
+  }
+```
+
+In de checkbox-lijst-JSX, ná elke hoofdcheckbox:
+
+```typescript
+              <input
+                type="checkbox"
+                data-testid="wachtlijst-checkbox"
+                checked={wachtlijst.has(t.templateId)}
+                disabled={!gekoppeld.has(t.templateId)}
+                onChange={() => schakelWachtlijst(t.templateId)}
+              />
+              <span className="text-xs text-ink-muted">wachtlijst</span>
+```
+
+En `koppelen()` stuurt nu het object:
+
+```typescript
+    const uitkomst = await zetGekoppeldeTemplates(vendorId, contractId, {
+      templateIds: [...gekoppeld],
+      wachtlijstTemplateIds: [...wachtlijst],
+    });
+```
+
+- [ ] **Step 4: Contactpersoon + notitie in `ContactRij` (bestaande sectie) en beide contract-formulieren**
+
+**4a — Notitieveld bij de bestaande Contactpersonen-sectie.** In
+`ContactRij`'s bewerkstand en in `Contactpersonen`'s toevoegformulier
+(zoek met `grep -n "jobTitle" "src/app/beheer/leveranciers/[id]/page.tsx"`
+naar beide plekken), een extra `Veld` toevoegen:
+
+```typescript
+            <Veld
+              id={`bewerkNotitie-${contact.contactId}`}
+              label="Notitie"
+              waarde={waarden.roleDescription ?? ''}
+              onWijzig={(w) => setWaarden((v) => ({ ...v, roleDescription: w }))}
+            />
+```
+
+Vraagt dat `ContactInvoer` (in `src/core/models/vendor.ts`) een
+`roleDescription?: string | null` krijgt, en dat de bestaande
+`wijzigContact`/`voegContactToe`-aanroepen dat veld meesturen. Controleer
+of de backend (`ContactInvoer` in `src/vendor/vendor.service.ts`) dat veld
+al accepteert:
+
+```bash
+grep -n "roleDescription\|role_description" c:/DEV/Work/MCM2/src/vendor/vendor.service.ts c:/DEV/Work/MCM2/src/vendor/vendor-invoer.ts
+```
+
+**Als dat veld nog nergens in de backend-invoer/service zit** (waarschijnlijk
+— de datamodel-spec van 22-08 noemde het alleen als bestaande kolom, geen
+route las of schreef hem ooit), is dat een kleine, extra backend-taak: voeg
+`roleDescription` toe aan `ContactInvoer` (backend), de INSERT/UPDATE in
+`VendorService.voegContactToe`/`wijzigContact`, en de SELECT in
+`detailBinnenTransactie`. Zelfde soort kleine uitbreiding als Task 1/3 van
+het eerdere plan — volg dat patroon, niet opnieuw uitvinden.
+
+**4b — Dezelfde toggle als Task 12, nu ook in `ContractRij`'s bewerkstand.**
+Kopieer de "nieuwe contactpersoon aanmaken"-toggle-logica uit
+`NieuwContractFormulier` (Task 12) naar `ContractRij`: eigen
+`nieuweContactpersoon`/`contactVelden`-state, dezelfde
+`voegContactToe`-aanroep vóór `wijzigContact`, inclusief het
+`roleDescription`-veld uit 4a.
+
+- [ ] **Step 5: Nieuw scherm `src/app/beheer/vragenlijsten/[id]/wachtlijst/page.tsx`**
+
+Volgt het patroon van `src/app/beheer/leveranciers/page.tsx` voor de
+selectie-UI (checkbox-lijst met een `Set<string>`), maar met
+`haalWachtlijst(templateId)` als startpunt in plaats van alle
+leveranciers:
+
+```typescript
+'use client';
+
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+
+import type { WachtlijstLeverancier } from '@/core/models/vragenlijst';
+import { haalVragenlijsten, haalWachtlijst } from '@/core/services/vragenlijstService';
+import { haalVendors } from '@/core/services/vendorService';
+import type { VendorSamenvatting } from '@/core/models/vendor';
+import { AppLayout } from '@/shared/components/layout/AppLayout';
+
+export default function WachtlijstPagina() {
+  const params = useParams<{ id: string }>();
+  const router = useRouter();
+  const templateId = params.id;
+
+  const [templateNaam, setTemplateNaam] = useState('');
+  const [alleVendors, setAlleVendors] = useState<VendorSamenvatting[]>([]);
+  const [wachtlijst, setWachtlijst] = useState<WachtlijstLeverancier[]>([]);
+  const [geselecteerd, setGeselecteerd] = useState<Set<string>>(new Set());
+  const [laden, setLaden] = useState(true);
+
+  useEffect(() => {
+    void (async () => {
+      const [lijsten, vendors, wl] = await Promise.all([
+        haalVragenlijsten(),
+        haalVendors(),
+        haalWachtlijst(templateId),
+      ]);
+      setTemplateNaam(lijsten.find((l) => l.templateId === templateId)?.name ?? '');
+      setAlleVendors(vendors);
+      setWachtlijst(wl);
+      setGeselecteerd(new Set(wl.map((w) => w.vendorId)));
+      setLaden(false);
+    })();
+  }, [templateId]);
+
+  function schakel(vendorId: string) {
+    setGeselecteerd((vorig) => {
+      const nieuw = new Set(vorig);
+      if (nieuw.has(vendorId)) nieuw.delete(vendorId);
+      else nieuw.add(vendorId);
+      return nieuw;
+    });
+  }
+
+  function verder() {
+    router.push(
+      `/beheer/vragenlijsten/uitnodigen?leveranciers=${[...geselecteerd].join(',')}&templateId=${templateId}`,
+    );
+  }
+
+  return (
+    <AppLayout
+      titel={`Wachtlijst — ${templateNaam}`}
+      ondertitel="Leveranciers die klaarstaan voor de volgende ronde. Vink aan of uit, en ga verder naar uitnodigen."
+    >
+      <Link
+        href="/beheer/vragenlijsten"
+        className="mb-6 inline-flex items-center gap-1.5 text-sm text-brand-primary hover:underline"
+      >
+        Terug naar vragenlijsten
+      </Link>
+
+      {laden ? (
+        <p className="text-sm text-ink-muted">Bezig met laden…</p>
+      ) : (
+        <>
+          <ul className="mb-6 divide-y divide-line rounded border border-line" data-testid="wachtlijst-lijst">
+            {alleVendors
+              .filter((v) => wachtlijst.some((w) => w.vendorId === v.vendorId) || geselecteerd.has(v.vendorId))
+              .map((vendor) => (
+                <li key={vendor.vendorId} className="flex items-center gap-3 px-4 py-2.5">
+                  <input
+                    type="checkbox"
+                    data-testid="wachtlijst-vendor-checkbox"
+                    checked={geselecteerd.has(vendor.vendorId)}
+                    onChange={() => schakel(vendor.vendorId)}
+                  />
+                  <span className="text-sm text-ink">{vendor.name}</span>
+                </li>
+              ))}
+          </ul>
+
+          {wachtlijst.length === 0 && (
+            <p className="mb-6 text-sm text-ink-muted" data-testid="wachtlijst-leeg">
+              Er staat nog niemand op de wachtlijst voor deze vragenlijst.
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={verder}
+            disabled={geselecteerd.size === 0}
+            data-testid="wachtlijst-verder"
+            className="rounded bg-brand-primary px-5 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Verder naar uitnodigen ({geselecteerd.size})
+          </button>
+        </>
+      )}
+    </AppLayout>
+  );
+}
+```
+
+**Let op:** de filter-regel (`alleVendors.filter(...)`) toont alleen
+leveranciers die al op de wachtlijst stonden óf nu aangevinkt zijn — niet
+de volledige leverancierslijst. Wil je ook kunnen *toevoegen* buiten de
+wachtlijst om, dan is dat een bewuste, latere uitbreiding (zie spec §9.4)
+en niet iets om hier stilzwijgend mee te bouwen.
+
+- [ ] **Step 6: Link vanaf `/beheer/vragenlijsten`**
+
+In `src/app/beheer/vragenlijsten/page.tsx`, de tabel (rond regel 190–244)
+krijgt een extra kolom of een badge in de bestaande "Naam"-kolom die
+alleen verschijnt als er een wachtlijst is. Simpelste optie: een klein
+badge-linkje naast de naam:
+
+```typescript
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/beheer/vragenlijsten/${lijst.templateId}`}
+                        className="font-medium text-brand-primary hover:underline"
+                        data-testid="vragenlijst-link"
+                      >
+                        {lijst.name}
+                      </Link>
+                      {/* wachtlijst-aantal is geen veld op VragenlijstSamenvatting
+                          — zie de opmerking hieronder vóór je dit implementeert */}
+                    </td>
+```
+
+**Dit vraagt een aantal, en dat aantal bestaat nog niet op
+`VragenlijstSamenvatting`.** Twee opties, kies er één vóór je verdergaat:
+(a) `VragenlijstBeheerService.lijst()` (backend) uitbreiden met een
+`aantalOpWachtlijst`-veld via een subquery, zelfde patroon als
+`aantalContacten` in `VendorService.lijst()`; of (b) de link altijd tonen
+("Wachtlijst bekijken") zonder aantal, en het aantal pas op het
+wachtlijst-scherm zelf laten zien. **Optie (b) is de kleinere wijziging en
+het aanbevolen pad** — geen backend-uitbreiding nodig:
+
+```typescript
+                      <Link
+                        href={`/beheer/vragenlijsten/${lijst.templateId}/wachtlijst`}
+                        className="ml-2 text-xs text-ink-muted hover:underline"
+                        data-testid="wachtlijst-link"
+                      >
+                        wachtlijst
+                      </Link>
+```
+
+- [ ] **Step 7: Compileer, prettier, lint**
+
+```bash
+npx tsc --noEmit
+npx prettier --write "src/core/models/contract.ts" "src/core/models/vragenlijst.ts" "src/core/services/contractService.ts" "src/core/services/vragenlijstService.ts" "src/app/beheer/leveranciers/[id]/page.tsx" "src/app/beheer/vragenlijsten/page.tsx" "src/app/beheer/vragenlijsten/[id]/wachtlijst/page.tsx"
+npx eslint "src/core/models/contract.ts" "src/core/models/vragenlijst.ts" "src/core/services/contractService.ts" "src/core/services/vragenlijstService.ts" "src/app/beheer/leveranciers/[id]/page.tsx" "src/app/beheer/vragenlijsten/page.tsx" "src/app/beheer/vragenlijsten/[id]/wachtlijst/page.tsx" --max-warnings=0
+```
+
+- [ ] **Step 8: Playwright-tests**
+
+Uitbreiding van `e2e/contracten.spec.ts`: een test die de wachtlijst-
+checkbox aanvinkt naast een gekoppelde template, opslaat, en dan navigeert
+naar `/beheer/vragenlijsten/[templateId]/wachtlijst` om te bevestigen dat
+de leverancier daar verschijnt en aangevinkt staat.
+
+```typescript
+  test('een leverancier op de wachtlijst verschijnt op het wachtlijst-scherm', async ({
+    page,
+  }) => {
+    const { vendorId } = await maakEnOpen(page);
+
+    const checkboxen = page.getByTestId('nieuw-contract-survey-checkbox');
+    const aantal = await checkboxen.count();
+    test.skip(aantal === 0, 'Geen vragenlijst-templates aanwezig.');
+
+    await page
+      .locator('#nieuw-contract-name')
+      .fill(`Contract-wachtlijst-${Date.now()}`);
+    await checkboxen.first().check();
+    await page.getByTestId('voeg-contract-toe').click();
+    await expect(page.getByTestId('contract-rij').first()).toBeVisible();
+
+    await page.getByTestId('bewerk-contract').first().click();
+    await page.getByTestId('wachtlijst-checkbox').first().check();
+    await page.getByTestId('koppel-survey-templates').click();
+    await expect(page.getByTestId('survey-koppeling-gelukt')).toBeVisible();
+
+    // templateId uit de link halen om naar het wachtlijst-scherm te gaan.
+    const knop = page.getByTestId('uitnodigen-vanuit-contract-knop').first();
+    const href = await knop.getAttribute('href');
+    const templateId = new URL(href!, 'http://localhost').searchParams.get(
+      'templateId',
+    );
+
+    await page.goto(`/beheer/vragenlijsten/${templateId}/wachtlijst`);
+    await expect(
+      page.getByTestId('wachtlijst-vendor-checkbox').first(),
+    ).toBeChecked();
+  });
+```
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add src/core/models/contract.ts src/core/models/vragenlijst.ts src/core/services/contractService.ts src/core/services/vragenlijstService.ts "src/app/beheer/leveranciers/[id]/page.tsx" src/app/beheer/vragenlijsten/page.tsx "src/app/beheer/vragenlijsten/[id]/wachtlijst/page.tsx" e2e/contracten.spec.ts
+git commit -m "feat(contract): contactpersoon+notitie bij bewerken, wachtlijst-scherm
+
+Toggle om een nieuwe contactpersoon aan te maken nu ook bij het bewerken
+van een bestaand contract, met notitieveld (role_description). Nieuwe
+wachtlijst-checkbox per gekoppelde vragenlijst, en een nieuw scherm
+/beheer/vragenlijsten/[id]/wachtlijst dat de leveranciers toont die
+klaarstaan — met een link door naar het bestaande uitnodigen-scherm.
+Geen automatisch verzenden, spec §9.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+```
+
+### 14.4 Vierde, volledige preview-ronde
+
+- [ ] **Step 1: Volledige backend-e2e, dan `npm run demo -- --branch feat/contractmanagement-scherm`**
+
+Herhaal Task 10 (Steps 2–6). Controleer specifiek:
+1. De contractenlijst toont nu als tabel met alle kolommen.
+2. Bij het bewerken van een bestaand contract: de toggle voor een nieuwe
+   contactpersoon staat er, met een notitieveld.
+3. Het notitieveld bij een bestaande contactpersoon (Contactpersonen-
+   sectie) is zichtbaar en bewerkbaar.
+4. Bij het koppelingsblok: een wachtlijst-checkbox naast elke gekoppelde
+   vragenlijst, uitschakelbaar los van de hoofdcheckbox.
+5. Vanaf `/beheer/vragenlijsten`: de "wachtlijst"-link opent het nieuwe
+   scherm, toont de aangevinkte leverancier(s), en "Verder naar
+   uitnodigen" komt uit op het bestaande scherm met de juiste
+   voorselectie.
+
+---
+
 ## Task 11: Samenvoegen — pas na akkoord op de preview
 
 **Niet uitvoeren zonder expliciet akkoord van de eigenaar op Task 10 (en,**
-**als Task 12/13 zijn uitgevoerd, ook op de latere preview-rondes daar).**
+**als Task 12/13/14 zijn uitgevoerd, ook op de latere preview-rondes daar).**
 
 - [ ] **Step 1: Volg `superpowers:finishing-a-development-branch`**
 
