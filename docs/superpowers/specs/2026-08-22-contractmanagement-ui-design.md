@@ -208,10 +208,121 @@ bulk-upload-UI.
 
 ## 6. Open vraag voor de implementatiestap
 
-Geen — de brainstorming heeft alle scope-vragen beantwoord: welke velden
-(inclusief contactpersoon en contractbeheerder, expliciet bevestigd), de
-plek van de survey-koppeling (eigen blok, eigen knop), en de reikwijdte
-daarvan (koppelen, niet uitsturen).
+Geen voor §1–5 — de brainstorming had alle scope-vragen daar beantwoord.
+§7–9 zijn een latere aanvulling (22-08, na de derde preview) met hun eigen
+scope-vastlegging.
+
+---
+
+## 7. Contractenlijst als tabel, niet als kaarten
+
+**Bevinding (derde preview):** met meerdere contracten per leverancier is
+de kaartweergave uit §4.1 te ruim — elke rij neemt veel verticale hoogte
+in, en contactpersoon/beheerder/status/data zijn niet in één oogopslag te
+vergelijken tussen contracten.
+
+**Wijziging:** de lijst uit §4.1 wordt een compacte HTML-tabel met
+kolommen: Naam, Contractnummer, Contactpersoon, Contractbeheerder, Status,
+Begindatum, Einddatum, acties (bewerken/verwijderen). Zelfde databron
+(`ContractSamenvatting`, met de namen die Task 3 van het backend-plan al
+toevoegde), alleen de weergave verandert — geen backend-wijziging.
+
+Het "Xd resterend"/"Xd verlopen"-label (§4.1, `EindeIndicator`) blijft
+bestaan maar verhuist naar een compacte notatie onder de einddatum in
+dezelfde kolom, niet ernaast.
+
+## 8. Contactpersoon toevoegen bij het BEWERKEN van een bestaand contract
+
+**Bevinding (derde preview):** Task 12 voegde de "nieuwe contactpersoon
+aanmaken"-toggle alleen toe aan het aanmaakformulier (`NieuwContractFormulier`).
+Bij het bewerken van een al bestaand contract (`ContractRij` in
+bewerkstand) ontbreekt diezelfde optie — een contactpersoon toevoegen kan
+dan alleen via de aparte Contactpersonen-sectie, wat het contract-
+bewerkformulier onvolledig maakt.
+
+**Wijziging:** dezelfde toggle-en-drie-velden-aanpak uit Task 12, nu ook in
+`ContractRij`'s bewerkstand. Bij opslaan: eerst de contactpersoon aanmaken
+(`voegContactToe`, bestaande route), dan het contract bijwerken met het
+nieuwe `contactId`.
+
+**Notitieveld bij contactpersoon zichtbaar maken.** De backend-kolom
+`vendor_contact.role_description` bestaat al sinds de basistabel (zie
+`2026-08-22-contractmanagement-design.md` §1) maar staat nergens in de UI
+— nog niet bij de Contactpersonen-sectie, en dus ook niet bij deze nieuwe
+toggle. Beide plekken krijgen een "Notitie"-tekstveld (bv. "is vervanger
+van X voor IT-zaken") dat naar `roleDescription` schrijft. Dit raakt drie
+plekken: `Contactpersonen`/`ContactRij` (het bestaande blok), de toggle in
+`NieuwContractFormulier` (Task 12), en de nieuwe toggle in `ContractRij`
+hier.
+
+## 9. Wachtlijst: een leverancier automatisch voorstellen bij de volgende ronde
+
+**Bevinding (derde preview):** de bestaande survey-templatekoppeling
+(§4.3, Task 2) legt vast *welke* vragenlijst bij een contract hoort, en
+Task 13 voegde een knop toe om *nu direct* uit te nodigen. Wat ontbrak: een
+manier om een leverancier te markeren voor een *toekomstige* ronde, zonder
+dat er nu al iemand op een knop drukt — bijvoorbeeld omdat de huidige ronde
+al loopt en deze leverancier voor de ronde daarna moet meedoen.
+
+**Expliciet niet gevraagd:** volautomatisch verzenden. De eigenaar was
+hier scherp: *"dit hoeft geen volautomatisch proces te worden [...]
+contractbeheerders hebben een hulpmiddel nodig waar ze alle relevante
+informatie in één keer onder de knop hebben, maar beslissen zelf."* Dit
+is dus een **voorstel, geen trigger** — een mens selecteert en verstuurt
+nog steeds bewust, via het bestaande uitnodigen-scherm.
+
+### 9.1 Datamodel: één kolom op de bestaande koppeltabel
+
+`clm.contract_survey_template` krijgt een kolom
+`wachtlijst boolean NOT NULL DEFAULT false` (nieuwe migratie 0028, niet
+een wijziging van migratie 0027 — die is al uitgerold). Geen nieuwe tabel:
+de wachtlijst-status hoort per definitie bij een specifieke
+contract-template-koppeling, en die koppeling bestaat al.
+
+Uitvinkbaar zoals de eigenaar vroeg: de kolom is een gewone boolean die de
+beheerder aan/uit zet, geen automatisch proces dat hem wijzigt.
+
+### 9.2 Zichtbaar en instelbaar: alleen op het contract, geen apart overzicht (nu)
+
+Bewust beperkt tot het bestaande `SurveyTemplateKoppelingBlok`
+(§4.3/Task 2): elke checkbox voor een gekoppelde template krijgt een
+tweede, kleinere checkbox ernaast — "op de wachtlijst voor de volgende
+ronde" — opgeslagen met dezelfde `PUT .../survey-templates`-aanroep
+(kolom `wachtlijst` naast `templateIds` in de body).
+
+Een centraal overzicht "alle leveranciers die klaarstaan voor ronde X" is
+een expliciet latere stap — zie §9.4.
+
+### 9.3 Nieuw, apart startpunt: "Ronde starten vanuit wachtlijst"
+
+Het bestaande uitnodigen-scherm (`/beheer/vragenlijsten/uitnodigen`) werkt
+"leverancier eerst, vragenlijst daarna" — de wachtlijst werkt andersom
+("vragenlijst eerst, dan wie er klaarstaat"). Dat bestaande scherm wordt
+niet omgebouwd (zou alle huidige gebruik en tests raken); in plaats
+daarvan komt er een nieuw, klein scherm:
+
+`/beheer/vragenlijsten/[id]/wachtlijst` (of vergelijkbaar, binnen de
+bestaande `/beheer/vragenlijsten`-sectie): toont per vragenlijst-template
+de leveranciers met `wachtlijst = true` op een gekoppeld contract, elk
+aangevinkt in een leverancierslijst die er verder uitziet als de bestaande
+selectielijst op `/beheer/leveranciers`. De beheerder kan uitvinken of
+aanvullen, en springt dan door naar het bestaande uitnodigen-scherm
+(`?leveranciers=...&templateId=...`) — dezelfde overgang die Task 13 al
+bouwde vanuit een los contract.
+
+**Toegangspunt:** een link/knop bij elke vragenlijst op
+`/beheer/vragenlijsten` ("N leveranciers staan klaar"), zichtbaar zodra
+`wachtlijst`-aantal > 0.
+
+### 9.4 Wat hier bewust niet gebeurt
+
+- Geen automatisch versturen — bevestigd door de eigenaar, zie boven.
+- Geen apart, centraal "alle wachtlijsten"-dashboard — dat is een
+  logische vervolgstap zodra dit scherm in gebruik is, maar een eigen
+  afweging (welke rol mag het zien, hoe filteren bij veel vragenlijsten)
+  die nu niet wordt voorgekookt.
+- Geen wijziging van de bestaande `?leveranciers=`-flow op
+  `/beheer/leveranciers` zelf — die blijft precies zoals hij is.
 
 ---
 
