@@ -68,9 +68,10 @@ async function verwijderTestdata(migratieClient: Client): Promise<void> {
   for (const t of [tenant, andereTenant]) {
     await migratieClient.query('BEGIN');
     await migratieClient.query(`SET LOCAL app.current_tenant_id = '${t}'`);
-    await migratieClient.query('DELETE FROM clm.contract WHERE tenant_id = $1', [
-      t,
-    ]);
+    await migratieClient.query(
+      'DELETE FROM clm.contract WHERE tenant_id = $1',
+      [t],
+    );
     await migratieClient.query(
       'DELETE FROM clm.vendor_contact WHERE tenant_id = $1',
       [t],

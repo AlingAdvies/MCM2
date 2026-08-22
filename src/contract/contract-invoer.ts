@@ -184,10 +184,7 @@ export function leesContractWijziging(body: unknown): ContractWijziging {
     );
   }
   if ('ownerUserId' in ruw) {
-    wijziging.ownerUserId = optioneleUuid(
-      ruw.ownerUserId,
-      'Contractbeheerder',
-    );
+    wijziging.ownerUserId = optioneleUuid(ruw.ownerUserId, 'Contractbeheerder');
   }
   if ('statusCode' in ruw) {
     wijziging.statusCode = optioneleTekst(ruw.statusCode, 'Status', MAX_KORT);
