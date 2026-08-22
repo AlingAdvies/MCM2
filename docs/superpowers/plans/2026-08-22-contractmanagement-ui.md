@@ -2430,10 +2430,315 @@ dezelfde branch, dus geen nieuwe `--branch`-naam nodig, alleen opnieuw
 
 ---
 
+## Task 13: Een vragenlijst daadwerkelijk kunnen versturen vanuit een contract
+
+**Toegevoegd 22-08, tijdens de tweede preview-ronde.** De eigenaar
+ontdekte dat de survey-templatekoppeling (Task 2/12) een doodlopend
+register was: er bestond geen weg van "dit contract heeft vragenlijst X
+aangevinkt" naar "stuur die vragenlijst nu naar de contactpersoon van dit
+contract". Bij het uitzoeken bleek het gat groter dan verwacht:
+`survey_run.contract_id` — de kolom die migratie 0007 al op 2026-08-14
+klaarzette precies voor dit doel — wordt nergens ingevuld. Niet in
+`RondeBeheerService.maakRonde()`, niet in de route, niet in het
+uitnodigen-scherm.
+
+Dit is geen nieuw datamodel, alleen het vullen van een kolom die al
+bestaat en het doortrekken van een `contractId` door een keten die al
+bestaat. Blijft binnen dezelfde twee branches.
+
+**Files (backend, `c:\DEV\Work\MCM2`):**
+- Modify: `src/survey/ronde-invoer.ts`
+- Modify: `src/survey/ronde-beheer.service.ts`
+- Test: uitbreiding van de bestaande e2e-suite voor rondes (zoek met
+  `grep -rn "maakRonde\|POST.*runs" test/*.e2e-spec.ts` naar de juiste
+  suite vóór je een nieuwe schrijft — hergebruik het bestaande bestand)
+
+- [ ] **Step 1: `NieuweRonde` krijgt een optioneel `contractId`**
+
+In `src/survey/ronde-invoer.ts`:
+
+```typescript
+export interface NieuweRonde {
+  templateId: string;
+  surveyKind: RondeSoort;
+  /** Wanneer de ronde sluit. Null betekent: geen sluitdatum. */
+  closesAt: Date | null;
+  isTest: boolean;
+  /** Op welk contract deze ronde betrekking heeft. Optioneel — zie migratie 0007. */
+  contractId: string | null;
+}
+```
+
+En in `leesNieuweRonde()`, ná de bestaande velden:
+
+```typescript
+  return {
+    templateId,
+    surveyKind: soort as RondeSoort,
+    closesAt: leesSluitdatum(invoer.closesAt),
+    isTest: invoer.isTest === true,
+    contractId:
+      invoer.contractId === undefined || invoer.contractId === null
+        ? null
+        : leesUuid(invoer.contractId, 'contractId'),
+  };
+```
+
+- [ ] **Step 2: `RondeBeheerService.maakRonde()` schrijft de kolom**
+
+In `src/survey/ronde-beheer.service.ts`, de bestaande INSERT uitbreiden:
+
+```typescript
+        const aangemaakt = await tx.execute<RunRij>(
+          sql`INSERT INTO clm.survey_run
+                  (tenant_id, template_id, survey_kind, status, closes_at,
+                   is_test, contract_id)
+              VALUES (${tenantId}, ${invoer.templateId}, ${invoer.surveyKind},
+                      'draft', ${invoer.closesAt?.toISOString() ?? null},
+                      ${invoer.isTest}, ${invoer.contractId})
+              RETURNING run_id, template_id, status, survey_kind, is_test,
+                        closes_at, contract_id`,
+        );
+```
+
+**Let op:** als het contract bij een andere tenant hoort dan de sessie, of
+niet bestaat, faalt dit met een foreign-key-fout (`contract_id` heeft geen
+FK naar een tenant-gefilterde subset — de FK zelf verwijst simpelweg naar
+`clm.contract.contract_id`). Voeg daarom eerst een controle toe, zelfde
+patroon als de bestaande template-controle iets hoger in dezelfde
+methode:
+
+```typescript
+        if (invoer.contractId) {
+          const contracten = await tx.execute<{ contract_id: string }>(
+            sql`SELECT contract_id FROM clm.contract
+               WHERE contract_id = ${invoer.contractId}
+                 AND deleted_at IS NULL`,
+          );
+
+          if (contracten.rows.length === 0) {
+            throw new NotFoundException('Dit contract bestaat niet.');
+          }
+        }
+```
+
+Plaats dit vóór de `INSERT`, ná de bestaande template/vragen-controles.
+RLS filtert automatisch op tenant (net als de template-check hierboven al
+doet) — een contract van een andere tenant levert dus gewoon nul rijen op,
+niet een lek.
+
+Voeg `contractId: r.contract_id` toe aan het teruggegeven object in
+`RondeGestart` (interface uitbreiden met `contractId: string | null`, en
+de `RunRij`-interface met `contract_id: string | null`).
+
+- [ ] **Step 3: Compileer**
+
+```bash
+npx tsc --noEmit
+```
+
+- [ ] **Step 4: Zoek en breid de bestaande e2e-suite voor rondes uit**
+
+```bash
+grep -rln "maakRonde\|POST.*admin/survey/runs" test/*.e2e-spec.ts
+```
+
+Voeg in dat bestand een test toe die bevestigt dat `contractId` wordt
+opgeslagen en teruggegeven, en één die bevestigt dat een onbekend
+`contractId` een 404 geeft — volg het bestaande testpatroon in dat
+bestand exact (tenant-opzet, cookie, opruimen), niet een nieuw patroon
+verzinnen.
+
+- [ ] **Step 5: Draai die suite geïsoleerd, dan de volledige e2e-run**
+
+```bash
+DATABASE_URL="postgresql://clm_api_runtime:pw@localhost:55440/postgres" \
+MIGRATION_DATABASE_URL="postgresql://clm_migrator:pw@localhost:55440/postgres" \
+npx jest --config test/jest-e2e.json --forceExit
+```
+
+- [ ] **Step 6: Prettier, lint, commit**
+
+```bash
+git add src/survey/ronde-invoer.ts src/survey/ronde-beheer.service.ts test/<gevonden-bestand>.e2e-spec.ts
+git commit -m "feat(survey): survey_run.contract_id daadwerkelijk vullen
+
+Kolom bestond sinds migratie 0007 maar werd nergens geschreven. Nu vult
+maakRonde() hem als er een contractId wordt meegestuurd, met een 404 bij
+een onbekend contract.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+```
+
+**Files (frontend, `MCM2-frontend`):**
+- Modify: `src/core/services/vragenlijstService.ts`
+- Modify: `src/app/beheer/vragenlijsten/uitnodigen/page.tsx`
+- Modify: `src/app/beheer/leveranciers/[id]/page.tsx`
+
+- [ ] **Step 7: `maakRonde()` stuurt `contractId` mee**
+
+In `src/core/services/vragenlijstService.ts`:
+
+```typescript
+export async function maakRonde(invoer: {
+  templateId: string;
+  closesAt?: string | null;
+  isTest?: boolean;
+  contractId?: string | null;
+}): Promise<RondeGestart> {
+```
+
+De rest van de functie ongewijzigd — `invoer` gaat al in zijn geheel als
+body mee.
+
+- [ ] **Step 8: Het uitnodigen-scherm leest `?contractId=` en voegt het toe aan `start()`**
+
+In `src/app/beheer/vragenlijsten/uitnodigen/page.tsx`, ná de bestaande
+`gekozenIds`-regel:
+
+```typescript
+  const contractId = parameters.get('contractId');
+```
+
+In `start()`, de aanroep naar `maakRonde` uitbreiden:
+
+```typescript
+      const ronde = await maakRonde({
+        templateId,
+        closesAt: sluitdatum ? new Date(sluitdatum).toISOString() : null,
+        contractId,
+      });
+```
+
+Toon daarnaast, wanneer `contractId` gezet is, een korte regel in de
+`kiezen`-stap die bevestigt vanuit welk contract dit uitnodigen komt —
+zonder dat is voor de gebruiker niet zichtbaar of de koppeling meekomt.
+Plaats dit vlak boven de bestaande template-keuze:
+
+```typescript
+      {contractId && (
+        <p
+          data-testid="uitnodigen-vanuit-contract"
+          className="mb-4 rounded border border-line bg-surface px-3 py-2 text-xs text-ink-muted"
+        >
+          Deze uitnodiging wordt gekoppeld aan het contract waar u vandaan
+          kwam.
+        </p>
+      )}
+```
+
+- [ ] **Step 9: Knop op het contract — per gekoppelde vragenlijst een "Uitnodigen"-link**
+
+In `SurveyTemplateKoppelingBlok` (in
+`src/app/beheer/leveranciers/[id]/page.tsx`), een link toevoegen naast
+elke aangevinkte checkbox die naar het uitnodigen-scherm springt met de
+juiste parameters. De component heeft `vendorId` en `contractId` al als
+props — voeg toe, ná de bestaande checkbox-lijst:
+
+```typescript
+      {!laden &&
+        [...gekoppeld].map((templateId) => {
+          const template = templates.find((t) => t.templateId === templateId);
+          if (!template) return null;
+
+          return (
+            <Link
+              key={templateId}
+              href={`/beheer/vragenlijsten/uitnodigen?leveranciers=${vendorId}&contractId=${contractId}&templateId=${templateId}`}
+              data-testid="uitnodigen-vanuit-contract-knop"
+              className="mb-2 inline-flex items-center gap-1.5 text-xs font-medium text-brand-primary hover:underline"
+            >
+              → {template.naam} nu uitnodigen
+            </Link>
+          );
+        })}
+```
+
+Plaats dit ná de checkbox-lijst en vóór de foutmelding/knop-blok. Voeg
+`import Link from 'next/link';` toe als die nog niet bovenaan het bestand
+staat (die is er al, gebruikt door `LeverancierDetailPagina` zelf —
+hergebruiken).
+
+**Let op:** het uitnodigen-scherm (Step 8) leest ook `templateId` uit de
+querystring niet automatisch voor — controleer of dat scherm die
+parameter al oppikt (`parameters.get('templateId')`) of dat er een regel
+bij moet om `setTemplateId` te initialiseren vanuit de querystring, zoals
+al gebeurt voor `alleLijsten.length === 1`. Gok niet, lees de bestaande
+`useEffect` in dat bestand na voordat je hier verdergaat.
+
+- [ ] **Step 10: Compileer, prettier, lint**
+
+```bash
+npx tsc --noEmit
+npx prettier --write "src/core/services/vragenlijstService.ts" "src/app/beheer/vragenlijsten/uitnodigen/page.tsx" "src/app/beheer/leveranciers/[id]/page.tsx"
+npx eslint "src/core/services/vragenlijstService.ts" "src/app/beheer/vragenlijsten/uitnodigen/page.tsx" "src/app/beheer/leveranciers/[id]/page.tsx" --max-warnings=0
+```
+
+- [ ] **Step 11: Playwright-test: van contract naar verstuurde uitnodiging**
+
+Uitbreiding van `e2e/contracten.spec.ts`:
+
+```typescript
+  test('stuurt een vragenlijst rechtstreeks vanuit een gekoppeld contract', async ({
+    page,
+  }) => {
+    await maakEnOpen(page);
+
+    const checkboxen = page.getByTestId('nieuw-contract-survey-checkbox');
+    const aantal = await checkboxen.count();
+    test.skip(
+      aantal === 0,
+      'Geen vragenlijst-templates aanwezig op deze database.',
+    );
+
+    await page
+      .locator('#nieuw-contract-name')
+      .fill(`Contract-uitnodigen-${Date.now()}`);
+    await checkboxen.first().check();
+    await page.getByTestId('voeg-contract-toe').click();
+    await expect(page.getByTestId('contract-rij').first()).toBeVisible();
+
+    await page.getByTestId('bewerk-contract').first().click();
+    await page.getByTestId('uitnodigen-vanuit-contract-knop').first().click();
+
+    await expect(
+      page.getByTestId('uitnodigen-vanuit-contract'),
+    ).toBeVisible();
+  });
+```
+
+- [ ] **Step 12: Commit**
+
+```bash
+git add src/core/services/vragenlijstService.ts "src/app/beheer/vragenlijsten/uitnodigen/page.tsx" "src/app/beheer/leveranciers/[id]/page.tsx" e2e/contracten.spec.ts
+git commit -m "feat(contract): vanuit een gekoppelde vragenlijst rechtstreeks kunnen uitnodigen
+
+Sluit het gat dat de eigenaar vond tijdens de tweede preview: de
+survey-templatekoppeling was een doodlopend register zonder een weg naar
+het daadwerkelijk versturen. Elke gekoppelde vragenlijst op een contract
+krijgt nu een link naar het bestaande uitnodigen-scherm, met leverancier
+en vragenlijst voorgeselecteerd en contract_id meegegeven.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 13: Derde, korte preview-ronde**
+
+Herhaal Task 10 (Steps 2–6) opnieuw. Controleer specifiek: vanuit een
+contract op "→ … nu uitnodigen" klikken, de melding "gekoppeld aan het
+contract" zien, de ronde afmaken, en — als er tijd voor is — in de
+database bevestigen dat `survey_run.contract_id` daadwerkelijk gevuld is:
+
+```sql
+SELECT run_id, contract_id FROM clm.survey_run WHERE contract_id IS NOT NULL ORDER BY started_at DESC LIMIT 1;
+```
+
+---
+
 ## Task 11: Samenvoegen — pas na akkoord op de preview
 
 **Niet uitvoeren zonder expliciet akkoord van de eigenaar op Task 10 (en,**
-**als Task 12 is uitgevoerd, ook op de tweede preview-ronde daar).**
+**als Task 12/13 zijn uitgevoerd, ook op de latere preview-rondes daar).**
 
 - [ ] **Step 1: Volg `superpowers:finishing-a-development-branch`**
 
