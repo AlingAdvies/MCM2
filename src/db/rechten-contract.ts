@@ -95,6 +95,16 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   // maakt hier rijen aan, en support-toegang wordt hier toegekend.
   'clm.tenant_membership': LEZEN_EN_SCHRIJVEN,
 
+  // clm.contract (0027): contractmanagement-basismodule. Zacht verwijderd via
+  // deleted_at, net als vendor — geen DELETE nodig.
+  'clm.contract': NIET_VERWIJDEREN,
+
+  // clm.contract_survey_template (0027): many-to-many-koppeling zonder eigen
+  // levenscyclus. Een koppeling die niet meer geldt, wordt verwijderd, niet
+  // zacht gemarkeerd — anders zou "welke templates horen bij dit contract"
+  // stilzwijgend verouderde rijen blijven meetellen.
+  'clm.contract_survey_template': ['SELECT', 'INSERT', 'DELETE'],
+
   // ── Van nature append-only ─────────────────────────────────────────────────
   //
   // Een oordeel, een notitie of een koppeling verdwijnt niet: hij wordt zacht
@@ -162,6 +172,7 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   'ref.business_criticality': LEZEN_EN_SCHRIJVEN,
   'ref.compliance_status': LEZEN_EN_SCHRIJVEN,
   'ref.vendor_category': LEZEN_EN_SCHRIJVEN,
+  'ref.contract_status': LEZEN_EN_SCHRIJVEN,
 };
 
 /**

@@ -97,14 +97,33 @@ CREATE TRIGGER trg_contract_updated_at
 ALTER TABLE clm.contract ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE clm.contract FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 
+-- Bewust GEEN "AND deleted_at IS NULL" in USING — dat is exact de fout die
+-- migratie 0004 (Issue #31) al eens oploste op vendor/user/vendor_contact.
+-- Met dat filter in USING toetst Postgres bij een UPDATE de zichtbaarheid
+-- van het RESULTAAT: zodra deleted_at gevuld wordt, valt de nieuwe rij
+-- buiten de policy en weigert de soft delete zelf met "new row violates
+-- row-level security policy" — precies de operatie die soft delete moet
+-- toestaan. RLS is de tenant-isolatiegrens; het filteren van zacht
+-- verwijderde rijen is een zaak van de query (zie ContractService, dat
+-- overal expliciet "AND deleted_at IS NULL" toevoegt), niet van de
+-- beveiligingslaag.
 CREATE POLICY contract_isolation ON clm.contract
-    USING (tenant_id = clm.current_tenant_id() AND deleted_at IS NULL)
+    USING (tenant_id = clm.current_tenant_id())
     WITH CHECK (tenant_id = clm.current_tenant_id());--> statement-breakpoint
 
 COMMENT ON TABLE clm.contract IS
     'Contracten bij een leverancier. vendor_contact_id is nullable: NULL betekent "gebruik de is_primary-contactpersoon van de vendor" (applicatielogica, geen database-default). status_code kent geen "verlopend" — die status is berekend uit end_date, nooit opgeslagen. Zie docs/superpowers/specs/2026-08-22-contractmanagement-design.md.';--> statement-breakpoint
 
-GRANT SELECT, INSERT, UPDATE ON clm.contract TO clm_api_runtime;--> statement-breakpoint
+-- REVOKE vóór GRANT, conform migratie 0022 (src/db/rechten-contract.ts): een
+-- kale GRANT beperkt niets, want ALTER DEFAULT PRIVILEGES (migratie 0001)
+-- geeft clm_api via het lidmaatschap van clm_api_runtime al SELECT, INSERT,
+-- UPDATE, DELETE op elke nieuwe tabel in clm. Zonder de REVOKE hieronder zou
+-- clm_api_runtime dus ook DELETE krijgen — ruimer dan bedoeld, en op een
+-- manier die alleen lokaal opvalt (Supabase kent die default niet).
+--
+-- Zacht verwijderd via deleted_at, net als vendor — geen DELETE nodig.
+REVOKE ALL ON clm.contract FROM clm_api, clm_admin, clm_readonly;--> statement-breakpoint
+GRANT SELECT, INSERT, UPDATE ON clm.contract TO clm_api, clm_admin;--> statement-breakpoint
 
 -- ── 3. clm.contract_survey_template — many-to-many, geen extra kolommen ────
 --
@@ -144,7 +163,10 @@ CREATE POLICY contract_survey_template_isolation ON clm.contract_survey_template
 COMMENT ON TABLE clm.contract_survey_template IS
     'Welke vragenlijst-templates relevant zijn voor een contract. Many-to-many, geen extra velden. Zie docs/superpowers/specs/2026-08-22-contractmanagement-design.md §2.4.';--> statement-breakpoint
 
-GRANT SELECT, INSERT, DELETE ON clm.contract_survey_template TO clm_api_runtime;--> statement-breakpoint
+-- Een koppeling bestaat of niet. Wijzigen heeft geen betekenis — ontkoppelen
+-- en opnieuw koppelen wel. Zelfde redenering als template_reviewer (0022).
+REVOKE ALL ON clm.contract_survey_template FROM clm_api, clm_admin, clm_readonly;--> statement-breakpoint
+GRANT SELECT, INSERT, DELETE ON clm.contract_survey_template TO clm_api, clm_admin;--> statement-breakpoint
 
 -- ── 4. survey_run.contract_id krijgt zijn foreign key ──────────────────────
 --

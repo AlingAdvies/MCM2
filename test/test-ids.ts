@@ -96,6 +96,13 @@ export const TEST_IDS = {
     andereTenant: id('8f'),
     andereUser: id('80'),
   },
+  'contract-routes': {
+    tenant: id('25'),
+    adminUser: id('26'),
+    reviewerUser: id('27'),
+    andereTenant: id('28'),
+    andereUser: id('29'),
+  },
   'tenant-context-guard': {
     tenantA: id('9a'),
     tenantB: id('9b'),
