@@ -50,6 +50,18 @@ export class TenantController {
     return this.tenants.lezen(request.sessie!.tenantId);
   }
 
+  /**
+   * De gebruikers van de eigen tenant, voor een keuzelijst.
+   *
+   * Geen `@VereistRol`: het is een keuzelijst, geen gevoelige data — zelfde
+   * redenering als bij `lezen()` hierboven.
+   */
+  @Get('gebruikers')
+  async gebruikersLijst(@Req() request: RequestMetSessie) {
+    const gebruikers = await this.tenants.gebruikers(request.sessie!.tenantId);
+    return { gebruikers };
+  }
+
   @Patch('instellingen')
   @VereistRol('admin')
   async wijzigen(@Req() request: RequestMetSessie, @Body() body: unknown) {

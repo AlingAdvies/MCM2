@@ -51,6 +51,12 @@ export interface TenantWijziging {
   readonly antwoordEmail?: string | null;
 }
 
+/** Een gebruiker van de tenant, voor een keuzelijst (bv. contractbeheerder). */
+export interface TenantGebruiker {
+  readonly userId: string;
+  readonly naam: string;
+}
+
 @Injectable()
 export class TenantService {
   constructor(private readonly db: DatabaseService) {}
@@ -142,6 +148,29 @@ export class TenantService {
         naam: rows[0].name,
         antwoordEmail: rows[0].antwoord_email,
       };
+    });
+  }
+
+  /**
+   * De gebruikers van de eigen tenant, voor een keuzelijst (bv. de
+   * contractbeheerder-dropdown). Alleen id en naam — geen e-mailadres of rol,
+   * dat is meer dan een dropdown nodig heeft.
+   */
+  async gebruikers(tenantId: string): Promise<TenantGebruiker[]> {
+    return this.db.withTenant(tenantId, async (tx) => {
+      const { rows } = await tx.execute<{
+        user_id: string;
+        full_name: string;
+      }>(
+        sql`SELECT user_id, full_name FROM clm."user"
+             WHERE deleted_at IS NULL
+             ORDER BY full_name`,
+      );
+
+      return rows.map((r) => ({
+        userId: r.user_id,
+        naam: r.full_name,
+      }));
     });
   }
 }
