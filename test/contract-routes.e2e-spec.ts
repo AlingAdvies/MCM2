@@ -202,8 +202,9 @@ describe('Contractroutes (e2e)', () => {
       .set('Cookie', adminCookie);
 
     expect(respons.status).toBe(200);
-    expect(Array.isArray(respons.body.contracten)).toBe(true);
-    expect(respons.body.contracten.length).toBeGreaterThan(0);
+    const lijst = (respons.body as { contracten: unknown[] }).contracten;
+    expect(Array.isArray(lijst)).toBe(true);
+    expect(lijst.length).toBeGreaterThan(0);
   });
 
   it('reviewer kan de lijst wél lezen (alleen schrijven is geblokkeerd)', async () => {
@@ -244,7 +245,7 @@ describe('Contractroutes (e2e)', () => {
       .set('Cookie', andereCookie);
 
     expect(respons.status).toBe(200);
-    expect(respons.body.contracten).toEqual([]);
+    expect((respons.body as { contracten: unknown[] }).contracten).toEqual([]);
   });
 
   it('wijzigen van een niet-bestaand contract geeft 404', async () => {
@@ -265,7 +266,7 @@ describe('Contractroutes (e2e)', () => {
       .send({});
 
     expect(respons.status).toBe(400);
-    expect(respons.body.veld).toBe('Naam');
+    expect((respons.body as { veld: string }).veld).toBe('Naam');
   });
 
   it('admin kan een contract verwijderen (soft delete)', async () => {
