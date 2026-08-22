@@ -2070,15 +2070,376 @@ npm run demo:af
 
 ---
 
+## Task 12: Contactpersoon en survey-koppeling direct bij het aanmaken
+
+**Toegevoegd 22-08, ná de eerste preview van Task 10.** Twee punten uit de
+vervolgopmerkingen ("21-08 II" in `docs/opmerkingen Vendor IT survey.txt`)
+zijn klein genoeg om nog in dezelfde bouwronde mee te nemen, vóór er
+gemerged wordt — zelfde branches, geen nieuw datamodel, dus geen nieuwe
+OTAP-doorloop nodig. De twee grotere punten (navigatie, dashboard) zijn
+losse issues geworden: #171, #172.
+
+**Files (`MCM2-frontend`):**
+- Modify: `src/app/beheer/leveranciers/[id]/page.tsx`
+
+- [ ] **Step 1: Contactpersoon direct aanmaken — toggle naast de dropdown**
+
+In `NieuwContractFormulier`, een schakelaar naast de bestaande
+contactpersoon-dropdown. Aangevinkt: de dropdown verdwijnt, drie extra
+velden (naam, e-mail, functie) verschijnen. Bij opslaan: eerst
+`voegContactToe` (bestaande route/service uit `vendorService.ts`, al
+gebruikt door de Contactpersonen-sectie hierboven), dan het contract met
+het net teruggekregen `contactId`.
+
+```typescript
+function NieuwContractFormulier({
+  vendorId,
+  contactenVanVendor,
+  gebruikers,
+  onAangemaakt,
+}: {
+  vendorId: string;
+  contactenVanVendor: Contactpersoon[];
+  gebruikers: { userId: string; naam: string }[];
+  onAangemaakt: () => void | Promise<void>;
+}) {
+  const [waarden, setWaarden] = useState<ContractInvoer>({});
+  const [nieuweContactpersoon, setNieuweContactpersoon] = useState(false);
+  const [contactVelden, setContactVelden] = useState({
+    fullName: '',
+    email: '',
+    jobTitle: '',
+  });
+  const [gekoppeldeTemplates, setGekoppeldeTemplates] = useState<Set<string>>(
+    new Set(),
+  );
+  const [templates, setTemplates] = useState<
+    { templateId: string; naam: string }[]
+  >([]);
+  const [bezig, setBezig] = useState(false);
+  const [fout, setFout] = useState<string | null>(null);
+  const [veldFout, setVeldFout] = useState<{
+    veld: string;
+    melding: string;
+  } | null>(null);
+
+  useEffect(() => {
+    void haalSurveyTemplates().then(setTemplates);
+  }, []);
+
+  async function voegToe(gebeurtenis: React.FormEvent) {
+    gebeurtenis.preventDefault();
+    setBezig(true);
+    setFout(null);
+    setVeldFout(null);
+
+    let invoer = waarden;
+
+    // Eerst de nieuwe contactpersoon aanmaken, als die optie aanstaat. Faalt
+    // dat, dan wordt het contract niet aangemaakt — een contract met een
+    // verwijzing naar een contactpersoon die niet bestaat is erger dan geen
+    // contract.
+    if (nieuweContactpersoon) {
+      if (!contactVelden.fullName.trim()) {
+        setVeldFout({
+          veld: 'contactNaam',
+          melding: 'Vul de naam van de nieuwe contactpersoon in.',
+        });
+        setBezig(false);
+        return;
+      }
+
+      const contactUitkomst = await voegContactToe(vendorId, {
+        fullName: contactVelden.fullName,
+        email: contactVelden.email.trim() || null,
+        jobTitle: contactVelden.jobTitle.trim() || null,
+      });
+
+      if (!contactUitkomst.ok) {
+        setBezig(false);
+        if (contactUitkomst.soort === 'veld') {
+          setVeldFout({
+            veld: contactUitkomst.veld,
+            melding: contactUitkomst.melding,
+          });
+        } else {
+          setFout(contactUitkomst.melding);
+        }
+        return;
+      }
+
+      invoer = { ...waarden, vendorContactId: contactUitkomst.waarde.contactId };
+    }
+
+    const uitkomst = await maakContractAan(vendorId, invoer);
+
+    if (!uitkomst.ok) {
+      setBezig(false);
+      verwerk(uitkomst, {
+        opGelukt: () => undefined,
+        opVeldFout: setVeldFout,
+        opAlgemeneFout: setFout,
+      });
+      return;
+    }
+
+    // Contract staat er. Als er templates zijn aangevinkt: meteen koppelen,
+    // vóór de gebruiker het resultaat ziet. Twee aanroepen, één actie voor
+    // de gebruiker.
+    if (gekoppeldeTemplates.size > 0) {
+      await zetGekoppeldeTemplates(vendorId, uitkomst.waarde.contractId, [
+        ...gekoppeldeTemplates,
+      ]);
+    }
+
+    setBezig(false);
+    setWaarden({});
+    setNieuweContactpersoon(false);
+    setContactVelden({ fullName: '', email: '', jobTitle: '' });
+    setGekoppeldeTemplates(new Set());
+    await onAangemaakt();
+  }
+
+  return (
+    <form onSubmit={voegToe} noValidate className="border-t border-line pt-5">
+      <p className="mb-3 text-sm font-medium text-ink">Contract toevoegen</p>
+
+      <ContractFormuliervelden
+        waarden={waarden}
+        onWijzig={setWaarden}
+        contactenVanVendor={contactenVanVendor}
+        gebruikers={gebruikers}
+        veldFout={veldFout}
+        idPrefix="nieuw-contract"
+        // Bij een nieuwe contactpersoon toont het formulier de dropdown niet
+        // — die twee horen niet tegelijk zichtbaar te zijn, anders is
+        // onduidelijk welke wint.
+        verbergContactDropdown={nieuweContactpersoon}
+      />
+
+      <div className="mt-3">
+        <button
+          type="button"
+          onClick={() => setNieuweContactpersoon((v) => !v)}
+          data-testid="toggle-nieuwe-contactpersoon"
+          className="text-xs font-medium text-brand-primary hover:underline"
+        >
+          {nieuweContactpersoon
+            ? '← kies een bestaande contactpersoon'
+            : '+ of maak een nieuwe contactpersoon aan'}
+        </button>
+
+        {nieuweContactpersoon && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <Veld
+              id="nieuw-contract-contactNaam"
+              label="Naam"
+              verplicht
+              waarde={contactVelden.fullName}
+              onWijzig={(w) =>
+                setContactVelden((v) => ({ ...v, fullName: w }))
+              }
+              fout={veldFoutVoor(veldFout, 'contactNaam')}
+            />
+            <Veld
+              id="nieuw-contract-contactEmail"
+              label="E-mailadres"
+              type="email"
+              waarde={contactVelden.email}
+              onWijzig={(w) => setContactVelden((v) => ({ ...v, email: w }))}
+            />
+            <Veld
+              id="nieuw-contract-contactFunctie"
+              label="Functie"
+              waarde={contactVelden.jobTitle}
+              onWijzig={(w) =>
+                setContactVelden((v) => ({ ...v, jobTitle: w }))
+              }
+            />
+          </div>
+        )}
+      </div>
+
+      {templates.length > 0 && (
+        <div className="mt-4 border-t border-line pt-3">
+          <p className="mb-2 text-sm font-medium text-ink">
+            Van toepassing zijnde vragenlijst(en)
+          </p>
+          <div className="flex flex-col gap-1.5">
+            {templates.map((t) => (
+              <label
+                key={t.templateId}
+                className="flex items-center gap-2 text-sm text-ink"
+              >
+                <input
+                  type="checkbox"
+                  data-testid="nieuw-contract-survey-checkbox"
+                  checked={gekoppeldeTemplates.has(t.templateId)}
+                  onChange={() =>
+                    setGekoppeldeTemplates((vorig) => {
+                      const nieuw = new Set(vorig);
+                      if (nieuw.has(t.templateId)) {
+                        nieuw.delete(t.templateId);
+                      } else {
+                        nieuw.add(t.templateId);
+                      }
+                      return nieuw;
+                    })
+                  }
+                />
+                {t.naam}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {fout && (
+        <p
+          role="alert"
+          data-testid="nieuw-contract-fout"
+          className="mt-4 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800"
+        >
+          {fout}
+        </p>
+      )}
+
+      <button
+        type="submit"
+        disabled={bezig}
+        data-testid="voeg-contract-toe"
+        className="mt-5 rounded border border-brand-primary px-4 py-2 text-sm font-medium text-brand-primary transition hover:bg-brand-primary hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {bezig ? 'Bezig…' : 'Toevoegen'}
+      </button>
+    </form>
+  );
+}
+```
+
+**Nodig: `voegContactToe` importeren** uit `@/core/services/vendorService`
+(al elders in dit bestand geïmporteerd voor de Contactpersonen-sectie —
+hergebruiken, niet opnieuw definiëren).
+
+- [ ] **Step 2: Voeg `verbergContactDropdown` toe aan `ContractFormuliervelden`**
+
+Kleine uitbreiding van de props uit Task 6 Step 5:
+
+```typescript
+function ContractFormuliervelden({
+  waarden,
+  onWijzig,
+  contactenVanVendor,
+  gebruikers,
+  veldFout,
+  idPrefix,
+  verbergContactDropdown = false,
+}: {
+  waarden: ContractInvoer;
+  onWijzig: (w: ContractInvoer) => void;
+  contactenVanVendor: Contactpersoon[];
+  gebruikers: { userId: string; naam: string }[];
+  veldFout: { veld: string; melding: string } | null;
+  idPrefix: string;
+  verbergContactDropdown?: boolean;
+}) {
+```
+
+En de bestaande `Keuzeveld`-blok voor `vendorContactId` wrap in
+`{!verbergContactDropdown && ( ... )}`.
+
+- [ ] **Step 3: Compileer**
+
+```bash
+npx tsc --noEmit
+```
+
+- [ ] **Step 4: Breid `e2e/contracten.spec.ts` uit met twee tests**
+
+```typescript
+  test('maakt direct een nieuwe contactpersoon aan bij het contract', async ({
+    page,
+  }) => {
+    await maakEnOpen(page);
+
+    await page.getByTestId('toggle-nieuwe-contactpersoon').click();
+    await page.locator('#nieuw-contract-name').fill(`Contract-nc-${Date.now()}`);
+    await page
+      .locator('#nieuw-contract-contactNaam')
+      .fill(`Nieuw Contact ${Date.now()}`);
+    await page.getByTestId('voeg-contract-toe').click();
+
+    await expect(page.getByTestId('contract-rij').first()).toBeVisible();
+
+    // De nieuwe contactpersoon moet ook in de Contactpersonen-sectie
+    // verschijnen — bewijst dat dezelfde route is gebruikt, niet een kopie.
+    await expect(page.getByTestId('contact-rij')).not.toHaveCount(0);
+  });
+
+  test('koppelt meteen een vragenlijst bij het aanmaken', async ({
+    page,
+  }) => {
+    await maakEnOpen(page);
+
+    const checkboxen = page.getByTestId('nieuw-contract-survey-checkbox');
+    const aantal = await checkboxen.count();
+    test.skip(
+      aantal === 0,
+      'Geen vragenlijst-templates aanwezig op deze database.',
+    );
+
+    await page.locator('#nieuw-contract-name').fill(`Contract-vl-${Date.now()}`);
+    await checkboxen.first().check();
+    await page.getByTestId('voeg-contract-toe').click();
+
+    await expect(page.getByTestId('contract-rij').first()).toBeVisible();
+
+    await page.getByTestId('bewerk-contract').first().click();
+    await expect(
+      page.getByTestId('survey-template-checkbox').first(),
+    ).toBeChecked();
+  });
+```
+
+- [ ] **Step 5: Prettier, lint, compileer**
+
+```bash
+npx prettier --write "src/app/beheer/leveranciers/[id]/page.tsx" "e2e/contracten.spec.ts"
+npx eslint "src/app/beheer/leveranciers/[id]/page.tsx" "e2e/contracten.spec.ts" --max-warnings=0
+npx tsc --noEmit
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add "src/app/beheer/leveranciers/[id]/page.tsx" e2e/contracten.spec.ts
+git commit -m "feat(contract): contactpersoon en vragenlijst direct bij aanmaken
+
+21-08 II punt 3+4: een toggle om een nieuwe contactpersoon aan te maken
+i.p.v. te kiezen uit bestaande, en de survey-templatekoppeling al zichtbaar
+in het aanmaakformulier zelf i.p.v. pas na opslaan.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 7: Tweede, korte preview-ronde**
+
+Herhaal Task 10 (Steps 2–6) met de bijgewerkte frontend-branch — het is
+dezelfde branch, dus geen nieuwe `--branch`-naam nodig, alleen opnieuw
+`npm run demo -- --branch feat/contractmanagement-scherm` na deze commit.
+
+---
+
 ## Task 11: Samenvoegen — pas na akkoord op de preview
 
-**Niet uitvoeren zonder expliciet akkoord van de eigenaar op Task 10.**
+**Niet uitvoeren zonder expliciet akkoord van de eigenaar op Task 10 (en,**
+**als Task 12 is uitgevoerd, ook op de tweede preview-ronde daar).**
 
 - [ ] **Step 1: Volg `superpowers:finishing-a-development-branch`**
 
 Voor beide repo's apart: backend-branch (taken 1–4) en frontend-branch
-(taken 5–8). Presenteer de opties (PR, direct mergen, branch parkeren)
-zoals die skill voorschrijft — niet zelf beslissen.
+(taken 5–8, eventueel 12). Presenteer de opties (PR, direct mergen, branch
+parkeren) zoals die skill voorschrijft — niet zelf beslissen.
 
 ---
 
