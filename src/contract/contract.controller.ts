@@ -24,6 +24,7 @@ import {
   leesContractWijziging,
   leesNieuwContract,
   leesSurveyTemplateKoppeling,
+  type SurveyTemplateKoppelingInvoer,
 } from './contract-invoer';
 import {
   ContractService,
@@ -188,10 +189,10 @@ export class ContractController {
   ) {
     const sessie = request.sessie!;
 
-    let templateIds: string[];
+    let invoer: SurveyTemplateKoppelingInvoer;
 
     try {
-      templateIds = leesSurveyTemplateKoppeling(body);
+      invoer = leesSurveyTemplateKoppeling(body);
     } catch (err) {
       throw alsHttpFout(err);
     }
@@ -201,7 +202,8 @@ export class ContractController {
         sessie.tenantId,
         leesUuid(vendorId),
         leesUuid(id),
-        templateIds,
+        invoer.templateIds,
+        invoer.wachtlijstTemplateIds,
       )
       .catch(alsRefFout);
 

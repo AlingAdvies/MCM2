@@ -394,6 +394,10 @@ export const contractSurveyTemplate = clm.table(
       .notNull()
       .references(() => surveyTemplate.templateId, { onDelete: 'cascade' }),
     tenantId: uuid('tenant_id').notNull(),
+    // Staat deze leverancier klaar om voorgesteld te worden bij de volgende
+    // ronde van deze vragenlijst? Uitvinkbaar, nooit automatisch gezet.
+    // Migratie 0028, spec 2026-08-22-contractmanagement-ui-design.md §9.
+    wachtlijst: boolean('wachtlijst').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

@@ -13,6 +13,8 @@ import { DatabaseService } from '../db/database.service';
 
 export interface SurveyTemplateKoppeling {
   templateIds: string[];
+  /** Welke van de gekoppelde templates ook op de wachtlijst staan. */
+  wachtlijstTemplateIds: string[];
 }
 
 export interface ContractSamenvatting {
@@ -342,14 +344,21 @@ export class ContractService {
           return null;
         }
 
-        const resultaat = await tx.execute<{ survey_template_id: string }>(
-          sql`SELECT survey_template_id FROM clm.contract_survey_template
+        const resultaat = await tx.execute<{
+          survey_template_id: string;
+          wachtlijst: boolean;
+        }>(
+          sql`SELECT survey_template_id, wachtlijst
+             FROM clm.contract_survey_template
              WHERE contract_id = ${contractId}
              ORDER BY created_at`,
         );
 
         return {
           templateIds: resultaat.rows.map((r) => r.survey_template_id),
+          wachtlijstTemplateIds: resultaat.rows
+            .filter((r) => r.wachtlijst)
+            .map((r) => r.survey_template_id),
         };
       },
       'medewerker',
@@ -368,6 +377,7 @@ export class ContractService {
     vendorId: string,
     contractId: string,
     templateIds: string[],
+    wachtlijstTemplateIds: string[],
   ): Promise<SurveyTemplateKoppeling | null> {
     return this.db.withTenant(
       tenantId,
@@ -391,8 +401,9 @@ export class ContractService {
         for (const templateId of templateIds) {
           await tx.execute(
             sql`INSERT INTO clm.contract_survey_template
-                  (contract_id, survey_template_id, tenant_id)
-                VALUES (${contractId}, ${templateId}, ${tenantId})`,
+                  (contract_id, survey_template_id, tenant_id, wachtlijst)
+                VALUES (${contractId}, ${templateId}, ${tenantId},
+                        ${wachtlijstTemplateIds.includes(templateId)})`,
           );
         }
 
@@ -400,7 +411,45 @@ export class ContractService {
           `Survey-templates gekoppeld aan contract ${contractId}: ${templateIds.length}.`,
         );
 
-        return { templateIds };
+        return { templateIds, wachtlijstTemplateIds };
+      },
+      'medewerker',
+    );
+  }
+
+  /**
+   * Leveranciers die op de wachtlijst staan voor de volgende ronde van
+   * deze vragenlijst-template, via een gekoppeld contract. Eén leverancier
+   * met meerdere contracten op de wachtlijst voor dezelfde template komt
+   * hier maar één keer voor (DISTINCT) — de UI toont een leverancier, geen
+   * contract.
+   */
+  async wachtlijstVoorTemplate(
+    tenantId: string,
+    templateId: string,
+  ): Promise<{ vendorId: string; vendorNaam: string }[]> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const resultaat = await tx.execute<{
+          vendor_id: string;
+          name: string;
+        }>(
+          sql`SELECT DISTINCT v.vendor_id, v.name
+             FROM clm.contract_survey_template cst
+             JOIN clm.contract c ON c.contract_id = cst.contract_id
+             JOIN clm.vendor v ON v.vendor_id = c.vendor_id
+             WHERE cst.survey_template_id = ${templateId}
+               AND cst.wachtlijst = true
+               AND c.deleted_at IS NULL
+               AND v.deleted_at IS NULL
+             ORDER BY v.name`,
+        );
+
+        return resultaat.rows.map((r) => ({
+          vendorId: r.vendor_id,
+          vendorNaam: r.name,
+        }));
       },
       'medewerker',
     );

@@ -912,4 +912,40 @@ describe('Ronde-beheerroutes (e2e)', () => {
     expect(body).not.toContain(uitnodigingen[0].token);
     expect(body).not.toContain('token');
   });
+
+  // ── Wachtlijst ───────────────────────────────────────────────────────────
+
+  it('geeft de leverancier terug die op de wachtlijst staat voor deze template', async () => {
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL app.current_tenant_id = '${tenantA}'`);
+    await client.query(
+      `INSERT INTO clm.contract_survey_template
+         (contract_id, survey_template_id, tenant_id, wachtlijst)
+       VALUES ($1, $2, $3, true)`,
+      [CONTRACT_1, TEMPLATE_A, tenantA],
+    );
+    await client.query('COMMIT');
+
+    const antwoord = await request(server)
+      .get(`/admin/survey/templates/${TEMPLATE_A}/wachtlijst`)
+      .set('Cookie', cookieAdminA)
+      .expect(200);
+
+    const { leveranciers } = antwoord.body as {
+      leveranciers: { vendorId: string; vendorNaam: string }[];
+    };
+
+    expect(leveranciers.some((l) => l.vendorId === VENDOR_1)).toBe(true);
+  });
+
+  it('geeft een lege lijst als niemand op de wachtlijst staat', async () => {
+    const antwoord = await request(server)
+      .get(`/admin/survey/templates/${TEMPLATE_LEEG}/wachtlijst`)
+      .set('Cookie', cookieAdminA)
+      .expect(200);
+
+    expect((antwoord.body as { leveranciers: unknown[] }).leveranciers).toEqual(
+      [],
+    );
+  });
 });

@@ -19,6 +19,7 @@ import {
   TenantContextGuard,
   type RequestMetSessie,
 } from '../auth/tenant-context.guard';
+import { ContractService } from '../contract/contract.service';
 import { ContractmanagerService } from './contractmanager.service';
 import { NotitieService } from './notitie.service';
 import { RondeBeheerService } from './ronde-beheer.service';
@@ -87,6 +88,7 @@ export class VragenlijstBeheerController {
     // Onderstreept om dezelfde reden als beoordelingen_.
     private readonly notities_: NotitieService,
     private readonly contractmanagers: ContractmanagerService,
+    private readonly contracten: ContractService,
   ) {}
 
   /** Alle vragenlijsten van deze tenant, met aantallen vragen en rondes. */
@@ -107,6 +109,19 @@ export class VragenlijstBeheerController {
     const sessie = request.sessie!;
 
     return this.beheer.detail(sessie.tenantId, id);
+  }
+
+  /** Leveranciers die op de wachtlijst staan voor de volgende ronde. */
+  @Get('templates/:id/wachtlijst')
+  async wachtlijst(@Req() request: RequestMetSessie, @Param('id') id: string) {
+    const sessie = request.sessie!;
+
+    const leveranciers = await this.contracten.wachtlijstVoorTemplate(
+      sessie.tenantId,
+      id,
+    );
+
+    return { leveranciers };
   }
 
   /** Alle rondes van deze tenant, met voortgang per ronde. */

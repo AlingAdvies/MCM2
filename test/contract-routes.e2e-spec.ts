@@ -346,6 +346,47 @@ describe('Contractroutes (e2e)', () => {
     );
   });
 
+  it('zet en leest wachtlijstTemplateIds naast de gewone koppeling', async () => {
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL app.current_tenant_id = '${tenant}'`);
+    const templateResultaat = await client.query<{ template_id: string }>(
+      `INSERT INTO clm.survey_template (tenant_id, name, version)
+       VALUES ($1, $2, 1) RETURNING template_id`,
+      [tenant, `Wachtlijsttest-${STEMPEL}`],
+    );
+    await client.query('COMMIT');
+    const templateId = templateResultaat.rows[0].template_id;
+
+    const aangemaakt = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Contract met wachtlijst' });
+    const contractId = alsContract(aangemaakt.body).contractId;
+
+    const gekoppeld = await request(server)
+      .put(`/vendors/${vendorId}/contracts/${contractId}/survey-templates`)
+      .set('Cookie', adminCookie)
+      .send({
+        templateIds: [templateId],
+        wachtlijstTemplateIds: [templateId],
+      });
+
+    expect(gekoppeld.status).toBe(200);
+    expect(
+      (gekoppeld.body as { wachtlijstTemplateIds: string[] })
+        .wachtlijstTemplateIds,
+    ).toEqual([templateId]);
+
+    const opgehaald = await request(server)
+      .get(`/vendors/${vendorId}/contracts/${contractId}/survey-templates`)
+      .set('Cookie', adminCookie);
+
+    expect(
+      (opgehaald.body as { wachtlijstTemplateIds: string[] })
+        .wachtlijstTemplateIds,
+    ).toEqual([templateId]);
+  });
+
   it('reviewer kan geen templates koppelen (403)', async () => {
     const aangemaakt = await request(server)
       .post(`/vendors/${vendorId}/contracts`)
