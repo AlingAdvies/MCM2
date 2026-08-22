@@ -9,6 +9,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -22,6 +23,7 @@ import {
   InvoerFout,
   leesContractWijziging,
   leesNieuwContract,
+  leesSurveyTemplateKoppeling,
 } from './contract-invoer';
 import {
   ContractService,
@@ -153,6 +155,61 @@ export class ContractController {
     if (!gelukt) {
       throw new NotFoundException('Contract niet gevonden.');
     }
+  }
+
+  @Get(':id/survey-templates')
+  async surveyTemplates(
+    @Req() request: RequestMetSessie,
+    @Param('vendorId') vendorId: string,
+    @Param('id') id: string,
+  ) {
+    const sessie = request.sessie!;
+
+    const koppeling = await this.contracts.surveyTemplates(
+      sessie.tenantId,
+      leesUuid(vendorId),
+      leesUuid(id),
+    );
+
+    if (!koppeling) {
+      throw new NotFoundException('Contract niet gevonden.');
+    }
+
+    return koppeling;
+  }
+
+  @Put(':id/survey-templates')
+  @VereistRol('admin')
+  async zetSurveyTemplates(
+    @Req() request: RequestMetSessie,
+    @Param('vendorId') vendorId: string,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const sessie = request.sessie!;
+
+    let templateIds: string[];
+
+    try {
+      templateIds = leesSurveyTemplateKoppeling(body);
+    } catch (err) {
+      throw alsHttpFout(err);
+    }
+
+    const koppeling = await this.contracts
+      .zetSurveyTemplates(
+        sessie.tenantId,
+        leesUuid(vendorId),
+        leesUuid(id),
+        templateIds,
+      )
+      .catch(alsRefFout);
+
+    if (!koppeling) {
+      throw new NotFoundException('Contract niet gevonden.');
+    }
+
+    return koppeling;
   }
 }
 

@@ -209,3 +209,33 @@ export function leesContractWijziging(body: unknown): ContractWijziging {
 
   return wijziging;
 }
+
+const UUID_PATROON_KOPPELING =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Leest de body van PUT .../contracts/:id/survey-templates. */
+export function leesSurveyTemplateKoppeling(body: unknown): string[] {
+  if (typeof body !== 'object' || body === null) {
+    throw new InvoerFout('body', 'Er is geen koppeling meegestuurd.');
+  }
+
+  const ruw = body as Record<string, unknown>;
+
+  if (!('templateIds' in ruw)) {
+    throw new InvoerFout('templateIds', 'templateIds is verplicht.');
+  }
+
+  if (!Array.isArray(ruw.templateIds)) {
+    throw new InvoerFout('templateIds', 'templateIds moet een lijst zijn.');
+  }
+
+  for (const waarde of ruw.templateIds) {
+    if (typeof waarde !== 'string' || !UUID_PATROON_KOPPELING.test(waarde)) {
+      throw new InvoerFout('templateIds', "Een van de id's is ongeldig.");
+    }
+  }
+
+  // Dubbele ids negeren, niet weigeren: een dubbelklik in de checkbox-lijst
+  // is een UI-detail, geen fout van de gebruiker.
+  return [...new Set(ruw.templateIds as string[])];
+}

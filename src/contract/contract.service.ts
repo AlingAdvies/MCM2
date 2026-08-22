@@ -11,6 +11,10 @@ import { DatabaseService } from '../db/database.service';
  * docs/superpowers/specs/2026-08-22-contractmanagement-design.md.
  */
 
+export interface SurveyTemplateKoppeling {
+  templateIds: string[];
+}
+
 export interface ContractSamenvatting {
   contractId: string;
   name: string;
@@ -299,6 +303,90 @@ export class ContractService {
 
         this.logger.log(`Contract verwijderd (${contractId}).`);
         return true;
+      },
+      'medewerker',
+    );
+  }
+
+  /** Welke vragenlijst-templates aan dit contract gekoppeld zijn. */
+  async surveyTemplates(
+    tenantId: string,
+    vendorId: string,
+    contractId: string,
+  ): Promise<SurveyTemplateKoppeling | null> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const bestaat = await tx.execute<{ contract_id: string }>(
+          sql`SELECT contract_id FROM clm.contract
+             WHERE contract_id = ${contractId}
+               AND vendor_id = ${vendorId}
+               AND deleted_at IS NULL`,
+        );
+
+        if (bestaat.rows.length === 0) {
+          return null;
+        }
+
+        const resultaat = await tx.execute<{ survey_template_id: string }>(
+          sql`SELECT survey_template_id FROM clm.contract_survey_template
+             WHERE contract_id = ${contractId}
+             ORDER BY created_at`,
+        );
+
+        return {
+          templateIds: resultaat.rows.map((r) => r.survey_template_id),
+        };
+      },
+      'medewerker',
+    );
+  }
+
+  /**
+   * Vervangt de volledige set gekoppelde templates in één transactie.
+   *
+   * Geen diff (verwijderen wat wegvalt, toevoegen wat nieuw is): bij een klein
+   * aantal templates per contract is "alles weg, alles opnieuw" even correct
+   * en eenvoudiger. Zie spec §3.2.
+   */
+  async zetSurveyTemplates(
+    tenantId: string,
+    vendorId: string,
+    contractId: string,
+    templateIds: string[],
+  ): Promise<SurveyTemplateKoppeling | null> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const bestaat = await tx.execute<{ contract_id: string }>(
+          sql`SELECT contract_id FROM clm.contract
+             WHERE contract_id = ${contractId}
+               AND vendor_id = ${vendorId}
+               AND deleted_at IS NULL`,
+        );
+
+        if (bestaat.rows.length === 0) {
+          return null;
+        }
+
+        await tx.execute(
+          sql`DELETE FROM clm.contract_survey_template
+             WHERE contract_id = ${contractId}`,
+        );
+
+        for (const templateId of templateIds) {
+          await tx.execute(
+            sql`INSERT INTO clm.contract_survey_template
+                  (contract_id, survey_template_id, tenant_id)
+                VALUES (${contractId}, ${templateId}, ${tenantId})`,
+          );
+        }
+
+        this.logger.log(
+          `Survey-templates gekoppeld aan contract ${contractId}: ${templateIds.length}.`,
+        );
+
+        return { templateIds };
       },
       'medewerker',
     );

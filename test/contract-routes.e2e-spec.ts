@@ -68,6 +68,16 @@ async function verwijderTestdata(migratieClient: Client): Promise<void> {
   for (const t of [tenant, andereTenant]) {
     await migratieClient.query('BEGIN');
     await migratieClient.query(`SET LOCAL app.current_tenant_id = '${t}'`);
+    // contract_survey_template en survey_template moeten eerst weg: FK naar
+    // clm.contract.
+    await migratieClient.query(
+      'DELETE FROM clm.contract_survey_template WHERE tenant_id = $1',
+      [t],
+    );
+    await migratieClient.query(
+      'DELETE FROM clm.survey_template WHERE tenant_id = $1',
+      [t],
+    );
     await migratieClient.query(
       'DELETE FROM clm.contract WHERE tenant_id = $1',
       [t],
@@ -288,5 +298,66 @@ describe('Contractroutes (e2e)', () => {
       .set('Cookie', adminCookie);
 
     expect(opgehaald.status).toBe(404);
+  });
+
+  it('koppelt en ontkoppelt vragenlijst-templates aan een contract', async () => {
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL app.current_tenant_id = '${tenant}'`);
+    const templateResultaat = await client.query<{ template_id: string }>(
+      `INSERT INTO clm.survey_template (tenant_id, name, version)
+       VALUES ($1, $2, 1) RETURNING template_id`,
+      [tenant, `Testvragenlijst-${STEMPEL}`],
+    );
+    await client.query('COMMIT');
+    const templateId = templateResultaat.rows[0].template_id;
+
+    const aangemaakt = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Contract met vragenlijst' });
+    const contractId = alsContract(aangemaakt.body).contractId;
+
+    const gekoppeld = await request(server)
+      .put(`/vendors/${vendorId}/contracts/${contractId}/survey-templates`)
+      .set('Cookie', adminCookie)
+      .send({ templateIds: [templateId] });
+
+    expect(gekoppeld.status).toBe(200);
+    expect((gekoppeld.body as { templateIds: string[] }).templateIds).toEqual([
+      templateId,
+    ]);
+
+    const opgehaald = await request(server)
+      .get(`/vendors/${vendorId}/contracts/${contractId}/survey-templates`)
+      .set('Cookie', adminCookie);
+
+    expect((opgehaald.body as { templateIds: string[] }).templateIds).toEqual([
+      templateId,
+    ]);
+
+    const ontkoppeld = await request(server)
+      .put(`/vendors/${vendorId}/contracts/${contractId}/survey-templates`)
+      .set('Cookie', adminCookie)
+      .send({ templateIds: [] });
+
+    expect(ontkoppeld.status).toBe(200);
+    expect((ontkoppeld.body as { templateIds: string[] }).templateIds).toEqual(
+      [],
+    );
+  });
+
+  it('reviewer kan geen templates koppelen (403)', async () => {
+    const aangemaakt = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Contract zonder reviewer-koppeling' });
+    const contractId = alsContract(aangemaakt.body).contractId;
+
+    const respons = await request(server)
+      .put(`/vendors/${vendorId}/contracts/${contractId}/survey-templates`)
+      .set('Cookie', reviewerCookie)
+      .send({ templateIds: [] });
+
+    expect(respons.status).toBe(403);
   });
 });
