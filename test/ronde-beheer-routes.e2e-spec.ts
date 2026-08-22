@@ -52,6 +52,7 @@ const {
   vendorB: VENDOR_B,
   vendorWeg: VENDOR_WEG,
   contract1: CONTRACT_1,
+  onbestaand: ONBESTAAND,
 } = TEST_IDS['ronde-beheer-routes'];
 
 const SUBJECT_ADMIN_A = `oid-rb-a-${Date.now()}`;
@@ -388,7 +389,7 @@ describe('Ronde-beheerroutes (e2e)', () => {
       .set('Cookie', cookieAdminA)
       .send({
         templateId: TEMPLATE_A,
-        contractId: '00000000-0000-0000-0000-000000000000',
+        contractId: ONBESTAAND,
       })
       .expect(404);
   });
