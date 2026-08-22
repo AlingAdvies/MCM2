@@ -32,6 +32,55 @@ Ga nooit uit van een oplossing omdat die eerder genoemd, gepland of deels gebouw
 
 **Drizzle is geen doel. Prisma is geen vaststaand besluit. AWS is een richting, geen reden voor vroegtijdige complexiteit.**
 
+### 1a. Stel basale vragen — de eigenaar is product owner, geen IT'er
+
+*Vastgelegd 2026-08-22, na een sessie waarin een complete backend
+(migratie, service, API) werd gebouwd en voor "klaar" werd aangezien
+zonder dat er een scherm bestond om hem te gebruiken. Dat werd pas
+duidelijk toen de eigenaar vroeg om een preview.*
+
+De eigenaar denkt vanuit het product, niet vanuit lagen als "backend" en
+"frontend" — die scheiding is voor jou vanzelfsprekend, voor hem niet. Een
+plan dat alleen een API oplevert kan voor hem onopgemerkt "compleet"
+lijken. Vandaar:
+
+- Bij elke nieuwe functionaliteit die een gebruiker ooit gaat bedienen:
+  **default is backend + scherm samen**, tenzij expliciet en bewust
+  gekozen voor backend-only (bijvoorbeeld een interne migratie of een API
+  die een al bestaand scherm bedient). Die keuze hoort een vraag te zijn,
+  niet een aanname.
+- Stel bij twijfel een basale vraag, ook als hij vanzelfsprekend lijkt:
+  "moet dit ook een scherm krijgen?", "is dit compleet genoeg om te
+  testen/previewen?", "waar in de bestaande navigatie hoort dit?". Een
+  vraag te veel kost een antwoord; een vraag te weinig kost een hele
+  bouwronde over.
+- Rond een implementatietaak nooit af met "klaar" of "backend staat"
+  zonder expliciet te benoemen wat een gebruiker er wél en niet mee kan
+  in de browser. "Klaar" betekent bruikbaar, niet "de tests zijn groen".
+
+### 1b. Nieuwe code volgt een bestaand precedent, niet een nieuw ontwerp
+
+*Vastgelegd 2026-08-22, na twee fouten in één migratie (0027) die allebei
+al eerder waren opgelost — een RLS-policy met `deleted_at IS NULL` in
+`USING` (exact het probleem dat migratie 0004/Issue #31 al oploste) en een
+GRANT zonder de voorafgaande `REVOKE ALL` (exact het patroon dat migratie
+0022 vastlegt in `src/db/rechten-contract.ts`). Beide fouten waren te
+voorkomen geweest door vóór het schrijven een vergelijkbare, recente
+migratie als sjabloon te lezen in plaats van de architectuurregel uit het
+geheugen te herhalen.
+
+- **Voordat je een migratie, RLS-policy, service of controller schrijft:**
+  zoek eerst het meest recente vergelijkbare voorbeeld in de repo op en
+  gebruik dat als sjabloon — niet als inspiratie, als sjabloon. Voor een
+  nieuwe tenanttabel is dat de laatste migratie die zoiets deed (nu:
+  0022/0027 voor rechten, 0015 voor een nieuwe tabel met RLS), niet de
+  regel in dit bestand die het principe samenvat.
+  Regels als "elke tenanttabel krijgt RLS" (§7) zeggen **wat** moet
+  gebeuren; ze zijn geen vervanging voor het lezen van **hoe** de vorige
+  keer een fout is voorkomen.
+- Dit voorkomt dat een al opgeloste klasse fout een tweede keer wordt
+  gemaakt, alleen op een nieuwe tabel — precies het patroon van vandaag.
+
 ---
 
 ## 2. Productdoel
@@ -211,6 +260,10 @@ Toon nooit secrets in terminaloutput, documenten, commits, chat of logs. Let ero
 ---
 
 ## 7. Database- en migratieregels
+
+**Lees eerst §1b.** De regels hieronder zeggen wat een migratie moet
+bevatten; ze vervangen niet het lezen van een recente, vergelijkbare
+migratie als sjabloon vóórdat je schrijft.
 
 1. Wijzig database-schema’s uitsluitend via versioned migrationbestanden.
 2. Gebruik nooit directe Supabase-dashboardwijzigingen als vervanging van een migratie.
