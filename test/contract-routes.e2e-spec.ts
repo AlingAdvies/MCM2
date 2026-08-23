@@ -300,6 +300,71 @@ describe('Contractroutes (e2e)', () => {
     expect(opgehaald.status).toBe(404);
   });
 
+  it('admin kan opzegtermijn, waarschuwingstermijn en verlengt-automatisch meegeven', async () => {
+    const respons = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({
+        name: 'Hosting met opzegtermijn',
+        endDate: '2027-12-31',
+        noticePeriodDays: '90',
+        warningDaysBefore: '30',
+        autoRenews: 'ja',
+      });
+
+    expect(respons.status).toBe(201);
+    expect((respons.body as { noticePeriodDays: number }).noticePeriodDays).toBe(
+      90,
+    );
+    expect(
+      (respons.body as { warningDaysBefore: number }).warningDaysBefore,
+    ).toBe(30);
+    expect((respons.body as { autoRenews: string }).autoRenews).toBe('ja');
+  });
+
+  it('warningDaysBefore is 90 wanneer niet meegegeven', async () => {
+    const respons = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Hosting zonder opgave' });
+
+    expect(respons.status).toBe(201);
+    expect(
+      (respons.body as { warningDaysBefore: number }).warningDaysBefore,
+    ).toBe(90);
+    expect(
+      (respons.body as { noticePeriodDays: number | null }).noticePeriodDays,
+    ).toBeNull();
+    expect((respons.body as { autoRenews: string | null }).autoRenews).toBeNull();
+  });
+
+  it('weigert een ongeldige autoRenews-waarde', async () => {
+    const respons = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Hosting', autoRenews: 'misschien' });
+
+    expect(respons.status).toBe(400);
+    expect((respons.body as { veld: string }).veld).toBe('Verlengt automatisch');
+  });
+
+  it('admin kan autoRenews wijzigen op een bestaand contract', async () => {
+    const aangemaakt = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Wijzigtest', autoRenews: 'onbekend' });
+
+    const contractId = alsContract(aangemaakt.body).contractId;
+
+    const gewijzigd = await request(server)
+      .patch(`/vendors/${vendorId}/contracts/${contractId}`)
+      .set('Cookie', adminCookie)
+      .send({ autoRenews: 'nee' });
+
+    expect(gewijzigd.status).toBe(200);
+    expect((gewijzigd.body as { autoRenews: string }).autoRenews).toBe('nee');
+  });
+
   it('koppelt en ontkoppelt vragenlijst-templates aan een contract', async () => {
     await client.query('BEGIN');
     await client.query(`SET LOCAL app.current_tenant_id = '${tenant}'`);
