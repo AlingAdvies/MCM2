@@ -125,14 +125,14 @@ function optioneelPositiefGeheelGetal(
     return null;
   }
 
-  const getal =
-    typeof waarde === 'number' ? waarde : Number.parseInt(String(waarde), 10);
+  if (typeof waarde !== 'number' && typeof waarde !== 'string') {
+    throw new InvoerFout(veld, `${veld} moet een positief geheel getal zijn.`);
+  }
 
-  if (
-    !Number.isInteger(getal) ||
-    getal < 0 ||
-    String(waarde).trim() !== String(getal)
-  ) {
+  const tekst = typeof waarde === 'number' ? String(waarde) : waarde.trim();
+  const getal = Number.parseInt(tekst, 10);
+
+  if (!Number.isInteger(getal) || getal < 0 || tekst !== String(getal)) {
     throw new InvoerFout(veld, `${veld} moet een positief geheel getal zijn.`);
   }
 
