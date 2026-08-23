@@ -204,6 +204,13 @@
       "when": 1787068800002,
       "tag": "0028_contract_survey_wachtlijst",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1787068800003,
+      "tag": "0029_contract_opzegtermijn",
+      "breakpoints": true
     }
   ]
 }
