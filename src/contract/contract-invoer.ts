@@ -260,10 +260,11 @@ export function leesContractWijziging(body: unknown): ContractWijziging {
     );
   }
   if ('warningDaysBefore' in ruw) {
-    wijziging.warningDaysBefore = optioneelPositiefGeheelGetal(
-      ruw.warningDaysBefore,
-      'Waarschuwingstermijn',
-    );
+    // Geen NULL-betekenis voor dit veld — de kolom is NOT NULL DEFAULT 90.
+    // Leeg meesturen valt terug op 90, net als bij aanmaken.
+    wijziging.warningDaysBefore =
+      optioneelPositiefGeheelGetal(ruw.warningDaysBefore, 'Waarschuwingstermijn') ??
+      90;
   }
   if ('autoRenews' in ruw) {
     wijziging.autoRenews = optioneelAutoRenews(

@@ -27,6 +27,9 @@ export interface ContractSamenvatting {
   vendorContactNaam: string | null;
   ownerGebruikerNaam: string | null;
   createdAt: string;
+  noticePeriodDays: number | null;
+  warningDaysBefore: number;
+  autoRenews: string | null;
 }
 
 export interface NieuwContract {
@@ -39,6 +42,9 @@ export interface NieuwContract {
   startDate?: string | null;
   endDate?: string | null;
   note?: string | null;
+  noticePeriodDays?: number | null;
+  warningDaysBefore?: number;
+  autoRenews?: string | null;
 }
 
 export interface ContractDetail {
@@ -57,6 +63,9 @@ export interface ContractDetail {
   note: string | null;
   createdAt: string;
   updatedAt: string | null;
+  noticePeriodDays: number | null;
+  warningDaysBefore: number;
+  autoRenews: string | null;
 }
 
 /**
@@ -74,6 +83,9 @@ export interface ContractWijziging {
   startDate?: string | null;
   endDate?: string | null;
   note?: string | null;
+  noticePeriodDays?: number | null;
+  warningDaysBefore?: number;
+  autoRenews?: string | null;
 }
 
 interface ContractRij extends Record<string, unknown> {
@@ -86,6 +98,9 @@ interface ContractRij extends Record<string, unknown> {
   vendor_contact_naam: string | null;
   owner_naam: string | null;
   created_at: Date | string;
+  notice_period_days: number | null;
+  warning_days_before: number;
+  auto_renews: string | null;
 }
 
 interface ContractDetailRij extends Record<string, unknown> {
@@ -104,6 +119,9 @@ interface ContractDetailRij extends Record<string, unknown> {
   note: string | null;
   created_at: Date | string;
   updated_at: Date | string | null;
+  notice_period_days: number | null;
+  warning_days_before: number;
+  auto_renews: string | null;
 }
 
 function alsTekst(waarde: Date | string): string {
@@ -136,6 +154,7 @@ export class ContractService {
         const resultaat = await tx.execute<ContractRij>(
           sql`SELECT c.contract_id, c.name, c.contract_number, c.status_code,
                      c.start_date, c.end_date, c.created_at,
+                     c.notice_period_days, c.warning_days_before, c.auto_renews,
                      vc.full_name AS vendor_contact_naam,
                      u.full_name AS owner_naam
                 FROM clm.contract c
@@ -155,6 +174,9 @@ export class ContractService {
           vendorContactNaam: r.vendor_contact_naam,
           ownerGebruikerNaam: r.owner_naam,
           createdAt: alsTekst(r.created_at),
+          noticePeriodDays: r.notice_period_days,
+          warningDaysBefore: r.warning_days_before,
+          autoRenews: r.auto_renews,
         }));
       },
       'medewerker',
@@ -188,7 +210,8 @@ export class ContractService {
           sql`INSERT INTO clm.contract
                 (tenant_id, vendor_id, name, contract_number,
                  vendor_contact_id, owner_user_id, status_code, value_eur,
-                 start_date, end_date, note)
+                 start_date, end_date, note,
+                 notice_period_days, warning_days_before, auto_renews)
               VALUES (${tenantId}, ${vendorId}, ${invoer.name.trim()},
                       ${leegIsNull(invoer.contractNumber)},
                       ${invoer.vendorContactId ?? null},
@@ -197,7 +220,10 @@ export class ContractService {
                       ${invoer.valueEur ?? null},
                       ${invoer.startDate ?? null},
                       ${invoer.endDate ?? null},
-                      ${leegIsNull(invoer.note)})
+                      ${leegIsNull(invoer.note)},
+                      ${invoer.noticePeriodDays ?? null},
+                      ${invoer.warningDaysBefore ?? 90},
+                      ${invoer.autoRenews ?? null})
               RETURNING contract_id`,
         );
 
@@ -275,6 +301,19 @@ export class ContractService {
         }
         if (wijziging.note !== undefined) {
           zetten.push(sql`note = ${leegIsNull(wijziging.note)}`);
+        }
+        if (wijziging.noticePeriodDays !== undefined) {
+          zetten.push(
+            sql`notice_period_days = ${wijziging.noticePeriodDays}`,
+          );
+        }
+        if (wijziging.warningDaysBefore !== undefined) {
+          zetten.push(
+            sql`warning_days_before = ${wijziging.warningDaysBefore}`,
+          );
+        }
+        if (wijziging.autoRenews !== undefined) {
+          zetten.push(sql`auto_renews = ${wijziging.autoRenews}`);
         }
 
         if (zetten.length > 0) {
@@ -464,6 +503,7 @@ export class ContractService {
       sql`SELECT c.contract_id, c.vendor_id, c.name, c.contract_number,
                  c.vendor_contact_id, c.owner_user_id, c.status_code,
                  c.value_eur, c.start_date, c.end_date, c.note,
+                 c.notice_period_days, c.warning_days_before, c.auto_renews,
                  c.created_at, c.updated_at,
                  vc.full_name AS vendor_contact_naam,
                  u.full_name AS owner_naam
@@ -497,6 +537,9 @@ export class ContractService {
       note: rij.note,
       createdAt: alsTekst(rij.created_at),
       updatedAt: alsTekstOfNull(rij.updated_at),
+      noticePeriodDays: rij.notice_period_days,
+      warningDaysBefore: rij.warning_days_before,
+      autoRenews: rij.auto_renews,
     };
   }
 }
