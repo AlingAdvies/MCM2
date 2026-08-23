@@ -51,6 +51,33 @@ van de flow (het portaal, het token, het formulier, de afzender) weegt
 zwaarder dan de interne beheerkant**, ook al is de interne kant waar de
 meeste roadmap-aandacht naartoe gaat.
 
+## Besluiten (23-08)
+
+**Onboarding Transdev-tenant — vastgesteld.** De eigenaar nodigt zichzelf
+(`kees@transdev.nl`) als platformbeheerder uit als tenant-admin voor de
+Transdev-tenant, via het bestaande uitnodigingstoken-mechanisme
+(`src/auth/uitnodigingstoken.ts`, migratie 0024). Geen nieuwe code nodig:
+een platformbeheerder genereert een uitnodiging, de ontvanger klikt de
+link, logt in bij Entra External ID met dat adres, en de eerste login
+koppelt automatisch aan de membership — dat patroon bestaat al en is niet
+specifiek voor deze pilot. Zo ook voor andere Transdev-collega's die
+tijdens de pilot tokens moeten kunnen versturen.
+
+**#76 (SMTP per tenant) en OV-9 in #15 vervallen voor de pilot.** MCM2
+verstuurt platform-breed al via Resend
+(`Van: Transdev via MCM2 <uitvraag@mcm2mail.nl>`,
+`Reply-To: <tenant-antwoordadres>`) — zie `src/mail/resend-mail-kanaal.ts`.
+Zet het tenant-antwoordadres op `contractmanagement@transdev.nl` en
+antwoorden van leveranciers komen daar vanzelf terecht. Er is geen eigen
+SMTP-verbinding tot een `transdev.nl`-mailbox nodig — dat was precies de
+vraag die als OV-9 openstond.
+
+**Onbevestigd, te checken bij de eerste testlogin (geen codevraag):** of
+Entra External ID zonder extra configuratie elk domein bij self-service
+signup accepteert. Geen aanwijzing in de repo dat er een domein-restrictie
+staat, maar niet gemeten — bevestigen bij `kees@transdev.nl`'s eerste
+login in plaats van aannemen.
+
 ## Wat de pilot nodig heeft — een voorlopige lijst
 
 Dit is geen uitputtende lijst maar een eerste aanzet, bedoeld om samen
@@ -62,10 +89,10 @@ al zichtbaar is vanuit bestaande, deels al open issues:
 | Backup onafhankelijk van de ontwikkellaptop | Open, al pilot-gelabeld | #58 |
 | Vragenlijst toont geen contact-/afzenderinfo voor de leverancier | Open | #153 |
 | Uitnodigingen versturen — handpicked en in bulk | Open | #77 |
-| E-mailinstellingen (SMTP) per tenant | Open | #76 |
+| ~~E-mailinstellingen (SMTP) per tenant~~ | **Vervallen (23-08)** — zie besluiten boven | #76 |
 | Backup/restore-test daadwerkelijk uitgevoerd | Open | #19 |
 | Logging/monitoring-basislaag vóór de pilot | Open | #17 |
-| Resterende open Transdev-klantvragen (OV-4, OV-6 t/m OV-9) | Open | #15 |
+| Resterende open Transdev-klantvragen (OV-4, OV-6, OV-7, OV-8) | Open — OV-9 vervalt, zie besluiten boven | #15 |
 
 Wat nog **niet** als issue bestaat en wel relevant lijkt voor de pilot,
 puur op basis van "wat ziet een leverancier voor het eerst":
