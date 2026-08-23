@@ -8,7 +8,7 @@ import { Controller, Get } from '@nestjs/common';
  * *bedoelde* te starten, niemand weet wat er *staat*. Op 2026-08-10 draaide
  * saxombp dagenlang oudere code dan main zonder dat iets dat kon melden.
  *
- * Drie velden, twee herkomsten:
+ * Vier velden, drie herkomsten:
  *
  *   commit / gebouwdOp   In het image gebakken door CI (build-args in
  *                        ci.yml). Kunnen na het bouwen niet meer veranderen —
@@ -21,6 +21,14 @@ import { Controller, Get } from '@nestjs/common';
  *                        deploy/docker-compose.omgeving.yml — de frontend
  *                        heeft geen eigen meldpunt, dus dit endpoint geeft
  *                        ook diens digest door.
+ *   omgeving             Welke omgeving dit is (acceptatie/staging/productie/
+ *                        lokale-demo) — meegegeven door `deploy.js` resp.
+ *                        `demo-stack.js` bij het starten. Toegevoegd 2026-08-23
+ *                        zodat de frontend browsercontrole (lokale demo,
+ *                        staging via het sub-pad) van elkaar kan
+ *                        onderscheiden, iets wat commit/imageDigest niet
+ *                        laten zien — twee omgevingen kunnen precies dezelfde
+ *                        code draaien.
  *
  * `null` betekent: niet meegekregen. Dat is een geldige uitkomst (lokale
  * ontwikkelbuild, oude uitrol van vóór deze meting) en hoort zichtbaar te
@@ -37,6 +45,7 @@ export class HealthController {
       gebouwdOp: process.env.BUILD_TIJDSTIP ?? null,
       imageDigest: process.env.IMAGE_DIGEST ?? null,
       frontendImageDigest: process.env.FRONTEND_IMAGE_DIGEST ?? null,
+      omgeving: process.env.OMGEVING ?? null,
     };
   }
 }

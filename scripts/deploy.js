@@ -425,6 +425,7 @@ function start(omgeving, versie, frontendVersie, digests = {}) {
     `export FRONTEND_IMAGE=$(grep '^GHCR_FRONTEND=' ${omgeving.naam}.env | cut -d= -f2):${frontendVersie}`,
     `export IMAGE_DIGEST='${digests.api || ''}'`,
     `export FRONTEND_IMAGE_DIGEST='${digests.frontend || ''}'`,
+    `export OMGEVING='${omgeving.naam}'`,
     `docker compose --env-file ${omgeving.naam}.env -p ${omgeving.project} ${db} up -d ${schaal}`.trim(),
   ].join(' && ');
 

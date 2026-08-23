@@ -29,7 +29,7 @@ describe('HealthController (e2e)', () => {
       });
   });
 
-  // De vier velden bestaan altijd, ook zonder waarde. Een veld dat pas
+  // De vijf velden bestaan altijd, ook zonder waarde. Een veld dat pas
   // verschijnt wanneer het gevuld is, is voor verify-omgevingen.js niet te
   // onderscheiden van een oud image dat het veld nog niet kent — en dat
   // onderscheid is precies waarvoor deze velden bestaan.
@@ -43,6 +43,7 @@ describe('HealthController (e2e)', () => {
           'gebouwdOp',
           'imageDigest',
           'frontendImageDigest',
+          'omgeving',
         ]) {
           expect(res.body).toHaveProperty(veld);
         }
