@@ -2,6 +2,65 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-23 — de vier UI-punten van "21 augustus III" gebouwd:
+leveranciersscherm herzien (badge-strip, twee kolommen, modal, uitklapbare
+contractrij, wachtlijst-label, urgentiekleur). Beide branches gepusht, PR
+#15 (frontend) open.**
+
+Vervolg op de sessie van 22-08. Brainstorm begon met een expliciete
+vergelijking met MVM_V2 (`vendors/[id]/page.tsx`, `VendorContactsPanel.tsx`)
+op verzoek van de eigenaar — dat leverde twee koerswijzigingen op t.o.v. het
+oorspronkelijke idee: **modal in plaats van fold-out** voor
+contactpersoon-toevoegen (MVM_V2's patroon), en een heroverweging van
+Contract 360 als eigen toppagina — bewust **niet** nu gebouwd, vastgelegd als
+issue #173 voor later.
+
+Tijdens het ontwerpgesprek bracht de eigenaar een vijfde eis in die niet in
+de oorspronkelijke vier punten stond: zichtbare urgentie voor aflopende
+contracten, vanwege het reële schaderisico van stilzwijgende verlenging. Het
+volledige mechanisme (opzegtermijn-veld + "verlengt automatisch"-
+waarschuwing) vraagt een nieuw databaseveld en is vastgelegd als **issue
+#174 — front+backend, expliciet als eerstvolgende stap na deze sessie**. Wat
+nu wél gebouwd is: kleurgecodeerde einddatum (grijs/oranje/rood, 90/30-
+dagendrempel) als tussenoplossing.
+
+**Spec en plan geschreven en gecommit** op `docs/contractmanagement-design`
+(backend-repo): `docs/superpowers/specs/2026-08-23-leveranciersscherm-
+dichtheid-design.md`, `docs/superpowers/plans/2026-08-23-leveranciersscherm-
+dichtheid.md`.
+
+**Implementatie** (inline, negen taken) op `feat/contractmanagement-scherm`
+(frontend-repo): het 1913-regelige `page.tsx` opgesplitst in
+`Stamgegevens.tsx`, `ClassificatieBadges.tsx`, `ContactpersoonModal.tsx`,
+`Contactpersonen.tsx`, `Contracten.tsx`, `contractUrgentie.ts` — elk met een
+eigen, enkelvoudige verantwoordelijkheid.
+
+**Vier echte bugs gevonden en gefixt tijdens de e2e-verificatie**
+(systematisch gedebugd, root cause per fout, geen symptoombestrijding):
+veldfout-matching in drie nieuwe componenten matchte kaal op
+`contactNaam`/`contactEmail`/`name`, terwijl de backend `'Naam'`/
+`'contact.email'` gooit — het origineel loste dit op via een gedeelde
+`hoortBij()`-aliasfunctie die niet was overgenomen, nu per bestand hersteld.
+Plus een onbedoelde tekstwijziging in de verwijderbevestiging
+(`'Ja'/'Nee'` i.p.v. het originele `'Ja, verwijderen'/'Annuleren'`) en een
+gemist testpad na het uitklapbaar maken van de contractrij.
+
+**Volledige verificatie gedraaid** op verzoek van de eigenaar ("doe met de
+frontend hetzelfde als met de backend"): `typecheck`, `lint` (0 warnings),
+`format:check` alle drie schoon; volledige e2e-suite tegen de demo-stack: 71
+passed, 4 failed, 5 skipped. De vier faalgevallen zijn bevestigd
+niet-gerelateerd (cross-suite-interferentie op de gegroeide demo-database,
+plus een al bekende pre-existing fout — zie #83, becommentarieerd vandaag).
+
+**Preview door de eigenaar bekeken en akkoord bevonden** vóór de PR werd
+aangemaakt. Beide branches (backend en frontend) vandaag voor het eerst
+gepusht; **PR #15** open op MCM2-frontend. Backend-branch
+(`docs/contractmanagement-design`) is documentatie-only bovenop het al
+eerder gebouwde datamodel van 22-08 — nog geen eigen PR, zie "Eerstvolgende
+goedgekeurde stap".
+
+---
+
 **2026-08-22 — contractmanagement gebouwd (backend + frontend), sessie
 bewust vroeg gestopt op "UI needs work"; §1c toegevoegd aan MCM2-CLAUDE.md
 na vergelijking met MVM_V2.**
@@ -2117,6 +2176,19 @@ Transdev Vendor IT Compliance Survey als eerste verticale MVP-slice.
 
 ## Actieve blokkades
 
+- **NIET BLOKKEREND (2026-08-23) — e2e-cross-suite-interferentie op de
+  demo-database, bevestigd, niet vandaag ontstaan.** Een volledige
+  `npm run demo:test`-run gaf 4 faalgevallen naast de 71 die slaagden:
+  `e2e/uitnodigen.spec.ts:323` (pre-existing, zie #83 — de vorige test
+  start een ronde die het overzicht niet betrouwbaar toont) en 3 gevallen
+  in `e2e/beheer-leveranciers.spec.ts` die bij isolatie alle drie slagen
+  (de leverancierslijst is gegroeid door eerdere testruns in dezelfde
+  sessie, waardoor aantalsverwachtingen niet meer kloppen). Comment
+  toegevoegd op #83 met de details. Blokkeert PR #15
+  (MCM2-frontend) niet: geen van de vier faalgevallen raakt de gewijzigde
+  bestanden, en CI draait tegen een verse wegwerpdatabase waar dit
+  patroon niet optreedt.
+
 - **OPGELOST 2026-08-07, ochtend — het CI-gat is gedicht.** GitHub Actions stond weer op
   `operational`, waarna de vijf wachtende PR's stuk voor stuk met een groene run zijn gemerged.
   De Docker-productiebuild en de RLS tenant-isolatietest hebben `main` daarmee weer gezien,
@@ -2560,6 +2632,43 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 ## Huidige branch en Git-status
 
+**Stand op 2026-08-23** (geverifieerd met `git status` en `git branch -vv` in
+beide repo's, ná de sessie leveranciersscherm-dichtheid):
+
+| Repo | Branch | Werkboom | Gepusht |
+|---|---|---|---|
+| MCM2 | `main` | schoon, op `888d56b` | ja |
+| MCM2 | `docs/contractmanagement-design` | schoon, 18 commits vóór `main` | **ja, vandaag voor het eerst** |
+| MCM2-frontend | `main` | schoon, op `b774463` | ja |
+| MCM2-frontend | `feat/contractmanagement-scherm` | schoon, 12 commits vóór `main` | **ja, vandaag voor het eerst** |
+
+**Twee openstaande branches, allebei vandaag voor het eerst gepusht en van een
+open PR voorzien:**
+
+- **`docs/contractmanagement-design`** (backend, MCM2) — spec
+  (`2026-08-23-leveranciersscherm-dichtheid-design.md`) en plan
+  (`2026-08-23-leveranciersscherm-dichtheid.md`) voor de UI-herziening.
+  Bevat ook het eerder gebouwde contractmanagement-datamodel (migraties
+  0027/0028) uit de sessie van 22-08. Zuiver documentatie op deze branch,
+  geen backend-codewijziging vandaag. **Nog geen PR** — dit is
+  documentatie-only en hoeft niet per se een eigen PR te krijgen vóór de
+  frontend-PR gemerged is; zie "Eerstvolgende goedgekeurde stap".
+- **`feat/contractmanagement-scherm`** (frontend, MCM2-frontend) — de
+  daadwerkelijke implementatie: badge-strip, twee kolommen,
+  `ContactpersoonModal`, uitklapbare contractrij, wachtlijst-label,
+  urgentiekleur. **PR #15** open:
+  <https://github.com/AlingAdvies/MCM2-frontend/pull/15>. Preview door de
+  eigenaar bekeken en akkoord bevonden vóór de PR werd aangemaakt.
+
+**Verificatie vóór de PR** (conform §10 CI-verplichtingen, handmatig
+gedraaid omdat er geen `verify:volledig`-equivalent in MCM2-frontend
+bestaat): `typecheck`, `lint` (0 warnings) en `format:check` alle drie
+schoon; volledige e2e-suite tegen de demo-stack 71 passed / 4 failed / 5
+skipped. De vier faalgevallen zijn bevestigd niet-gerelateerd aan deze
+wijziging — zie "Actieve blokkades" hieronder en de comment op #83.
+
+---
+
 **Stand op 2026-08-04, ochtend** (geverifieerd met `git status` en `git branch -a`):
 
 | Repo | Branch | Werkboom | Gepusht |
@@ -2634,6 +2743,27 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 ## Eerstvolgende goedgekeurde stap
 
+**Stand 2026-08-23.** In deze volgorde, zoals besproken met de eigenaar:
+
+1. **PR #15 (MCM2-frontend) beoordelen en mergen of bewust parkeren.**
+   Preview al bekeken en akkoord bevonden; wacht op de merge/parkeer-keuze
+   van de eigenaar volgens het git-ritueel.
+2. **`docs/contractmanagement-design` (backend) afhandelen** — bevat
+   uitsluitend documentatie (spec + plan) bovenop het al eerder gebouwde
+   contractmanagement-datamodel van 22-08. Zelfde merge/parkeer-vraag als
+   bij de frontend-branch.
+3. **Issue #174 — opzegtermijn-veld + waarschuwing (front+backend), direct
+   hierna.** Expliciet door de eigenaar als eerstvolgende prioriteit
+   aangewezen: reëel schaderisico van stilzwijgende contractverlenging.
+4. **Issue #173 — Contract 360 als eigen toppagina.** Later, apart
+   traject; bewust niet meegenomen in de huidige UI-ronde.
+5. **"21 augustus II" punt 1+2** (issues #171, #172: contracten in de
+   linkerbalk, dashboard-hernoeming + 90-dagen-widget) — ander deel van
+   het scherm/de navigatie, staat los van de bovenstaande volgorde.
+
+<details>
+<summary>Vorige eerstvolgende stap (2026-08-04, inmiddels ver voorbij — laten staan als historie)</summary>
+
 **Stand 2026-08-04.** Twee dingen, in deze volgorde:
 
 1. ~~**De backupcontrole inrichten**~~ — **gedaan op 2026-08-04.** Credentials, beide taken, testbericht aangekomen, beide taken via Taakplanner gedraaid.
@@ -2646,6 +2776,8 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 - **#78** — het besluit over welke rol de backup maakt. Nu feitelijk de `postgres`-rol met `BYPASSRLS`, zonder dat dat ergens als besluit staat.
 - **#19** — de hersteltest moet over. Die van 30 juli draaide tegen negen tabellen en bewees dus het herstelpad, niet de compleetheid. De backupcontrole doet dit inmiddels wekelijks, wat het issue grotendeels afdekt.
 - **#83** — gearchiveerde testrondes stapelen op in de demo-database. De e2e-suite archiveert ze (verwijderen kan niet en hoort ook niet te kunnen), maar ze blijven in de lijst staan. Logisch moment om aan te pakken is fase C, want dan wordt het rondeoverzicht toch herzien.
+
+</details>
 
 <details>
 <summary>Vorige eerstvolgende stap (2026-07-31, inmiddels uitgevoerd)</summary>
