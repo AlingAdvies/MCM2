@@ -21,6 +21,8 @@ export interface ContractSamenvatting {
   contractId: string;
   name: string;
   contractNumber: string | null;
+  vendorContactId: string | null;
+  ownerUserId: string | null;
   statusCode: string | null;
   startDate: string | null;
   endDate: string | null;
@@ -92,6 +94,8 @@ interface ContractRij extends Record<string, unknown> {
   contract_id: string;
   name: string;
   contract_number: string | null;
+  vendor_contact_id: string | null;
+  owner_user_id: string | null;
   status_code: string | null;
   start_date: string | null;
   end_date: string | null;
@@ -152,7 +156,8 @@ export class ContractService {
       tenantId,
       async (tx) => {
         const resultaat = await tx.execute<ContractRij>(
-          sql`SELECT c.contract_id, c.name, c.contract_number, c.status_code,
+          sql`SELECT c.contract_id, c.name, c.contract_number,
+                     c.vendor_contact_id, c.owner_user_id, c.status_code,
                      c.start_date, c.end_date, c.created_at,
                      c.notice_period_days, c.warning_days_before, c.auto_renews,
                      vc.full_name AS vendor_contact_naam,
@@ -168,6 +173,8 @@ export class ContractService {
           contractId: r.contract_id,
           name: r.name,
           contractNumber: r.contract_number,
+          vendorContactId: r.vendor_contact_id,
+          ownerUserId: r.owner_user_id,
           statusCode: r.status_code,
           startDate: r.start_date,
           endDate: r.end_date,

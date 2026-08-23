@@ -217,6 +217,39 @@ describe('Contractroutes (e2e)', () => {
     expect(lijst.length).toBeGreaterThan(0);
   });
 
+  it('de lijst bevat vendorContactId en ownerUserId, niet alleen de namen', async () => {
+    // Regressietest: ContractSamenvatting had tot 2026-08-23 wel de namen
+    // (vendorContactNaam, ownerGebruikerNaam) maar niet de id's, waardoor
+    // het bewerkformulier in de frontend de dropdowns niet kon voorinvullen
+    // — de waarde kwam wel op het scherm te staan (via de naam), maar de
+    // <select> kon 'm niet matchen zonder de id.
+    const contact = await request(server)
+      .post(`/vendors/${vendorId}/contacts`)
+      .set('Cookie', adminCookie)
+      .send({ fullName: 'Lijst-test contact' });
+    const contactId = (contact.body as { contactId: string }).contactId;
+
+    const aangemaakt = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Lijst-test contract', vendorContactId: contactId });
+
+    const respons = await request(server)
+      .get(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie);
+
+    const lijst = (
+      respons.body as {
+        contracten: { contractId: string; vendorContactId: string | null }[];
+      }
+    ).contracten;
+    const gevonden = lijst.find(
+      (c) => c.contractId === (aangemaakt.body as { contractId: string }).contractId,
+    );
+
+    expect(gevonden?.vendorContactId).toBe(contactId);
+  });
+
   it('reviewer kan de lijst wél lezen (alleen schrijven is geblokkeerd)', async () => {
     const respons = await request(server)
       .get(`/vendors/${vendorId}/contracts`)
