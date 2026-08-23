@@ -244,7 +244,8 @@ describe('Contractroutes (e2e)', () => {
       }
     ).contracten;
     const gevonden = lijst.find(
-      (c) => c.contractId === (aangemaakt.body as { contractId: string }).contractId,
+      (c) =>
+        c.contractId === (aangemaakt.body as { contractId: string }).contractId,
     );
 
     expect(gevonden?.vendorContactId).toBe(contactId);
@@ -346,9 +347,9 @@ describe('Contractroutes (e2e)', () => {
       });
 
     expect(respons.status).toBe(201);
-    expect((respons.body as { noticePeriodDays: number }).noticePeriodDays).toBe(
-      90,
-    );
+    expect(
+      (respons.body as { noticePeriodDays: number }).noticePeriodDays,
+    ).toBe(90);
     expect(
       (respons.body as { warningDaysBefore: number }).warningDaysBefore,
     ).toBe(30);
@@ -368,7 +369,9 @@ describe('Contractroutes (e2e)', () => {
     expect(
       (respons.body as { noticePeriodDays: number | null }).noticePeriodDays,
     ).toBeNull();
-    expect((respons.body as { autoRenews: string | null }).autoRenews).toBeNull();
+    expect(
+      (respons.body as { autoRenews: string | null }).autoRenews,
+    ).toBeNull();
   });
 
   it('weigert een ongeldige autoRenews-waarde', async () => {
@@ -378,7 +381,9 @@ describe('Contractroutes (e2e)', () => {
       .send({ name: 'Hosting', autoRenews: 'misschien' });
 
     expect(respons.status).toBe(400);
-    expect((respons.body as { veld: string }).veld).toBe('Verlengt automatisch');
+    expect((respons.body as { veld: string }).veld).toBe(
+      'Verlengt automatisch',
+    );
   });
 
   it('admin kan autoRenews wijzigen op een bestaand contract', async () => {

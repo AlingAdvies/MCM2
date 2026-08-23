@@ -148,7 +148,9 @@ function optioneelAutoRenews(waarde: unknown, veld: string): string | null {
 
   if (
     typeof waarde !== 'string' ||
-    !AUTO_RENEWS_WAARDEN.includes(waarde as (typeof AUTO_RENEWS_WAARDEN)[number])
+    !AUTO_RENEWS_WAARDEN.includes(
+      waarde as (typeof AUTO_RENEWS_WAARDEN)[number],
+    )
   ) {
     throw new InvoerFout(veld, `${veld} moet ja, nee of onbekend zijn.`);
   }
@@ -263,8 +265,10 @@ export function leesContractWijziging(body: unknown): ContractWijziging {
     // Geen NULL-betekenis voor dit veld — de kolom is NOT NULL DEFAULT 90.
     // Leeg meesturen valt terug op 90, net als bij aanmaken.
     wijziging.warningDaysBefore =
-      optioneelPositiefGeheelGetal(ruw.warningDaysBefore, 'Waarschuwingstermijn') ??
-      90;
+      optioneelPositiefGeheelGetal(
+        ruw.warningDaysBefore,
+        'Waarschuwingstermijn',
+      ) ?? 90;
   }
   if ('autoRenews' in ruw) {
     wijziging.autoRenews = optioneelAutoRenews(

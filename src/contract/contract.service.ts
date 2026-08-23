@@ -310,9 +310,7 @@ export class ContractService {
           zetten.push(sql`note = ${leegIsNull(wijziging.note)}`);
         }
         if (wijziging.noticePeriodDays !== undefined) {
-          zetten.push(
-            sql`notice_period_days = ${wijziging.noticePeriodDays}`,
-          );
+          zetten.push(sql`notice_period_days = ${wijziging.noticePeriodDays}`);
         }
         if (wijziging.warningDaysBefore !== undefined) {
           zetten.push(
