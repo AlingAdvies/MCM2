@@ -1,8 +1,11 @@
 # Roadmap — Vendor IT survey en contractmanagement
 
-**Type:** roadmap — overzicht; elk punt heeft een gekoppeld GitHub issue (§2–§4)
+**Type:** roadmap — overzicht; de meeste punten hebben een gekoppeld GitHub
+issue (§2–§4, §6); §7 verwijst naar een uitgewerkte spec i.p.v. een los
+issue, §8 is bewust nog geen issue (zie daar waarom)
 **Eigenaar:** de eigenaar (Chris)
-**Opgesteld:** 2026-08-21, uit `docs/opmerkingen Vendor IT survey.txt`
+**Opgesteld:** 2026-08-21, uit `docs/opmerkingen Vendor IT survey.txt`;
+bijgewerkt 2026-08-22 met de 21-08-vervolgpunten
 **Geldt voor:** MCM2 in generieke zin — niet Transdev-specifiek, ook al zijn de
 opmerkingen ontstaan tijdens het testen met Transdev als eerste echte tenant.
 **Criticality:** productieapp voor een echte klant. Volgorde binnen deze
@@ -100,6 +103,11 @@ bewust intern.
 **Bevestigd in productie (21-08):** gemerged via
 AlingAdvies/MCM2-frontend#14, doorgelopen via staging, uitgerold naar
 `clm.alingadvies.nl`, met eigen ogen bekeken door de eigenaar.
+
+**Vervolgwens (21-08, nieuwe opmerking) → [#170](https://github.com/AlingAdvies/MCM2/issues/170):**
+de uitgeklapte weergave uit #154 werkt goed; twee kolommen erbij gevraagd —
+vendornaam en e-mailadres van de gebruikte contactpersoon. Vermoedelijk
+weer een puur frontend-wijziging, net als #154 zelf.
 
 ### 2.3 Nieuwe feature: vragenlijst-bouwer → [#155](https://github.com/AlingAdvies/MCM2/issues/155)
 
@@ -273,6 +281,7 @@ statusbord:
 | [#160](https://github.com/AlingAdvies/MCM2/issues/160) | §3.5 — bulk-upload contracten | Bij stap 3, na §3.3 (hergebruikt de mechaniek) |
 | [#159](https://github.com/AlingAdvies/MCM2/issues/159) | §3.4 — leverancierstype aanvinken | Bij stap 3, kleine UI-uitbreiding |
 | [#161](https://github.com/AlingAdvies/MCM2/issues/161) | §3.6 — compliance-status koppeling | Open vraag, geen datum — eerst besluiten wat het moet worden |
+| [#170](https://github.com/AlingAdvies/MCM2/issues/170) | §2.2 (vervolg) — kolommen in uitklaplijst | Bij stap 1, kleine UI-uitbreiding op #154 |
 
 **Wat dit document bewust niet doet:** de volgorde hierboven als vaststaand
 behandelen. Het is een voorstel; de eigenaar bepaalt de daadwerkelijke
@@ -280,9 +289,62 @@ volgorde via het statusbord en de issues zelf.
 
 ---
 
+## 7. Contractmanagement — datamodel uitgewerkt → spec
+
+De opmerking van 21-08 (punt 2) over contactpersoon-per-contract en de
+survey-koppeling (§3.2/#157 hierboven) is op 22-08 via een brainstorm-sessie
+uitgewerkt tot een volledig datamodel-ontwerp:
+`docs/superpowers/specs/2026-08-22-contractmanagement-design.md`. Dat
+document dekt #156 en #157 in samenhang — een nieuwe `clm.contract`-tabel,
+statusmodel, en de koppeling met vragenlijst-templates. Zie dat document voor
+de details; dit punt blijft hier alleen als verwijzing zodat de roadmap niet
+opnieuw "nog een ontwerpstap nodig" meldt voor iets dat al ontworpen is.
+
+**Notitieveld bij contactpersoon (21-08, punt 2b):** bleek bij het uitwerken
+al te bestaan als `vendor_contact.role_description` — alleen nog niet
+zichtbaar in de UI. Geen apart issue, wordt meegenomen in de
+contractmanagement-implementatie. Zie de spec §1 voor detail.
+
+### 7.1 Vervolgwensen ná de preview (21-08 II) → [#171](https://github.com/AlingAdvies/MCM2/issues/171), [#172](https://github.com/AlingAdvies/MCM2/issues/172)
+
+Bij het bekijken van de eerste preview van de Contracten-sectie (22-08)
+kwamen vier nieuwe punten naar boven. Twee daarvan (contactpersoon en
+survey-koppeling direct bij het aanmaken van een contract) waren klein
+genoeg om nog in dezelfde bouwronde mee te nemen — zie
+`docs/superpowers/plans/2026-08-22-contractmanagement-ui.md`, uitgebreid
+met een Task 12. De andere twee raken schermen buiten het
+vendor-detailscherm (sidebar, startscherm) en zijn losse issues geworden:
+
+- [#171](https://github.com/AlingAdvies/MCM2/issues/171) — Contracten ook
+  in de linkerbalk/navigatie opnemen, niet alleen bereikbaar via een
+  leverancier.
+- [#172](https://github.com/AlingAdvies/MCM2/issues/172) — "Start"
+  hernoemen naar "Dashboard", met een overzicht van contracten die binnen
+  90 dagen verlopen (ook zonder ingevulde status).
+
+## 8. Productidee: (intake)leveranciersbeoordeling o.b.v. Z-CERT-vragenlijst
+
+**Bevinding (21-08, uit de opmerkingen):** een productidee, geen uitgewerkte
+feature — een leveranciersbeoordeling bij de intake van een nieuwe
+leverancier, gebaseerd op de Z-CERT excel-vragenlijst (een bestaande
+sectorstandaard-vragenlijst voor IT-risicobeoordeling van leveranciers,
+gebruikt in de zorgsector).
+
+**Status:** puur een idee, nog niet besproken op scope, doel of verhouding
+tot de bestaande acht Transdev-vragen. Geen issue — dat zou voorbarig zijn
+zolang niet vastligt of dit een aparte vragenlijst-template wordt (past dan
+onder #155, de vragenlijst-bouwer), een uitbreiding van de intake-flow, of
+iets anders. Terugkomen zodra stap 1 (goede basisvragenlijst) en de
+vragenlijst-bouwer verder gevorderd zijn — dit idee leunt op beide.
+
+---
+
 ## Bronnen
 
 - `docs/opmerkingen Vendor IT survey.txt` — de oorspronkelijke, ruwe notities
+  (20 en 21 augustus)
+- `docs/superpowers/specs/2026-08-22-contractmanagement-design.md` — het
+  datamodel-ontwerp voor #156/#157, zie §7
 - `docs/superpowers/specs/2026-08-04-beheermenu-tenantinstellingen.md` — het beheermenu waar §2.1, §4.1 en de #75/#76/#77-issues in landen
 - Issue #24 — de bewuste later-lijst voor bredere modules
 - Issue #77 — bulk/handpicked uitnodigingen, met de nog openstaande criteriavraag

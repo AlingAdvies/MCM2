@@ -96,6 +96,19 @@ export const TEST_IDS = {
     andereTenant: id('8f'),
     andereUser: id('80'),
   },
+  'contract-routes': {
+    tenant: id('25'),
+    adminUser: id('26'),
+    reviewerUser: id('27'),
+    andereTenant: id('28'),
+    andereUser: id('29'),
+  },
+  'tenant-gebruikers': {
+    tenant: id('2a'),
+    adminUser: id('2b'),
+    reviewerUser: id('2c'),
+    andereTenant: id('2d'),
+  },
   'tenant-context-guard': {
     tenantA: id('9a'),
     tenantB: id('9b'),
@@ -156,6 +169,9 @@ export const TEST_IDS = {
     vendor3: '00000000-0000-0000-0000-0000000000cf',
     vendorB: '00000000-0000-0000-0000-0000000000d4',
     vendorWeg: '00000000-0000-0000-0000-0000000000d5',
+    contract1: id('2e'),
+    /** Bewust nergens aangemaakt — gebruikt om "bestaat niet" te toetsen. */
+    onbestaand: id('2f'),
   },
   // Fase C2 — beoordelen. Staarten d6 t/m db; da is al vergeven, vandaar de
   // sprong. Gecontroleerd tegen alleTestIds(), niet gegokt.

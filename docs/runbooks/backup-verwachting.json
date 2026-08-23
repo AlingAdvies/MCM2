@@ -13,10 +13,12 @@
     "",
     "Zie docs/superpowers/specs/2026-08-04-backupcontrole-en-signalering.md, paragraaf 4."
   ],
-  "bijgewerkt": "2026-08-13",
-  "migratiestand": "0026_tenantregister",
+  "bijgewerkt": "2026-08-22",
+  "migratiestand": "0028_contract_survey_wachtlijst",
   "tabellen": [
     "audit.audit_event",
+    "clm.contract",
+    "clm.contract_survey_template",
     "clm.omgeving",
     "clm.platform_admin",
     "clm.response_note",
@@ -39,6 +41,7 @@
     "clm.vendor_tag",
     "ref.business_criticality",
     "ref.compliance_status",
+    "ref.contract_status",
     "ref.vendor_category"
   ]
 }

@@ -71,6 +71,8 @@ export interface NieuweRonde {
   /** Wanneer de ronde sluit. Null betekent: geen sluitdatum. */
   closesAt: Date | null;
   isTest: boolean;
+  /** Op welk contract deze ronde betrekking heeft. Optioneel — zie migratie 0007. */
+  contractId: string | null;
 }
 
 export interface Uitnodigingen {
@@ -128,6 +130,10 @@ export function leesNieuweRonde(body: unknown): NieuweRonde {
     // gemarkeerd valt buiten de rapportage, en dat hoort een bewuste keuze te
     // zijn — niet het gevolg van een meegestuurde string "false".
     isTest: invoer.isTest === true,
+    contractId:
+      invoer.contractId === undefined || invoer.contractId === null
+        ? null
+        : leesUuid(invoer.contractId, 'contractId'),
   };
 }
 

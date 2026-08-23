@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { AuthModule } from '../auth/auth.module';
+import { ContractModule } from '../contract/contract.module';
 import { MailModule } from '../mail/mail.module';
 import { SurveyAuditService } from './survey-audit.service';
 import { SurveyResponseController } from './survey-response.controller';
@@ -40,7 +41,7 @@ import { VragenlijstLeesService } from './vragenlijst-lezen.service';
  * maar krijgt niemand ze — dat was de stand tot 2026-08-06.
  */
 @Module({
-  imports: [AuthModule, MailModule],
+  imports: [AuthModule, MailModule, ContractModule],
   controllers: [SurveyResponseController, VragenlijstBeheerController],
   providers: [
     SurveyAuditService,

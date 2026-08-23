@@ -105,6 +105,7 @@ export interface RondeGestart {
   surveyKind: string;
   isTest: boolean;
   closesAt: string | null;
+  contractId: string | null;
 }
 
 interface RunRij extends Record<string, unknown> {
@@ -115,6 +116,7 @@ interface RunRij extends Record<string, unknown> {
   survey_kind: string;
   is_test: boolean;
   closes_at: Date | string | null;
+  contract_id: string | null;
 }
 
 interface VendorRij extends Record<string, unknown> {
@@ -182,15 +184,30 @@ export class RondeBeheerService {
           });
         }
 
+        // Bestaat het contract, als er een is meegestuurd? RLS filtert
+        // automatisch op tenant — een contract van een andere tenant levert
+        // hier gewoon nul rijen op, niet een lek.
+        if (invoer.contractId) {
+          const contracten = await tx.execute<{ contract_id: string }>(
+            sql`SELECT contract_id FROM clm.contract
+               WHERE contract_id = ${invoer.contractId}
+                 AND deleted_at IS NULL`,
+          );
+
+          if (contracten.rows.length === 0) {
+            throw new NotFoundException('Dit contract bestaat niet.');
+          }
+        }
+
         const aangemaakt = await tx.execute<RunRij>(
           sql`INSERT INTO clm.survey_run
                   (tenant_id, template_id, survey_kind, status, closes_at,
-                   is_test)
+                   is_test, contract_id)
               VALUES (${tenantId}, ${invoer.templateId}, ${invoer.surveyKind},
                       'draft', ${invoer.closesAt?.toISOString() ?? null},
-                      ${invoer.isTest})
+                      ${invoer.isTest}, ${invoer.contractId})
               RETURNING run_id, template_id, status, survey_kind, is_test,
-                        closes_at`,
+                        closes_at, contract_id`,
         );
 
         const r = aangemaakt.rows[0];
@@ -203,6 +220,7 @@ export class RondeBeheerService {
           surveyKind: r.survey_kind,
           isTest: r.is_test,
           closesAt: iso(r.closes_at),
+          contractId: r.contract_id,
         };
       },
       'medewerker',
@@ -233,7 +251,8 @@ export class RondeBeheerService {
       async (tx) => {
         const huidige = await tx.execute<RunRij>(
           sql`SELECT r.run_id, r.template_id, t.name AS template_naam,
-                     r.status, r.survey_kind, r.is_test, r.closes_at
+                     r.status, r.survey_kind, r.is_test, r.closes_at,
+                     r.contract_id
                 FROM clm.survey_run r
                 JOIN clm.survey_template t ON t.template_id = r.template_id
                WHERE r.run_id = ${runId}`,
@@ -266,7 +285,7 @@ export class RondeBeheerService {
                  SET status = ${nieuweStatus}
                WHERE run_id = ${runId}
               RETURNING run_id, template_id, status, survey_kind, is_test,
-                        closes_at`,
+                        closes_at, contract_id`,
         );
 
         return this.naarGestart({
@@ -478,6 +497,7 @@ export class RondeBeheerService {
       surveyKind: r.survey_kind,
       isTest: r.is_test,
       closesAt: iso(r.closes_at),
+      contractId: r.contract_id,
     };
   }
 }
