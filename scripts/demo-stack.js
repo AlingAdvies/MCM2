@@ -420,6 +420,10 @@ function backendStarten() {
       // gevolg is een 401 die zwijgt over de oorzaak.
       SESSIE_COOKIE_INSECURE: 'true',
       PORT: String(API_POORT),
+      // Meldt /health terug (health.controller.ts) — zodat de sidebar de
+      // lokale demo van staging/acceptatie kan onderscheiden, ook al draaien
+      // ze soms exact dezelfde code.
+      OMGEVING: 'lokale-demo',
     },
   });
 

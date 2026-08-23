@@ -78,6 +78,9 @@ services:
       # ontbreekt in plaats van dat er niets afwijkt.
       IMAGE_DIGEST: ${IMAGE_DIGEST:-}
       FRONTEND_IMAGE_DIGEST: ${FRONTEND_IMAGE_DIGEST:-}
+      # Welke omgeving dit is (acceptatie/staging/productie), gezet door
+      # deploy.js. Meldt /health terug — zie health.controller.ts.
+      OMGEVING: ${OMGEVING:-}
       # Waar de database staat. Vóór 2026-08-11 stond hier een vaste
       # connectiestring naar de `db`-service hierboven; dat kon niet meer toen
       # staging erbij kwam, want die praat met Supabase.
