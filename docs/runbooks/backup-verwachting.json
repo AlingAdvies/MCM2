@@ -13,8 +13,8 @@
     "",
     "Zie docs/superpowers/specs/2026-08-04-backupcontrole-en-signalering.md, paragraaf 4."
   ],
-  "bijgewerkt": "2026-08-22",
-  "migratiestand": "0028_contract_survey_wachtlijst",
+  "bijgewerkt": "2026-08-23",
+  "migratiestand": "0029_contract_opzegtermijn",
   "tabellen": [
     "audit.audit_event",
     "clm.contract",
