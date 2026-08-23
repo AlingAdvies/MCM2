@@ -68,3 +68,6 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Schermafdrukken uit browsersessies — werkmateriaal, geen broncode.
 /*.png
+
+# superpowers brainstorm-companion mockups (tijdelijk, hoort niet in git)
+.superpowers/
