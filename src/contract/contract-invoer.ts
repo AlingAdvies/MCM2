@@ -117,6 +117,47 @@ function optioneelBedrag(waarde: unknown, veld: string): string | null {
   return waarde;
 }
 
+function optioneelPositiefGeheelGetal(
+  waarde: unknown,
+  veld: string,
+): number | null {
+  if (waarde === undefined || waarde === null || waarde === '') {
+    return null;
+  }
+
+  if (typeof waarde !== 'number' && typeof waarde !== 'string') {
+    throw new InvoerFout(veld, `${veld} moet een positief geheel getal zijn.`);
+  }
+
+  const tekst = typeof waarde === 'number' ? String(waarde) : waarde.trim();
+  const getal = Number.parseInt(tekst, 10);
+
+  if (!Number.isInteger(getal) || getal < 0 || tekst !== String(getal)) {
+    throw new InvoerFout(veld, `${veld} moet een positief geheel getal zijn.`);
+  }
+
+  return getal;
+}
+
+const AUTO_RENEWS_WAARDEN = ['ja', 'nee', 'onbekend'] as const;
+
+function optioneelAutoRenews(waarde: unknown, veld: string): string | null {
+  if (waarde === undefined || waarde === null || waarde === '') {
+    return null;
+  }
+
+  if (
+    typeof waarde !== 'string' ||
+    !AUTO_RENEWS_WAARDEN.includes(
+      waarde as (typeof AUTO_RENEWS_WAARDEN)[number],
+    )
+  ) {
+    throw new InvoerFout(veld, `${veld} moet ja, nee of onbekend zijn.`);
+  }
+
+  return waarde;
+}
+
 function controleerDatumVolgorde(
   startDate: string | null,
   endDate: string | null,
@@ -141,6 +182,11 @@ export function leesNieuwContract(body: unknown): NieuwContract {
   const endDate = optioneleDatum(ruw.endDate, 'Einddatum');
   controleerDatumVolgorde(startDate, endDate);
 
+  const warningDaysBefore = optioneelPositiefGeheelGetal(
+    ruw.warningDaysBefore,
+    'Waarschuwingstermijn',
+  );
+
   return {
     name: verplichteTekst(ruw.name, 'Naam', MAX_NAAM),
     contractNumber: optioneleTekst(
@@ -155,6 +201,14 @@ export function leesNieuwContract(body: unknown): NieuwContract {
     startDate,
     endDate,
     note: optioneleTekst(ruw.note, 'Notitie', MAX_NOTITIE),
+    noticePeriodDays: optioneelPositiefGeheelGetal(
+      ruw.noticePeriodDays,
+      'Opzegtermijn',
+    ),
+    // Default 90 wanneer niet meegestuurd — elk contract heeft een
+    // waarschuwingstermijn, nooit "geen".
+    warningDaysBefore: warningDaysBefore ?? 90,
+    autoRenews: optioneelAutoRenews(ruw.autoRenews, 'Verlengt automatisch'),
   };
 }
 
@@ -200,6 +254,27 @@ export function leesContractWijziging(body: unknown): ContractWijziging {
   }
   if ('note' in ruw) {
     wijziging.note = optioneleTekst(ruw.note, 'Notitie', MAX_NOTITIE);
+  }
+  if ('noticePeriodDays' in ruw) {
+    wijziging.noticePeriodDays = optioneelPositiefGeheelGetal(
+      ruw.noticePeriodDays,
+      'Opzegtermijn',
+    );
+  }
+  if ('warningDaysBefore' in ruw) {
+    // Geen NULL-betekenis voor dit veld — de kolom is NOT NULL DEFAULT 90.
+    // Leeg meesturen valt terug op 90, net als bij aanmaken.
+    wijziging.warningDaysBefore =
+      optioneelPositiefGeheelGetal(
+        ruw.warningDaysBefore,
+        'Waarschuwingstermijn',
+      ) ?? 90;
+  }
+  if ('autoRenews' in ruw) {
+    wijziging.autoRenews = optioneelAutoRenews(
+      ruw.autoRenews,
+      'Verlengt automatisch',
+    );
   }
 
   controleerDatumVolgorde(

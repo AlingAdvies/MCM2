@@ -65,3 +65,67 @@ describe('leesNieuwContract', () => {
     ).toThrow(InvoerFout);
   });
 });
+
+describe('leesNieuwContract — opzegtermijn en verlengt-automatisch', () => {
+  it('accepteert een geldige noticePeriodDays', () => {
+    const invoer = leesNieuwContract({
+      name: 'Hosting',
+      noticePeriodDays: '90',
+    });
+    expect(invoer.noticePeriodDays).toBe(90);
+  });
+
+  it('laat noticePeriodDays leeg zonder invoer', () => {
+    const invoer = leesNieuwContract({ name: 'Hosting' });
+    expect(invoer.noticePeriodDays).toBeNull();
+  });
+
+  it('weigert een negatieve noticePeriodDays', () => {
+    expect(() =>
+      leesNieuwContract({ name: 'Hosting', noticePeriodDays: '-5' }),
+    ).toThrow(InvoerFout);
+  });
+
+  it('weigert een niet-numerieke noticePeriodDays', () => {
+    expect(() =>
+      leesNieuwContract({ name: 'Hosting', noticePeriodDays: 'abc' }),
+    ).toThrow(InvoerFout);
+  });
+
+  it('vult warningDaysBefore met 90 als het ontbreekt', () => {
+    const invoer = leesNieuwContract({ name: 'Hosting' });
+    expect(invoer.warningDaysBefore).toBe(90);
+  });
+
+  it('accepteert een expliciete warningDaysBefore', () => {
+    const invoer = leesNieuwContract({
+      name: 'Hosting',
+      warningDaysBefore: '30',
+    });
+    expect(invoer.warningDaysBefore).toBe(30);
+  });
+
+  it('weigert een negatieve warningDaysBefore', () => {
+    expect(() =>
+      leesNieuwContract({ name: 'Hosting', warningDaysBefore: '-1' }),
+    ).toThrow(InvoerFout);
+  });
+
+  it('accepteert ja/nee/onbekend voor autoRenews', () => {
+    for (const waarde of ['ja', 'nee', 'onbekend']) {
+      const invoer = leesNieuwContract({ name: 'Hosting', autoRenews: waarde });
+      expect(invoer.autoRenews).toBe(waarde);
+    }
+  });
+
+  it('laat autoRenews null zonder invoer (onbekend is de default)', () => {
+    const invoer = leesNieuwContract({ name: 'Hosting' });
+    expect(invoer.autoRenews).toBeNull();
+  });
+
+  it('weigert een ongeldige waarde voor autoRenews', () => {
+    expect(() =>
+      leesNieuwContract({ name: 'Hosting', autoRenews: 'misschien' }),
+    ).toThrow(InvoerFout);
+  });
+});

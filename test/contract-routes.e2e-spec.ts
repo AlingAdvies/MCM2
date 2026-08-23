@@ -217,6 +217,40 @@ describe('Contractroutes (e2e)', () => {
     expect(lijst.length).toBeGreaterThan(0);
   });
 
+  it('de lijst bevat vendorContactId en ownerUserId, niet alleen de namen', async () => {
+    // Regressietest: ContractSamenvatting had tot 2026-08-23 wel de namen
+    // (vendorContactNaam, ownerGebruikerNaam) maar niet de id's, waardoor
+    // het bewerkformulier in de frontend de dropdowns niet kon voorinvullen
+    // — de waarde kwam wel op het scherm te staan (via de naam), maar de
+    // <select> kon 'm niet matchen zonder de id.
+    const contact = await request(server)
+      .post(`/vendors/${vendorId}/contacts`)
+      .set('Cookie', adminCookie)
+      .send({ fullName: 'Lijst-test contact' });
+    const contactId = (contact.body as { contactId: string }).contactId;
+
+    const aangemaakt = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Lijst-test contract', vendorContactId: contactId });
+
+    const respons = await request(server)
+      .get(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie);
+
+    const lijst = (
+      respons.body as {
+        contracten: { contractId: string; vendorContactId: string | null }[];
+      }
+    ).contracten;
+    const gevonden = lijst.find(
+      (c) =>
+        c.contractId === (aangemaakt.body as { contractId: string }).contractId,
+    );
+
+    expect(gevonden?.vendorContactId).toBe(contactId);
+  });
+
   it('reviewer kan de lijst wél lezen (alleen schrijven is geblokkeerd)', async () => {
     const respons = await request(server)
       .get(`/vendors/${vendorId}/contracts`)
@@ -298,6 +332,75 @@ describe('Contractroutes (e2e)', () => {
       .set('Cookie', adminCookie);
 
     expect(opgehaald.status).toBe(404);
+  });
+
+  it('admin kan opzegtermijn, waarschuwingstermijn en verlengt-automatisch meegeven', async () => {
+    const respons = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({
+        name: 'Hosting met opzegtermijn',
+        endDate: '2027-12-31',
+        noticePeriodDays: '90',
+        warningDaysBefore: '30',
+        autoRenews: 'ja',
+      });
+
+    expect(respons.status).toBe(201);
+    expect(
+      (respons.body as { noticePeriodDays: number }).noticePeriodDays,
+    ).toBe(90);
+    expect(
+      (respons.body as { warningDaysBefore: number }).warningDaysBefore,
+    ).toBe(30);
+    expect((respons.body as { autoRenews: string }).autoRenews).toBe('ja');
+  });
+
+  it('warningDaysBefore is 90 wanneer niet meegegeven', async () => {
+    const respons = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Hosting zonder opgave' });
+
+    expect(respons.status).toBe(201);
+    expect(
+      (respons.body as { warningDaysBefore: number }).warningDaysBefore,
+    ).toBe(90);
+    expect(
+      (respons.body as { noticePeriodDays: number | null }).noticePeriodDays,
+    ).toBeNull();
+    expect(
+      (respons.body as { autoRenews: string | null }).autoRenews,
+    ).toBeNull();
+  });
+
+  it('weigert een ongeldige autoRenews-waarde', async () => {
+    const respons = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Hosting', autoRenews: 'misschien' });
+
+    expect(respons.status).toBe(400);
+    expect((respons.body as { veld: string }).veld).toBe(
+      'Verlengt automatisch',
+    );
+  });
+
+  it('admin kan autoRenews wijzigen op een bestaand contract', async () => {
+    const aangemaakt = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Wijzigtest', autoRenews: 'onbekend' });
+
+    const contractId = alsContract(aangemaakt.body).contractId;
+
+    const gewijzigd = await request(server)
+      .patch(`/vendors/${vendorId}/contracts/${contractId}`)
+      .set('Cookie', adminCookie)
+      .send({ autoRenews: 'nee' });
+
+    expect(gewijzigd.status).toBe(200);
+    expect((gewijzigd.body as { autoRenews: string }).autoRenews).toBe('nee');
   });
 
   it('koppelt en ontkoppelt vragenlijst-templates aan een contract', async () => {
