@@ -25,6 +25,29 @@ Haalbaarheid wordt beoordeeld op drie niveaus, conform
 
 ---
 
+## Besluiten van de eigenaar (23-08, na eerste lezing)
+
+Vastgelegd zodat ze niet opnieuw gesteld worden. Verwerkt in de secties
+hieronder en in de prioriteitentabel.
+
+| Gap | Besluit |
+|---|---|
+| §9 Granulaire rolmatrix | Later — bevestigd, geen concreet scenario met 3+ rollen nu. |
+| §3 Interne leveranciersbeoordeling | **Haalbaarheid herzien: Middel, niet Groot.** Als dit met een tokenlink werkt — de interne Transdev-beoordelaars hoeven **geen** tenant-gebruiker/Entra-account te zijn — hergebruikt dit het bestaande, al gebouwde tokenmechanisme (issue #8) in plaats van een nieuw permissiemodel te vergen. Zie herziene paragraaf hieronder. |
+| §6 AI Document Interrogation | Later — bevestigd. |
+| §2 Contract 360 / CATS-levenscyclus | De levenscyclus-balk (Initiatie/Implementatie/Uitvoering/Monitoring/Beëindiging) is een **nice-to-have**, niet nu nodig. Kerngegevens + gerelateerde contracten (zonder de fase-balk) blijven wel de moeite waard — zie herziene paragraaf. |
+| §4b Certificeringen-sectie | **Scope bevestigd en verbreed.** Vendor IT hangt samen met NIS2-certificering; de verwachting is dat andere normen (ISO27001, BIO, VCA, …) ook tot bewaking én een eigen "survey" gaan leiden, onder verantwoordelijkheid van de contractbeheerder — niet alleen een statusveld maar een eigen bewakings-/beoordelingsstroom per norm. Dit maakt §4b zwaarder dan oorspronkelijk ingeschat; zie herziene paragraaf. |
+
+**Open vraag van de eigenaar, apart behandeld:** hoe verhoudt deze roadmap
+zich tot de korte-termijn pilot (een beperkt aantal Transdev-medewerkers en
+hun leveranciers zien de app voor het eerst)? Dat is een andere toets dan
+"is dit uiteindelijk de juiste richting" — zie
+**`docs/architectuur/pilot-versus-roadmap.md`** voor die afweging. De
+roadmap-issues in dit document zijn niet automatisch pilot-issues, en
+omgekeerd.
+
+---
+
 ## 1. Dashboard — ontbreekt volledig in MCM2
 
 **MVM_V2:** `/dashboard` toont vier KPI-tegels (aantal leveranciers,
@@ -82,14 +105,18 @@ leverancier als geheel. Een eigen pagina geeft ruimte voor die diepte
 zonder de leverancierspagina te verdrukken.
 
 **Haalbaarheid: Middel tot Groot, gefaseerd.** Dit is al vastgelegd als
-apart issue (#173). Kerngegevens + levenscyclus-balk zijn **Klein**: een
-nieuwe `cats_phase`-kolom (enum) op `clm.contract`, een nieuwe route
+apart issue (#173). Kerngegevens zijn **Klein**: een nieuwe route
 `/contracten/[id]`, hergebruik van bestaande contract-service-data. Overleg-
 log, issues, documenten en leveranciersbeoordeling zijn elk **Middel**:
 nieuwe tabellen (`contract_overleg`, `contract_issue`, geen
 documentopslag-infrastructuur vandaag — zie §6). Aanrader: eerst
-kerngegevens + levenscyclus + gerelateerde contracten bouwen (hergebruikt
-bestaande data), overleg/issues/documenten als losse vervolgissues.
+kerngegevens + gerelateerde contracten bouwen (hergebruikt bestaande data),
+overleg/issues/documenten als losse vervolgissues.
+
+> **Besluit 23-08: de levenscyclus-balk (CATS-fases) is een nice-to-have,
+> niet nu nodig.** De `cats_phase`-kolom en de fase-balk zelf vervallen uit
+> de eerste versie van Contract 360 — dat scheelt een nieuw enum-concept
+> zonder dat het de kerngegevens-pagina blokkeert.
 
 ---
 
@@ -115,15 +142,21 @@ ze bewust in aparte navigatie-items (Survey vs. Controls) omdat de
 respondent en het doel verschillen: intern oordeel over
 leveranciersprestatie versus extern bewijs van compliance.
 
-**Haalbaarheid: Groot.** Dit is een nieuw subsysteem, geen uitbreiding van
-`clm.survey_*` — die tabellen zijn ingericht op "vragenlijst naar de
-leverancier", niet "collega's beoordelen leverancier op score-schaal met
-subcategorieën en NPS". Vergt eigen tabellen
-(`vendor_review_round`, `vendor_review_response`, `vendor_review_score`),
-een eigen scherm, en een besluit of dit nu prioriteit heeft — de vraag is
-niet triviaal: bewaakt de tool nu al genoeg met vragenlijst + contract-
-waarschuwing, of is interne beoordeling een reëel gemis? Dit is een
-product-beslissing voor de eigenaar, geen technische.
+**Haalbaarheid: Middel (herzien 23-08, was Groot).** De oorspronkelijke
+inschatting ging ervan uit dat interne beoordelaars als tenant-gebruiker
+zouden inloggen (MVM_V2's "Platformgebruiker"-optie) — dat vergt een nieuw
+stuk rechtenmodel. De eigenaar heeft dit gecorrigeerd: de Transdev-
+collega's die de beoordeling uitvoeren **hoeven geen gebruiker in de
+tenant te zijn**. Met een tokenlink-only aanpak (net als de bestaande
+vragenlijst-flow) hergebruikt dit het al gebouwde, tijdgebonden en
+niet-raadbare tokenmechanisme (issue #8) in plaats van een nieuw
+permissiemodel te vergen. Dat verlaagt de zwaarte aanzienlijk: het blijft
+een nieuw subsysteem — geen uitbreiding van `clm.survey_*`, want die
+tabellen zijn ingericht op "vragenlijst naar de leverancier", niet
+"collega's beoordelen leverancier op score-schaal met subcategorieën en
+NPS" — maar wel eigen tabellen (`vendor_review_round`,
+`vendor_review_response`, `vendor_review_score`) die het bestaande
+tokenpatroon volgen in plaats van een nieuw toegangsconcept.
 
 ---
 
@@ -154,10 +187,19 @@ certificaten kan hebben die niet aan één specifiek contract hangen.
   hij al gebruikt wordt voordat er iets nieuws bijkomt.
 - **Jaarlijkse spend, KvK, website**: **Klein**. Nieuwe kolommen op
   `clm.vendor`, geen nieuwe tabel.
-- **Certificeringen-sectie**: **Middel**. Nieuwe tabel
-  (`vendor_certification`: naam, status, vervaldatum), eigen
-  vervalbewaking analoog aan `contractWaarschuwing.ts` (het patroon is nu
-  al herbruikbaar — pure functie, geen React/fetch-afhankelijkheid).
+- **Certificeringen-sectie**: **Middel, scope verbreed (besluit 23-08)**.
+  Vendor IT hangt samen met NIS2-certificering, en de verwachting is dat
+  andere normen (ISO27001, BIO, VCA, …) hetzelfde patroon gaan volgen: niet
+  alleen een statusveld, maar een eigen bewakings- én beoordelingsstroom
+  per norm, onder verantwoordelijkheid van de contractbeheerder. Dat is
+  inhoudelijk dichter bij §3 (interne beoordeling, tokenlink-gedreven) dan
+  bij een simpel "status + vervaldatum"-veld — een certificering per norm
+  kan zelf weer een "survey" nodig hebben (bijv. een periodieke controle-
+  vragenlijst per certificeringstype). Eerste versie: nieuwe tabel
+  (`vendor_certification`: norm, status, vervaldatum), eigen vervalbewaking
+  analoog aan `contractWaarschuwing.ts` (herbruikbaar patroon). De
+  koppeling met een norm-specifieke bewakings-/surveystroom is een
+  vervolgstap, niet iets voor de eerste versie.
 - **Open taken-widget**: **Groot** — vergt een taken-concept dat vandaag
   nergens in MCM2 bestaat (geen `task`-tabel, geen toewijzing, geen
   status). Zou een eigen mini-project zijn, niet een velduitbreiding.
@@ -316,24 +358,36 @@ er een concreet scenario is met meer dan de huidige twee rollen (bijv.
 een "alleen-lezen"-rol, of de eerder genoemde accountmanager-over-alle-
 contracten-rol uit de leveranciersscherm-dichtheid-sessie).
 
+> **Besluit 23-08: later.** Bevestigd door de eigenaar — geen concreet
+> scenario met 3+ rollen op dit moment.
+
 ---
 
 ## Samenvattend prioriteitenoverzicht
 
-| # | Gap | Haalbaarheid | Advies volgorde |
-|---|---|---|---|
-| 5 | Contractenlijst tenant-breed + eigen nav-item | Klein–Middel | **Eerst** — data bestaat al, sluit direct aan op #171/#172 |
-| 2 | Contract 360 (kerngegevens + levenscyclus) | Middel | **Tweede** — al belegd in #173, eigenaar wil dit expliciet |
-| 1 | Dashboard met KPI-tegels | Middel | **Derde** — hergebruikt #174's waarschuwingslogica |
-| 4a | Vrije tags, spend/KvK/website-velden | Klein | Kan meelopen met bovenstaande, lage kosten |
-| 8 | Instellingenscherm (drempelwaarden, labels) | Middel | Na de eerste drie — bouwt op wat dan al bestaat |
-| 4b | Certificeringen-sectie | Middel | Losse vervolgstap, eigen tabel |
-| 2b | Contract 360: overleg/issues/documenten | Middel–Groot | Losse vervolgstappen op Contract 360 |
-| 3 | Interne leveranciersbeoordeling | Groot | Aparte productbeslissing eerst — is dit nodig? |
-| 7 | Samengesteld compliance/risicocijfer | Middel + ontwerpvraag | Eerst brainstormen, past het bij "waarschuwen niet blokkeren"? |
-| 9 | Granulaire rolmatrix | Groot (architectuur) | Alleen bij concreet scenario met 3+ rollen |
-| 4c | Open taken-widget | Groot | Nieuw concept, geen bestaande bouwstenen |
-| 6 | AI Document Interrogation | Groot + externe afhankelijkheid | Laatst — vergt S3-achtige opslag, eigen brainstorm |
+**Bijgewerkt 23-08** na de besluiten van de eigenaar (zie boven). Kolom
+"Wijziging" toont alleen de rijen waar het besluit de eerdere inschatting
+heeft veranderd.
+
+| # | Gap | Haalbaarheid | Advies volgorde | Wijziging 23-08 |
+|---|---|---|---|---|
+| 5 | Contractenlijst tenant-breed + eigen nav-item | Klein–Middel | **Eerst** — data bestaat al, sluit direct aan op #171/#172 | — |
+| 2 | Contract 360 (kerngegevens, zonder levenscyclus-balk) | Klein–Middel | **Tweede** — al belegd in #173, eigenaar wil dit expliciet | CATS-fase geschrapt uit eerste versie |
+| 1 | Dashboard met KPI-tegels | Middel | **Derde** — hergebruikt #174's waarschuwingslogica | — |
+| 3 | Interne leveranciersbeoordeling (tokenlink, geen tenant-account) | Middel | Kan naar voren — hergebruikt het bestaande tokenmechanisme (#8) | **Groot → Middel** |
+| 4a | Vrije tags, spend/KvK/website-velden | Klein | Kan meelopen met bovenstaande, lage kosten | — |
+| 8 | Instellingenscherm (drempelwaarden, labels) | Middel | Na de eerste drie — bouwt op wat dan al bestaat | — |
+| 4b | Certificeringen-sectie (meerdere normen, eigen bewaking) | Middel–Groot | Losse vervolgstap; scope is breder dan gedacht | Verbreed: meerdere normen, eigen surveystroom per norm |
+| 2b | Contract 360: overleg/issues/documenten | Middel–Groot | Losse vervolgstappen op Contract 360 | — |
+| 7 | Samengesteld compliance/risicocijfer | Middel + ontwerpvraag | Eerst brainstormen, past het bij "waarschuwen niet blokkeren"? | — |
+| 9 | Granulaire rolmatrix | Groot (architectuur) | **Later** — bevestigd, geen scenario met 3+ rollen | Bevestigd: later |
+| 4c | Open taken-widget | Groot | Nieuw concept, geen bestaande bouwstenen | — |
+| 6 | AI Document Interrogation | Groot + externe afhankelijkheid | **Later** — bevestigd | Bevestigd: later |
+
+**Zie ook** `docs/architectuur/pilot-versus-roadmap.md` — deze tabel is de
+roadmap-toets ("is dit de juiste productrichting"); de pilot voor een
+beperkt aantal Transdev-leveranciers vraagt een andere toets en staat
+apart.
 
 ## Wat dit niet is
 
