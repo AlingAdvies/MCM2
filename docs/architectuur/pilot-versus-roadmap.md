@@ -103,6 +103,52 @@ puur op basis van "wat ziet een leverancier voor het eerst":
 - Of de afzender/het e-mailadres van de uitnodiging er voor een externe
   ontvanger professioneel en herkenbaar uitziet (raakt #153 en #76).
 
+## Prioriteitenvoorstel (23-08) — startpunt voor de volgende sessie
+
+Ingedeeld op één as: **raakt dit de leverancier direct (Groep A), raakt
+het alleen de interne/achtergrondkant (Groep B), of kan het wachten tot
+na de eerste ronde (Groep C)?** Conform het asymmetrische risico hierboven
+weegt Groep A het zwaarst, ook al is dat niet per se het meeste werk.
+
+**Groep A — vóór de eerste vendor-uitnodiging (raakt de leverancier):**
+- **#77** — Uitnodigingen versturen (handpicked/bulk). Zonder dit scherm
+  kan de pilot niet eens starten — dit is de kernactie, geen
+  randvoorwaarde.
+- **#153** — Contact-/afzenderinfo in de vragenlijst zelf. Een
+  leverancier met een vraag moet ergens naartoe kunnen zonder dat het een
+  pilot-experiment aanvoelt.
+
+**Groep B — vóór de pilot, maar op de achtergrond (raakt jou, niet de
+vendor):**
+- **#58** — Backup onafhankelijk van de ontwikkellaptop. Kern draait al
+  (dagelijkse taak sinds 30-07); resterende laptop-afhankelijkheid is een
+  reëel maar niet acuut risico voor een korte pilot.
+- **#19** — Restore-test daadwerkelijk uitgevoerd. Belangrijk voor
+  vertrouwen, geen blokkade om te starten.
+- **#17** — Falende mail/upload zichtbaar maken. Waardevol, maar bij een
+  klein aantal vendors merk je een probleem waarschijnlijk zelf.
+
+**Groep C — kan na de eerste ronde:**
+- **#15** — OV-4, 6, 7, 8 (OV-9 is al vervallen). Losse contentvragen,
+  geen van alle blokkerend voor een eerste test.
+- **Foutafhandeling in het portaal & professionele afzender.** Beter te
+  testen dóór de pilot-flow zelf te doorlopen dan vooraf te bouwen op
+  aannames — zie hieronder.
+
+Dit is een voorstel, geen besluit — de eigenaar bevestigt of schrapt bij
+het oppakken van issue #180.
+
+## Claude kan de portaalflow zelf doorlopen (bevestigd 23-08)
+
+Tijdens de gap-analyse is bevestigd dat Claude zelfstandig een browser kan
+besturen via een los Playwright-script — navigeren, klikken, een formulier
+invullen, screenshotten — niet alleen voor geautomatiseerde e2e-tests, ook
+om een lopend scherm zelf te bekijken en te beoordelen. Praktisch bruikbaar
+voor deze pilot: vóór de eerste echte vendor-uitnodiging zelf een
+tokenlink doorlopen als leverancier-in-de-praktijk-test, in plaats van
+alleen op basis van code te redeneren of het portaal werkt. Zie de
+sessie-memory `playwright-zelf-testen-en-navigeren`.
+
 ## Hoe dit issue-technisch te structureren
 
 **Voorstel:** één nieuw issue, `priority:before-pilot`-gelabeld, met deze
