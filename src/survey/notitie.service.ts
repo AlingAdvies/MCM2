@@ -35,6 +35,8 @@ export interface Notitie {
   noteId: string;
   responseId: string;
   tekst: string;
+  /** 'werk' (standaard) of 'vastgesteld' — zie migratie 0030. */
+  soort: 'werk' | 'vastgesteld';
   authorUserId: string;
   /** Null wanneer de gebruiker geen naam heeft — dan toont het scherm het adres. */
   authorNaam: string | null;
@@ -46,6 +48,7 @@ interface NotitieRij extends Record<string, unknown> {
   note_id: string;
   response_id: string;
   tekst: string;
+  soort: string;
   author_user_id: string;
   author_naam: string | null;
   created_at: Date | string;
@@ -76,6 +79,7 @@ export class NotitieService {
           sql`SELECT n.note_id,
                      n.response_id,
                      n.tekst,
+                     n.soort,
                      n.author_user_id,
                      u.full_name AS author_naam,
                      n.created_at
@@ -104,6 +108,7 @@ export class NotitieService {
     responseId: string,
     authorUserId: string,
     tekst: string,
+    soort: 'werk' | 'vastgesteld' = 'werk',
   ): Promise<Notitie> {
     return this.db.withTenant(
       tenantId,
@@ -113,13 +118,14 @@ export class NotitieService {
         const resultaat = await tx.execute<NotitieRij>(
           sql`WITH nieuw AS (
                 INSERT INTO clm.response_note
-                       (tenant_id, response_id, tekst, author_user_id)
-                VALUES (${tenantId}, ${responseId}, ${tekst}, ${authorUserId})
-                RETURNING note_id, response_id, tekst, author_user_id, created_at
+                       (tenant_id, response_id, tekst, soort, author_user_id)
+                VALUES (${tenantId}, ${responseId}, ${tekst}, ${soort}, ${authorUserId})
+                RETURNING note_id, response_id, tekst, soort, author_user_id, created_at
               )
               SELECT n.note_id,
                      n.response_id,
                      n.tekst,
+                     n.soort,
                      n.author_user_id,
                      u.full_name AS author_naam,
                      n.created_at
@@ -197,6 +203,7 @@ export class NotitieService {
       noteId: r.note_id,
       responseId: r.response_id,
       tekst: r.tekst,
+      soort: r.soort === 'vastgesteld' ? 'vastgesteld' : 'werk',
       authorUserId: r.author_user_id,
       authorNaam: r.author_naam,
       createdAt: iso(r.created_at) ?? '',
