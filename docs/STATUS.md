@@ -2,6 +2,73 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-24 — NIS2-scaffold beoordeeld en gelabeld; nieuwe feature
+"vastgestelde notitie" volledig door de keten (backend + frontend),
+gemerged naar main in beide repo's; twee stale branches opgeruimd in
+MCM2-frontend.**
+
+Vier losse dingen, in volgorde van de sessie.
+
+**1. NIS2-scaffold (`nis2-scaffold_1.zip`) beoordeeld, niet ingepast.**
+Eigenaar leverde een compleet plan-scaffold aan voor een NIS2-toeleveringsketen-
+beoordelingstool, met vijf ADR's (0001/0004 ingetrokken, vervangen door
+ADR 0005: module op mcm2 in plaats van zelfstandige app — gedeeld tenant-/
+leveranciers-/rollen-/orchestratiemodel). Besproken: hoe dit zich verhoudt
+tot de lopende gap-analyse-issues (#153–#173). Besluit: geen nieuwe issue-
+set nu (scaffold is nog concept, geen functioneel ontwerp), wel een nieuw
+label **`thema:gedeeld-fundament-nis2`** gezet op zeven issues (#148, #155,
+#156, #157, #158, #159, #161) met per issue een concrete aantekening over
+de NIS2-implicatie — zodat bij het oppakken ervan niet per ongeluk een deur
+dichtgetimmerd wordt die met een kleine moeite open had kunnen blijven. De
+zip zelf blijft voorlopig los, niet uitgepakt in de repo (bewuste keuze
+eigenaar). Pilot (#180) blijft prioriteit.
+
+**2. Issue #77 bleek al gebouwd.** Bij het doorlopen van #180's Groep A
+("uitnodigingen versturen") bleek de backend-route
+(`POST runs/:id/participants`) en het frontend-scherm
+(`src/app/beheer/vragenlijsten/uitnodigen/page.tsx`) al compleet en op main
+te staan — handpicked-selectie, gekoppeld vanuit de leverancierslijst en
+vanuit contracten. Zie de comment op #180 voor detail. Bulk-op-criteria
+blijft bewust uitgesteld (besluit eigenaar 24-08).
+
+**3. Nieuwe feature: "vastgestelde notitie".** Tijdens het onderzoek naar
+#16 (herinneringen) bracht de eigenaar een ander scenario naar voren: een
+ingediende respons wordt na overleg met de leverancier bijgesteld, en die
+uitkomst moet vastgelegd kunnen worden zonder het oorspronkelijke,
+bevroren antwoord aan te tasten. Volledig los ontwikkeld traject
+(brainstorm → spec → plan → subagent-driven implementatie, twee reviewrondes
+per taak, twee fixes na code quality review):
+
+- **Backend** (`docs/superpowers/specs/2026-08-24-vastgestelde-notitie-design.md`,
+  `docs/superpowers/plans/2026-08-24-vastgestelde-notitie.md`): migratie 0030
+  voegt `response_note.soort` toe (`werk`/`vastgesteld`, CHECK-constraint),
+  `NotitieService` en de invoervalidatie geven het door, een e2e-tegenproef
+  bewijst dat het leverancierspad een `vastgesteld`-notitie niet kan zien
+  (na een fix: de eerste versie testte per ongeluk tegen een al-ingediende
+  respons en was daardoor vacuous — nu tegen een open respons, met een
+  expliciete 200-assertie). Gemerged naar main (`2bfbc55`).
+- **Frontend**: `soort`-veld in het model/de service, een toggle
+  "Vastgesteld na overleg met de leverancier" bij het notitieveld op het
+  responsdetail-scherm, en een badge in de notitielijst (na een fix:
+  badge-styling aangepast naar de bestaande status-badge-conventie,
+  `bg-green-100`/`rounded-full` i.p.v. een ad-hoc emerald-variant). Gepreviewd
+  via de demo-stack (backend main, frontend op de featurebranch) vóór
+  mergen, conform het vaste previewprotocol. Gemerged naar main (`3243aa3`).
+
+Geen bijbehorend GitHub-issue — kwam uit een spontane brainstorm, niet uit
+de backlog.
+
+**4. Twee stale branches opgeruimd in MCM2-frontend.** `feat/154-rondes-
+groeperen` en `docs/rondes-groeperen-plan` bleken resten van al gemerged
+werk (PR #14, 21-08) die nooit lokaal/remote waren opgeruimd. Verwijderd,
+lokaal en op GitHub. Drie andere lokale branch-refs
+(`feat/contract-opzegtermijn`, `feat/contractmanagement-scherm`,
+`feat/omgevingslabel-health`) bleken alleen verouderde lokale tracking-info
+te zijn — al langer niet meer op de remote. `MCM2-frontend` staat nu schoon:
+alleen `main`.
+
+---
+
 **2026-08-23 — de vier UI-punten van "21 augustus III" gebouwd:
 leveranciersscherm herzien (badge-strip, twee kolommen, modal, uitklapbare
 contractrij, wachtlijst-label, urgentiekleur). Beide branches gepusht, PR
