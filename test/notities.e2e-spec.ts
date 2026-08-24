@@ -8,6 +8,7 @@ import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { cookieInstellingen } from '../src/auth/sessie';
 import { SessieService } from '../src/auth/sessie.service';
+import { genereerToken, hashToken } from '../src/survey/survey-token';
 import { TEST_IDS } from './test-ids';
 import { verwijderTestdata } from './opruimen';
 
@@ -44,12 +45,35 @@ const SUBJECT_B = `oid-nt-b-${Date.now()}`;
 
 /** 64 hex-tekens, conform de CHECK op token_hash (migratie 0003). */
 const HASH_INGEDIEND = `${'4'.repeat(48)}dddddddddddddddd`;
-const HASH_OPEN = `${'5'.repeat(48)}eeeeeeeeeeeeeeee`;
+
+/**
+ * Voor RESPONSE_OPEN wordt de hash niet handmatig getypt maar afgeleid van een
+ * echt gegenereerd token (zoals antwoord-indienen.e2e-spec.ts dat doet) —
+ * nodig om in de leverancierspad-tegenproef als leverancier daadwerkelijk via
+ * ?t= een verzoek te kunnen doen dat de guard ook werkelijk doorlaat.
+ *
+ * RESPONSE_INGEDIEND (status 'submitted') is daarvoor ONGESCHIKT:
+ * SurveyTokenService.controleer() geeft voor 'submitted' al
+ * {geldig: false, reden: 'al-ingediend'} terug vóórdat het verzoek de
+ * controllerhandler ooit bereikt (410 Gone). Een test die desondanks tegen
+ * RESPONSE_INGEDIEND draait, bewijst alleen "een foutbody bevat geen
+ * notities" — niet "een open leverancierssessie kan geen vastgesteld-notitie
+ * zien". Vandaar RESPONSE_OPEN (status 'pending'): daar geeft de guard
+ * {geldig: true} en komt het verzoek echt bij de handler.
+ *
+ * test-ids.ts kent geen bestaande conventie voor een tokenveld (tokens staan
+ * daar nergens in): de database bewaart alleen de hash, dus het ruwe token
+ * moet sowieso vers gegenereerd worden in de test zelf, in lockstep met de
+ * hash die de fixture-insert gebruikt.
+ */
+const RAW_TOKEN_OPEN = genereerToken();
+const HASH_OPEN = hashToken(RAW_TOKEN_OPEN);
 
 interface NotitieBody {
   notitie: {
     noteId: string;
     tekst: string;
+    soort: 'werk' | 'vastgesteld';
     authorUserId: string;
     authorNaam: string | null;
     createdAt: string;
@@ -60,6 +84,7 @@ interface LijstBody {
   notities: Array<{
     noteId: string;
     tekst: string;
+    soort: 'werk' | 'vastgesteld';
     authorNaam: string | null;
     createdAt: string;
   }>;
@@ -254,6 +279,37 @@ describe('Notities bij een inzending (e2e)', () => {
         .send({ tekst: 'Bestaat niet.' })
         .expect(404);
     });
+
+    it("zonder soort in de body wordt 'werk'", async () => {
+      const antwoord = await request(server)
+        .post(`/admin/survey/responses/${RESPONSE_INGEDIEND}/notes`)
+        .set('Cookie', cookieAdminA)
+        .send({ tekst: 'Gewone werkaantekening.' })
+        .expect(201);
+
+      expect((antwoord.body as NotitieBody).notitie.soort).toBe('werk');
+    });
+
+    it("met soort 'vastgesteld' legt de overeengekomen wijziging vast", async () => {
+      const antwoord = await request(server)
+        .post(`/admin/survey/responses/${RESPONSE_INGEDIEND}/notes`)
+        .set('Cookie', cookieAdminA)
+        .send({
+          tekst: 'Na overleg akkoord op aangepaste levertermijn.',
+          soort: 'vastgesteld',
+        })
+        .expect(201);
+
+      expect((antwoord.body as NotitieBody).notitie.soort).toBe('vastgesteld');
+    });
+
+    it('weigert een onbekend soort', async () => {
+      await request(server)
+        .post(`/admin/survey/responses/${RESPONSE_INGEDIEND}/notes`)
+        .set('Cookie', cookieAdminA)
+        .send({ tekst: 'Ongeldig soort.', soort: 'definitief' })
+        .expect(400);
+    });
   });
 
   describe('notities lezen', () => {
@@ -272,6 +328,20 @@ describe('Notities bij een inzending (e2e)', () => {
       for (const n of notities) {
         expect(n.authorNaam).toBe('Admin van A');
         expect(n.createdAt).toBeTruthy();
+      }
+    });
+
+    it('geeft het soort van elke notitie mee', async () => {
+      await plaats(RESPONSE_INGEDIEND, 'Werkaantekening voor de lijsttest.');
+
+      const antwoord = await request(server)
+        .get(`/admin/survey/responses/${RESPONSE_INGEDIEND}/notes`)
+        .set('Cookie', cookieAdminA)
+        .expect(200);
+
+      const { notities } = antwoord.body as LijstBody;
+      for (const n of notities) {
+        expect(['werk', 'vastgesteld']).toContain(n.soort);
       }
     });
   });
@@ -349,6 +419,50 @@ describe('Notities bij een inzending (e2e)', () => {
 
       const ids = (lijst.body as LijstBody).notities.map((n) => n.noteId);
       expect(ids).toContain(noteId);
+    });
+  });
+
+  // Tegenproef uit ontwerp §8: een leverancier zit in dezelfde tenant als de
+  // notitie over hem, dus de tenantgrens alleen bewijst niets voor dit pad.
+  // GET /survey/respond is de enige route die een leverancier zonder account
+  // bereikt op basis van zijn token; hij geeft alleen { status, verlooptOp }
+  // terug en raakt clm.response_note nergens aan. Getest tegen de echte route
+  // (MCM2-CLAUDE.md §15b: test een lek bij de bron), niet met een losse
+  // policy-query, omdat die route hier daadwerkelijk bestaat.
+  //
+  // Bewust RESPONSE_OPEN (status 'pending'), niet RESPONSE_INGEDIEND: bij
+  // 'submitted' geeft SurveyTokenService.controleer() al {geldig: false,
+  // reden: 'al-ingediend'} terug, en de guard stuurt dan 410 Gone terug vóórdat
+  // het verzoek de controllerhandler ooit bereikt. Een 410-foutbody bevat per
+  // definitie geen notities — dat bewijst niets over een open leverancierssessie
+  // die de handler daadwerkelijk doorloopt. Zie HASH_OPEN/RAW_TOKEN_OPEN
+  // hierboven voor waarom dit pad een eigen, echt gegenereerd token nodig heeft.
+  describe('het leverancierspad', () => {
+    it('geeft geen response_note terug, ook geen vastgesteld-notitie', async () => {
+      await plaats(RESPONSE_OPEN, 'Vertrouwelijke werkaantekening.');
+      await request(server)
+        .post(`/admin/survey/responses/${RESPONSE_OPEN}/notes`)
+        .set('Cookie', cookieAdminA)
+        .send({
+          tekst: 'Overeengekomen na overleg.',
+          soort: 'vastgesteld',
+        })
+        .expect(201);
+
+      const antwoord = await request(server).get(
+        `/survey/respond?t=${RAW_TOKEN_OPEN}`,
+      );
+
+      // De guard moet het verzoek daadwerkelijk doorlaten (niet 410
+      // 'al-ingediend') — anders bewijst de test hieronder niets.
+      expect(antwoord.status).toBe(200);
+
+      // Wat de route ook teruggeeft, response_note/notities mag er nergens
+      // in voorkomen.
+      expect(JSON.stringify(antwoord.body)).not.toContain('response_note');
+      expect(JSON.stringify(antwoord.body)).not.toContain(
+        'Overeengekomen na overleg.',
+      );
     });
   });
 });

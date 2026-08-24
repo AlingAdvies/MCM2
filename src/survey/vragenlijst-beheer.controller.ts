@@ -273,9 +273,9 @@ export class VragenlijstBeheerController {
   ) {
     const sessie = request.sessie!;
 
-    let tekst: string;
+    let invoer: ReturnType<typeof leesNotitie>;
     try {
-      tekst = leesNotitie(body);
+      invoer = leesNotitie(body);
     } catch (err) {
       throw this.naarHttpFout(err);
     }
@@ -284,7 +284,8 @@ export class VragenlijstBeheerController {
       sessie.tenantId,
       id,
       sessie.userId,
-      tekst,
+      invoer.tekst,
+      invoer.soort,
     );
 
     return { notitie };
