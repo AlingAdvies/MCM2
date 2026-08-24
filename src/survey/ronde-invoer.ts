@@ -382,13 +382,22 @@ export function leesBeoordelaar(body: unknown): string {
  */
 export const NOTITIE_MAX_TEKENS = 4000;
 
+export interface NotitieInvoer {
+  tekst: string;
+  soort: 'werk' | 'vastgesteld';
+}
+
 /**
- * Leest de tekst van een notitie (migratie 0018).
+ * Leest de tekst en het soort van een notitie (migratie 0018, soort sinds
+ * migratie 0030).
  *
- * Alleen de tekst. De schrijver komt uit de sessie en de respons uit het pad —
- * die horen niet in een body waar een client ze kan verzinnen (§6).
+ * Alleen tekst en soort. De schrijver komt uit de sessie en de respons uit
+ * het pad — die horen niet in een body waar een client ze kan verzinnen (§6).
+ *
+ * `soort` is optioneel in de invoer en valt terug op 'werk': bestaande
+ * clients die het veld niet meesturen blijven werken zoals voorheen.
  */
-export function leesNotitie(body: unknown): string {
+export function leesNotitie(body: unknown): NotitieInvoer {
   const invoer = leesObject(body);
 
   if (typeof invoer.tekst !== 'string') {
@@ -408,5 +417,16 @@ export function leesNotitie(body: unknown): string {
     );
   }
 
-  return tekst;
+  let soort: 'werk' | 'vastgesteld' = 'werk';
+  if (invoer.soort !== undefined && invoer.soort !== null) {
+    if (invoer.soort !== 'werk' && invoer.soort !== 'vastgesteld') {
+      throw new InvoerFout(
+        'soort',
+        "Het soort moet 'werk' of 'vastgesteld' zijn.",
+      );
+    }
+    soort = invoer.soort;
+  }
+
+  return { tekst, soort };
 }
