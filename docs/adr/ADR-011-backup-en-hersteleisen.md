@@ -151,6 +151,12 @@ Besluit eigenaar, 2026-07-28:
    wél het juiste gereedschap, want het gaat om eigen apparaten. Concreet: `BACKUP_DIR` naar een
    map op die server, of de dump er na afloop naartoe kopiëren.
 
+**Uitgevoerd op 2026-08-25** — niet als "laptop kopieert de dump naartoe" (dat obstakel bleek
+Tailscale SSH's periodieke herauthenticatie, onhaalbaar voor een onbewaakte taak), maar als
+"saxombp maakt de dump zelf, rechtstreeks bij Supabase, via een eigen cron-taak". Zie
+`docs/superpowers/specs/2026-08-25-saxombp-productiebackup-design.md` voor het volledige
+ontwerp en `docs/runbooks/backupcontrole.md` ("De saxombp-laag") voor de operationele kant.
+
 ### Wanneer dit heroverwogen kan worden
 
 Als beschikbaarheid aantoonbaar is opgelost — publieke bereikbaarheid met vast adres en geldig

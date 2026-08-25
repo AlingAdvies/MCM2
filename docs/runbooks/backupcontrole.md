@@ -340,6 +340,77 @@ antwoord triviaal; met een team niet meer.
 
 ---
 
+## De saxombp-laag (sinds 2026-08-25)
+
+Naast de OneDrive-backup (hierboven) draait er een **volledig onafhankelijke** tweede
+productiebackup, rechtstreeks op `saxombp` — geen laptop in de keten. Zie
+`docs/superpowers/specs/2026-08-25-saxombp-productiebackup-design.md` voor het volledige
+ontwerp.
+
+**Wat er draait:**
+
+| Waar | Wat | Wanneer |
+|---|---|---|
+| saxombp, cron | `/opt/mcm2-backup/saxombp-backup-productie.sh` | dagelijks 06:00 |
+| Dump-locatie | `/opt/mcm2-backup/dumps/` op saxombp | 14 dagen bewaard |
+| Controle | `scripts/backup-controle.js` (op de laptop, ongewijzigd tijdstip) | leest saxombp via SSH |
+
+**Dit vervangt de laptop-productiebackup nog niet.** Zie "Wanneer de laptoptaak uit mag"
+hieronder — dat is een bewust latere, handmatige stap, geen automatisme.
+
+### Het samengevoegde Telegram-bericht
+
+Sinds deze uitbreiding toont het dagelijkse Telegram-bericht de status van beide backups. Een
+voorbeeld bij een geslaagde run:
+
+```
+✅ MCM2 backup — weekcheck 25-08, 07:30
+
+Laatste dump: mcm2-2026-08-25_05-38-43.dump (3 uur oud)
+Compleet: 27 tabellen
+saxombp: 1 uur oud, 5 dump(s) bewaard
+Bewaard: 12 dump(s)
+```
+
+Een probleem op saxombp meldt apart, met een eigen sleutel (`saxombp`) — dus onafhankelijk
+gedempt van een eventueel probleem op de OneDrive-kant. `controleerSaxombp()` in
+`scripts/backup-controle.js` onderscheidt vier soorten falen, in deze volgorde:
+
+1. **"saxombp is niet bereikbaar via SSH."** — Tailscale staat uit, saxombp staat uit, of het
+   netwerk hapert. Zegt niets over de dump zelf. Het bericht bevat de SSH-foutmelding en wijst
+   naar Tailscale en de machine zelf.
+2. **"Kon de dumpmap niet lezen op saxombp (…)."** — saxombp is wel bereikbaar, maar `ls` op de
+   dumpmap zelf gaf een fout (bijvoorbeeld een rechtenprobleem). Bewust apart van "geen dump
+   gevonden": een lees-fout stil interpreteren als "geen dumps" zou het verkeerde probleem
+   melden.
+3. **"Onverwachte bestandsnaam gevonden op saxombp (…)."** — er staat een bestand in de dumpmap
+   dat niet aan het verwachte patroon voldoet
+   (`mcm2-productie-JJJJ-MM-DDTUU-MM-SS.dump`). Dat bestand wordt niet verwerkt; de melding
+   somt de onbekende naam/namen op en vraagt om handmatige controle. Dit is ook de reden dat er
+   geen losse `grep` gebruikt wordt: een bestandsnaam die niet aan de whitelist voldoet komt
+   nooit in een SSH-commando terecht.
+4. **"Geen enkele productiedump gevonden op saxombp (…)"**, of **"De nieuwste productiedump op
+   saxombp is X oud (…). De cron-taak op saxombp heeft kennelijk stilgelegen."** — saxombp is
+   bereikbaar en de map is leesbaar, maar er staat geen (recente) dump. Dit wijst op de
+   cron-taak op saxombp zelf, niet op bereikbaarheid.
+
+### Wanneer de laptoptaak uit mag
+
+**Niet automatisch, niet zomaar.** De bestaande Windows-taak `MCM2 databasebackup` blijft
+draaien tot **beide** onderstaande punten aantoonbaar zijn:
+
+1. Minimaal 7 opeenvolgende geslaagde saxombp-dumps (zichtbaar in het samengevoegde
+   Telegram-bericht, of via `ssh root@saxombp "ls -la /opt/mcm2-backup/dumps/"`).
+2. Minstens één geslaagde restore-test **vanaf een saxombp-dump** — dezelfde route als de
+   bestaande restore-test in `docs/runbooks/supabase-verificatie-en-restoretest.md`, maar dan
+   met een dumpbestand dat van saxombp is gehaald in plaats van uit OneDrive.
+
+Zodra beide zijn aangetoond: zet de Windows-taak `MCM2 databasebackup` handmatig uit in
+Taakplanner. Dat is een besluit en een handeling van de eigenaar — geen script in deze repo
+doet dat automatisch.
+
+---
+
 ## Bekende beperking
 
 **De controle draait op dezelfde machine als de backup.** Staat de laptop uit, dan draait geen
