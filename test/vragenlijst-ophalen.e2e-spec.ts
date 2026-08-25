@@ -41,6 +41,7 @@ interface VragenlijstVorm {
   }[];
   questions: VraagVorm[];
   closesAt: string | null;
+  contactinfo: { naam: string | null; email: string } | null;
 }
 
 let volgnummer = 0;
@@ -181,12 +182,34 @@ describe('Vragenlijst ophalen (e2e)', () => {
         sluitOver: 30 * 24 * 60 * 60 * 1000,
       }));
 
+      // Contactinfo (testpunt hieronder) heeft een bron nodig om niet-null te
+      // zijn; het tenant-antwoordadres is de eenvoudigste, hoogste laag in de
+      // prioriteitsketen. De ketenlogica zelf staat in het eigen testblok
+      // 'Contactinfo — de prioriteitsketen' verderop in dit bestand.
+      await db.withTenant(TENANT_A, async (tx) => {
+        await tx.execute(
+          sql`UPDATE clm.tenant SET antwoord_email = 'contact@transdev-test.nl'
+               WHERE tenant_id = ${TENANT_A}`,
+        );
+      });
+
       const res = await request(server)
         .get('/survey/respond/questions')
         .query({ t: token })
         .expect(200);
 
       lijst = res.body as VragenlijstVorm;
+    });
+
+    afterAll(async () => {
+      // Dit tenant-brede veld mag andere describe-blokken in dit bestand niet
+      // beïnvloeden.
+      await db.withTenant(TENANT_A, async (tx) => {
+        await tx.execute(
+          sql`UPDATE clm.tenant SET antwoord_email = NULL
+               WHERE tenant_id = ${TENANT_A}`,
+        );
+      });
     });
 
     it('levert negen vragen als platte lijst, zonder categorieën', () => {
@@ -260,6 +283,35 @@ describe('Vragenlijst ophalen (e2e)', () => {
 
       expect(verdacht).toEqual([]);
       expect(JSON.stringify(lijst)).not.toContain(TENANT_A);
+    });
+
+    it('geeft contactinfo mee zonder tenant/vendor/response-ID erin te lekken', () => {
+      // Zelfde scan als de vorige test, nu specifiek gericht op het nieuwe
+      // veld: contactinfo mag een naam en e-mailadres bevatten, maar geen van
+      // de verboden sleutels (tenant/vendor/response/token/template_id) als
+      // veldnaam, en de UUID van de tenant mag nergens in de waarden staan.
+      expect(lijst.contactinfo).not.toBeNull();
+      expect(lijst.contactinfo?.email).toBeTruthy();
+
+      const velden = new Set<string>();
+      const verzamel = (waarde: unknown): void => {
+        if (Array.isArray(waarde)) {
+          waarde.forEach(verzamel);
+        } else if (typeof waarde === 'object' && waarde !== null) {
+          for (const [sleutel, inhoud] of Object.entries(waarde)) {
+            velden.add(sleutel);
+            verzamel(inhoud);
+          }
+        }
+      };
+      verzamel(lijst.contactinfo);
+
+      const verdacht = [...velden].filter((veld) =>
+        /tenant|vendor|response|token|template_?id/i.test(veld),
+      );
+
+      expect(verdacht).toEqual([]);
+      expect(JSON.stringify(lijst.contactinfo)).not.toContain(TENANT_A);
     });
   });
 
@@ -545,6 +597,201 @@ describe('Vragenlijst ophalen (e2e)', () => {
       expect(body.message).toMatch(/geen vragenlijst/i);
       // Geen framework-404: die begint met "Cannot GET" en lekt het routepad.
       expect(body.message).not.toMatch(/^Cannot /);
+    });
+  });
+
+  describe('Contactinfo — de prioriteitsketen', () => {
+    /**
+     * Maakt een gebruiker aan (voor owner_user_id-koppelingen) en geeft diens
+     * id, naam en e-mailadres terug.
+     */
+    async function maakGebruiker(
+      tenantId: string,
+      naam: string,
+    ): Promise<{ userId: string; email: string }> {
+      const subject = `oid-contactinfo-${naam}-${Date.now()}-${Math.random()}`;
+      const email = `${subject}@voorbeeld.nl`;
+
+      return db.withTenant(tenantId, async (tx) => {
+        const rij = await tx.execute<{ user_id: string }>(
+          sql`INSERT INTO clm."user" (tenant_id, email, full_name, external_subject)
+              VALUES (${tenantId}, ${email}, ${naam}, ${subject})
+              RETURNING user_id`,
+        );
+        return { userId: rij.rows[0].user_id, email };
+      });
+    }
+
+    it('gebruikt het tenant-antwoordadres als dat is ingesteld', async () => {
+      const templateId = await importeerSeed(
+        TENANT_A,
+        'transdev-annual-vendor-it-risk-v1.json',
+      );
+
+      await db.withTenant(TENANT_A, async (tx) => {
+        await tx.execute(
+          sql`UPDATE clm.tenant SET antwoord_email = 'contact@transdev-test.nl'
+               WHERE tenant_id = ${TENANT_A}`,
+        );
+      });
+
+      const { token } = await maakLink({
+        tenantId: TENANT_A,
+        templateId,
+        naam: 'contactinfo-tenant',
+      });
+
+      const res = await request(server)
+        .get('/survey/respond/questions')
+        .query({ t: token })
+        .expect(200);
+
+      const lijst = res.body as VragenlijstVorm;
+      expect(lijst.contactinfo).toEqual({
+        naam: null,
+        email: 'contact@transdev-test.nl',
+      });
+
+      // Opruimen: dit tenant-brede veld mag andere tests in dit bestand niet
+      // beïnvloeden.
+      await db.withTenant(TENANT_A, async (tx) => {
+        await tx.execute(
+          sql`UPDATE clm.tenant SET antwoord_email = NULL
+               WHERE tenant_id = ${TENANT_A}`,
+        );
+      });
+    });
+
+    it('valt terug op de contract-eigenaar als er geen tenant-antwoordadres is', async () => {
+      const templateId = await importeerSeed(
+        TENANT_A,
+        'transdev-annual-vendor-it-risk-v1.json',
+      );
+
+      // Zeker weten dat er geen tenant-antwoordadres is voor dit scenario.
+      await db.withTenant(TENANT_A, async (tx) => {
+        await tx.execute(
+          sql`UPDATE clm.tenant SET antwoord_email = NULL
+               WHERE tenant_id = ${TENANT_A}`,
+        );
+      });
+
+      const contractOwner = await maakGebruiker(TENANT_A, 'Contract Eigenaar');
+
+      const { token } = await maakLink({
+        tenantId: TENANT_A,
+        templateId,
+        naam: 'contactinfo-contract',
+      });
+
+      // maakLink() zet geen contract_id op de ronde; die koppeling leggen we
+      // hier expliciet, na het aanmaken van de link, om maakLink() niet met
+      // een optie te hoeven uitbreiden die alleen dit ene testgeval gebruikt.
+      // We vinden de response via token_hash (dezelfde hash-functie als
+      // maakLink() gebruikt om het token op te slaan), maken daarna een
+      // contract aan met owner_user_id, en koppelen de bijbehorende run eraan.
+      await db.withTenant(TENANT_A, async (tx) => {
+        const contractRij = await tx.execute<{ contract_id: string }>(
+          sql`INSERT INTO clm.contract (tenant_id, vendor_id, name, owner_user_id)
+              SELECT r.tenant_id, r.vendor_id, 'contactinfo-testcontract', ${contractOwner.userId}
+                FROM clm.survey_response r
+               WHERE r.token_hash = ${hashToken(token)}
+              RETURNING contract_id`,
+        );
+
+        await tx.execute(
+          sql`UPDATE clm.survey_run
+                 SET contract_id = ${contractRij.rows[0].contract_id}
+               WHERE run_id = (
+                 SELECT run_id FROM clm.survey_response
+                  WHERE token_hash = ${hashToken(token)}
+               )`,
+        );
+      });
+
+      const res = await request(server)
+        .get('/survey/respond/questions')
+        .query({ t: token })
+        .expect(200);
+
+      const lijst = res.body as VragenlijstVorm;
+      expect(lijst.contactinfo).toEqual({
+        naam: 'Contract Eigenaar',
+        email: contractOwner.email,
+      });
+    });
+
+    it('valt terug op de vendor-eigenaar als er geen tenant-adres en geen contract-eigenaar is', async () => {
+      const templateId = await importeerSeed(
+        TENANT_A,
+        'transdev-annual-vendor-it-risk-v1.json',
+      );
+
+      await db.withTenant(TENANT_A, async (tx) => {
+        await tx.execute(
+          sql`UPDATE clm.tenant SET antwoord_email = NULL
+               WHERE tenant_id = ${TENANT_A}`,
+        );
+      });
+
+      const vendorOwner = await maakGebruiker(TENANT_A, 'Vendor Eigenaar');
+
+      const vendorId = await db.withTenant(TENANT_A, async (tx) => {
+        const rij = await tx.execute<{ vendor_id: string }>(
+          sql`INSERT INTO clm.vendor (tenant_id, name, owner_user_id)
+              VALUES (${TENANT_A}, 'v-contactinfo-vendor', ${vendorOwner.userId})
+              RETURNING vendor_id`,
+        );
+        return rij.rows[0].vendor_id;
+      });
+
+      const { token } = await maakLink({
+        tenantId: TENANT_A,
+        templateId,
+        naam: 'contactinfo-vendor',
+        vendorId,
+      });
+
+      const res = await request(server)
+        .get('/survey/respond/questions')
+        .query({ t: token })
+        .expect(200);
+
+      const lijst = res.body as VragenlijstVorm;
+      expect(lijst.contactinfo).toEqual({
+        naam: 'Vendor Eigenaar',
+        email: vendorOwner.email,
+      });
+    });
+
+    it('geeft null als geen van de drie bronnen iets oplevert', async () => {
+      const templateId = await importeerSeed(
+        TENANT_A,
+        'transdev-annual-vendor-it-risk-v1.json',
+      );
+
+      await db.withTenant(TENANT_A, async (tx) => {
+        await tx.execute(
+          sql`UPDATE clm.tenant SET antwoord_email = NULL
+               WHERE tenant_id = ${TENANT_A}`,
+        );
+      });
+
+      // Nieuwe vendor zonder owner_user_id, geen contract erbij — de default
+      // situatie van maakLink() zonder verdere aanpassing.
+      const { token } = await maakLink({
+        tenantId: TENANT_A,
+        templateId,
+        naam: 'contactinfo-leeg',
+      });
+
+      const res = await request(server)
+        .get('/survey/respond/questions')
+        .query({ t: token })
+        .expect(200);
+
+      const lijst = res.body as VragenlijstVorm;
+      expect(lijst.contactinfo).toBeNull();
     });
   });
 });
