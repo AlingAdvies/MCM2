@@ -2,6 +2,100 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-25 (vervolg 3) — audit-bewijsvoering: brainstorm → plan →
+volledige implementatie (7 taken, beide repo's), plus twee rondes
+gebruikersfeedback verwerkt. Branches gepusht, bewust nog niet gemerged —
+de eigenaar bekijkt de preview morgen verder.**
+
+**Aanleiding.** Tijdens het testen van de productie-inloggegevens bracht de
+eigenaar het achterliggende doel van de surveyfunctie scherp naar voren: die
+is ontstaan nadat een derde-partij-auditor bij Transdev vaststelde dat de
+leveranciersbeoordeling niet op orde was. De app moet Transdev (en later
+andere tenants) dus niet alleen surveys laten versturen, maar ook **aantonen
+aan een auditor** welke leveranciers relevant zijn, dat ze daadwerkelijk
+beoordeeld zijn, en wat de uitkomst was. Losstaand, klein punt erbij: het
+goedkeur-scherm gaf geen bevestiging, waardoor een dubbele klik mogelijk was.
+
+**Spec en plan** (`docs/superpowers/specs/2026-08-25-audit-bewijsvoering-design.md`,
+`docs/superpowers/plans/2026-08-25-audit-bewijsvoering.md`). Vier delen:
+
+1. **Compliance-thema op de leverancier** — nieuwe koppeltabel
+   (`clm.vendor_compliance_thema`, migratie 0031), multi-value, los van de
+   survey zelf (puur een filtercriterium). Seed: Cybersecurity, Kwaliteit,
+   Continuïteit.
+2. **Twee nieuwe afgeleide statussen** in `respons-status.ts`: `afgekeurd`
+   (laatste oordeel `niet_goed`, eigen rode badge — voorheen onopvallend
+   "beoordeeld") en `gepland` (relevante leverancier — criticaliteit
+   medium/high/critical — zonder enige respons; nooit opgeslagen, alleen
+   berekend/toegekend in `ContractmanagerService.haalGeplandeVendors()`).
+3. **Statusoverzicht uitgebreid** (`/beheer/status`): thema-filter,
+   `gepland`-rijen linken naar het leveranciersdetailscherm i.p.v. een
+   inzendingscherm.
+4. **Bevestiging na goedkeuren** (`/beheer/status/[responseId]`): een groen
+   blok met wie/wanneer + link terug naar het overzicht, in plaats van dat de
+   knoppenrij stil bleef staan.
+
+Bewust **buiten scope** gehouden en vastgelegd als zodanig: een instelbare
+drempel voor "relevant" (tenant-eigen criticaliteitsniveaus i.p.v. de vaste
+vier labels) — dat idee kwam op tijdens de brainstorm, raakt de hele app en
+wordt een eigen, latere brainstorm.
+
+**Implementatie, zeven taken, beide repo's** (backend `feat/audit-bewijsvoering`
+@ `a190344`, frontend @ `2f2962d`, **beide gepusht, bewust niet gemerged**):
+migratie + rechtencontract-uitbreiding, thema's lezen/schrijven
+(`PUT /vendors/:id/compliance-themas`), thema-toekenning op het
+leveranciersdetailscherm, de twee nieuwe statussen, thema-filter op het
+overzicht, en de goedkeur-bevestiging. Backend: volledige e2e-suite groen
+(39/39 suites, 538/538 tests, meerdere keren herbevestigd na latere
+wijzigingen). Frontend: typecheck/lint/build groen op elke taak.
+
+**Twee bijvangsten tijdens het bouwen, buiten de oorspronkelijke scope maar
+nodig om te slagen:**
+- `src/db/rechten-contract.ts` miste de nieuwe tabellen — het
+  bewakingstest (`rechten-contract.e2e-spec.ts`) hoort elke tabel te kennen.
+- Array-parameters in Drizzle's `sql`-tag (`= ANY($1)`) gaven
+  `malformed array literal` bij kale interpolatie; opgelost met
+  `sql.param()`, hetzelfde patroon dat al in `ronde-beheer.service.ts` stond.
+
+**Werkwijze-observatie, aanleiding voor nieuw gereedschap.** De eigenaar
+merkte terecht op dat de meeste tijdverspilling tijdens het testen niet uit
+nieuwe code kwam, maar uit steeds opnieuw handmatig een wegwerp-testdatabase
+opzetten (rol-verwarring `postgres`-superuser vs. `clm_migrator`/
+`clm_api_runtime`, wachtwoorden driemaal opnieuw uitzoeken). Gebouwd:
+**`npm run test:db`** (`scripts/test-db-opzetten.js`, gemerged naar `main` als
+apart, eigen commitje) — één commando voor container + rollen + migraties +
+wegwerp-markering, exact het patroon dat CI al gebruikt. Vastgelegd in
+`CLAUDE.md` en het projectgeheugen (`mcm2-e2e-testdb-opzetten`).
+
+**Twee feedbackrondes op de preview, direct verwerkt (zelfde branches):**
+
+1. *"de druk-op-een-pil voor categorie/thema is onhandig, gewoon een
+   pulldown in het invulscherm."* Thema's stonden als los-klikbare pills
+   tussen de andere badges; nu een badge die — net als categorie/
+   criticaliteit — een bewerkscherm opent, met een nieuwe
+   `Meerkeuzeveld`-component (checkbox-groep, want multi-value kan niet met
+   een gewone dropdown zonder Ctrl-klikken).
+2/3. *Leverancierslijst (`/beheer/leveranciers`): contactpersoon-kolom
+   toonde een aantal in plaats van een naam; categorie/criticaliteit/
+   normenkader ontbraken als kolom; wil kunnen filteren op die drie.*
+   Backend levert nu `contactpersoonNaam` (prioriteit: primair contact →
+   eerste contact → contactpersoon van een gekoppeld contract → null — het
+   contract-fallback was een expliciete eis) plus de drie classificatievelden.
+   Frontend: drie nieuwe kolommen (pills, consistent met het detailscherm)
+   en drie filterdropdowns naast het bestaande zoekveld, browser-side zoals
+   de bestaande zoekfunctie. "Ontbreekt" toont nu op basis van
+   `contactpersoonNaam === null`, niet het oude `aantalContacten === 0` —
+   een leverancier zonder eigen contact maar met een contract dat er wél
+   een heeft, toont voortaan de naam.
+
+**Vervolg, volgende sessie:** de eigenaar bekijkt de preview verder en geeft
+dan akkoord — pas daarna mergen. Beide branches (`feat/audit-bewijsvoering`
+in `MCM2` en `MCM2-frontend`) zijn het werkgebied; geen nieuwe branch nodig.
+Bij "we gaan verder waar we gebleven zijn": begin met een korte
+draaien-de-demo-stack-en-laten-zien-stap, niet blind doorbouwen.
+
+---
+
 **2026-08-25 (vervolg 2) — issue #184 opgelost: ontbrekende
 contractmanagement-migraties alsnog naar productie uitgerold, en het
 volledige 4-stappenplan (uitrol → testen → verse backup → restore-test)
