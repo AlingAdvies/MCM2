@@ -2,6 +2,69 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-25 (vervolg 2) — issue #184 opgelost: ontbrekende
+contractmanagement-migraties alsnog naar productie uitgerold, en het
+volledige 4-stappenplan (uitrol → testen → verse backup → restore-test)
+afgerond en bewezen.**
+
+**Aanleiding.** Direct vervolg op de saxombp-backup-sessie hieronder: de
+eerste echte productiedump legde bloot dat migraties 0027-0029 wél op
+`main` stonden maar nooit op productie waren toegepast (issue #184). De
+eigenaar stelde voor dit meteen recht te zetten en tegelijk het hele
+backup/restore-pad te bewijzen: *"de nieuwe migraties uitrollen naar
+productie; dat testen; dan backup naar saxombp en dan die backup
+terugzetten, om het terugzetten van backup te testen."*
+
+**Kip-en-ei bij de backup-poort.** De productie-poort (`productie-poort.js`)
+weigert een uitrol zonder complete backup, maar de backup kon niet compleet
+zijn zolang productie zelf de contract-tabellen miste — en de uitrol was nu
+juist bedoeld om dat gat te dichten. Opgelost door
+`docs/runbooks/backup-verwachting.json` tijdelijk, met een expliciete
+"terugzetten na uitrol"-aantekening erin, terug te zetten naar wat productie
+op dat moment wérkelijk bevatte (24 i.p.v. 27 tabellen). Na de geslaagde
+uitrol is dat teruggedraaid (zie hieronder) — geen blijvende aanpassing.
+
+**Uitrol.** Workflow `productie-aws.yml`, run
+[32843846161](https://github.com/AlingAdvies/MCM2/actions/runs/32843846161),
+geslaagd in 37m30s (het grootste deel daarvan normale ECS-stabilisatietijd
+voor de twee services na elkaar, geen storing). **Rechtstreeks tegen
+productie geverifieerd** (niet de workflow-melding aangenomen): `clm.contract`,
+`clm.contract_survey_template` en `ref.contract_status` bestaan nu, en de
+migratiehistorie (`drizzle.__drizzle_migrations`) loopt door tot en met
+migratie 0030 (`response_note_soort` — bleek ook nog niet uitgerold te zijn).
+Issue #184 gesloten met dit bewijs.
+
+**Verwachtingslijst hersteld.** `docs/runbooks/backup-verwachting.json`
+teruggezet naar de volledige 27-tabellenlijst, migratiestand bijgewerkt naar
+`0030_response_note_soort` (commit `21ca704`, branch
+`fix/backup-verwachting-herstellen`, direct gemerged en opgeruimd).
+
+**Verse, volledige backups gemaakt en gecontroleerd — op beide plekken.**
+saxombp-cron handmatig eenmalig gedraaid (143 KB, 27 tabellen bevestigd via
+`pg_restore --list`). Bij het verversen van de laptop-backup bleek een eigen
+foutieve handmatige aanroep (zonder `BACKUP_DIR`) naar de verkeerde,
+projectlokale map te schrijven in plaats van OneDrive — geen echt probleem,
+wel een aanwijzing dat `backup:dump` zonder de env var die de geplande taak
+altijd meegeeft, misleidend kan ogen. Met de juiste `BACKUP_DIR` opnieuw
+gedraaid; `backup:controle:volledig` toont nu **0 problemen, 27 tabellen,
+geslaagde herstelproef** op beide backuplagen.
+
+**Restore-test — het eigenlijke bewijsstuk.** De nieuwste saxombp-dump via
+`scp` naar de laptop gehaald, in de al bestaande `wegwerp`-gemarkeerde
+testcontainer (`mcm2test`, poort 55440) in een verse `restoretest`-database
+teruggezet met `pg_restore`. Inhoudelijk geverifieerd, niet de exitcode
+geloofd: 27 tabellen (22 clm + 4 ref + 1 audit), alle drie de
+contract-tabellen erbij, RLS-policies correct hersteld, echte rijdata terug
+(tenants, users, survey_responses). Daarna opgeruimd: testdatabase
+verwijderd, lokale dumpkopie met productiedata gewist.
+
+Dit is — samen met de al langer lopende saxombp-cron — één van de twee
+criteria uit ADR-011 om ooit de laptop-backup-taak te mogen uitzetten (het
+andere: 7 opeenvolgende geslaagde saxombp-dumps). Nog niet aan de orde, wel
+een concrete stap dichterbij.
+
+---
+
 **2026-08-25 (vervolg) — issue #58 opgelost: onafhankelijke productiebackup op
 saxombp, los van de ontwikkellaptop. Bijvangst: issue #184 aangemaakt —
 productie mist de contractmanagement-tabellen ondanks gemergede migraties.**
