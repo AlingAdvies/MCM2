@@ -74,6 +74,18 @@ export interface Categorie {
   questions: Vraag[];
 }
 
+/**
+ * Wie de leverancier kan benaderen bij vragen over deze vragenlijst.
+ *
+ * `naam` is `null` wanneer de bron het tenant-antwoordadres is (een generiek
+ * adres, geen persoon) — zie de bewuste-uitzondering-comment op
+ * `haalContactinfo()` hieronder voor de volledige toelichting.
+ */
+export interface Contactinfo {
+  naam: string | null;
+  email: string;
+}
+
 export interface Vragenlijst {
   name: string;
   /** Leeg bij een platte lijst (UC1); gevuld bij een ingedeelde lijst (UC2). */
@@ -81,6 +93,7 @@ export interface Vragenlijst {
   /** Vragen zonder categorie. Bij UC1 staat hier alles in. */
   questions: Vraag[];
   closesAt: string | null;
+  contactinfo: Contactinfo | null;
 }
 
 interface VraagRij extends Record<string, unknown> {
@@ -98,6 +111,14 @@ interface VraagRij extends Record<string, unknown> {
   category_min_answers: number | null;
   template_name: string;
   closes_at: Date | string | null;
+}
+
+interface ContactinfoRij extends Record<string, unknown> {
+  tenant_antwoord_email: string | null;
+  contract_owner_naam: string | null;
+  contract_owner_email: string | null;
+  vendor_owner_naam: string | null;
+  vendor_owner_email: string | null;
 }
 
 /** Maakt van 'Duidelijkheid & Kosten' → 'duidelijkheid-kosten'. */
@@ -240,6 +261,7 @@ export class VragenlijstLeesService {
         // wegen twee extra queries niet op tegen die complexiteit.
         const antwoorden = await this.haalOpgeslagenAntwoorden(tx, responseId);
         const bijlagen = await this.haalOpgeslagenBijlagen(tx, responseId);
+        const contactinfo = await this.haalContactinfo(tx, responseId);
 
         const categorieen = new Map<string, Categorie>();
         const losseVragen: Vraag[] = [];
@@ -294,6 +316,7 @@ export class VragenlijstLeesService {
               : sluit instanceof Date
                 ? sluit.toISOString()
                 : new Date(sluit).toISOString(),
+          contactinfo,
         };
       },
       'leverancier',
@@ -372,5 +395,77 @@ export class VragenlijstLeesService {
     }
 
     return perVraag;
+  }
+
+  /**
+   * Contactinfo voor de leverancier: wie te benaderen bij vragen over deze
+   * vragenlijst.
+   *
+   * ── Bewuste uitzondering op de regel dat dit pad geen tenant-info teruggeeft ──
+   *
+   * Zie de class-comment hierboven en die van `SurveyResponseController`: dit
+   * pad geeft standaard geen tenant-, vendor- of responsdata terug. Dit veld
+   * is een bewuste, individuele uitzondering (besluit eigenaar 25-08,
+   * docs/superpowers/specs/2026-08-25-contactinfo-vragenlijst-design.md),
+   * niet een precedent voor meer. Drie redenen: de leverancier kent de
+   * afzender al uit de uitnodigingsmail, dit is een zakelijk adres binnen
+   * een bestaande contractrelatie (geen bijzonder persoonsgegeven), en er
+   * komt verder geen tenant-/vendor-/responsdata bij. Elke volgende
+   * toevoeging aan dit pad vraagt een eigen afweging — dit dekt alleen
+   * contactinfo.
+   *
+   * ── Prioriteit ──────────────────────────────────────────────────────────
+   *
+   * 1. tenant.antwoord_email (geen naam — generiek tenant-adres)
+   * 2. contract.owner_user_id, via survey_run.contract_id, als de ronde aan
+   *    een contract hangt
+   * 3. vendor.owner_user_id, via survey_response.vendor_id
+   * 4. Geen van de drie aanwezig → null
+   *
+   * Eén query met alle drie bronnen als losse LEFT JOINs, in plaats van drie
+   * aparte queries: de keuze tussen de drie gebeurt hierna in code op basis
+   * van welke kolom niet-leeg is, dat is duidelijker te lezen dan geneste
+   * COALESCE-logica over meerdere joins met eigen NULL-gedrag.
+   *
+   * `survey_run.contract_id` heeft geen foreign key naar `clm.contract` (zie
+   * schema.ts, historische reden) — de LEFT JOIN levert dus gewoon niets op
+   * als er geen bijbehorend contract bestaat, zonder foutmelding.
+   */
+  private async haalContactinfo(
+    tx: TenantTransaction,
+    responseId: string,
+  ): Promise<Contactinfo | null> {
+    const resultaat = await tx.execute<ContactinfoRij>(
+      sql`SELECT t.antwoord_email                     AS tenant_antwoord_email,
+                 contract_owner.full_name              AS contract_owner_naam,
+                 contract_owner.email                  AS contract_owner_email,
+                 vendor_owner.full_name                AS vendor_owner_naam,
+                 vendor_owner.email                    AS vendor_owner_email
+            FROM clm.survey_response r
+            JOIN clm.survey_run      run ON run.run_id    = r.run_id
+            JOIN clm.tenant          t   ON t.tenant_id   = r.tenant_id
+            LEFT JOIN clm.contract        con           ON con.contract_id = run.contract_id
+            LEFT JOIN clm."user"          contract_owner ON contract_owner.user_id = con.owner_user_id
+            LEFT JOIN clm.vendor           v             ON v.vendor_id = r.vendor_id
+            LEFT JOIN clm."user"          vendor_owner   ON vendor_owner.user_id = v.owner_user_id
+           WHERE r.response_id = ${responseId}`,
+    );
+
+    const rij = resultaat.rows[0];
+    if (!rij) return null;
+
+    if (rij.tenant_antwoord_email) {
+      return { naam: null, email: rij.tenant_antwoord_email };
+    }
+
+    if (rij.contract_owner_email) {
+      return { naam: rij.contract_owner_naam, email: rij.contract_owner_email };
+    }
+
+    if (rij.vendor_owner_email) {
+      return { naam: rij.vendor_owner_naam, email: rij.vendor_owner_email };
+    }
+
+    return null;
   }
 }
