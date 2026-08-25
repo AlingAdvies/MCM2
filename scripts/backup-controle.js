@@ -109,14 +109,46 @@ function controleerSaxombp() {
     };
   }
 
-  const lijst = opSaxombp(
-    `ls -1 --time-style=+%s ${SAXOMBP_DUMP_DIR} 2>/dev/null | grep '^mcm2-productie-.*\\.dump$' || true`,
-  );
+  // Geen `|| true`: dat verstopt een echte fout (bv. permission-denied op de
+  // dumpmap) achter dezelfde lege uitvoer als "geen dumps aanwezig", en meldt
+  // dan het verkeerde probleem ("cron heeft niet gedraaid" i.p.v. "de map is
+  // niet leesbaar"). Een niet-nul exitcode wordt hieronder apart afgehandeld.
+  const lijst = opSaxombp(`ls -1 --time-style=+%s ${SAXOMBP_DUMP_DIR}`);
+
+  if (!lijst.ok) {
+    return {
+      bereikbaar: true,
+      goed: false,
+      bericht: `Kon de dumpmap niet lezen op saxombp (${SAXOMBP_DUMP_DIR}).\n${lijst.fout || 'Geen verdere foutmelding.'}`,
+    };
+  }
 
   // `ls` zonder -t sorteert alfabetisch; de bestandsnamen bevatten een
   // ISO-achtige tijdstempel (mcm2-productie-YYYY-MM-DDTHH-MM-SS.dump), dus
   // alfabetisch is hier ook chronologisch. Geen aparte sortering nodig.
-  const dumps = lijst.uit.split('\n').filter(Boolean);
+  //
+  // Strikte whitelist i.p.v. een losse grep: exact het formaat dat
+  // saxombp-backup-productie.sh produceert. Een naam die hier niet aan
+  // voldoet komt NOOIT in een SSH-commando-string terecht — dat voorkomt
+  // shell-injectie via een geprepareerde bestandsnaam (bv.
+  // "mcm2-productie-...$(commando).dump") volledig, in plaats van hem
+  // "veilig te maken" met escaping.
+  const DUMPNAAM_PATROON = /^mcm2-productie-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.dump$/;
+
+  const regels = lijst.uit.split('\n').filter(Boolean);
+  const dumps = regels.filter((r) => DUMPNAAM_PATROON.test(r));
+  const onverwacht = regels.filter((r) => !DUMPNAAM_PATROON.test(r));
+
+  if (onverwacht.length > 0) {
+    return {
+      bereikbaar: true,
+      goed: false,
+      bericht:
+        `Onverwachte bestandsnaam gevonden op saxombp (${SAXOMBP_DUMP_DIR}):\n` +
+        onverwacht.map((r) => `  • ${r}`).join('\n') +
+        `\n\nDit wordt niet verwerkt — controleer handmatig wat daar staat.`,
+    };
+  }
 
   if (dumps.length === 0) {
     return {
@@ -127,9 +159,7 @@ function controleerSaxombp() {
   }
 
   const nieuwste = dumps[dumps.length - 1];
-  const mtijd = opSaxombp(
-    `stat -c%Y ${SAXOMBP_DUMP_DIR}/${nieuwste} 2>/dev/null || true`,
-  );
+  const mtijd = opSaxombp(`stat -c%Y ${SAXOMBP_DUMP_DIR}/${nieuwste} 2>/dev/null || true`);
   const tijdSeconden = Number(mtijd.uit);
 
   if (!Number.isFinite(tijdSeconden) || tijdSeconden === 0) {
