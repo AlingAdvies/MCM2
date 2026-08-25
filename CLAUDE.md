@@ -171,12 +171,24 @@ Productie leeft nog als `NOOD_PRODUCTIE_URL` in `.env` — **geen enkel script
 leest die naam**. Erbij komen kost twee bewuste stappen: het adres meegeven én
 `--extern`, want productie is `beschermd`.
 
+**Gebruik `npm run test:db -- "waarvoor"` om die container helemaal op te
+zetten — niet met de hand.** (2026-08-25) Container, rollen (`clm_migrator`/
+`clm_api_runtime`, wachtwoorden inclusief), migraties én de
+wegwerp-markering in één stap, precies zoals CI het doet. Draait
+`DATABASE_URL` per ongeluk op de `postgres`-superuser (die heeft BYPASSRLS,
+verboden door ADR-008) of moet je bij elke nieuwe container opnieuw
+wachtwoorden raden — dat kostte op 2026-08-25 een hele testronde aan
+omwegen, terwijl de code zelf goed was. Het script drukt aan het eind de
+exacte `MIGRATION_DATABASE_URL`/`DATABASE_URL`-regels af om te exporteren.
+`npm run test:db -- "waarvoor" --hergebruik` op een bestaande container
+(idempotent); `npm run test:db -- --afbreken` om op te ruimen.
+
 **1b. Elke database is `beschermd` tot hij zich als wegwerp meldt.**
 Sinds migratie 0019 staat dat in `clm.omgeving`. De e2e-suites weigeren tegen
 alles wat niet `wegwerp` is, en sinds stap 5 geldt dat ook voor de schrijvende
 scripts: `eisOnbeschermdeDatabase()` leest die markering in plaats van de
-hostnaam. Na het opzetten van je eigen container:
-`node scripts/markeer-wegwerp.js "waarvoor"`.
+hostnaam. `npm run test:db` doet dit al automatisch; los, op een al bestaande
+container: `node scripts/markeer-wegwerp.js "waarvoor"`.
 
 **Markeer nooit de demo (poort 55450) of een Supabase-productiedatabase.**
 Aanleiding: op 2026-08-07 wisten de e2e-tests de demo-database leeg omdat

@@ -40,6 +40,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:db": "node scripts/test-db-opzetten.js",
     "deploy:inrichten": "node scripts/deploy-inrichten.js",
     "deploy:acceptatie": "node scripts/deploy.js acceptatie",
     "deploy:staging": "node scripts/deploy.js staging",
