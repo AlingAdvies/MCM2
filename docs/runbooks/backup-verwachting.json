@@ -13,20 +13,20 @@
     "",
     "Zie docs/superpowers/specs/2026-08-04-backupcontrole-en-signalering.md, paragraaf 4.",
     "",
-    "TIJDELIJKE UITZONDERING (25-08, issue #184): de drie contract-tabellen staan hier",
-    "bewust NIET in, ondanks dat migraties 0027-0029 al op main staan. Bij het testen van",
-    "de saxombp-backup bleek productie deze migraties nooit daadwerkelijk toegepast te",
-    "hebben — clm.contract, clm.contract_survey_template en ref.contract_status bestaan",
-    "niet in de echte productiedatabase (rechtstreeks geverifieerd, niet aangenomen).",
-    "Deze lijst is tijdelijk teruggezet naar wat productie nu WERKELIJK bevat, zodat de",
-    "backup-poort niet blokkeert op een gat dat de aanstaande uitrol juist dicht.",
-    "Na een geslaagde uitrol (issue #184): deze drie tabellen terugzetten en",
-    "migratiestand bijwerken naar 0029_contract_opzegtermijn."
+    "OPGELOST (25-08, issue #184): de drie contract-tabellen stonden hier tijdelijk NIET in,",
+    "ondanks dat migraties 0027-0029 al op main stonden. Bij het testen van de saxombp-backup",
+    "bleek productie deze migraties nooit daadwerkelijk toegepast te hebben. Na onderzoek is de",
+    "uitrol alsnog gedraaid (workflow productie-aws.yml, run 32843846161) en rechtstreeks tegen",
+    "productie geverifieerd dat clm.contract, clm.contract_survey_template en",
+    "ref.contract_status nu bestaan — samen met migratie 0030 (was ook nog niet uitgerold).",
+    "Deze lijst is teruggezet naar de volledige, werkelijke stand."
   ],
   "bijgewerkt": "2026-08-25",
-  "migratiestand": "0026_tenantregister",
+  "migratiestand": "0030_response_note_soort",
   "tabellen": [
     "audit.audit_event",
+    "clm.contract",
+    "clm.contract_survey_template",
     "clm.omgeving",
     "clm.platform_admin",
     "clm.response_note",
@@ -49,6 +49,7 @@
     "clm.vendor_tag",
     "ref.business_criticality",
     "ref.compliance_status",
+    "ref.contract_status",
     "ref.vendor_category"
   ]
 }
