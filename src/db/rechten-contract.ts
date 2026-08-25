@@ -105,6 +105,10 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   // stilzwijgend verouderde rijen blijven meetellen.
   'clm.contract_survey_template': ['SELECT', 'INSERT', 'DELETE'],
 
+  // clm.vendor_compliance_thema (0031): many-to-many-koppeling, zelfde
+  // redenering als contract_survey_template hierboven.
+  'clm.vendor_compliance_thema': ['SELECT', 'INSERT', 'DELETE'],
+
   // ── Van nature append-only ─────────────────────────────────────────────────
   //
   // Een oordeel, een notitie of een koppeling verdwijnt niet: hij wordt zacht
@@ -173,6 +177,7 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   'ref.compliance_status': LEZEN_EN_SCHRIJVEN,
   'ref.vendor_category': LEZEN_EN_SCHRIJVEN,
   'ref.contract_status': LEZEN_EN_SCHRIJVEN,
+  'ref.compliance_thema': LEZEN_EN_SCHRIJVEN,
 };
 
 /**

@@ -87,6 +87,8 @@ export interface VendorDetail {
   createdAt: string;
   updatedAt: string | null;
   contacten: Contactpersoon[];
+  /** Compliance-thema's waarvoor deze leverancier relevant is (multi-value). */
+  complianceThemaCodes: string[];
 }
 
 /**
@@ -160,6 +162,10 @@ interface ContactRij extends Record<string, unknown> {
   job_title: string | null;
   role_description: string | null;
   is_primary: boolean;
+}
+
+interface ThemaRij extends Record<string, unknown> {
+  thema_code: string;
 }
 
 function alsTekst(waarde: Date | string): string {
@@ -732,6 +738,12 @@ export class VendorService {
            ORDER BY is_primary DESC, full_name`,
     );
 
+    const themas = await tx.execute<ThemaRij>(
+      sql`SELECT thema_code FROM clm.vendor_compliance_thema
+           WHERE vendor_id = ${vendorId}
+           ORDER BY thema_code`,
+    );
+
     return {
       vendorId: rij.vendor_id,
       name: rij.name,
@@ -755,6 +767,56 @@ export class VendorService {
         roleDescription: c.role_description,
         isPrimary: c.is_primary,
       })),
+      complianceThemaCodes: themas.rows.map((t) => t.thema_code),
     };
+  }
+
+  /**
+   * Vervangt de volledige set compliance-thema's van een leverancier.
+   *
+   * Geen incrementele toggle-endpoint: de UI stuurt altijd de complete
+   * gewenste set, dus "verwijder wat er niet meer in zit, voeg toe wat nieuw
+   * is" binnen één transactie is eenvoudiger en heeft geen race condition
+   * tussen twee losse toggle-aanroepen.
+   *
+   * Geeft `null` wanneer de leverancier niet bestaat of niet van deze tenant
+   * is — zelfde redenering als wijzig().
+   */
+  async zetComplianceThemas(
+    tenantId: string,
+    vendorId: string,
+    themaCodes: string[],
+  ): Promise<VendorDetail | null> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const bestaat = await tx.execute<{ vendor_id: string }>(
+          sql`SELECT vendor_id FROM clm.vendor
+             WHERE vendor_id = ${vendorId} AND deleted_at IS NULL`,
+        );
+
+        if (bestaat.rows.length === 0) {
+          return null;
+        }
+
+        await tx.execute(
+          sql`DELETE FROM clm.vendor_compliance_thema WHERE vendor_id = ${vendorId}`,
+        );
+
+        for (const code of themaCodes) {
+          await tx.execute(
+            sql`INSERT INTO clm.vendor_compliance_thema (vendor_id, thema_code, tenant_id)
+                VALUES (${vendorId}, ${code}, ${tenantId})`,
+          );
+        }
+
+        this.logger.log(
+          `Compliance-thema's bijgewerkt (${vendorId}): ${themaCodes.join(', ') || 'geen'}.`,
+        );
+
+        return this.detailBinnenTransactie(tx, vendorId);
+      },
+      'medewerker',
+    );
   }
 }

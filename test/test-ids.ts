@@ -360,6 +360,15 @@ export const TEST_IDS = {
   'antwoord-concept-opslaan': {
     tenant: id('24'),
   },
+  'vendor-compliance-thema': {
+    tenantA: id('30'),
+    tenantB: id('31'),
+    userA: id('32'),
+  },
+  'statusoverzicht-audit': {
+    tenant: id('33'),
+    user: id('34'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */

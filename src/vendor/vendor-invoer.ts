@@ -344,3 +344,37 @@ export function leesContact(
 
   return invoer;
 }
+
+/**
+ * Leest de gewenste compliance-thema's uit een PUT-body.
+ *
+ * Verwacht `{ themaCodes: string[] }`. Een leeg array is geldig — dat
+ * betekent "geen thema's meer", niet "niet aangeraakt". Duplicaten worden
+ * stilzwijgend genegeerd (de primary key zou ze toch weigeren); dat is geen
+ * invoerfout, want de UI stuurt de complete gewenste set en kan zelf geen
+ * duplicaten produceren via de checkbox-interactie.
+ */
+export function leesThemaCodes(body: unknown): string[] {
+  if (
+    typeof body !== 'object' ||
+    body === null ||
+    !('themaCodes' in body) ||
+    !Array.isArray((body as { themaCodes: unknown }).themaCodes)
+  ) {
+    throw new InvoerFout(
+      'themaCodes',
+      'themaCodes moet een lijst van codes zijn.',
+    );
+  }
+
+  const codes = (body as { themaCodes: unknown[] }).themaCodes;
+
+  if (!codes.every((c) => typeof c === 'string' && c.trim().length > 0)) {
+    throw new InvoerFout(
+      'themaCodes',
+      'Elke themaCode moet een niet-lege tekst zijn.',
+    );
+  }
+
+  return [...new Set(codes as string[])];
+}
