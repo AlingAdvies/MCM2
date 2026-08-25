@@ -60,6 +60,102 @@ const verwachtingPad = path.join(PROJECT_DIR, 'docs', 'runbooks', 'backup-verwac
 
 const telegram = new Telegram({ projectDir: PROJECT_DIR, statusDir });
 
+const SAXOMBP = 'root@saxombp';
+const SAXOMBP_DUMP_DIR = '/opt/mcm2-backup/dumps';
+
+/**
+ * Draait een commando op saxombp via SSH. Zelfde vorm als in
+ * scripts/verify-omgevingen.js (opServer): BatchMode + ConnectTimeout, geen
+ * interactieve prompt mogelijk.
+ *
+ * Dit is een DOOR EEN MENS GESTARTE controle (de eigenaar draait
+ * `npm run backup:controle`, of de geplande laptoktaak doet dat namens
+ * hem) — de periodieke Tailscale SSH-herauthenticatie is hier dus geen
+ * showstopper zoals bij een onbewaakte cron-taak. Mocht de herauth ooit
+ * opnieuw nodig zijn, faalt deze aanroep met een duidelijke fout in plaats
+ * van stil te hangen, want BatchMode=yes weigert de interactieve vraag.
+ */
+function opSaxombp(commando) {
+  const res = spawnSync(
+    'ssh',
+    ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15', SAXOMBP, commando],
+    { encoding: 'utf8' },
+  );
+  return {
+    ok: res.status === 0,
+    uit: (res.stdout || '').trim(),
+    fout: (res.stderr || res.error?.message || '').trim(),
+  };
+}
+
+/**
+ * Controleert de saxombp-productiebackup: bereikbaar? recente dump aanwezig?
+ *
+ * Twee soorten falen die uit elkaar gehouden moeten worden (spec §6): "saxombp
+ * niet bereikbaar" (Tailscale uit, machine down, SSH-time-out) is een ander
+ * signaal dan "geen dump gevonden" — hetzelfde onderscheid dat
+ * backupcontrole.md al maakt voor "Docker draait niet" versus een echt
+ * beschadigde dump. Een bericht dat de verkeerde oorzaak suggereert leert je
+ * het te negeren.
+ */
+function controleerSaxombp() {
+  const bereikbaar = opSaxombp('echo ok');
+  if (!bereikbaar.ok) {
+    return {
+      bereikbaar: false,
+      bericht:
+        `saxombp is niet bereikbaar via SSH.\n${bereikbaar.fout || 'Geen verdere foutmelding.'}\n\n` +
+        `Controleer of Tailscale actief is en of saxombp aanstaat.`,
+    };
+  }
+
+  const lijst = opSaxombp(
+    `ls -1 --time-style=+%s ${SAXOMBP_DUMP_DIR} 2>/dev/null | grep '^mcm2-productie-.*\\.dump$' || true`,
+  );
+
+  // `ls` zonder -t sorteert alfabetisch; de bestandsnamen bevatten een
+  // ISO-achtige tijdstempel (mcm2-productie-YYYY-MM-DDTHH-MM-SS.dump), dus
+  // alfabetisch is hier ook chronologisch. Geen aparte sortering nodig.
+  const dumps = lijst.uit.split('\n').filter(Boolean);
+
+  if (dumps.length === 0) {
+    return {
+      bereikbaar: true,
+      goed: false,
+      bericht: `Geen enkele productiedump gevonden op saxombp (${SAXOMBP_DUMP_DIR}).`,
+    };
+  }
+
+  const nieuwste = dumps[dumps.length - 1];
+  const mtijd = opSaxombp(
+    `stat -c%Y ${SAXOMBP_DUMP_DIR}/${nieuwste} 2>/dev/null || true`,
+  );
+  const tijdSeconden = Number(mtijd.uit);
+
+  if (!Number.isFinite(tijdSeconden) || tijdSeconden === 0) {
+    return {
+      bereikbaar: true,
+      goed: false,
+      bericht: `Kon de leeftijd van ${nieuwste} op saxombp niet bepalen.`,
+    };
+  }
+
+  const urenOud = (Date.now() / 1000 - tijdSeconden) / 3600;
+  if (urenOud > MAX_LEEFTIJD_UREN) {
+    const leeftijd =
+      urenOud >= 24 ? `${Math.floor(urenOud / 24)} dag(en)` : `${Math.floor(urenOud)} uur`;
+    return {
+      bereikbaar: true,
+      goed: false,
+      bericht: `De nieuwste productiedump op saxombp is ${leeftijd} oud (${nieuwste}).\nDe cron-taak op saxombp heeft kennelijk stilgelegen.`,
+    };
+  }
+
+  const leeftijd =
+    urenOud >= 1 ? `${Math.floor(urenOud)} uur` : `${Math.round(urenOud * 60)} minuten`;
+  return { bereikbaar: true, goed: true, leeftijd, aantal: dumps.length };
+}
+
 // ── De portabiliteitsgrens ──────────────────────────────────────────────────
 //
 // Dit is de ENIGE functie die verandert bij de overstap naar een managed service.
@@ -361,6 +457,23 @@ async function main() {
   } else {
     await telegram.meldHerstel('verouderd', 'de backup is weer actueel');
     regels.push(`Laatste dump: ${dump.naam} (${actualiteit.leeftijd} oud)`);
+  }
+
+  // ── Saxombp — onafhankelijke productiebackup ──────────────────────────────
+  //
+  // Los van de OneDrive-laag hierboven: dit is een TWEEDE, onafhankelijke
+  // backup (spec 2026-08-25-saxombp-productiebackup-design.md). Eigen sleutel
+  // ('saxombp'), zodat de demping los werkt van de OneDrive-problemen — een
+  // storing op de laptop mag een storing op saxombp niet verbergen en
+  // andersom.
+  const saxombp = controleerSaxombp();
+  if (!saxombp.bereikbaar) {
+    problemen.push({ sleutel: 'saxombp', bericht: saxombp.bericht });
+  } else if (!saxombp.goed) {
+    problemen.push({ sleutel: 'saxombp', bericht: saxombp.bericht });
+  } else {
+    await telegram.meldHerstel('saxombp', 'de productiebackup op saxombp is weer actueel');
+    regels.push(`saxombp: ${saxombp.leeftijd} oud, ${saxombp.aantal} dump(s) bewaard`);
   }
 
   // Draait Docker? Zonder container geen laag B en geen laag C. Dan is één
