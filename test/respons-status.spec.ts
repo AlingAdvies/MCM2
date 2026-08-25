@@ -78,7 +78,7 @@ describe('bepaalStatus', () => {
       ).toBe('terug');
     });
 
-    it.each(['goed', 'nadere_vragen', 'niet_goed'])(
+    it.each(['goed', 'nadere_vragen'])(
       'is beoordeeld bij het inhoudelijke oordeel %s',
       (laatsteOordeel) => {
         expect(bepaalStatus(feiten({ ...ingediend, laatsteOordeel }))).toBe(
@@ -86,6 +86,15 @@ describe('bepaalStatus', () => {
         );
       },
     );
+
+    // 'niet_goed' krijgt een eigen status: voor een auditor moet een
+    // afkeuring in één oogopslag opvallen, niet verdwijnen achter de
+    // neutrale 'beoordeeld'-badge naast een 'goed'-oordeel.
+    it('is afgekeurd wanneer het laatste oordeel niet_goed is', () => {
+      expect(
+        bepaalStatus(feiten({ ...ingediend, laatsteOordeel: 'niet_goed' })),
+      ).toBe('afgekeurd');
+    });
 
     it('is goedgekeurd wanneer het laatste oordeel goedgekeurd is', () => {
       expect(
@@ -99,13 +108,13 @@ describe('bepaalStatus', () => {
 
     // Dit is de vervolgvraag op V3, en het minst vanzelfsprekende geval:
     // schrijft iemand ná een goedkeuring alsnog 'niet_goed', dan staat de
-    // inzending weer op 'beoordeeld'. Een goedkeuring die blijft staan terwijl
-    // er een afwijzing onder hangt, is niet herstelbaar zonder dat iemand het
-    // merkt.
-    it('valt terug op beoordeeld als er na goedkeuring een afwijzing komt', () => {
+    // inzending weer op 'afgekeurd' (was 'beoordeeld' vóór de eigen
+    // afgekeurd-status). Een goedkeuring die blijft staan terwijl er een
+    // afwijzing onder hangt, is niet herstelbaar zonder dat iemand het merkt.
+    it('valt terug op afgekeurd als er na goedkeuring een afwijzing komt', () => {
       expect(
         bepaalStatus(feiten({ ...ingediend, laatsteOordeel: 'niet_goed' })),
-      ).toBe('beoordeeld');
+      ).toBe('afgekeurd');
     });
 
     // De keerzijde: een ingetrokken goedkeuring hoort niet meer te tellen. Dat
