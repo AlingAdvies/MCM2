@@ -43,6 +43,11 @@ export const contractStatus = ref.table('contract_status', {
   label: text('label').notNull(),
 });
 
+export const complianceThema = ref.table('compliance_thema', {
+  code: text('code').primaryKey(),
+  label: text('label').notNull(),
+});
+
 // ─── clm schema: fundament ────────────────────────────────────────────────
 
 export const tenant = clm.table(
@@ -305,6 +310,26 @@ export const vendorTag = clm.table(
   (t) => [
     uniqueIndex('vendor_tag_pkey').on(t.vendorId, t.tag),
     index('vendor_tag_tenant_id_idx').on(t.tenantId),
+  ],
+);
+
+export const vendorComplianceThema = clm.table(
+  'vendor_compliance_thema',
+  {
+    vendorId: uuid('vendor_id')
+      .notNull()
+      .references(() => vendor.vendorId, { onDelete: 'cascade' }),
+    themaCode: text('thema_code')
+      .notNull()
+      .references(() => complianceThema.code, { onDelete: 'restrict' }),
+    tenantId: uuid('tenant_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('vendor_compliance_thema_pkey').on(t.vendorId, t.themaCode),
+    index('vendor_compliance_thema_tenant_id_idx').on(t.tenantId),
   ],
 );
 
