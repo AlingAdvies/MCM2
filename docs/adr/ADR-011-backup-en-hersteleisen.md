@@ -1,6 +1,13 @@
 # ADR-011 — Backup- en hersteleisen per fase
 
-- **Status:** voorgesteld — de getallen hieronder zijn onderbouwde uitgangspunten, geen gemeten waarden. Ze worden bevestigd of bijgesteld zodra de eerste restore-test is uitgevoerd (Issue #19).
+- **Status:** aangenomen — twee handmatige dump/restore-tests zijn uitgevoerd (2026-07-28 en
+  2026-08-25, de tweede vanaf de nieuwe saxombp-route) en de getallen hieronder zijn bevestigd
+  binnen de gemeten omvang. **Issue #19 staat nog open**: het acceptatiecriterium daar vraagt
+  specifiek een restore via Supabase's eigen dashboard naar een wegwerp-project — beide tot nu
+  toe uitgevoerde tests zijn een handmatige `pg_dump`/`pg_restore` in een eigen container, wat
+  een ander (en volgens `supabase-verificatie-en-restoretest.md` stap 1a/1b breder bruikbaar)
+  herstelpad bewijst, maar niet hetzelfde. Zie het meetregister in
+  `docs/runbooks/supabase-verificatie-en-restoretest.md` voor de volledige reeks.
 - **Datum:** 2026-07-28
 - **Aanleiding:** de vraag "hoe stellen we blijvend vast dat de backupstrategie passend is, ook bij een groeiende database?" Tot nu toe was er wél een backup-issue (#19), maar geen norm om "passend" aan af te meten.
 - **Relatie:** ADR-002 (Supabase als database, control 1 en 2 nog open), `docs/runbooks/supabase-verificatie-en-restoretest.md`.
@@ -204,6 +211,12 @@ De hertest-frequentie hangt aan de fase, niet aan een losse afspraak. Overgang n
 ## Openstaand
 
 - ~~De getallen zijn niet gemeten~~ — **eerste meting gedaan op 2026-07-28**: dump 9,8s (21,2 kB), restore 1s, verificatie inclusief 20 e2e-tests. Ruim binnen de RTO van 4 uur. Zegt weinig over een gevulde database; daarvoor is het meetregister in het runbook.
+- **Tweede meting, 2026-08-25** — eerste keer met een dump **vanaf saxombp** in plaats van
+  OneDrive (dus de nieuwe, onafhankelijke backuproute uit §"Waarvoor hij wél wordt ingezet"
+  zelf getest, niet alleen zijn bestaan). 27 tabellen, 143 kB, restore ruim binnen een minuut.
+  Zie het meetregister in `docs/runbooks/supabase-verificatie-en-restoretest.md`. Dit vult één
+  van de twee voorwaarden in `docs/runbooks/backupcontrole.md` §"Wanneer de laptoptaak uit mag"
+  (nog niet beide — 7 opeenvolgende geslaagde saxombp-dumps staat nog open).
 - ~~Wat Supabase feitelijk biedt is nog niet vastgesteld~~ — **vastgesteld op 2026-07-28** via het dashboard: Free levert **geen enkele backup** ("Free Plan does not include project backups") en pauzeert projecten na ~7 dagen inactiviteit. Pro (~$25/mnd) geeft dagelijkse backups met 7 dagen retentie; Point-in-Time Recovery is een add-on van **$100/mnd bovenop Pro**. Ter vergelijking gemeten: Neon biedt een 7-daags PITR-venster binnen een plan van ~$10–20/mnd, en MCM2 draait daar aantoonbaar op zonder codewijziging (Issue #30). De eigenaar heeft desondanks gekozen voor Free tijdens de pilot — zie de risico-acceptatie hierboven.
 - **De handmatige dump is nu de enige backup.** Dat maakt de betrouwbaarheid van de geplande taak een enkelvoudig faalpunt. Een taak die stil faalt is gevaarlijker dan geen taak, want dan denk je beschermd te zijn. Er is nog geen mechanisme dat waarschuwt als de dump een dag overslaat — te overwegen vóór de pilotstart.
 - Backup van **geüploade bestanden** (certificaten, Issue #9) valt buiten dit ADR: die gaan naar objectopslag (MinIO/S3), niet naar de database. Vereist een eigen afweging zodra dat gebouwd wordt.

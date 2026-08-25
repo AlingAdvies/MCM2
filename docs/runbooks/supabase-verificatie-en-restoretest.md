@@ -325,6 +325,7 @@ eisen uit ADR-011 gelijk blijven, dan is dat een signaal vóórdat het een incid
 | Datum | Omvang database | Duur restore (start → geverifieerd) | `verify-schema.js` | Binnen RTO uit ADR-011? | Uitgevoerd door |
 |---|---|---|---|---|---|
 | 2026-07-28 | 21,7 kB dump, 9 tabellen, geen klantdata | dump 5s + restore 1s + rechten <1s ≈ **10s** | GOEDGEKEURD (na herstel grants én defaults) | Ja, ruim — norm is 1 werkdag | Claude, via `pg_dump`/`pg_restore` in container |
+| 2026-08-25 | 143 kB dump, 27 tabellen (incl. contractmanagement, migratie 0030), geen klantdata | dump op saxombp 9s + scp naar laptop + restore ≈ **onder 1 minuut** | niet `verify-schema.js` gedraaid, wel handmatig geverifieerd: 27 tabellen, RLS-policies aanwezig, echte rijdata terug | Ja, ruim | Claude, dump vanaf **saxombp** (niet OneDrive) — eerste keer dat de saxombp-cron-route zelf getest is, zie `backupcontrole.md` §"Wanneer de laptoptaak uit mag" |
 
 **Toelichting bij de eerste meting.** Dit was een handmatige dump-restore, **niet** de
 dashboard-backup van Supabase. Het bewijst dat er een werkend herstelpad bestaat en levert een

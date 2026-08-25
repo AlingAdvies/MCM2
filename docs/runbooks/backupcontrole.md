@@ -409,6 +409,31 @@ Zodra beide zijn aangetoond: zet de Windows-taak `MCM2 databasebackup` handmatig
 Taakplanner. Dat is een besluit en een handeling van de eigenaar — geen script in deze repo
 doet dat automatisch.
 
+**Punt 2 is op 2026-08-25 voor het eerst aangetoond.** Naar aanleiding van issue #184 (zie
+hieronder) is de nieuwste saxombp-dump via `scp` naar de laptop gehaald en met `pg_restore`
+teruggezet in de al bestaande `wegwerp`-gemarkeerde testcontainer (`mcm2test`, poort 55440,
+`127.0.0.1`-binding). Geverifieerd: 27 tabellen (22 clm + 4 ref + 1 audit), RLS-policies
+correct hersteld, echte rijdata terug. Daarna opgeruimd (testdatabase gedropt, lokale
+dumpkopie met productiedata gewist). Punt 1 (7 opeenvolgende dagen) loopt nog — de cron draait
+sinds 25-08.
+
+**Bijvangst tijdens deze test:** `npm run backup:dump` zonder `BACKUP_DIR` schrijft stil naar
+de projectmap (`process.cwd()/backups`) in plaats van OneDrive — bevestigt nogmaals de
+waarschuwing hierboven ("Waarom het `.cmd` en niet het npm-script"). Bij een handmatige
+`backup:dump`-aanroep altijd `BACKUP_DIR="$HOME/OneDrive - Aling Advies/MCM2-backups"`
+expliciet meegeven, of het `.cmd`-bestand gebruiken.
+
+### Bijvangst: issue #184 (25-08)
+
+Bij het inhoudelijk controleren van de eerste echte saxombp-dump (`pg_restore --list`) bleek
+hij 24 van de 27 verwachte tabellen te bevatten. Rechtstreeks tegen productie geverifieerd: de
+contractmanagement-migraties (0027-0029) stonden al sinds 22/23-08 op `main`, maar waren nooit
+op de echte productiedatabase toegepast. Dit was dus geen backup-fout — de dump was correct
+voor wat er echt in productie stond. Opgelost dezelfde dag: migraties (plus 0030, die bleek
+ook nog te ontbreken) alsnog uitgerold via `productie-aws.yml` (run 32843846161), rechtstreeks
+geverifieerd, `docs/runbooks/backup-verwachting.json` teruggezet naar de volledige
+27-tabellenlijst. Zie `docs/STATUS.md`, sectie 2026-08-25 (vervolg 2).
+
 ---
 
 ## Bekende beperking
