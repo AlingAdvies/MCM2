@@ -2,6 +2,46 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-25 — issue #153 opgelost: contactinfo op de vragenlijst voor de
+leverancier. Groep A van #180 (pilot-prioriteit) daarmee volledig afgerond.**
+
+Vervolg op 24-08. Voor de bouw is eerst een expliciete beveiligingsdiscussie
+gevoerd met de eigenaar (bewuste uitzondering op de regel dat het
+leverancierspad geen tenant-/vendor-/responsdata teruggeeft — zie
+`docs/superpowers/specs/2026-08-25-contactinfo-vragenlijst-design.md` §1
+voor de volledige afweging: geen precedent, alleen dit ene veld).
+
+**Prioriteitsketen:** `tenant.antwoordEmail` → `contract.ownerUserId` (als de
+ronde aan een contract hangt) → `vendor.ownerUserId` → geen contactregel.
+Alle drie bronnen bestonden al, geen migratie nodig. Toegevoegd aan
+`GET /survey/respond/questions`, niet aan de status-route.
+
+**Backend** (`VragenlijstLeesService.haalContactinfo()`, MCM2@5485522): één
+query met drie LEFT JOINs, expliciete beveiligingscomment op de functie,
+tegenproef die bevestigt dat er verder niets tenant-/vendor-/response-
+specifieks meelekt (uitbreiding van een al bestaande lek-detectietest).
+Onderweg bleek de eigen nieuwe test tegen een verkeerde fixture te draaien
+(een al-ingediende respons geeft 410 vóór de echte handler bereikt wordt) —
+door de implementer zelf gevonden en gecorrigeerd vóór review, niet door de
+reviewer.
+
+**Frontend** (MCM2-frontend@c1d32ae): contactregel onderaan bij de
+indienknop (eerste versie), en na preview + expliciet verzoek van de
+eigenaar ook bovenaan boven de eerste vraag (tweede, kleine iteratie na
+goedkeuring — geen aparte brainstorm nodig, cosmetische toevoeging op een
+net goedgekeurde feature). Beide keren gepreviewd via de demo-stack vóór
+mergen, conform het vaste protocol.
+
+**Twee subagent-driven-development-rondes zonder fixes nodig** op de
+kernvier taken (in tegenstelling tot 24-08's feature, waar twee fixes nodig
+waren) — spec-compliance en code-quality-reviews beide meteen akkoord.
+
+**Vervolg:** Groep A van #180 is nu compleet (#77 bleek al gebouwd, #153 nu
+opgelost). Resteert Groep B (#58, #19, #17 — raakt de eigenaar, niet de
+leverancier, geen blokkade voor de eerste uitnodiging) en Groep C.
+
+---
+
 **2026-08-24 — NIS2-scaffold beoordeeld en gelabeld; nieuwe feature
 "vastgestelde notitie" volledig door de keten (backend + frontend),
 gemerged naar main in beide repo's; twee stale branches opgeruimd in
