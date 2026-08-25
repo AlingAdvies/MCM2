@@ -81,6 +81,7 @@ if ! docker run --rm \
     sh -c "pg_dump \"\$PGURL\" --format=custom --no-owner --no-privileges --schema=clm --schema=ref --schema=audit --file=/backup/$BESTANDSNAAM"
 then
   echo "Backup MISLUKT — pg_dump gaf een foutcode terug." >&2
+  rm -f "$DOELPAD" 2>/dev/null || true
   exit 1
 fi
 
