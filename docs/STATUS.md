@@ -2,6 +2,57 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-25 (vervolg) — issue #58 opgelost: onafhankelijke productiebackup op
+saxombp, los van de ontwikkellaptop. Bijvangst: issue #184 aangemaakt —
+productie mist de contractmanagement-tabellen ondanks gemergede migraties.**
+
+**Aanleiding en gevolgde weg.** Eigenaar wilde backup naar saxombp i.p.v.
+alleen de laptop. Bleek in twee stappen te verdiepen: eerst "kopieer de
+laptop-dump ook naar saxombp" (SSH-obstakel: Tailscale SSH vraagt periodiek
+een browser-herauthenticatie, onhaalbaar voor een onbewaakte 06:00-taak —
+"Disable key expiry" bleek bij onderzoek een ANDER mechanisme te zijn dan
+gedacht, lost dit niet op), toen — op verzoek van de eigenaar — "saxombp
+haalt de dump zelf rechtstreeks bij Supabase, geen laptop in de keten".
+Dat laatste bleek de juiste, eenvoudiger oplossing: geen SSH-herauth-
+probleem meer, want er is geen SSH nodig voor de dump zelf.
+
+**Gebouwd, backend/scripts (`docs/superpowers/specs/2026-08-25-
+saxombp-productiebackup-design.md`, plan met dezelfde datumnaam):**
+- `scripts/saxombp-backup-productie.sh` — bash-script op saxombp, cron
+  06:00 dagelijks, dezelfde `pg_dump`-vorm als het bestaande
+  `backup-dump.js` (postgres:17.6-image, schema's clm/ref/audit).
+- `scripts/backup-controle.js` uitgebreid met een aparte, gedempte
+  saxombp-laag (eigen sleutel, vier onderscheiden foutsoorten) — één
+  samengevoegd Telegram-bericht met de status van beide backups.
+- Uitvoerend op saxombp zelf: `/opt/mcm2-backup/.env` (rechten 600, alleen
+  root), het script gekopieerd, cron ingericht en geverifieerd. Eerste
+  dump gemaakt én inhoudelijk gecontroleerd (`pg_restore --list`).
+
+**Twee kritieke fixes uit de code-quality-reviews** (subagent-driven,
+zoals de twee vorige features vandaag): een corrupte dump werd bij een
+mislukte `pg_dump` niet opgeruimd (maskeerde een storing voor de
+volgende dag's staleness-check), en een shell-injectie-kwetsbaarheid in
+de SSH-controle (een geprepareerde bestandsnaam op saxombp kon
+willekeurige code als root uitvoeren) — gedicht met whitelist-validatie
+i.p.v. escaping. Beide gevonden vóórdat er iets naar productie ging.
+
+**Bijvangst — issue #184.** Bij het controleren van de eerste dump bleek
+hij 24 van de 27 verwachte tabellen te bevatten. Rechtstreeks tegen
+productie geverifieerd (niet aangenomen): de 3 ontbrekende
+(`clm.contract`, `clm.contract_survey_template`, `ref.contract_status`)
+bestaan simpelweg niet in de productiedatabase, hoewel de bijbehorende
+migraties (0027-0029) al op 22/23-08 naar `main` gemergd zijn. Dit is
+geen backup-fout — de dump is correct voor wat er echt staat. Los issue
+aangemaakt (#184), niet ter plekke opgelost: dit raakt een
+productie-uitrol, niet het backup-werk van vandaag.
+
+**Laptop-backup blijft nog draaien**, bewust. Concreet criterium om hem
+uit te zetten (ADR-011, `backupcontrole.md`): 7 opeenvolgende geslaagde
+saxombp-dumps + een geslaagde restore-test vanaf een saxombp-dump. Dat is
+een latere, handmatige stap van de eigenaar.
+
+---
+
 **2026-08-25 — issue #153 opgelost: contactinfo op de vragenlijst voor de
 leverancier. Groep A van #180 (pilot-prioriteit) daarmee volledig afgerond.**
 
