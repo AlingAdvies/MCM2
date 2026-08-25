@@ -34,12 +34,23 @@ import { bepaalStatus, type ResponsStatus } from './respons-status';
  * omkijkt.
  */
 
-/** Eén respons in het statusoverzicht. */
+/**
+ * Eén respons in het statusoverzicht — of, sinds 2026-08-25, één relevante
+ * leverancier zonder respons (status 'gepland').
+ *
+ * De eerste vier velden zijn nullable geworden omdat een 'gepland'-item nog
+ * geen response/run/template heeft. Zie
+ * docs/superpowers/specs/2026-08-25-audit-bewijsvoering-design.md, Deel 2.
+ */
 export interface StatusItem {
-  responseId: string;
-  runId: string;
-  templateId: string;
-  templateNaam: string;
+  /** Null voor een 'gepland'-item: er is nog geen response om naar te verwijzen. */
+  responseId: string | null;
+  /** Null voor een 'gepland'-item. */
+  runId: string | null;
+  /** Null voor een 'gepland'-item. */
+  templateId: string | null;
+  /** Null voor een 'gepland'-item — er is nog geen vragenlijst gekoppeld. */
+  templateNaam: string | null;
   vendorId: string | null;
   vendorNaam: string | null;
   /** De contractmanager van deze vendor; null wanneer er geen is. */
@@ -68,6 +79,8 @@ export interface StatusItem {
   aantalOordelen: number;
   /** Hoeveel notities erbij staan. Nul is een geldige uitkomst. */
   aantalNotities: number;
+  /** Toegekende compliance-thema's. Leeg array wanneer er geen zijn. */
+  themaCodes: string[];
 }
 
 interface StatusRij extends Record<string, unknown> {
@@ -86,6 +99,7 @@ interface StatusRij extends Record<string, unknown> {
   laatste_oordeel: string | null;
   aantal_oordelen: string | number;
   aantal_notities: string | number;
+  thema_codes: string[] | null;
 }
 
 function iso(waarde: Date | string | null): string | null {
@@ -104,8 +118,12 @@ export class ContractmanagerService {
    * zijn ingediend — dat is juist wat een contractmanager wil weten: wie moet
    * er nog invullen, en wie is te laat.
    */
-  async vanMij(tenantId: string, userId: string): Promise<StatusItem[]> {
-    return this.haal(tenantId, userId);
+  async vanMij(
+    tenantId: string,
+    userId: string,
+    themaCodes: string[] = [],
+  ): Promise<StatusItem[]> {
+    return this.haal(tenantId, userId, themaCodes);
   }
 
   /**
@@ -115,8 +133,11 @@ export class ContractmanagerService {
    * het scherm de eigen lijst, maar de rest blijft één klik weg: de koppeling
    * is een hulpmiddel en geen grens (ADR-013 besluit 3).
    */
-  async alles(tenantId: string): Promise<StatusItem[]> {
-    return this.haal(tenantId, null);
+  async alles(
+    tenantId: string,
+    themaCodes: string[] = [],
+  ): Promise<StatusItem[]> {
+    return this.haal(tenantId, null, themaCodes);
   }
 
   /**
@@ -126,7 +147,9 @@ export class ContractmanagerService {
   private async haal(
     tenantId: string,
     eigenaarUserId: string | null,
+    themaCodes: string[],
   ): Promise<StatusItem[]> {
+
     return this.db.withTenant(
       tenantId,
       async (tx) => {
@@ -161,7 +184,10 @@ export class ContractmanagerService {
                      (SELECT count(*)
                         FROM clm.response_note n
                        WHERE n.response_id = s.response_id
-                         AND n.deleted_at IS NULL)    AS aantal_notities
+                         AND n.deleted_at IS NULL)    AS aantal_notities,
+                     (SELECT array_agg(vct.thema_code ORDER BY vct.thema_code)
+                        FROM clm.vendor_compliance_thema vct
+                       WHERE vct.vendor_id = s.vendor_id)  AS thema_codes
                 FROM clm.survey_response s
                 JOIN clm.survey_run r      ON r.run_id = s.run_id
                 JOIN clm.survey_template t ON t.template_id = r.template_id
@@ -169,6 +195,12 @@ export class ContractmanagerService {
                 LEFT JOIN clm."user" o     ON o.user_id = v.owner_user_id
                WHERE (${eigenaarUserId}::uuid IS NULL
                       OR v.owner_user_id = ${eigenaarUserId}::uuid)
+                 AND (${sql.param(themaCodes)}::text[] = '{}'
+                      OR EXISTS (
+                        SELECT 1 FROM clm.vendor_compliance_thema vct
+                         WHERE vct.vendor_id = s.vendor_id
+                           AND vct.thema_code = ANY(${sql.param(themaCodes)}::text[])
+                      ))
                ORDER BY s.submitted_at DESC NULLS FIRST, v.name`,
         );
 
@@ -196,9 +228,103 @@ export class ContractmanagerService {
           laatsteOordeel: r.laatste_oordeel,
           aantalOordelen: Number(r.aantal_oordelen),
           aantalNotities: Number(r.aantal_notities),
+          themaCodes: r.thema_codes ?? [],
         }));
       },
       'medewerker',
     );
+  }
+
+  /**
+   * Relevante leveranciers zonder enige survey_response — status 'gepland'.
+   *
+   * "Relevant" = business_criticality medium/high/critical, plus (indien
+   * themaCodes niet leeg is) minstens één van de gefilterde thema's. Zie
+   * docs/superpowers/specs/2026-08-25-audit-bewijsvoering-design.md, Deel 2.
+   *
+   * Bewuste beperking: "zonder enige response ooit", niet "zonder response in
+   * de actuele ronde". Een leverancier die al eens beoordeeld is en op de
+   * volgende ronde wacht, verschijnt hier niet — zie de spec voor de
+   * toelichting.
+   */
+  async haalGeplandeVendors(
+    tenantId: string,
+    eigenaarUserId: string | null,
+    themaCodes: string[],
+  ): Promise<StatusItem[]> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const resultaat = await tx.execute<{
+          vendor_id: string;
+          vendor_naam: string;
+          eigenaar_user_id: string | null;
+          eigenaar_naam: string | null;
+          thema_codes: string[] | null;
+        }>(
+          sql`SELECT v.vendor_id,
+                     v.name AS vendor_naam,
+                     v.owner_user_id AS eigenaar_user_id,
+                     o.full_name AS eigenaar_naam,
+                     (SELECT array_agg(vct.thema_code ORDER BY vct.thema_code)
+                        FROM clm.vendor_compliance_thema vct
+                       WHERE vct.vendor_id = v.vendor_id) AS thema_codes
+                FROM clm.vendor v
+                LEFT JOIN clm."user" o ON o.user_id = v.owner_user_id
+               WHERE v.deleted_at IS NULL
+                 AND v.business_criticality_code IN ('medium', 'high', 'critical')
+                 AND (${eigenaarUserId}::uuid IS NULL
+                      OR v.owner_user_id = ${eigenaarUserId}::uuid)
+                 AND (${sql.param(themaCodes)}::text[] = '{}'
+                      OR EXISTS (
+                        SELECT 1 FROM clm.vendor_compliance_thema vct
+                         WHERE vct.vendor_id = v.vendor_id
+                           AND vct.thema_code = ANY(${sql.param(themaCodes)}::text[])
+                      ))
+                 AND NOT EXISTS (
+                       SELECT 1 FROM clm.survey_response s
+                        WHERE s.vendor_id = v.vendor_id
+                     )
+               ORDER BY v.name`,
+        );
+
+        return resultaat.rows.map((r) => ({
+          responseId: null,
+          runId: null,
+          templateId: null,
+          templateNaam: null,
+          vendorId: r.vendor_id,
+          vendorNaam: r.vendor_naam,
+          eigenaarUserId: r.eigenaar_user_id,
+          eigenaarNaam: r.eigenaar_naam,
+          uitgestuurdOp: null,
+          submittedAt: null,
+          closesAt: null,
+          status: 'gepland' as const,
+          laatsteOordeel: null,
+          aantalOordelen: 0,
+          aantalNotities: 0,
+          themaCodes: r.thema_codes ?? [],
+        }));
+      },
+      'medewerker',
+    );
+  }
+
+  /**
+   * Het volledige overzicht: bestaande responsen + relevante vendors zonder
+   * respons ('gepland'). Dit is wat het statusoverzicht-scherm aanroept.
+   */
+  async volledigOverzicht(
+    tenantId: string,
+    eigenaarUserId: string | null,
+    themaCodes: string[],
+  ): Promise<StatusItem[]> {
+    const [bestaand, gepland] = await Promise.all([
+      this.haal(tenantId, eigenaarUserId, themaCodes),
+      this.haalGeplandeVendors(tenantId, eigenaarUserId, themaCodes),
+    ]);
+
+    return [...bestaand, ...gepland];
   }
 }

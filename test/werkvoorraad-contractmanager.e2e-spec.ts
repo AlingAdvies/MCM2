@@ -332,7 +332,10 @@ describe('Werkvoorraad contractmanager (e2e)', () => {
     // Besluit eigenaar 2026-08-07: het laatste oordeel telt, ook als dat een
     // goedkeuring ongedaan maakt. Een goedkeuring die blijft staan terwijl er
     // een afwijzing onder hangt is niet herstelbaar zonder dat iemand het merkt.
-    it('valt terug op beoordeeld als er na goedkeuring een afwijzing komt', async () => {
+    //
+    // Status is 'afgekeurd' sinds 2026-08-25 (was 'beoordeeld'): een auditor
+    // moet een afkeuring in één oogopslag zien, zie respons-status.ts.
+    it('valt terug op afgekeurd als er na goedkeuring een afwijzing komt', async () => {
       await request(server)
         .post(`/admin/survey/responses/${RESPONSE_VAN_MIJ}/reviews`)
         .set('Cookie', cookieManager)
@@ -343,7 +346,7 @@ describe('Werkvoorraad contractmanager (e2e)', () => {
         (w) => w.responseId === RESPONSE_VAN_MIJ,
       );
 
-      expect(mijne?.status).toBe('beoordeeld');
+      expect(mijne?.status).toBe('afgekeurd');
       expect(mijne?.laatsteOordeel).toBe('niet_goed');
     });
 
