@@ -28,6 +28,20 @@ export interface VendorSamenvatting {
   website: string | null;
   /** Aantal actieve contactpersonen — genoeg om te zien of er iemand bekend is. */
   aantalContacten: number;
+  /**
+   * De naam die in de contactpersoon-kolom hoort te staan, of null wanneer er
+   * niemand bekend is. Prioriteit: primair contact van de leverancier → eerste
+   * contact van de leverancier → contactpersoon van een gekoppeld contract →
+   * null. Besluit eigenaar 2026-08-25: cijfers in deze kolom waren onbruikbaar
+   * ("wie is het?"), en het gekoppelde contract telt ook mee — een leverancier
+   * zonder eigen contact maar met een contract dat er wél een heeft, hoort
+   * hier niet als "niemand" te tonen.
+   */
+  contactpersoonNaam: string | null;
+  categoryCode: string | null;
+  businessCriticalityCode: string | null;
+  /** Compliance-thema's waarvoor deze leverancier relevant is (multi-value). */
+  complianceThemaCodes: string[];
   createdAt: string;
 }
 
@@ -135,6 +149,10 @@ interface VendorRij extends Record<string, unknown> {
   country: string;
   website: string | null;
   aantal_contacten: string;
+  contactpersoon_naam: string | null;
+  category_code: string | null;
+  business_criticality_code: string | null;
+  thema_codes: string[] | null;
   created_at: Date | string;
 }
 
@@ -207,11 +225,35 @@ export class VendorService {
                    v.city,
                    v.country,
                    v.website,
+                   v.category_code,
+                   v.business_criticality_code,
                    v.created_at,
                    (SELECT count(*)
                       FROM clm.vendor_contact c
                      WHERE c.vendor_id = v.vendor_id
-                       AND c.deleted_at IS NULL) AS aantal_contacten
+                       AND c.deleted_at IS NULL) AS aantal_contacten,
+                   -- Prioriteit: primair contact → eerste contact → contact-
+                   -- persoon van een gekoppeld contract → NULL. Zie de
+                   -- toelichting bij VendorSamenvatting.contactpersoonNaam.
+                   COALESCE(
+                     (SELECT c.full_name
+                        FROM clm.vendor_contact c
+                       WHERE c.vendor_id = v.vendor_id
+                         AND c.deleted_at IS NULL
+                       ORDER BY c.is_primary DESC, c.created_at
+                       LIMIT 1),
+                     (SELECT cc.full_name
+                        FROM clm.contract co
+                        JOIN clm.vendor_contact cc ON cc.contact_id = co.vendor_contact_id
+                       WHERE co.vendor_id = v.vendor_id
+                         AND co.deleted_at IS NULL
+                         AND cc.deleted_at IS NULL
+                       ORDER BY co.created_at
+                       LIMIT 1)
+                   ) AS contactpersoon_naam,
+                   (SELECT array_agg(vct.thema_code ORDER BY vct.thema_code)
+                      FROM clm.vendor_compliance_thema vct
+                     WHERE vct.vendor_id = v.vendor_id) AS thema_codes
               FROM clm.vendor v
              WHERE v.deleted_at IS NULL
              ORDER BY v.created_at DESC`,
@@ -225,6 +267,10 @@ export class VendorService {
           country: r.country,
           website: r.website,
           aantalContacten: Number(r.aantal_contacten),
+          contactpersoonNaam: r.contactpersoon_naam,
+          categoryCode: r.category_code,
+          businessCriticalityCode: r.business_criticality_code,
+          complianceThemaCodes: r.thema_codes ?? [],
           createdAt: alsTekst(r.created_at),
         }));
       },
