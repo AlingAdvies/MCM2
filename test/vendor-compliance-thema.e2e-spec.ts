@@ -20,7 +20,18 @@ import { TEST_IDS } from './test-ids';
 const { tenantA, tenantB, userA } = TEST_IDS['vendor-compliance-thema'];
 
 const SUBJECT_A = `oid-thema-a-${Date.now()}`;
-const SUBJECT_B = `oid-thema-b-${Date.now()}`;
+
+interface VendorAanmaakBody {
+  vendorId: string;
+}
+
+interface ComplianceThemaBody {
+  complianceThemaCodes: string[];
+}
+
+interface VeldFoutBody {
+  veld: string;
+}
 
 /**
  * Ruimt alle testdata van deze suite op — idempotent, mag draaien op een lege
@@ -42,19 +53,13 @@ async function verwijderTestdata(client: Client): Promise<void> {
       'DELETE FROM clm.vendor_compliance_thema WHERE tenant_id = $1',
       [tenant],
     );
-    await client.query('DELETE FROM clm.vendor WHERE tenant_id = $1', [
-      tenant,
-    ]);
+    await client.query('DELETE FROM clm.vendor WHERE tenant_id = $1', [tenant]);
     await client.query(
       'DELETE FROM clm.tenant_membership WHERE tenant_id = $1',
       [tenant],
     );
-    await client.query('DELETE FROM clm."user" WHERE tenant_id = $1', [
-      tenant,
-    ]);
-    await client.query('DELETE FROM clm.tenant WHERE tenant_id = $1', [
-      tenant,
-    ]);
+    await client.query('DELETE FROM clm."user" WHERE tenant_id = $1', [tenant]);
+    await client.query('DELETE FROM clm.tenant WHERE tenant_id = $1', [tenant]);
     await client.query('COMMIT');
   }
 }
@@ -115,7 +120,7 @@ describe('PUT /vendors/:id/compliance-themas (e2e)', () => {
       .set('Cookie', cookieA)
       .send({ name: `Thema-testvendor-${Date.now()}` });
 
-    vendorId = aanmaak.body.vendorId;
+    vendorId = (aanmaak.body as VendorAanmaakBody).vendorId;
   }, 30000);
 
   afterAll(async () => {
@@ -131,7 +136,8 @@ describe('PUT /vendors/:id/compliance-themas (e2e)', () => {
       .send({ themaCodes: ['cybersecurity', 'kwaliteit'] });
 
     expect(res.status).toBe(200);
-    expect([...res.body.complianceThemaCodes].sort()).toEqual([
+    const { complianceThemaCodes } = res.body as ComplianceThemaBody;
+    expect([...complianceThemaCodes].sort()).toEqual([
       'cybersecurity',
       'kwaliteit',
     ]);
@@ -149,7 +155,9 @@ describe('PUT /vendors/:id/compliance-themas (e2e)', () => {
       .send({ themaCodes: ['continuiteit'] });
 
     expect(res.status).toBe(200);
-    expect(res.body.complianceThemaCodes).toEqual(['continuiteit']);
+    expect((res.body as ComplianceThemaBody).complianceThemaCodes).toEqual([
+      'continuiteit',
+    ]);
   });
 
   it('accepteert een lege lijst — betekent "geen thema meer"', async () => {
@@ -164,7 +172,7 @@ describe('PUT /vendors/:id/compliance-themas (e2e)', () => {
       .send({ themaCodes: [] });
 
     expect(res.status).toBe(200);
-    expect(res.body.complianceThemaCodes).toEqual([]);
+    expect((res.body as ComplianceThemaBody).complianceThemaCodes).toEqual([]);
   });
 
   it('weigert een onbekende thema-code met een 400', async () => {
@@ -174,7 +182,7 @@ describe('PUT /vendors/:id/compliance-themas (e2e)', () => {
       .send({ themaCodes: ['niet-bestaand-thema'] });
 
     expect(res.status).toBe(400);
-    expect(res.body.veld).toBe('themaCodes');
+    expect((res.body as VeldFoutBody).veld).toBe('themaCodes');
   });
 
   it('weigert een niet-bestaande leverancier met 404', async () => {

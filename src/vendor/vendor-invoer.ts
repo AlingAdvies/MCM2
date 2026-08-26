@@ -359,7 +359,7 @@ export function leesThemaCodes(body: unknown): string[] {
     typeof body !== 'object' ||
     body === null ||
     !('themaCodes' in body) ||
-    !Array.isArray((body as { themaCodes: unknown }).themaCodes)
+    !Array.isArray(body.themaCodes)
   ) {
     throw new InvoerFout(
       'themaCodes',

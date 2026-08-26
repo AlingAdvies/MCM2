@@ -149,7 +149,6 @@ export class ContractmanagerService {
     eigenaarUserId: string | null,
     themaCodes: string[],
   ): Promise<StatusItem[]> {
-
     return this.db.withTenant(
       tenantId,
       async (tx) => {
