@@ -2,6 +2,49 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-26 — audit-bewijsvoering afgerond: vijf UI-verbeteringen verwerkt,
+gemerged naar `main` (beide repo's), en volledig uitgerold tot en met
+productie.**
+
+De preview van gisteren leidde tot vijf concrete feedbackpunten: uitklapbare
+formulieren op het leveranciersdetailscherm (nieuw contract) en het
+leverancierslijstscherm (nieuwe leverancier) in plaats van altijd-open
+invulvelden, het veld "Vestigingsnummer" hernoemd naar "Leveranciersnummer"
+(met toelichting: matching met het ERP-systeem van de tenant), een
+korte uitleg bij "Overzicht" over het aanvinkvakje voor vragenlijst-
+uitnodiging, en een klikbaar/filterbaar statusoverzicht (badges bovenin
+werken nu ook als filter). Onderweg is een React-state-bug gevonden en
+gefixt: de gelukt-melding bij het opslaan van een nieuwe leverancier stond
+ín het uitklapblok dat in dezelfde render-stap sloot, en verscheen daardoor
+nooit.
+
+**`npm run verify:volledig` kostte dit keer vijf ronden** voordat alles
+groen was — drie fouten hoorden bij het werk van die dag (opmaak,
+verwachtingslijst niet bijgewerkt, browsertests niet meegenomen na de
+UI-wijziging), maar de vierde (`uitnodigen.spec.ts`) stond al **vijf dagen
+stuk** zonder dat iemand het zag: een test verwachtte een rondes-tabel die
+sinds 21-08 achter een uitklapknop zat. Root cause: `verify:volledig` werd
+tot nu toe pas bij afronding van een feature gedraaid, niet tussentijds.
+**Afspraak vanaf nu: bij een feature die meerdere sessies beslaat,
+`verify:volledig` ook tussentijds draaien**, niet bewaren tot de
+afsluitende ronde.
+
+**Uitgerold tot en met productie** via `productie-aws.yml` (run
+`32965448810`), met het handmatige akkoord van de eigenaar als vierde rem:
+migraties tegen productie gedraaid en teruggelezen, `mcm2-api` en
+`mcm2-frontend` beide succesvol bijgewerkt, runtime-rol-check geslaagd. De
+`feat/audit-bewijsvoering`-feature (backend + frontend) is hiermee volledig
+door de OTAP-keten heen: acceptatie → staging → productie. Feature-branches
+verwijderd in beide repo's.
+
+**saxombp-productiebackup (issue #58), voortgang:** de cron-taak draait
+sinds 25-08; stand op 26-08 is 2 geslaagde dumps (25-08 handmatig ingericht,
+26-08 06:00 de eerste echte cron-run). De laptop-backuptaak blijft aanstaan
+tot 7 opeenvolgende geslaagde dumps zijn aangetoond — nog 5 te gaan. Zie
+`docs/runbooks/backupcontrole.md`, sectie "De saxombp-laag".
+
+---
+
 **2026-08-25 (vervolg 3) — audit-bewijsvoering: brainstorm → plan →
 volledige implementatie (7 taken, beide repo's), plus twee rondes
 gebruikersfeedback verwerkt. Branches gepusht, bewust nog niet gemerged —

@@ -2,7 +2,7 @@
 
 **Type:** D — routineoperaties
 **Eigenaar:** de eigenaar (Chris)
-**Laatste update:** 2026-08-10
+**Laatste update:** 2026-08-26
 **Vereiste toegang:** deze PC, Docker Desktop, een Telegram-account
 **Ritme:** zie [onderhoudskalender.md](onderhoudskalender.md) §1
 
@@ -414,8 +414,10 @@ hieronder) is de nieuwste saxombp-dump via `scp` naar de laptop gehaald en met `
 teruggezet in de al bestaande `wegwerp`-gemarkeerde testcontainer (`mcm2test`, poort 55440,
 `127.0.0.1`-binding). Geverifieerd: 27 tabellen (22 clm + 4 ref + 1 audit), RLS-policies
 correct hersteld, echte rijdata terug. Daarna opgeruimd (testdatabase gedropt, lokale
-dumpkopie met productiedata gewist). Punt 1 (7 opeenvolgende dagen) loopt nog — de cron draait
-sinds 25-08.
+dumpkopie met productiedata gewist). **Punt 1 loopt nog:** stand op 2026-08-26 is 2 geslaagde
+dumps (25-08 handmatig ingericht, 26-08 06:00 de eerste echte cron-run) — nog 5 te gaan voor de
+7 opeenvolgende dagen zijn volgemaakt. Controleren: `ssh root@saxombp "ls -la
+/opt/mcm2-backup/dumps/"`.
 
 **Bijvangst tijdens deze test:** `npm run backup:dump` zonder `BACKUP_DIR` schrijft stil naar
 de projectmap (`process.cwd()/backups`) in plaats van OneDrive — bevestigt nogmaals de

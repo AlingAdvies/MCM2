@@ -2,7 +2,7 @@
 
 **Type:** D — routineoperatie
 **Eigenaar:** Kees Maling
-**Laatste update:** 2026-08-07
+**Laatste update:** 2026-08-26
 **Vereiste toegang:** Docker Desktop draaiend, deze repository, `MCM2-frontend` als buurmap
 
 ---
@@ -132,6 +132,17 @@ Hij staat in de demo omdat `seed-demo-tenant.js` alles uit `db/seeds/` inleest;
 Bijgewerkt op 2026-08-07. Daarvóór waren het er drie, en dan toonde het
 statusoverzicht maar twee van de vijf statussen: de rest was visueel nooit
 beoordeeld.
+
+> **Sinds 2026-08-25/26 (feature audit-bewijsvoering, in productie) bestaan er
+> twee extra statussen op `/beheer/status`: `afgekeurd` (laatste oordeel
+> `niet_goed`) en `gepland` (relevante leverancier — criticaliteit medium/
+> high/critical — zonder enige respons, nooit opgeslagen, alleen berekend).
+> De demo-seed hierboven levert geen van beide op: geen van de zes responses
+> heeft een `niet_goed`-oordeel, en er is niet gecontroleerd of een van de 21
+> leveranciers zonder respons toevallig als `gepland` meetelt. Wil je die twee
+> statussen zelf zien, dan moet je ze met de hand aanmaken (een leverancier
+> afkeuren, of een leverancier met hoge criticaliteit zonder ronde
+> achterlaten) — de seed-data dekt dit nog niet.**
 
 Twee dingen die daarbij bewust zo zijn:
 
