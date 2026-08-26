@@ -356,14 +356,24 @@ export class VragenlijstBeheerController {
   async mijnVendors(
     @Req() request: RequestMetSessie,
     @Query('scope') scope?: string,
+    @Query('thema') thema?: string,
   ) {
     const sessie = request.sessie!;
 
     const heleOrganisatie = scope === 'organisatie';
+    const themaCodes = thema ? thema.split(',').filter(Boolean) : [];
 
     const werkvoorraad = heleOrganisatie
-      ? await this.contractmanagers.alles(sessie.tenantId)
-      : await this.contractmanagers.vanMij(sessie.tenantId, sessie.userId);
+      ? await this.contractmanagers.volledigOverzicht(
+          sessie.tenantId,
+          null,
+          themaCodes,
+        )
+      : await this.contractmanagers.volledigOverzicht(
+          sessie.tenantId,
+          sessie.userId,
+          themaCodes,
+        );
 
     return { werkvoorraad, scope: heleOrganisatie ? 'organisatie' : 'mij' };
   }

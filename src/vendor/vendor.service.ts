@@ -28,6 +28,20 @@ export interface VendorSamenvatting {
   website: string | null;
   /** Aantal actieve contactpersonen — genoeg om te zien of er iemand bekend is. */
   aantalContacten: number;
+  /**
+   * De naam die in de contactpersoon-kolom hoort te staan, of null wanneer er
+   * niemand bekend is. Prioriteit: primair contact van de leverancier → eerste
+   * contact van de leverancier → contactpersoon van een gekoppeld contract →
+   * null. Besluit eigenaar 2026-08-25: cijfers in deze kolom waren onbruikbaar
+   * ("wie is het?"), en het gekoppelde contract telt ook mee — een leverancier
+   * zonder eigen contact maar met een contract dat er wél een heeft, hoort
+   * hier niet als "niemand" te tonen.
+   */
+  contactpersoonNaam: string | null;
+  categoryCode: string | null;
+  businessCriticalityCode: string | null;
+  /** Compliance-thema's waarvoor deze leverancier relevant is (multi-value). */
+  complianceThemaCodes: string[];
   createdAt: string;
 }
 
@@ -87,6 +101,8 @@ export interface VendorDetail {
   createdAt: string;
   updatedAt: string | null;
   contacten: Contactpersoon[];
+  /** Compliance-thema's waarvoor deze leverancier relevant is (multi-value). */
+  complianceThemaCodes: string[];
 }
 
 /**
@@ -133,6 +149,10 @@ interface VendorRij extends Record<string, unknown> {
   country: string;
   website: string | null;
   aantal_contacten: string;
+  contactpersoon_naam: string | null;
+  category_code: string | null;
+  business_criticality_code: string | null;
+  thema_codes: string[] | null;
   created_at: Date | string;
 }
 
@@ -160,6 +180,10 @@ interface ContactRij extends Record<string, unknown> {
   job_title: string | null;
   role_description: string | null;
   is_primary: boolean;
+}
+
+interface ThemaRij extends Record<string, unknown> {
+  thema_code: string;
 }
 
 function alsTekst(waarde: Date | string): string {
@@ -201,11 +225,35 @@ export class VendorService {
                    v.city,
                    v.country,
                    v.website,
+                   v.category_code,
+                   v.business_criticality_code,
                    v.created_at,
                    (SELECT count(*)
                       FROM clm.vendor_contact c
                      WHERE c.vendor_id = v.vendor_id
-                       AND c.deleted_at IS NULL) AS aantal_contacten
+                       AND c.deleted_at IS NULL) AS aantal_contacten,
+                   -- Prioriteit: primair contact → eerste contact → contact-
+                   -- persoon van een gekoppeld contract → NULL. Zie de
+                   -- toelichting bij VendorSamenvatting.contactpersoonNaam.
+                   COALESCE(
+                     (SELECT c.full_name
+                        FROM clm.vendor_contact c
+                       WHERE c.vendor_id = v.vendor_id
+                         AND c.deleted_at IS NULL
+                       ORDER BY c.is_primary DESC, c.created_at
+                       LIMIT 1),
+                     (SELECT cc.full_name
+                        FROM clm.contract co
+                        JOIN clm.vendor_contact cc ON cc.contact_id = co.vendor_contact_id
+                       WHERE co.vendor_id = v.vendor_id
+                         AND co.deleted_at IS NULL
+                         AND cc.deleted_at IS NULL
+                       ORDER BY co.created_at
+                       LIMIT 1)
+                   ) AS contactpersoon_naam,
+                   (SELECT array_agg(vct.thema_code ORDER BY vct.thema_code)
+                      FROM clm.vendor_compliance_thema vct
+                     WHERE vct.vendor_id = v.vendor_id) AS thema_codes
               FROM clm.vendor v
              WHERE v.deleted_at IS NULL
              ORDER BY v.created_at DESC`,
@@ -219,6 +267,10 @@ export class VendorService {
           country: r.country,
           website: r.website,
           aantalContacten: Number(r.aantal_contacten),
+          contactpersoonNaam: r.contactpersoon_naam,
+          categoryCode: r.category_code,
+          businessCriticalityCode: r.business_criticality_code,
+          complianceThemaCodes: r.thema_codes ?? [],
           createdAt: alsTekst(r.created_at),
         }));
       },
@@ -732,6 +784,12 @@ export class VendorService {
            ORDER BY is_primary DESC, full_name`,
     );
 
+    const themas = await tx.execute<ThemaRij>(
+      sql`SELECT thema_code FROM clm.vendor_compliance_thema
+           WHERE vendor_id = ${vendorId}
+           ORDER BY thema_code`,
+    );
+
     return {
       vendorId: rij.vendor_id,
       name: rij.name,
@@ -755,6 +813,56 @@ export class VendorService {
         roleDescription: c.role_description,
         isPrimary: c.is_primary,
       })),
+      complianceThemaCodes: themas.rows.map((t) => t.thema_code),
     };
+  }
+
+  /**
+   * Vervangt de volledige set compliance-thema's van een leverancier.
+   *
+   * Geen incrementele toggle-endpoint: de UI stuurt altijd de complete
+   * gewenste set, dus "verwijder wat er niet meer in zit, voeg toe wat nieuw
+   * is" binnen één transactie is eenvoudiger en heeft geen race condition
+   * tussen twee losse toggle-aanroepen.
+   *
+   * Geeft `null` wanneer de leverancier niet bestaat of niet van deze tenant
+   * is — zelfde redenering als wijzig().
+   */
+  async zetComplianceThemas(
+    tenantId: string,
+    vendorId: string,
+    themaCodes: string[],
+  ): Promise<VendorDetail | null> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const bestaat = await tx.execute<{ vendor_id: string }>(
+          sql`SELECT vendor_id FROM clm.vendor
+             WHERE vendor_id = ${vendorId} AND deleted_at IS NULL`,
+        );
+
+        if (bestaat.rows.length === 0) {
+          return null;
+        }
+
+        await tx.execute(
+          sql`DELETE FROM clm.vendor_compliance_thema WHERE vendor_id = ${vendorId}`,
+        );
+
+        for (const code of themaCodes) {
+          await tx.execute(
+            sql`INSERT INTO clm.vendor_compliance_thema (vendor_id, thema_code, tenant_id)
+                VALUES (${vendorId}, ${code}, ${tenantId})`,
+          );
+        }
+
+        this.logger.log(
+          `Compliance-thema's bijgewerkt (${vendorId}): ${themaCodes.join(', ') || 'geen'}.`,
+        );
+
+        return this.detailBinnenTransactie(tx, vendorId);
+      },
+      'medewerker',
+    );
   }
 }

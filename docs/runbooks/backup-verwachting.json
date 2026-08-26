@@ -19,10 +19,13 @@
     "uitrol alsnog gedraaid (workflow productie-aws.yml, run 32843846161) en rechtstreeks tegen",
     "productie geverifieerd dat clm.contract, clm.contract_survey_template en",
     "ref.contract_status nu bestaan — samen met migratie 0030 (was ook nog niet uitgerold).",
-    "Deze lijst is teruggezet naar de volledige, werkelijke stand."
+    "Deze lijst is teruggezet naar de volledige, werkelijke stand.",
+    "",
+    "Migratie 0031 (25-08, audit-bewijsvoering) voegde ref.compliance_thema en",
+    "clm.vendor_compliance_thema toe. Bijgewerkt bij het afronden van die feature."
   ],
-  "bijgewerkt": "2026-08-25",
-  "migratiestand": "0030_response_note_soort",
+  "bijgewerkt": "2026-08-26",
+  "migratiestand": "0031_compliance_thema",
   "tabellen": [
     "audit.audit_event",
     "clm.contract",
@@ -45,10 +48,12 @@
     "clm.tenant_register",
     "clm.user",
     "clm.vendor",
+    "clm.vendor_compliance_thema",
     "clm.vendor_contact",
     "clm.vendor_tag",
     "ref.business_criticality",
     "ref.compliance_status",
+    "ref.compliance_thema",
     "ref.contract_status",
     "ref.vendor_category"
   ]

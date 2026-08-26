@@ -9,6 +9,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -22,6 +23,7 @@ import {
   InvoerFout,
   leesContact,
   leesNieuweVendor,
+  leesThemaCodes,
   leesVendorWijziging,
 } from './vendor-invoer';
 import {
@@ -148,6 +150,41 @@ export class VendorController {
     const vendor = await this.vendors
       .wijzig(sessie.tenantId, leesUuid(id), wijziging)
       .catch(alsRefFout);
+
+    if (!vendor) {
+      throw new NotFoundException('Leverancier niet gevonden.');
+    }
+
+    return vendor;
+  }
+
+  /**
+   * Vervangt de compliance-thema's van een leverancier.
+   *
+   * PUT, niet PATCH: de body is altijd de complete gewenste set, geen
+   * gedeeltelijke wijziging. Een onbekende thema-code geeft een 400 (foreign
+   * key-fout omgezet, zelfde patroon als alsRefFout()).
+   */
+  @Put(':id/compliance-themas')
+  @VereistRol('admin')
+  async zetComplianceThemas(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const sessie = request.sessie!;
+
+    let themaCodes: string[];
+
+    try {
+      themaCodes = leesThemaCodes(body);
+    } catch (err) {
+      throw alsHttpFout(err);
+    }
+
+    const vendor = await this.vendors
+      .zetComplianceThemas(sessie.tenantId, leesUuid(id), themaCodes)
+      .catch(alsThemaRefFout);
 
     if (!vendor) {
       throw new NotFoundException('Leverancier niet gevonden.');
@@ -302,6 +339,27 @@ function alsRefFout(err: unknown): never {
     throw new BadRequestException({
       message: 'Onbekende categorie, criticality of compliancestatus.',
       veld: 'categoryCode',
+    });
+  }
+
+  throw err;
+}
+
+/**
+ * Een onbekende thema-code is een gebruikersfout, geen storing.
+ *
+ * `thema_code` heeft een foreign key naar `ref.compliance_thema`. Een waarde
+ * die daar niet in staat geeft een `23503`-fout — zelfde patroon als
+ * alsRefFout(), maar met een ander veld in de melding.
+ */
+function alsThemaRefFout(err: unknown): never {
+  const code = (err as { cause?: { code?: string }; code?: string })?.cause
+    ?.code;
+
+  if (code === '23503') {
+    throw new BadRequestException({
+      message: 'Onbekend compliance-thema.',
+      veld: 'themaCodes',
     });
   }
 

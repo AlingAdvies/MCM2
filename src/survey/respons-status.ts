@@ -20,13 +20,29 @@
  * closes_at, de ronde-status en het laatste oordeel.
  */
 
-/** De vier statussen die de eigenaar noemde, plus 'te_laat'. */
+/**
+ * De vier statussen die de eigenaar noemde, plus 'te_laat', 'afgekeurd' en
+ * 'gepland'.
+ *
+ * 'afgekeurd' (2026-08-25): een eigen status voor een auditor — een
+ * afkeuring moet in één oogopslag opvallen, niet verdwijnen achter de
+ * neutrale 'beoordeeld'-badge naast een 'goed'-oordeel. Zie
+ * docs/superpowers/specs/2026-08-25-audit-bewijsvoering-design.md, Deel 2.
+ *
+ * 'gepland' wordt hier bewust NIET afgeleid in bepaalStatus(): die status
+ * gaat over een relevante leverancier zónder respons, terwijl deze functie
+ * uitgaat van een bestaande respons. Hij bestaat alleen in deze unie zodat
+ * frontend- en backend-code met één type kunnen werken; toegekend in
+ * ContractmanagerService.haalGeplandeVendors().
+ */
 export const RESPONS_STATUSSEN = [
   'opgestuurd',
   'te_laat',
   'terug',
   'beoordeeld',
   'goedgekeurd',
+  'afgekeurd',
+  'gepland',
 ] as const;
 
 export type ResponsStatus = (typeof RESPONS_STATUSSEN)[number];
@@ -38,6 +54,8 @@ export const STATUS_LABEL: Record<ResponsStatus, string> = {
   terug: 'Terug, nog niet beoordeeld',
   beoordeeld: 'Beoordeeld, nog niet goedgekeurd',
   goedgekeurd: 'Beoordeeld en goedgekeurd',
+  afgekeurd: 'Afgekeurd',
+  gepland: 'Nog niet uitgenodigd',
 };
 
 /** De feiten waaruit de status volgt. Alles wat de query oplevert. */
@@ -111,6 +129,13 @@ export function bepaalStatus(feiten: StatusFeiten): ResponsStatus {
   // eerdere goedkeuring met daarna een inhoudelijk oordeel telt niet meer.
   if (feiten.laatsteOordeel === 'goedgekeurd') {
     return 'goedgekeurd';
+  }
+
+  // Een afkeuring moet voor een auditor in één oogopslag opvallen — vandaar
+  // een eigen status in plaats van de neutrale 'beoordeeld'. 'goed' en
+  // 'nadere_vragen' blijven onder 'beoordeeld' vallen.
+  if (feiten.laatsteOordeel === 'niet_goed') {
+    return 'afgekeurd';
   }
 
   return 'beoordeeld';
