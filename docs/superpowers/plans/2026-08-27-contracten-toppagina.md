@@ -39,13 +39,13 @@ volgende sessie op dezelfde container: `npm run test:db -- "contracten-toppagina
 **Files:**
 - Modify: `src/contract/contract.service.ts`
 
-- [ ] **Step 1: Bekijk het bestaande `lijst()` als sjabloon**
+- [x] **Step 1: Bekijk het bestaande `lijst()` als sjabloon**
 
 ```powershell
 Get-Content src/contract/contract.service.ts | Select-String -Pattern "async lijst" -Context 0,40
 ```
 
-- [ ] **Step 2: Voeg het nieuwe interface toe**
+- [x] **Step 2: Voeg het nieuwe interface toe**
 
 In `src/contract/contract.service.ts`, direct na `ContractSamenvatting`
 (regel ~20-35):
@@ -58,7 +58,7 @@ export interface ContractTenantBreed extends ContractSamenvatting {
 }
 ```
 
-- [ ] **Step 3: Voeg de nieuwe methode toe**
+- [x] **Step 3: Voeg de nieuwe methode toe**
 
 Direct na de bestaande `lijst()`-methode (na regel ~191, vóór `maakAan`):
 
@@ -116,7 +116,7 @@ Direct na de bestaande `lijst()`-methode (na regel ~191, vóór `maakAan`):
   }
 ```
 
-- [ ] **Step 4: Typecheck**
+- [x] **Step 4: Typecheck**
 
 ```powershell
 npx tsc --noEmit
@@ -124,7 +124,7 @@ npx tsc --noEmit
 
 Verwacht: geen fouten.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/contract/contract.service.ts
@@ -140,13 +140,13 @@ git commit -m "feat(contract): ContractService.lijstTenantBreed() voor de contra
 - Modify: `src/contract/contract.module.ts`
 - Test: `test/contracten-overzicht.e2e-spec.ts`
 
-- [ ] **Step 1: Bekijk `contract.module.ts`**
+- [x] **Step 1: Bekijk `contract.module.ts`**
 
 ```powershell
 Get-Content src/contract/contract.module.ts
 ```
 
-- [ ] **Step 2: Registreer de test-ids**
+- [x] **Step 2: Registreer de test-ids**
 
 In `test/test-ids.ts`, na het laatste blok (vóór de afsluitende `} as const;`):
 
@@ -159,7 +159,7 @@ In `test/test-ids.ts`, na het laatste blok (vóór de afsluitende `} as const;`)
   },
 ```
 
-- [ ] **Step 3: Schrijf de falende e2e-tests**
+- [x] **Step 3: Schrijf de falende e2e-tests**
 
 Maak `test/contracten-overzicht.e2e-spec.ts`, naar het patroon van
 `test/tenant-leden.e2e-spec.ts` (imports, `migratieUrl()`, `SessieService`,
@@ -391,7 +391,7 @@ describe('GET /contracts — tenant-breed overzicht (e2e)', () => {
 });
 ```
 
-- [ ] **Step 4: Run, verwacht FAIL**
+- [x] **Step 4: Run, verwacht FAIL**
 
 ```powershell
 npx jest --config ./test/jest-e2e.json test/contracten-overzicht.e2e-spec.ts
@@ -399,7 +399,7 @@ npx jest --config ./test/jest-e2e.json test/contracten-overzicht.e2e-spec.ts
 
 Verwacht: FAIL — de route bestaat nog niet (404).
 
-- [ ] **Step 5: Implementeer de controller**
+- [x] **Step 5: Implementeer de controller**
 
 Maak `src/contract/contracts-overzicht.controller.ts`:
 
@@ -436,24 +436,24 @@ export class ContractsOverzichtController {
 }
 ```
 
-- [ ] **Step 6: Registreer in `contract.module.ts`**
+- [x] **Step 6: Registreer in `contract.module.ts`**
 
 Voeg `ContractsOverzichtController` toe aan `controllers`, naast de
 bestaande `ContractController`.
 
-- [ ] **Step 7: Run, verwacht PASS**
+- [x] **Step 7: Run, verwacht PASS**
 
 ```powershell
 npx jest --config ./test/jest-e2e.json test/contracten-overzicht.e2e-spec.ts
 ```
 
-- [ ] **Step 8: Volledige e2e-run**
+- [x] **Step 8: Volledige e2e-run**
 
 ```powershell
 npx jest --config ./test/jest-e2e.json
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/contract/contracts-overzicht.controller.ts src/contract/contract.module.ts test/contracten-overzicht.e2e-spec.ts test/test-ids.ts
@@ -464,7 +464,7 @@ git commit -m "feat(contract): route GET /contracts — tenant-breed overzicht (
 
 ### Taak 3: Backend — `verify:volledig`
 
-- [ ] **Step 1**
+- [x] **Step 1**
 
 ```powershell
 npm run verify:volledig
@@ -473,7 +473,7 @@ npm run verify:volledig
 Verwacht: groen. Diagnosticeer en fix elk falen vóór verdergaan (conform
 CLAUDE.md, "verify:volledig tussentijds draaien").
 
-- [ ] **Step 2: Commit eventuele fixes apart**
+- [x] **Step 2: Commit eventuele fixes apart**
 
 ```bash
 git add -A
