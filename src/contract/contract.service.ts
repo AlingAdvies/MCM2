@@ -34,6 +34,12 @@ export interface ContractSamenvatting {
   autoRenews: string | null;
 }
 
+export interface ContractTenantBreed extends ContractSamenvatting {
+  vendorId: string;
+  vendorNaam: string;
+  valueEur: string | null;
+}
+
 export interface NieuwContract {
   name: string;
   contractNumber?: string | null;
@@ -176,6 +182,62 @@ export class ContractService {
           vendorContactId: r.vendor_contact_id,
           ownerUserId: r.owner_user_id,
           statusCode: r.status_code,
+          startDate: r.start_date,
+          endDate: r.end_date,
+          vendorContactNaam: r.vendor_contact_naam,
+          ownerGebruikerNaam: r.owner_naam,
+          createdAt: alsTekst(r.created_at),
+          noticePeriodDays: r.notice_period_days,
+          warningDaysBefore: r.warning_days_before,
+          autoRenews: r.auto_renews,
+        }));
+      },
+      'medewerker',
+    );
+  }
+
+  /**
+   * Alle actieve contracten van de tenant, ongeacht leverancier — voor de
+   * contracten-toppagina (issue #173). Dichtstbijzijnde einddatum eerst: een
+   * tenant-breed overzicht beantwoordt primair "wat loopt er binnenkort af",
+   * anders dan de vendor-gescoped lijst() hierboven (nieuwste eerst).
+   */
+  async lijstTenantBreed(tenantId: string): Promise<ContractTenantBreed[]> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const resultaat = await tx.execute<
+          ContractRij & {
+            vendor_id: string;
+            vendor_naam: string;
+            value_eur: string | null;
+          }
+        >(
+          sql`SELECT c.contract_id, c.vendor_id, c.name, c.contract_number,
+                     c.vendor_contact_id, c.owner_user_id, c.status_code,
+                     c.value_eur, c.start_date, c.end_date, c.created_at,
+                     c.notice_period_days, c.warning_days_before, c.auto_renews,
+                     vc.full_name AS vendor_contact_naam,
+                     u.full_name AS owner_naam,
+                     v.name AS vendor_naam
+                FROM clm.contract c
+                LEFT JOIN clm.vendor_contact vc ON vc.contact_id = c.vendor_contact_id
+                LEFT JOIN clm."user" u ON u.user_id = c.owner_user_id
+                JOIN clm.vendor v ON v.vendor_id = c.vendor_id
+               WHERE c.deleted_at IS NULL AND v.deleted_at IS NULL
+               ORDER BY c.end_date ASC NULLS LAST`,
+        );
+
+        return resultaat.rows.map((r) => ({
+          contractId: r.contract_id,
+          vendorId: r.vendor_id,
+          vendorNaam: r.vendor_naam,
+          name: r.name,
+          contractNumber: r.contract_number,
+          vendorContactId: r.vendor_contact_id,
+          ownerUserId: r.owner_user_id,
+          statusCode: r.status_code,
+          valueEur: r.value_eur,
           startDate: r.start_date,
           endDate: r.end_date,
           vendorContactNaam: r.vendor_contact_naam,
