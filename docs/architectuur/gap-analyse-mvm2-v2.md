@@ -363,6 +363,50 @@ contracten-rol uit de leveranciersscherm-dichtheid-sessie).
 
 ---
 
+## 10. Landingpagina na Entra-login — geen MVM_V2-vergelijking, eigen punt
+
+**Toegevoegd 27-08** op verzoek van de eigenaar, geen bevinding uit de
+MVM_V2-vergelijking (die dit document verder methodisch draagt) maar een
+eigen MCM2-punt: na een geslaagde Entra External ID-login komt de
+gebruiker nu op wat de eerste route toevallig oplevert, niet op een
+bewust gekozen landingpagina die past bij de rol (platformbeheerder,
+tenant-admin, medewerker, support-sessie).
+
+**Haalbaarheid: Klein–Middel.** De sessie kent de rol al
+(`sessie.rol`/`isPlatformbeheerder`, zie `@/core/auth/rechten.ts`) —
+het gaat om een routeringsbeslissing direct na login, geen nieuw
+databaseconcept. Raakt mogelijk ook de net gebouwde
+platformbeheer-uitbreiding: een support-sessie landt nu default op
+`/beheer/platform` (zie `mcm2-diagnosemethode-niet-verzinnen`-sessie,
+27-08) — een aparte, rolbewuste landingpagina zou dat kunnen vervangen
+door een consistentere regel voor alle rollen tegelijk.
+
+---
+
+## 11. Gebruikshandleidingen voor tenant-admins en tenant-gebruikers
+
+**Toegevoegd 27-08**, eigen MCM2-punt, geen MVM_V2-vergelijking. Er
+bestaat geen documentatie voor de mensen die de applicatie daadwerkelijk
+gebruiken (tenant-admins, medewerkers) — alle bestaande documentatie
+(`docs/`) is ontwikkelaars- of eigenaargericht. Wordt actueel zodra de
+pilot draait: Transdev-medewerkers en later andere tenants hebben iets
+nodig om zelfstandig te kunnen werken, zonder dat de eigenaar het
+voordoet.
+
+**Twee te schrijven handleidingen, verschillende doelgroep:**
+- **Tenant-admin:** leden uitnodigen/beheren, tenant-instellingen,
+  vragenlijsten uitsturen, rapportage lezen.
+- **Tenant-gebruiker (medewerker/beoordelaar):** dagelijks gebruik —
+  leveranciers/contracten bekijken, beoordelingen doen, wat een
+  "goedkeuren" precies betekent.
+
+**Haalbaarheid: Klein**, maar geen codewerk — dit is documentatie, geen
+implementatietaak. Raakt wel §10 hierboven: een handleiding is makkelijker
+te schrijven zodra er een vaste landingpagina/navigatiestructuur per rol
+ligt, dus logische volgorde is §10 eerst.
+
+---
+
 ## Samenvattend prioriteitenoverzicht
 
 **Bijgewerkt 23-08** na de besluiten van de eigenaar (zie boven). Kolom
@@ -383,6 +427,8 @@ heeft veranderd.
 | 9 | Granulaire rolmatrix | Groot (architectuur) | **Later** — bevestigd, geen scenario met 3+ rollen | Bevestigd: later |
 | 4c | Open taken-widget | Groot | Nieuw concept, geen bestaande bouwstenen | — |
 | 6 | AI Document Interrogation | Groot + externe afhankelijkheid | **Later** — bevestigd | Bevestigd: later |
+| 10 | Landingpagina na Entra-login (rolbewust) | Klein–Middel | Toegevoegd 27-08 — geen MVM_V2-gap, eigen punt | Nieuw |
+| 11 | Gebruikshandleidingen (tenant-admin, tenant-gebruiker) | Klein (documentatie) | Toegevoegd 27-08 — na §10, geen MVM_V2-gap | Nieuw |
 
 **Zie ook** `docs/architectuur/pilot-versus-roadmap.md` — deze tabel is de
 roadmap-toets ("is dit de juiste productrichting"); de pilot voor een

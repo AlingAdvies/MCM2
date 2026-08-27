@@ -242,6 +242,16 @@ erin — je eigen tenant beschermt je dus niet. Een suite die los groen draait
 kan de volledige run alsnog rood maken, en welke suite dan omvalt hangt af van
 de volgorde. Draai altijd `npx jest test-ids` én de volledige e2e-run.
 
+**6. Verzin ook geen diagnosemethode — dezelfde regel als bij commando's.**
+Loopt iets vast (een falende test, een onverwacht resultaat), check dan eerst
+`docs/runbooks/commandos-en-omgeving.md` §"Bij een falende test of onverwacht
+resultaat" op een al-beproefde aanpak — een lijst bekende architectuurvallen
+(FORCE RLS + SECURITY DEFINER, `clm."user"` aan één tenant gebonden, PATCH/PUT-
+mismatches) en `node scripts/trace-lezen.js` voor Playwright-traces. Pas als
+daar niets bij past, een nieuwe aanpak proberen — en die er dan bij zetten.
+Aanleiding: op 2026-08-27 werd dezelfde trace-analyse vier keer met de hand
+opnieuw uitgevonden in plaats van als vast stappenplan hergebruikt.
+
 ---
 
 ## Groen is alleen groen via verify

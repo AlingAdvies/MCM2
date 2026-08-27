@@ -160,3 +160,26 @@ Bij migratie 0020 aan te tonen, geen ervan optioneel:
 2. `support` kan lezen maar niet schrijven.
 3. Een gewone gebruiker kan nog steeds géén tweede actief membership krijgen.
 4. Het toekennen staat in `audit.audit_event`.
+
+## Addendum 27-08 — één-klik "Openen", geen nieuw model
+
+Migratie 0033 (platformbeheer-uitbreiding, zie `docs/STATUS.md` en
+`docs/superpowers/specs/2026-08-27-platformbeheer-uitbreiding-design.md`)
+voegt `POST /platform/sessie/wisselen` toe: een "Openen"-knop op de
+tenantrij die support-toegang toekent én meteen naar die tenant wisselt,
+zonder apart reden-formulier vooraf. Dit **vervangt niets van bovenstaand
+besluit** — de oorspronkelijke `POST /platform/tenants/:id/toegang` (met
+verplichte `reden`) blijft bestaan, en `sessie/wisselen` roept dezelfde
+`supportToegangGeven()` intern aan. Alle vier tegenproeven hierboven
+blijven onveranderd gelden: de rol is nog steeds `support`, niet
+impersonatie; toekenning staat nog steeds in `audit.audit_event`; de
+tenantgrens loopt nog steeds via `TenantContextGuard`, niet om de knop
+heen.
+
+Reden voor het ontbreken van een reden-veld op de snelle route: de
+eigenaar wilde geen permanente cross-tenant-superuser (expliciet
+afgewezen tijdens het brainstormen) maar ook geen frictie bij het eigen,
+dagelijkse gebruik als enige platformbeheerder. Bij meerdere
+platformbeheerders of een externe supportmedewerker is een verplicht
+reden-veld op déze route een heroverweging waard — nu niet gebouwd omdat
+er nog maar één platformbeheerder is.

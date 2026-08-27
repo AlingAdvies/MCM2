@@ -2,6 +2,21 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-27 (vervolg 4) — platformbeheer-uitbreiding gemerged naar main
+(beide repo's), gestaged (rookproef groen) en uitgerold naar AWS-productie
+(migratiestand 33, teruggelezen en gelijk aan het journal). Werkwijzeles
+vastgelegd: `docs/runbooks/commandos-en-omgeving.md` heeft een nieuwe
+sectie "Bij een falende test of onverwacht resultaat" (bekende
+architectuurvallen-tabel, `node scripts/trace-lezen.js` voor
+Playwright-traces), met een bijbehorende harde regel in `MCM2-CLAUDE.md`
+punt 6. Aanleiding: dezelfde trace-analyse werd tijdens het bouwen vier
+keer met de hand opnieuw uitgevonden. ADR-015 heeft een addendum over de
+nieuwe "Openen"-knop (vult het besluit aan, vervangt het niet). Twee
+nieuwe roadmap-punten toegevoegd aan
+`docs/architectuur/gap-analyse-mvm2-v2.md` (§10 rolbewuste landingpagina
+na Entra-login, §11 gebruikshandleidingen voor tenant-admins/-gebruikers)
+— geen MVM_V2-vergelijking, eigen punten op verzoek van de eigenaar.**
+
 **2026-08-27 (vervolg 3) — platformbeheer-uitbreiding gebouwd: tenant
 wijzigen/deactiveren, en een één-klik "Openen"-knop voor support-toegang
 (support-toegang toekennen én meteen wisselen, zonder apart reden-formulier).

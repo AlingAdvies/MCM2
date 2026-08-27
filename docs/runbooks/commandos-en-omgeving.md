@@ -621,6 +621,71 @@ taskkill /PID <pid> /F
 
 ---
 
+## Bij een falende test of onverwacht resultaat: eerst hier kijken
+
+*Toegevoegd 2026-08-27, aanleiding: de platformbeheer-uitbreiding-sessie liep
+vier keer tegen een probleem aan, en alle vier de keren werd de diagnosemethode
+opnieuw uitgevonden in plaats van herbruikt — terwijl het steeds dezelfde
+werkwijze (Playwright-trace uitpakken en doorzoeken) was. Dezelfde discipline
+die geldt voor commando's ("verzin er geen, zoek het op") geldt hierna ook voor
+de manier waarop je een fout onderzoekt.
+
+**De regel: bij een tegenvaller eerst deze sectie checken op een al-beproefde
+aanpak, pas daarna een nieuwe aanpak verzinnen.** Blijkt die er niet te staan
+en werkt een nieuwe aanpak, voeg hem hier toe — zodat de volgende sessie hem
+niet opnieuw hoeft te verzinnen.
+
+### Een Playwright-trace uitlezen
+
+Een falende e2e-/Playwright-assertie zegt vaak alleen *dat* iets niet klopte,
+niet *waarom* — geen statuscode, geen response-body. Het trace-bestand dat
+Playwright bij een falende test bewaart heeft dat wel. Niet met de hand
+uitpakken en met python3 eenregelaars doorzoeken (dat gebeurde vier keer in
+deze sessie): gebruik het script.
+
+```powershell
+node scripts/trace-lezen.js <pad-naar-trace.zip>
+```
+
+Print per netwerkverzoek: methode, URL, statuscode, request-cookies,
+response-body (voor zover tekst). Filter desgewenst op een deel van de URL:
+
+```powershell
+node scripts/trace-lezen.js <pad-naar-trace.zip> --url platform
+```
+
+Dit vond zowel de PATCH/PUT-mismatch (dialoog sloot zonder fout, de wijziging
+kwam niet door) als het `profiel()`-401-gat (geslaagde sessiewissel, daarna
+"gebruiker bestaat niet meer") — allebei onzichtbaar in de test-assertie zelf.
+
+### Bekende architectuurvallen
+
+Dingen die zich voordoen als een bug in nieuwe code, maar een eigenschap van de
+architectuur zijn. Niet opnieuw ontdekken via een falende test — hier staan ze
+al.
+
+| Symptoom | Oorzaak | Oplossing |
+|---|---|---|
+| `SECURITY DEFINER`-functie geeft stil 0 rijen bij een `JOIN` naar een tabel met `FORCE ROW LEVEL SECURITY` | FORCE RLS geldt óók voor de functie-eigenaar — SECURITY DEFINER omzeilt dat niet | Eerst de rij zonder JOIN naar de FORCE-RLS-tabel ophalen, dan `PERFORM set_config('app.current_tenant_id', ..., true)`, dan pas de FORCE-RLS-tabel apart lezen |
+| Een support-sessie (tijdelijk lid van een andere tenant) krijgt 401 "gebruiker bestaat niet meer" na een geslaagde sessiewissel | `clm."user"` is aan precies één tenant gebonden (ADR-015) — een support-sessie heeft geen eigen `user`-rij in de doeltenant | Gebruikersnaam ophalen via een aparte `SECURITY DEFINER`-functie die niet aan tenantcontext hangt (zie `clm.gebruikersnaam()`), niet via een `JOIN clm.tenant` op `clm."user"` |
+| Frontend-schrijfactie "lukt" (geen fout, dialoog sluit) maar de wijziging komt niet door | Frontend-helper gebruikt de verkeerde HTTP-methode voor de backend-route (`wijzig()`=PATCH vs. `zetData()`=PUT) | Vergelijk de decorator in de controller (`@Put`/`@Post`/`@Patch`) met de gebruikte client-helper vóór je iets anders zoekt |
+| Na een sessiewissel toont de banner nog de oude tenant | `router.push()` laat een al-gemount layout-component zijn sessie-`useEffect` niet herhalen | `window.location.assign()` gebruiken bij elke sessiewissel, niet client-side navigeren |
+
+### Verify-lus: vaste procedure, niet ad-hoc
+
+*Werkte al redelijk consistent deze sessie — hier vastgelegd zodat het geen
+toeval blijft.*
+
+1. `verify:volledig` als achtergrondtaak starten, nooit synchroon wachten.
+2. Wachten via een geplande wake-up, niet blind pollen.
+3. Bij falen: eerst de **volledige** foutmelding lezen (niet alleen de laatste
+   regel) vóór er een fix-poging gedaan wordt.
+4. Root cause vaststellen — bij twijfel de sectie hierboven checken op een
+   bekende val, of het trace-script gebruiken. Nooit gokken-en-opnieuw-draaien.
+5. Fixen, opnieuw draaien, herhalen tot groen.
+
+---
+
 ## Een nieuwe e2e-suite schrijven
 
 Alle e2e-suites delen één database. Een suite die los groen draait kan de
