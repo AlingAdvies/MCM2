@@ -16,8 +16,14 @@ import { TEST_IDS } from './test-ids';
  * docs/superpowers/specs/2026-08-27-tenant-gebruikersbeheer-design.md §11.
  */
 
-const { tenant, admin, tweedeAdmin, reviewer, andereTenant, adminAndereTenant } =
-  TEST_IDS['tenant-leden'];
+const {
+  tenant,
+  admin,
+  tweedeAdmin,
+  reviewer,
+  andereTenant,
+  adminAndereTenant,
+} = TEST_IDS['tenant-leden'];
 
 const STEMPEL = Date.now();
 const SUBJECT_ADMIN = `oid-tl-admin-${STEMPEL}`;
@@ -235,9 +241,7 @@ describe('Tenant-leden (e2e)', () => {
         .send({ email: 'herstel@tenant-leden-test.nl', rol: 'user' });
 
       expect(tweede.status).toBe(201);
-      expect((tweede.body as { userId: string }).userId).toBe(
-        lidVoor!.userId,
-      );
+      expect((tweede.body as { userId: string }).userId).toBe(lidVoor!.userId);
       expect((tweede.body as { rol: string }).rol).toBe('user');
     });
   });
@@ -248,9 +252,9 @@ describe('Tenant-leden (e2e)', () => {
         .get('/tenant/leden')
         .set('Cookie', adminAndereTenantCookie);
 
-      const ids = (
-        respons.body as { leden: { userId: string }[] }
-      ).leden.map((l) => l.userId);
+      const ids = (respons.body as { leden: { userId: string }[] }).leden.map(
+        (l) => l.userId,
+      );
       expect(ids).not.toContain(admin);
     });
   });

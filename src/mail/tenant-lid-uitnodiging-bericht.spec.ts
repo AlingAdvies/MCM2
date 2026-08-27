@@ -36,9 +36,7 @@ describe('tenant-lid-uitnodigingsbericht', () => {
     });
 
     it('schrijft de link volledig uit', () => {
-      expect(stelTenantLidUitnodigingSamen(BASIS).tekst).toContain(
-        BASIS.link,
-      );
+      expect(stelTenantLidUitnodigingSamen(BASIS).tekst).toContain(BASIS.link);
     });
 
     it('noemt de uiterste datum in leesbare vorm', () => {
@@ -48,9 +46,7 @@ describe('tenant-lid-uitnodigingsbericht', () => {
     });
 
     it('zegt dat de link eenmalig is', () => {
-      expect(stelTenantLidUitnodigingSamen(BASIS).tekst).toContain(
-        'eenmalig',
-      );
+      expect(stelTenantLidUitnodigingSamen(BASIS).tekst).toContain('eenmalig');
     });
 
     it('vertelt wat te doen bij een onverwachte uitnodiging', () => {

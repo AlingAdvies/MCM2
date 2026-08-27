@@ -5,7 +5,10 @@ import {
   genereerUitnodigingstoken,
   hashUitnodigingstoken,
 } from '../auth/uitnodigingstoken';
-import { DatabaseService, type TenantTransaction } from '../db/database.service';
+import {
+  DatabaseService,
+  type TenantTransaction,
+} from '../db/database.service';
 import { UitnodigingVerzender } from '../mail/uitnodiging-verzender.service';
 
 /** Hoe lang een tenant-uitnodiging geldig blijft — zelfde als de
