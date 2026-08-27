@@ -563,7 +563,7 @@ git commit -m "feat(contract): API-client voor het tenant-brede contractenoverzi
 - Modify: `src/shared/components/layout/Sidebar.tsx`
 - Test: `e2e/contracten-overzicht.spec.ts`
 
-- [ ] **Step 1: Bekijk het statusfilter-patroon**
+- [x] **Step 1: Bekijk het statusfilter-patroon**
 
 ```powershell
 Get-Content "src/app/beheer/status/page.tsx"
@@ -572,7 +572,7 @@ Get-Content "src/app/beheer/status/page.tsx"
 Let op regels 115-121 (state), 175-177 (filteren/sorteren), en
 298-330 (klikbare badges met `aria-pressed`).
 
-- [ ] **Step 2: Schrijf de falende Playwright-test**
+- [x] **Step 2: Schrijf de falende Playwright-test**
 
 Maak `e2e/contracten-overzicht.spec.ts`, naar het patroon van
 `e2e/tenant-leden.spec.ts`:
@@ -640,7 +640,7 @@ test.describe('Contractenoverzicht', () => {
 });
 ```
 
-- [ ] **Step 3: Run, verwacht FAIL**
+- [x] **Step 3: Run, verwacht FAIL**
 
 ```powershell
 npx playwright test e2e/contracten-overzicht.spec.ts
@@ -648,7 +648,7 @@ npx playwright test e2e/contracten-overzicht.spec.ts
 
 Verwacht: FAIL — pagina en menu-item bestaan nog niet.
 
-- [ ] **Step 4: Bouw de pagina**
+- [x] **Step 4: Bouw de pagina**
 
 Maak `src/app/beheer/contracten/page.tsx`:
 
@@ -824,7 +824,7 @@ export default function ContractenOverzichtPagina() {
 }
 ```
 
-- [ ] **Step 5: Voeg het sidebar-item toe**
+- [x] **Step 5: Voeg het sidebar-item toe**
 
 In `src/shared/components/layout/Sidebar.tsx`, importeer een passend icoon
 (bijv. `FileSignature` uit `lucide-react`) en voeg toe aan `MENU`, tussen
@@ -841,7 +841,7 @@ Leveranciers en Vragenlijsten:
 Geen `vereistRol` — zelfde afweging als de andere lijst-items (lezen mag
 iedereen, de backend bepaalt de echte grens).
 
-- [ ] **Step 6: Run, verwacht PASS voor de eerste drie tests**
+- [x] **Step 6: Run, verwacht PASS voor de eerste drie tests**
 
 ```powershell
 npx playwright test e2e/contracten-overzicht.spec.ts -g "bereikbaar|tabel|filtert"
@@ -849,7 +849,7 @@ npx playwright test e2e/contracten-overzicht.spec.ts -g "bereikbaar|tabel|filter
 
 De vierde test (klik → leveranciersscherm) faalt hier nog — dat is Taak 6.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/app/beheer/contracten/page.tsx src/shared/components/layout/Sidebar.tsx e2e/contracten-overzicht.spec.ts
