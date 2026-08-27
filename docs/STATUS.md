@@ -2,6 +2,35 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-27 — staging bleek overgeslagen bij de productie-uitrol van 26-08;
+gecorrigeerd en het proces zelf aangescherpt.**
+
+De eigenaar vroeg terecht door op de nasleep van 26-08: als staging het
+verschil tussen "werkt" en "werkt niet" had kunnen tonen, waarom viel dat dan
+niet daar al op? Antwoord: **staging is die dag niet opnieuw uitgerold.**
+`npm run deploy:staging` gebruikt, net als `productie-aws.yml`, `:latest` uit
+GHCR wanneer er geen expliciete versie is meegegeven — maar die stap is na de
+merge van `feat/audit-bewijsvoering` simpelweg nooit gedraaid. `deploy:status`
+toonde staging nog op de frontend-commit van 23-08. Er is dus geen falende
+controle gemist; de controle is nooit uitgevoerd.
+
+**Hersteld:** het compose-bestand op `saxombp` week één regel af van de repo
+(ontbrekende `OMGEVING`-variabele, waarschijnlijk sinds een latere commit niet
+meer bijgewerkt) — die rem van `deploy.js` werkte precies zoals bedoeld en
+stopte de uitrol. Backup gemaakt, bijgewerkt, sha256 geverifieerd gelijk, en
+`npm run deploy:staging` opnieuw gedraaid: staging draait nu op `latest`/
+`latest`, alle rookproeven groen (inclusief het doorgeefluik-401).
+
+**Procesfout, niet incidenteel:** de eigenaar gaf aan dat "in productie
+krijgen" bedoelt "het runbook volledig doorlopen tot en met productie" — dat
+is ook wat `docs/runbooks/devops-handleiding.md` beoogt, maar de tekst dwong
+het niet af. Die handleiding is aangescherpt (§2): een productie-verzoek
+doorloopt voortaan altijd eerst staging (met zichtbare rookproef) vóórdat de
+productie-workflow start, tenzij expliciet alleen om staging gevraagd wordt.
+Dit is een blijvende werkafspraak, niet eenmalig hersteld gedrag.
+
+---
+
 **2026-08-26 — audit-bewijsvoering afgerond: vijf UI-verbeteringen verwerkt,
 gemerged naar `main` (beide repo's), en volledig uitgerold tot en met
 productie.**

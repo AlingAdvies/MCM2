@@ -2,7 +2,7 @@
 
 **Type:** D — routineoperaties
 **Eigenaar:** de eigenaar (Chris)
-**Laatste update:** 2026-08-21
+**Laatste update:** 2026-08-27
 **Vereiste toegang:** GitHub (AlingAdvies/MCM2), AWS-console (account
 AlingAdvies, 727732213368), Telegram op je telefoon
 
@@ -106,6 +106,18 @@ openen, wachten tot de controles groen zijn, mergen, en de applicatie starten.
 🧑 **Jouw enige moment:** Claude vraagt je of de pull request gemerged mag
 worden. Dat is een vraag in de chat, geen knop op GitHub.
 
+> **Sinds 2026-08-27: "zet deze versie in productie" impliceert deze stap.**
+> Op 26-08 ging dit een keer mis: de productie-uitrol werd gestart zonder dat
+> staging eerst met dezelfde code was bijgewerkt en bewezen. Zichtbaar gevolg:
+> de eigenaar zag in productie een oud scherm, terwijl de onderliggende
+> oorzaak (een mislukte GHCR-publicatie door opmaakfouten in de frontend) op
+> staging al zichtbaar had kunnen zijn vóórdat productie geraakt werd. Vanaf nu
+> geldt: **wanneer de eigenaar zegt "in productie krijgen" of vergelijkbaar,
+> doorloopt Claude eerst deze stap (staging bijwerken en de rookproef
+> bekijken) — zonder daar apart naar te hoeven vragen — en gaat pas daarna
+> naar de productie-stap hieronder.** Vraagt de eigenaar met zoveel woorden om
+> alléén staging, dan stopt het daar, zoals dit hoofdstuk al beschreef.
+
 ### Naar productie (AWS) — daar komt jouw akkoord bij
 
 🤖 **Vraag Claude:** *"ik wil versie X naar productie"*
@@ -114,9 +126,10 @@ Wat er dan gebeurt, in volgorde:
 
 | | Wie | Wat |
 |---|---|---|
+| 0 | 🤖 CLAUDE | rolt eerst uit naar staging (zie hierboven) en bevestigt dat de rookproef daar slaagt |
 | 1 | 🤖 CLAUDE | controleert of de backup vers genoeg is, en commit het bewijs |
 | 2 | 🤖 CLAUDE | start de workflow `productie-aws.yml` op GitHub |
-| 3 | ⚙️ VANZELF | de poort draait: backup, staging, productiestand |
+| 3 | ⚙️ VANZELF | de poort draait: backup- en migratiestand worden gecontroleerd (géén staging-uitrol — zie stap 0) |
 | 4 | 🧑 **JIJ** | **akkoord geven** — zie moment 2 hierboven |
 | 5 | ⚙️ VANZELF | de poort draait nog eens, dan de migraties |
 | 6 | ⚙️ VANZELF | AWS rolt de nieuwe versie uit — eerst de API, dan de website — en wacht tot beide aantoonbaar gezond zijn |
