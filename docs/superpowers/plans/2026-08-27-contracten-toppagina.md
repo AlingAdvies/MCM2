@@ -988,13 +988,13 @@ git commit -m "feat(contract): contract opengeklapt via ?contract=-query-param o
 - Modify: `src/app/beheer/leveranciers/[id]/Contracten.tsx`
 - Modify: `e2e/contracten.spec.ts` (bestaand bestand, nieuwe test toevoegen)
 
-- [ ] **Step 1: Bekijk waar het uitgeklapte contract-detail eindigt**
+- [x] **Step 1: Bekijk waar het uitgeklapte contract-detail eindigt**
 
 In `Contracten.tsx`, de `ContractRijen`-functie: het blok na
 `<SurveyTemplateKoppelingBlok .../>` (rond regel 600-604), binnen de
 `{opengeklapt && (...)}`-tak.
 
-- [ ] **Step 2: Schrijf de falende test**
+- [x] **Step 2: Schrijf de falende test**
 
 Voeg toe aan `e2e/contracten.spec.ts` (zoek eerst het bestaande
 `maakEnOpen()`-hulpfunctiepatroon in dat bestand):
@@ -1018,13 +1018,13 @@ Pas de exacte opzet aan naar wat `maakEnOpen()` in dat bestand werkelijk
 teruggeeft (bekijk het bestand eerst — de exacte returnwaarde is niet
 gegarandeerd `{ vendorId }`).
 
-- [ ] **Step 3: Run, verwacht FAIL**
+- [x] **Step 3: Run, verwacht FAIL**
 
 ```powershell
 npx playwright test e2e/contracten.spec.ts -g "andere contracten"
 ```
 
-- [ ] **Step 4: Implementeer**
+- [x] **Step 4: Implementeer**
 
 In `Contracten.tsx`, geef `ContractRijen` de volledige contractenlijst mee
 zodat het de overige kan filteren. Pas de aanroep in `Contracten` aan:
@@ -1143,19 +1143,19 @@ inklapt en het geklikte contract openklapt:
                 onKlikAnder={(contractId) => setOpengeklapt(contractId)}
 ```
 
-- [ ] **Step 5: Run, verwacht PASS**
+- [x] **Step 5: Run, verwacht PASS**
 
 ```powershell
 npx playwright test e2e/contracten.spec.ts -g "andere contracten"
 ```
 
-- [ ] **Step 6: Volledige Playwright-suite**
+- [x] **Step 6: Volledige Playwright-suite**
 
 ```powershell
 npx playwright test
 ```
 
-- [ ] **Step 7: Typecheck, format, lint**
+- [x] **Step 7: Typecheck, format, lint**
 
 ```powershell
 npx tsc --noEmit
@@ -1163,7 +1163,7 @@ npm run format
 npm run lint
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add "src/app/beheer/leveranciers/[id]/Contracten.tsx" e2e/contracten.spec.ts
