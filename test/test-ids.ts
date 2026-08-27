@@ -370,16 +370,16 @@ export const TEST_IDS = {
     user: id('34'),
   },
   'vendor-rol-user': {
-    tenant: id('f7'),
-    userRol: id('f8'),
+    tenant: id('35'),
+    userRol: id('36'),
   },
   'tenant-leden': {
-    tenant: id('f9'),
-    admin: id('fa'),
-    tweedeAdmin: id('fb'),
-    reviewer: id('fc'),
-    andereTenant: id('fd'),
-    adminAndereTenant: id('fe'),
+    tenant: id('37'),
+    admin: id('38'),
+    tweedeAdmin: id('39'),
+    reviewer: id('3a'),
+    andereTenant: id('3b'),
+    adminAndereTenant: id('3c'),
   },
 } as const;
 
