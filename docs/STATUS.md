@@ -2,10 +2,43 @@
 
 ## Laatst bijgewerkt
 
-**2026-08-27 (vervolg) — tenant-gebruikersbeheer gebouwd (issue #75): een
+**2026-08-27 (vervolg 2) — contracten-toppagina gebouwd (issue #173/#171): een
+tenant-brede contractenlijst op `/beheer/contracten`, met eigen sidebar-item,
+klikbare statusfilters en een dagen-tot-einddatum-indicator. Een klik op een
+contract navigeert naar het bestaande leveranciersscherm met dat contract al
+uitgeklapt en gescrold in beeld (`?contract=`-query-param) — bewust geen
+aparte detailpagina. Binnen het uitgeklapte contract staat nu ook "andere
+contracten bij deze leverancier". `verify:volledig` groen (backend +
+frontend), op de branch `feat/contracten-toppagina` in beide repo's, nog niet
+gemerged.**
+
+Backend: nieuwe route `GET /contracts` (`ContractsOverzichtController`,
+`ContractService.lijstTenantBreed()`) naast de bestaande vendor-gescoped
+route — geen migratie nodig, alleen een JOIN op `clm.vendor` voor de
+leveranciersnaam en sortering op einddatum i.p.v. aanmaakdatum. Geen
+`@VereistRol`: lezen mag elke geldige sessie, zelfde afweging als de andere
+tenant-brede overzichten.
+
+Frontend: `/beheer/contracten`-lijstpagina, `initieelOpengeklapt`-prop op de
+bestaande `Contracten`-component met auto-scroll (vereiste een
+`Suspense`-boundary rond `useSearchParams()`, zelfde patroon als
+`uitnodigen/page.tsx`).
+
+**Twee testbugs onderweg gevonden en gefixt**, geen productiecode-bugs: de
+eerste Playwright-run ging er ten onrechte van uit dat de schone
+`verify:volledig`-testdatabase al contracten bevat (migreert leeg — de test
+maakt nu zelf eerst een leverancier+contract aan, zoals `contracten.spec.ts`
+al deed); de tweede run klikte per ongeluk op de genestelde
+leveranciers-`<Link>` (met `stopPropagation()`) in plaats van de rij zelf,
+door een lange testnaam die de kolombreedte opschoof.
+
+Spec: `docs/superpowers/specs/2026-08-27-contracten-toppagina-design.md`.
+Plan: `docs/superpowers/plans/2026-08-27-contracten-toppagina.md`.
+
+**2026-08-27 — tenant-gebruikersbeheer gebouwd (issue #75): een
 tenant-admin kan zelf collega's uitnodigen, hun rol wijzigen en hun toegang
-intrekken. `verify:volledig` groen, backend + frontend, op de branch
-`feat/tenant-gebruikersbeheer` in beide repo's, nog niet gemerged.**
+intrekken. `verify:volledig` groen, backend + frontend — GEMERGED naar main
+in beide repo's, branch `feat/tenant-gebruikersbeheer` opgeruimd.**
 
 **Aanleiding.** Bij "voor de pilot ga ik de tokens handmatig in een mail
 plakken" bleek #77 (uitnodigingenscherm) geen blokkade — het bestaande
