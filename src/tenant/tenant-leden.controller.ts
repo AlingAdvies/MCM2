@@ -101,10 +101,6 @@ export class TenantLedenController {
     @Req() request: RequestMetSessie,
     @Param('userId') userId: string,
   ) {
-    await this.leden.intrekken(
-      request.sessie!.tenantId,
-      userId,
-      request.sessie!.userId,
-    );
+    await this.leden.intrekken(request.sessie!.tenantId, userId);
   }
 }

@@ -244,11 +244,7 @@ export class TenantLedenService {
     });
   }
 
-  async intrekken(
-    tenantId: string,
-    userId: string,
-    _doorUserId: string,
-  ): Promise<void> {
+  async intrekken(tenantId: string, userId: string): Promise<void> {
     return this.db.withTenant(tenantId, async (tx) => {
       await this.weigerAlsLaatsteAdmin(tx, tenantId, userId);
 

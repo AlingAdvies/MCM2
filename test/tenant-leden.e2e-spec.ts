@@ -217,7 +217,7 @@ describe('Tenant-leden (e2e)', () => {
     });
 
     it('nodigt een eerder ingetrokken gebruiker opnieuw uit door de bestaande rij bij te werken', async () => {
-      const eerste = await request(server)
+      await request(server)
         .post('/tenant/leden')
         .set('Cookie', adminCookie)
         .send({ email: 'herstel@tenant-leden-test.nl', rol: 'reviewer' });
