@@ -133,10 +133,9 @@ moet daarom rekening houden met drie gevallen voor het opgegeven e-mailadres:
    token genereren, mail versturen, link ook in het antwoord (eenmalig
    zichtbaar, zelfde reden als bij de platformbeheerder-route).
 2. **Bestaat, met een ingetrokken (`deleted_at`) membership bij deze tenant**
-   — nieuwe membership-rij aanmaken (de oude blijft staan als geschiedenis;
-   `tenant_membership_pkey` is `(user_id, tenant_id)`, dus dit vraagt een
-   nieuwe rij te kunnen naast een bestaande verwijderde — zie §7 voor de
-   migratie-implicatie). Nieuw token, nieuwe mail.
+   — de bestaande rij wordt bijgewerkt (`UPDATE`: nieuwe rol, `deleted_at =
+   NULL`), niet een nieuwe rij aangemaakt — zie §7 voor de reden. Nieuw
+   token, nieuwe mail.
 3. **Bestaat, met een actieve membership** — bij deze tenant (dubbele
    uitnodiging) of bij een andere tenant. Beide worden vooraf gecontroleerd en
    geven een duidelijke fout (`ConflictException`, "dit e-mailadres heeft al
@@ -173,24 +172,39 @@ is hergebruik van een bestaand mechanisme, geen nieuw stuk.
 **Migratie `0032_tenant_membership_rol_user.sql`:**
 
 - CHECK-constraint op `clm.tenant_membership.role` uitbreiden:
-  `CHECK (role IN ('admin', 'user', 'reviewer'))`.
+  `CHECK (role IN ('admin', 'user', 'reviewer', 'support'))` — `support`
+  bestaat al sinds migratie 0020 (ADR-015, platformbeheer) en blijft
+  ongewijzigd; deze migratie voegt alleen `user` toe.
 - Geen nieuwe tabel. Uitnodigen hergebruikt de bestaande `uitnodiging_hash`-
   kolom op `clm.user` (migratie 0024).
-- **Geen wijziging nodig aan `tenant_membership_pkey` of de unieke index**
-  `tenant_membership_een_actief_per_gebruiker`: het scenario "opnieuw
-  uitnodigen na intrekken" resulteert in een tweede rij met dezelfde
-  `(user_id, tenant_id)`-combinatie maar een ándere primaire sleutel is dan
-  niet mogelijk — de primaire sleutel is exact dat paar. **Dit is een gat dat
-  het bestaande schema niet dekt en dat opgelost moet worden vóór §5a-geval 2
-  gebouwd kan worden:** de `pkey` moet naar een surrogaatsleutel (eigen
-  `membership_id uuid`) met een aparte unieke index op
-  `(user_id, tenant_id) WHERE deleted_at IS NULL`, zodat meerdere historische
-  rijen voor hetzelfde paar kunnen bestaan. Dit raakt elke plek die vandaag
-  `(user_id, tenant_id)` als sleutel gebruikt (met name `clm.sessie_oplossen()`
-  en `RolGuard`) — die moeten om naar "de actieve rij voor dit paar", niet
-  "de rij voor dit paar". Dit is het grootste technische risico van dit
-  ontwerp en verdient een eigen taak met eigen aandacht in het
-  implementatieplan.
+
+**Besluit (eigenaar, 27-08), na heroverweging tijdens het schrijven van het
+implementatieplan: géén surrogaatsleutel.** De oorspronkelijke aanname hier
+(zie de git-historie van dit document) bleek een bestaande, werkende route
+te breken: `PlatformService.supportToegangGeven()` gebruikt
+`ON CONFLICT (user_id, tenant_id) DO UPDATE`, wat rechtstreeks leunt op de
+huidige primary key `tenant_membership_pkey (user_id, tenant_id)`. Een
+surrogaatsleutel zou die query moeten herschrijven — een onnodig risico voor
+bewezen code, voor een rol (`support`) die voorlopig alleen door de eigenaar
+zelf wordt ingevuld.
+
+**In plaats daarvan (§5a-geval 2, opnieuw uitnodigen na intrekken):** de
+bestaande, ingetrokken rij wordt hergebruikt via `UPDATE` (rol, nieuw
+`uitnodiging_hash`, `deleted_at = NULL`) in plaats van een nieuwe rij toe te
+voegen. De primary key en de bestaande unieke index
+`tenant_membership_een_actief_per_gebruiker` blijven ongewijzigd, en
+`supportToegangGeven()` hoeft niet aangepast te worden. Het enige verlies:
+de periode van intrekking is niet meer als een aparte, afgesloten
+membership-rij zichtbaar (alleen het laatste `created_at`/`deleted_at`) —
+maar `audit.audit_event` legt zowel de intrekking als de heruitnodiging al
+apart vast (zelfde patroon als `supportToegangGeven()` vandaag al doet), dus
+de geschiedenis blijft reconstrueerbaar via de audittrail.
+
+`sessie_aanmaken()` (migratie 0010) is al bestand tegen dit patroon: hij
+selecteert op `u.external_subject`, filtert op `m.deleted_at IS NULL` en
+neemt `ORDER BY m.created_at LIMIT 1` — geen wijziging nodig. `RolGuard` leest
+de rol uit `clm.sessie.role` (gekopieerd bij het inloggen), nooit
+rechtstreeks uit `tenant_membership` — ook daar geen wijziging nodig.
 
 ---
 
@@ -257,9 +271,10 @@ Conform MCM2-CLAUDE.md §15b horen deze te falen vóórdat de code bestaat.
    (bijv. een beoordeling) blijven zichtbaar met zijn naam.
 9. Platformbeheerder zonder actieve support-toegang krijgt 403 op
    `GET /tenant/gebruikers`; mét support-toegang krijgt hij 200.
-10. Een ingetrokken gebruiker opnieuw uitnodigen levert een nieuwe, actieve
-    membership op; de oude rij blijft `deleted_at` en zichtbaar in de
-    geschiedenis.
+10. Een ingetrokken gebruiker opnieuw uitnodigen levert een actieve membership
+    op (de bestaande rij bijgewerkt, `deleted_at = NULL`, nieuwe rol/token);
+    de intrekking en de heruitnodiging staan beide apart in
+    `audit.audit_event`.
 11. Uitnodigen van een e-mailadres met een al-actieve membership (eigen of
     andere tenant) geeft een duidelijke `ConflictException`, geen
     database-constraint-crash.
@@ -268,10 +283,8 @@ Conform MCM2-CLAUDE.md §15b horen deze te falen vóórdat de code bestaat.
 
 ## 12. Volgorde van bouwen (advies voor het implementatieplan)
 
-1. **Migratie:** rol-CHECK uitbreiden + de surrogaatsleutel-wijziging op
-   `tenant_membership` (§7) — dit raakt bestaande functies en verdient een
-   eigen, geïsoleerde stap met eigen tegenproef vóór er iets bovenop gebouwd
-   wordt.
+1. **Migratie:** rol-CHECK uitbreiden met `user` (§7) — kleine, geïsoleerde
+   wijziging, geen impact op bestaande functies of routes.
 2. **`RolGuard`/`VereistRol`** naar meerdere rollen, plus de mechanische
    aanpassing van bestaande routes naar `admin`, `user`.
 3. **De vier nieuwe routes**, inclusief de drie uitnodig-gevallen (§5a) en de
