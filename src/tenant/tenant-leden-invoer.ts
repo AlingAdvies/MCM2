@@ -16,8 +16,12 @@ import { InvoerFout } from '../vendor/vendor-invoer';
 const TOEGESTANE_ROLLEN = ['admin', 'user', 'reviewer'] as const;
 type ToegestaneRol = (typeof TOEGESTANE_ROLLEN)[number];
 
+/** Zelfde grens als full_name elders (vendor-invoer.ts). */
+const MAX_NAAM = 200;
+
 export interface NieuwLid {
   email: string;
+  naam: string;
   rol: ToegestaneRol;
 }
 
@@ -35,17 +39,31 @@ function leesRol(waarde: unknown): ToegestaneRol {
   return waarde as ToegestaneRol;
 }
 
+function leesNaam(waarde: unknown): string {
+  if (typeof waarde !== 'string' || waarde.trim() === '') {
+    throw new InvoerFout('naam', 'Naam is verplicht.');
+  }
+
+  const geknipt = waarde.trim();
+
+  if (geknipt.length > MAX_NAAM) {
+    throw new InvoerFout('naam', `Naam mag hoogstens ${MAX_NAAM} tekens zijn.`);
+  }
+
+  return geknipt;
+}
+
 export function leesNieuwLid(body: unknown): NieuwLid {
   if (typeof body !== 'object' || body === null) {
     throw new InvoerFout('email', 'Verwacht een JSON-object.');
   }
-  const { email, rol } = body as Record<string, unknown>;
+  const { email, naam, rol } = body as Record<string, unknown>;
 
   if (typeof email !== 'string' || !isGeldigMailadres(email)) {
     throw new InvoerFout('email', 'Vul een geldig e-mailadres in.');
   }
 
-  return { email, rol: leesRol(rol) };
+  return { email, naam: leesNaam(naam), rol: leesRol(rol) };
 }
 
 export function leesRolWijziging(body: unknown): RolWijziging {

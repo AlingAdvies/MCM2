@@ -167,7 +167,11 @@ describe('Tenant-leden (e2e)', () => {
       const respons = await request(server)
         .post('/tenant/leden')
         .set('Cookie', adminCookie)
-        .send({ email: 'nieuw@tenant-leden-test.nl', rol: 'user' });
+        .send({
+          email: 'nieuw@tenant-leden-test.nl',
+          naam: 'Nieuwe Collega',
+          rol: 'user',
+        });
 
       expect(respons.status).toBe(201);
       expect(
@@ -179,7 +183,11 @@ describe('Tenant-leden (e2e)', () => {
       const respons = await request(server)
         .post('/tenant/leden')
         .set('Cookie', reviewerCookie)
-        .send({ email: 'x@tenant-leden-test.nl', rol: 'user' });
+        .send({
+          email: 'x@tenant-leden-test.nl',
+          naam: 'X Persoon',
+          rol: 'user',
+        });
 
       expect(respons.status).toBe(403);
     });
@@ -188,12 +196,20 @@ describe('Tenant-leden (e2e)', () => {
       await request(server)
         .post('/tenant/leden')
         .set('Cookie', adminCookie)
-        .send({ email: 'dubbel@tenant-leden-test.nl', rol: 'reviewer' });
+        .send({
+          email: 'dubbel@tenant-leden-test.nl',
+          naam: 'Dubbel Persoon',
+          rol: 'reviewer',
+        });
 
       const respons = await request(server)
         .post('/tenant/leden')
         .set('Cookie', adminCookie)
-        .send({ email: 'dubbel@tenant-leden-test.nl', rol: 'user' });
+        .send({
+          email: 'dubbel@tenant-leden-test.nl',
+          naam: 'Dubbel Persoon',
+          rol: 'user',
+        });
 
       expect(respons.status).toBe(409);
     });
@@ -210,6 +226,7 @@ describe('Tenant-leden (e2e)', () => {
         .set('Cookie', adminCookie)
         .send({
           email: 'anton@tenant-leden-andere-test.nl',
+          naam: 'Anton Andere',
           rol: 'reviewer',
         });
 
@@ -220,7 +237,11 @@ describe('Tenant-leden (e2e)', () => {
       await request(server)
         .post('/tenant/leden')
         .set('Cookie', adminCookie)
-        .send({ email: 'herstel@tenant-leden-test.nl', rol: 'reviewer' });
+        .send({
+          email: 'herstel@tenant-leden-test.nl',
+          naam: 'Herstel Persoon',
+          rol: 'reviewer',
+        });
 
       const lijstVoorId = await request(server)
         .get('/tenant/leden')
@@ -238,11 +259,23 @@ describe('Tenant-leden (e2e)', () => {
       const tweede = await request(server)
         .post('/tenant/leden')
         .set('Cookie', adminCookie)
-        .send({ email: 'herstel@tenant-leden-test.nl', rol: 'user' });
+        .send({
+          email: 'herstel@tenant-leden-test.nl',
+          naam: 'Herstel Persoon Opnieuw',
+          rol: 'user',
+        });
 
       expect(tweede.status).toBe(201);
       expect((tweede.body as { userId: string }).userId).toBe(lidVoor!.userId);
       expect((tweede.body as { rol: string }).rol).toBe('user');
+
+      const lijstErna = await request(server)
+        .get('/tenant/leden')
+        .set('Cookie', adminCookie);
+      const lidErna = (
+        lijstErna.body as { leden: { userId: string; naam: string }[] }
+      ).leden.find((l) => l.userId === lidVoor!.userId);
+      expect(lidErna?.naam).toBe('Herstel Persoon Opnieuw');
     });
   });
 
@@ -345,7 +378,11 @@ describe('Tenant-leden (e2e)', () => {
       const uitnodigen = await request(server)
         .post('/tenant/leden')
         .set('Cookie', adminCookie)
-        .send({ email: 'intrek@tenant-leden-test.nl', rol: 'reviewer' });
+        .send({
+          email: 'intrek@tenant-leden-test.nl',
+          naam: 'Intrek Persoon',
+          rol: 'reviewer',
+        });
       const userId = (uitnodigen.body as { userId: string }).userId;
 
       const intrekken = await request(server)

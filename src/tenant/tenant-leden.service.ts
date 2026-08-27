@@ -92,7 +92,7 @@ export class TenantLedenService {
 
   async uitnodigen(
     tenantId: string,
-    invoer: { email: string; rol: string },
+    invoer: { email: string; naam: string; rol: string },
   ): Promise<NieuwLidResultaat> {
     const token = genereerUitnodigingstoken();
     const tokenHash = hashUitnodigingstoken(token);
@@ -161,7 +161,8 @@ export class TenantLedenService {
           );
           await tx.execute(
             sql`UPDATE clm."user"
-                   SET uitnodiging_hash = ${tokenHash},
+                   SET full_name = ${invoer.naam},
+                       uitnodiging_hash = ${tokenHash},
                        koppelbaar_tot = ${verlooptOp.toISOString()}
                  WHERE user_id = ${rij.user_id}`,
           );
@@ -177,7 +178,8 @@ export class TenantLedenService {
         );
         await tx.execute(
           sql`UPDATE clm."user"
-                 SET uitnodiging_hash = ${tokenHash},
+                 SET full_name = ${invoer.naam},
+                     uitnodiging_hash = ${tokenHash},
                      koppelbaar_tot = ${verlooptOp.toISOString()}
                WHERE user_id = ${rij.user_id}`,
         );
@@ -189,7 +191,7 @@ export class TenantLedenService {
       const nieuw = await tx.execute<{ user_id: string }>(
         sql`INSERT INTO clm."user"
               (tenant_id, full_name, email, uitnodiging_hash, koppelbaar_tot)
-            VALUES (${tenantId}, ${invoer.email}, ${invoer.email},
+            VALUES (${tenantId}, ${invoer.naam}, ${invoer.email},
                     ${tokenHash}, ${verlooptOp.toISOString()})
             RETURNING user_id`,
       );
