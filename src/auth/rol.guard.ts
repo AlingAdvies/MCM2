@@ -39,22 +39,23 @@ import type { RequestMetSessie } from './tenant-context.guard';
 
 export const VEREISTE_ROL = 'vereisteRol';
 
-/** Markeert een route of controller als "alleen voor deze rol". */
-export const VereistRol = (rol: string) => SetMetadata(VEREISTE_ROL, rol);
+/** Markeert een route of controller als "alleen voor deze rol(len)". */
+export const VereistRol = (...rollen: string[]) =>
+  SetMetadata(VEREISTE_ROL, rollen);
 
 @Injectable()
 export class RolGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const vereist = this.reflector.getAllAndOverride<string | undefined>(
+    const vereist = this.reflector.getAllAndOverride<string[] | undefined>(
       VEREISTE_ROL,
       [context.getHandler(), context.getClass()],
     );
 
     // Geen eis op deze route: iedereen met een geldige sessie mag door. De
     // authenticatie is dan al gedaan door TenantContextGuard.
-    if (!vereist) {
+    if (!vereist || vereist.length === 0) {
       return true;
     }
 
@@ -68,7 +69,7 @@ export class RolGuard implements CanActivate {
       throw new ForbiddenException('Geen sessie.');
     }
 
-    if (sessie.role !== vereist) {
+    if (!vereist.includes(sessie.role)) {
       throw new ForbiddenException(
         'U heeft geen rechten voor deze handeling. Neem contact op met uw beheerder.',
       );
