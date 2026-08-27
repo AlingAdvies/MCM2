@@ -37,6 +37,27 @@ migraties tegen productie gedraaid en teruggelezen, `mcm2-api` en
 door de OTAP-keten heen: acceptatie → staging → productie. Feature-branches
 verwijderd in beide repo's.
 
+**Nasleep (27-08): eerste uitrol toonde het oude scherm.** De eigenaar zag in
+productie nog het niet-uitklapbare "Leverancier toevoegen"-formulier — geen
+cache, maar een echte oorzaak: `productie-aws.yml` gebruikt zonder expliciete
+`frontend_versie` de `:latest`-image uit GHCR, en die wordt gepubliceerd door
+de **CI-workflow van `MCM2-frontend`**, niet door de productie-workflow zelf.
+De laatste CI-run op `main` (commit `6414339`) faalde op `format:check` (5
+bestanden met opmaakfouten), waardoor de stap "Image publiceren naar GHCR"
+werd overgeslagen — `:latest` bleef op een dag oude versie staan, van vóór de
+UI-feedback. Opgelost: opmaak gecorrigeerd (`MCM2-frontend` commit `fc71cce`),
+CI opnieuw groen inclusief publicatie, `productie-aws.yml` nogmaals gedraaid
+(run `33004376017`, alleen frontend opnieuw), akkoord gegeven, en visueel
+bevestigd door de eigenaar dat het scherm nu klopt.
+
+**Les:** een groene `productie-aws.yml`-run bewijst dat de uitrol zelf lukte,
+niet dat de gewenste code ook daadwerkelijk in de gebruikte image zit — de
+GHCR-publicatie is een aparte, stille schakel die kan falen zonder dat de
+uitrol dat zelf opmerkt. Bij twijfel over "waarom zie ik de wijziging niet":
+eerst checken of de CI-run op `main` van de betrokken repo daadwerkelijk
+geslaagd is tot en met de publicatiestap, vóórdat cache als verklaring
+aangenomen wordt.
+
 **saxombp-productiebackup (issue #58), voortgang:** de cron-taak draait
 sinds 25-08; stand op 26-08 is 2 geslaagde dumps (25-08 handmatig ingericht,
 26-08 06:00 de eerste echte cron-run). De laptop-backuptaak blijft aanstaan
