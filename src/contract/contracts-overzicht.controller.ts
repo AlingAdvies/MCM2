@@ -22,9 +22,7 @@ export class ContractsOverzichtController {
   @Get()
   async lijst(@Req() request: RequestMetSessie) {
     const sessie = request.sessie!;
-    const contracten = await this.contracts.lijstTenantBreed(
-      sessie.tenantId,
-    );
+    const contracten = await this.contracts.lijstTenantBreed(sessie.tenantId);
     return { contracten };
   }
 }

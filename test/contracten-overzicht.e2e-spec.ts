@@ -231,8 +231,9 @@ describe('GET /contracts — tenant-breed overzicht (e2e)', () => {
       .get('/contracts')
       .set('Cookie', adminCookie);
 
-    const contracten = (respons.body as { contracten: { contractId: string }[] })
-      .contracten;
+    const contracten = (
+      respons.body as { contracten: { contractId: string }[] }
+    ).contracten;
     const ids = contracten.map((c) => c.contractId);
 
     expect(ids).toContain(contract1Id);
