@@ -111,15 +111,22 @@ een superset.
 
 ## 5. Nieuwe routes
 
-Nieuwe controller (`src/tenant/tenant-gebruikers.controller.ts`), alle routes
+**Padkeuze:** `GET /tenant/gebruikers` bestaat al (`TenantController`,
+`src/tenant/tenant.controller.ts`) — een simpele keuzelijst
+(`{userId, naam}`, geen rol/status, zonder `@VereistRol`, gebruikt elders om
+bijv. een reviewer te koppelen aan een template). De nieuwe, uitgebreidere
+gebruikersbeheer-routes krijgen daarom een eigen pad, `/tenant/leden`, om
+geen bestaand endpoint te hergebruiken voor een ander doel of contract.
+
+Nieuwe controller (`src/tenant/tenant-leden.controller.ts`), alle routes
 `@VereistRol('admin')`:
 
 | Route | Doet |
 |---|---|
-| `GET /tenant/gebruikers` | Lijst: naam, e-mail, rol, status (actief / uitnodiging open / ingetrokken), sinds wanneer |
-| `POST /tenant/gebruikers` | Uitnodigen: e-mail + rol (`admin`/`user`/`reviewer`) |
-| `PUT /tenant/gebruikers/:id/rol` | Rol wijzigen |
-| `POST /tenant/gebruikers/:id/intrekken` | Toegang intrekken (`deleted_at`, geen `DELETE`) |
+| `GET /tenant/leden` | Lijst: naam, e-mail, rol, status (actief / uitnodiging open / ingetrokken), sinds wanneer |
+| `POST /tenant/leden` | Uitnodigen: e-mail + rol (`admin`/`user`/`reviewer`) |
+| `PUT /tenant/leden/:userId/rol` | Rol wijzigen |
+| `POST /tenant/leden/:userId/intrekken` | Toegang intrekken (`deleted_at`, geen `DELETE`) |
 
 ### 5a. Uitnodigen — drie gevallen die de route moet onderscheiden
 
