@@ -6,6 +6,7 @@ import {
   hashUitnodigingstoken,
 } from '../auth/uitnodigingstoken';
 import { DatabaseService, type TenantTransaction } from '../db/database.service';
+import { UitnodigingVerzender } from '../mail/uitnodiging-verzender.service';
 
 /** Hoe lang een tenant-uitnodiging geldig blijft — zelfde als de
  * platformbeheerder-uitnodiging (PlatformService). */
@@ -24,6 +25,9 @@ export interface NieuwLidResultaat {
   userId: string;
   rol: string;
   uitnodigingslink: string;
+  mailVerstuurd: boolean;
+  mailEchtVerstuurd: boolean;
+  mailFout?: string;
 }
 
 /**
@@ -42,7 +46,10 @@ export interface NieuwLidResultaat {
  */
 @Injectable()
 export class TenantLedenService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly uitnodigingen: UitnodigingVerzender,
+  ) {}
 
   async lijst(tenantId: string): Promise<TenantLid[]> {
     return this.db.withTenant(tenantId, async (tx) => {
@@ -90,7 +97,7 @@ export class TenantLedenService {
       Date.now() + UITNODIGING_GELDIGHEID_UREN * 60 * 60 * 1000,
     );
 
-    return this.db.withTenant(tenantId, async (tx) => {
+    const aangemaakt = await this.db.withTenant(tenantId, async (tx) => {
       // Bestaat er al een user-rij met dit e-mailadres bínnen deze tenant?
       //
       // Bewust geen check op een andere tenant: RLS beperkt elke query in
@@ -127,6 +134,11 @@ export class TenantLedenService {
                AND u.deleted_at IS NULL`,
       );
 
+      const tenantRij = await tx.execute<{ name: string }>(
+        sql`SELECT name FROM clm.tenant WHERE tenant_id = ${tenantId}`,
+      );
+      const tenantNaam = tenantRij.rows[0]?.name ?? tenantId;
+
       if (bestaand.rows.length > 0) {
         const rij = bestaand.rows[0];
 
@@ -151,11 +163,7 @@ export class TenantLedenService {
                  WHERE user_id = ${rij.user_id}`,
           );
 
-          return {
-            userId: rij.user_id,
-            rol: invoer.rol,
-            uitnodigingslink: this.uitnodigingsLink(token),
-          };
+          return { userId: rij.user_id, tenantNaam };
         }
 
         // Geval 3: de user-rij bestaat, maar heeft nooit een membership bij
@@ -171,11 +179,7 @@ export class TenantLedenService {
                WHERE user_id = ${rij.user_id}`,
         );
 
-        return {
-          userId: rij.user_id,
-          rol: invoer.rol,
-          uitnodigingslink: this.uitnodigingsLink(token),
-        };
+        return { userId: rij.user_id, tenantNaam };
       }
 
       // Geval 1: geheel nieuw e-mailadres.
@@ -193,12 +197,29 @@ export class TenantLedenService {
             VALUES (${userId}, ${tenantId}, ${invoer.rol})`,
       );
 
-      return {
-        userId,
-        rol: invoer.rol,
-        uitnodigingslink: this.uitnodigingsLink(token),
-      };
+      return { userId, tenantNaam };
     });
+
+    // Versturen ná de transactie, nooit erin — zelfde volgorde en zelfde
+    // reden als PlatformController.tenantAanmaken: een verstuurde mail is
+    // niet terug te draaien.
+    const link = this.uitnodigingsLink(token);
+    const verzending = await this.uitnodigingen.verstuurAanTenantLid({
+      ontvanger: invoer.email,
+      tenantNaam: aangemaakt.tenantNaam,
+      rol: invoer.rol,
+      link,
+      verlooptOp: verlooptOp.toISOString(),
+    });
+
+    return {
+      userId: aangemaakt.userId,
+      rol: invoer.rol,
+      uitnodigingslink: link,
+      mailVerstuurd: verzending.verstuurd,
+      mailEchtVerstuurd: verzending.echtVerstuurd,
+      mailFout: verzending.fout,
+    };
   }
 
   async rolWijzigen(

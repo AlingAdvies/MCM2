@@ -303,6 +303,70 @@ describe('UitnodigingVerzender', () => {
     });
   });
 
+  describe('verstuurAanTenantLid', () => {
+    it('verstuurt een uitnodiging met de rol erin', async () => {
+      const kanaal = new LogMailKanaal();
+      const verzender = new UitnodigingVerzender(kanaal);
+
+      const uitkomst = await verzender.verstuurAanTenantLid({
+        ontvanger: 'collega@transdev.nl',
+        tenantNaam: 'Transdev',
+        rol: 'user',
+        link: 'https://mcm2.example.nl/api/backend/auth/login?uitnodiging=abc',
+        verlooptOp: '2026-09-01T12:00:00.000Z',
+      });
+
+      expect(uitkomst.verstuurd).toBe(true);
+      expect(kanaal.laatste?.onderwerp).toContain('Transdev');
+    });
+
+    it('meldt niet echt verstuurd zonder mailkanaal', async () => {
+      const verzender = new UitnodigingVerzender(new LogMailKanaal());
+
+      const uitkomst = await verzender.verstuurAanTenantLid({
+        ontvanger: 'collega@transdev.nl',
+        tenantNaam: 'Transdev',
+        rol: 'reviewer',
+        link: 'https://mcm2.example.nl/api/backend/auth/login?uitnodiging=abc',
+        verlooptOp: '2026-09-01T12:00:00.000Z',
+      });
+
+      expect(uitkomst.verstuurd).toBe(true);
+      expect(uitkomst.echtVerstuurd).toBe(false);
+    });
+
+    it('meldt echt verstuurd met een echt kanaal', async () => {
+      const verzender = new UitnodigingVerzender(new FalendKanaal(new Set()));
+
+      const uitkomst = await verzender.verstuurAanTenantLid({
+        ontvanger: 'collega@transdev.nl',
+        tenantNaam: 'Transdev',
+        rol: 'admin',
+        link: 'https://mcm2.example.nl/api/backend/auth/login?uitnodiging=abc',
+        verlooptOp: '2026-09-01T12:00:00.000Z',
+      });
+
+      expect(uitkomst.echtVerstuurd).toBe(true);
+    });
+
+    it('geeft de reden mee bij een mislukte verzending', async () => {
+      const verzender = new UitnodigingVerzender(
+        new FalendKanaal(new Set(['collega@transdev.nl'])),
+      );
+
+      const uitkomst = await verzender.verstuurAanTenantLid({
+        ontvanger: 'collega@transdev.nl',
+        tenantNaam: 'Transdev',
+        rol: 'user',
+        link: 'https://mcm2.example.nl/api/backend/auth/login?uitnodiging=abc',
+        verlooptOp: '2026-09-01T12:00:00.000Z',
+      });
+
+      expect(uitkomst.verstuurd).toBe(false);
+      expect(uitkomst.fout).toContain('Resend weigerde');
+    });
+  });
+
   describe('met een echt kanaal', () => {
     it('meldt de uitnodiging als echt verstuurd', async () => {
       // De tegenproef: zou `echtVerstuurd` altijd `false` zijn, dan is het

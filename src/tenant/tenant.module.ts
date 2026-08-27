@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 
 import { AuthModule } from '../auth/auth.module';
+import { MailModule } from '../mail/mail.module';
 import { TenantController } from './tenant.controller';
 import { TenantLedenController } from './tenant-leden.controller';
 import { TenantLedenService } from './tenant-leden.service';
@@ -18,7 +19,7 @@ import { TenantService } from './tenant.service';
  * `tenant.controller.ts`.
  */
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, MailModule],
   controllers: [TenantController, TenantLedenController],
   providers: [TenantService, TenantLedenService],
   exports: [TenantService],

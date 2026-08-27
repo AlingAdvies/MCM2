@@ -5,6 +5,10 @@ import {
   type BeheerderUitnodigingGegevens,
 } from './beheerder-uitnodiging-bericht';
 import { MailKanaal, MailVerzendFout } from './mail-kanaal';
+import {
+  stelTenantLidUitnodigingSamen,
+  type TenantLidUitnodigingGegevens,
+} from './tenant-lid-uitnodiging-bericht';
 import { stelUitnodigingSamen } from './uitnodiging-bericht';
 
 /**
@@ -176,6 +180,51 @@ export class UitnodigingVerzender {
       // Het adres staat bewust niet in de logregel — MCM2-CLAUDE.md §6.
       this.logger.error(
         `Uitnodiging voor de beheerder van ${gegevens.tenantNaam} niet verstuurd: ` +
+          (err instanceof Error ? err.message : 'onbekende fout'),
+      );
+
+      return {
+        verstuurd: false,
+        echtVerstuurd: false,
+        fout:
+          err instanceof Error ? err.message : 'Onbekende fout bij versturen.',
+        tijdelijk: fout ? err.tijdelijk : false,
+      };
+    }
+  }
+
+  /**
+   * Verstuurt de uitnodiging waarmee een tenant-admin een collega uitnodigt
+   * voor zijn eigen tenant (issue #75). Zelfde patroon en zelfde
+   * echtVerstuurd/verstuurd-onderscheid als `verstuurAanBeheerder` hierboven
+   * (Issue #131).
+   */
+  async verstuurAanTenantLid(gegevens: TenantLidUitnodigingGegevens): Promise<{
+    verstuurd: boolean;
+    echtVerstuurd: boolean;
+    providerId?: string;
+    fout?: string;
+    tijdelijk?: boolean;
+  }> {
+    try {
+      const { providerId, echtVerstuurd } = await this.mail.verstuur(
+        stelTenantLidUitnodigingSamen(gegevens),
+      );
+
+      this.logger.log(
+        echtVerstuurd
+          ? `Uitnodiging voor een lid van ${gegevens.tenantNaam} verstuurd.`
+          : `Uitnodiging voor een lid van ${gegevens.tenantNaam} NIET verstuurd: ` +
+              'er is geen mailkanaal ingesteld. Geef de link handmatig door.',
+      );
+
+      return { verstuurd: true, echtVerstuurd, providerId };
+    } catch (err) {
+      const fout = err instanceof MailVerzendFout;
+
+      // Het adres staat bewust niet in de logregel — MCM2-CLAUDE.md §6.
+      this.logger.error(
+        `Uitnodiging voor een lid van ${gegevens.tenantNaam} niet verstuurd: ` +
           (err instanceof Error ? err.message : 'onbekende fout'),
       );
 
