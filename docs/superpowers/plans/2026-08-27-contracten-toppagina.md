@@ -864,11 +864,11 @@ git commit -m "feat(contract): lijstpagina /beheer/contracten + sidebar-item"
 - Modify: `src/app/beheer/leveranciers/[id]/Contracten.tsx`
 - Modify: `src/app/beheer/leveranciers/[id]/page.tsx`
 
-- [ ] **Step 1: Bekijk de huidige `opengeklapt`-state**
+- [x] **Step 1: Bekijk de huidige `opengeklapt`-state**
 
 Regel 115 in `Contracten.tsx`: `const [opengeklapt, setOpengeklapt] = useState<string | null>(null);`
 
-- [ ] **Step 2: Voeg een prop toe voor de initiële waarde**
+- [x] **Step 2: Voeg een prop toe voor de initiële waarde**
 
 In `Contracten.tsx`, pas de functiesignatuur aan:
 
@@ -900,7 +900,7 @@ export function Contracten({
 `opengeklapt` en de functiesignatuur; de rest van het component blijft
 ongewijzigd.)
 
-- [ ] **Step 3: Voeg auto-scroll toe wanneer er een initiële waarde is**
+- [x] **Step 3: Voeg auto-scroll toe wanneer er een initiële waarde is**
 
 Direct na de bestaande `useEffect(() => { void laad(); }, [laad]);`, voeg
 een tweede `useEffect` toe:
@@ -920,7 +920,7 @@ een tweede `useEffect` toe:
   }, []);
 ```
 
-- [ ] **Step 4: Geef de query-param door vanuit het leveranciersscherm**
+- [x] **Step 4: Geef de query-param door vanuit het leveranciersscherm**
 
 `src/app/beheer/leveranciers/[id]/page.tsx` is al een Client Component
 (`'use client'` op regel 1, gebruikt al `useParams`/`useRouter` uit
@@ -951,7 +951,7 @@ Zoek de `<Contracten`-aanroep (rond regel 154) en breid hem uit:
               />
 ```
 
-- [ ] **Step 5: Run de Playwright-test uit Taak 5, nu volledig**
+- [x] **Step 5: Run de Playwright-test uit Taak 5, nu volledig**
 
 ```powershell
 npx playwright test e2e/contracten-overzicht.spec.ts
@@ -959,13 +959,13 @@ npx playwright test e2e/contracten-overzicht.spec.ts
 
 Verwacht: alle 4 tests slagen.
 
-- [ ] **Step 6: Volledige Playwright-suite (regressie-check)**
+- [x] **Step 6: Volledige Playwright-suite (regressie-check)**
 
 ```powershell
 npx playwright test
 ```
 
-- [ ] **Step 7: Typecheck, format, lint**
+- [x] **Step 7: Typecheck, format, lint**
 
 ```powershell
 npx tsc --noEmit
@@ -973,7 +973,7 @@ npm run format
 npm run lint
 ```
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add "src/app/beheer/leveranciers/[id]/Contracten.tsx" "src/app/beheer/leveranciers/[id]/page.tsx"
