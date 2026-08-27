@@ -2,6 +2,68 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-27 (vervolg) — tenant-gebruikersbeheer gebouwd (issue #75): een
+tenant-admin kan zelf collega's uitnodigen, hun rol wijzigen en hun toegang
+intrekken. `verify:volledig` groen, backend + frontend, op de branch
+`feat/tenant-gebruikersbeheer` in beide repo's, nog niet gemerged.**
+
+**Aanleiding.** Bij "voor de pilot ga ik de tokens handmatig in een mail
+plakken" bleek #77 (uitnodigingenscherm) geen blokkade — het bestaande
+mechanisme volstaat. Wat wél ontbrak: een tenant-admin kan geen collega's
+toevoegen zonder dat de eigenaar het met de hand in de database doet (#75).
+
+**Vooronderzoek (27-08), op verzoek van de eigenaar:** bestaat hier een
+3rd-party dienst voor (Permit.io, Cerbos, Oso, Authzed, AWS Verified
+Permissions, Supabase RBAC, Entra app-rollen)? Geen van allen past zonder een
+architectuurwijziging die niemand vroeg — ze werken naast Postgres RLS, niet
+erin, of vragen Supabase Auth/een AWS-account/per-app-registratie-rollen die
+hier niet passen. Besluit: zelf bouwen. Zie de spec §1 voor de volledige
+afweging.
+
+**Drie rollen** (`admin`/`user`/`reviewer`, migratie 0032): `user`
+(contractbeheerder) krijgt dezelfde schrijfrechten als `admin` op alles
+behalve tenant-gebruikersbeheer zelf en de twee routes die zelf bevoegdheden
+toekennen (`koppelReviewer`, `maakRonde`). `RolGuard`/`VereistRol` (backend)
+en `magZien`/`vereistRol` (frontend) accepteren nu een lijst rollen in plaats
+van precies één — kleine, gerichte uitbreiding, geen bestaande aanroep
+brak.
+
+**Platformbeheerder-doorkijk** loopt via het bestaande support-toegang-
+mechanisme (ADR-015) — geen nieuwe uitzondering.
+
+**Twee bevindingen tijdens het bouwen, niet in de spec voorzien:**
+- `clm.sessie` bleek een **eigen**, aparte `sessie_role_check`-constraint te
+  hebben die migratie 0020 nooit had bijgewerkt met `support` — een
+  platformbeheerder met support-toegang kon sinds die migratie nooit
+  succesvol inloggen. Ontdekt bij het testen van de nieuwe `user`-rol,
+  meegenomen in migratie 0032.
+- De oorspronkelijke aanpak voor "opnieuw uitnodigen na intrekken"
+  (surrogaatsleutel op `tenant_membership`) bleek een bestaande, werkende
+  route (`PlatformService.supportToegangGeven()`, leunt op de huidige
+  primary key) te breken. Opgelost door de bestaande rij te hergebruiken
+  (`UPDATE` i.p.v. een nieuwe rij) — geen schemawijziging nodig.
+
+**Bewust laten vallen:** een cross-tenant e-mailcheck bij het uitnodigen
+(iemand met een actieve membership bij een ándere tenant nogmaals
+uitnodigen). RLS maakt zo'n check principieel onmogelijk zonder een aparte
+`SECURITY DEFINER`-functie; `PlatformController.tenantAanmaken()` doet
+dezelfde controle ook niet. Besluit eigenaar: laten vallen — verwarrend voor
+de betrokkene, geen beveiligingslek.
+
+**Test-ids-botsing gevonden en gefixt** (`test/test-ids.spec.ts`): de eerst
+gekozen suffixen (`f7`-`fe`) bleken al letterlijk in een ander testblok
+gebruikt te zijn (niet via de `id()`-helper, dus niet zichtbaar bij een
+oppervlakkige `grep`). Verplaatst naar geverifieerd vrije suffixen.
+
+Spec: `docs/superpowers/specs/2026-08-27-tenant-gebruikersbeheer-design.md`.
+Plan: `docs/superpowers/plans/2026-08-27-tenant-gebruikersbeheer.md`.
+
+**Vervolg:** eigenaar bekijkt de preview, geeft akkoord, dan mergen —
+conform de "naar productie impliceert eerst staging"-afspraak van eerder
+vandaag.
+
+---
+
 **2026-08-27 — staging bleek overgeslagen bij de productie-uitrol van 26-08;
 gecorrigeerd en het proces zelf aangescherpt.**
 
