@@ -67,6 +67,20 @@ CREATE TRIGGER tenant_register_bijhouden
 -- en de doeltenant zelf niet gedeactiveerd. Geeft niets terug als een van
 -- beide ontbreekt — zelfde stijl als sessie_aanmaken() (0010).
 
+-- ⚠ v_role wordt in twee stappen bepaald, niet met één JOIN naar clm.tenant.
+-- clm.tenant heeft FORCE ROW LEVEL SECURITY (migratie 0011) — die geldt óók
+-- voor de eigenaar van een SECURITY DEFINER-functie. Een gewone JOIN naar
+-- clm.tenant levert daarom altijd nul rijen op zolang er nog geen
+-- app.current_tenant_id gezet is (gemeten: sessie_aanmaken() faalde hierop
+-- stil tijdens het testen van deze migratie). clm.tenant_membership heeft
+-- geen FORCE, dus die query mag wél zonder context. Zodra de doeltenant
+-- bekend is, zet set_config() de context binnen deze transactie, en pas dán
+-- is clm.tenant leesbaar.
+-- external_subject is NOT NULL op clm.sessie (migratie 0010) — de nieuwe
+-- sessierij neemt daarom het subject van de bestaande sessie over. Er komt
+-- geen nieuwe Entra-login aan te pas, dus er is geen ander subject om te
+-- gebruiken; het blijft hetzelfde geverifieerde ID als de oorspronkelijke
+-- login.
 CREATE FUNCTION clm.sessie_wisselen(
     p_huidige_token_hash text,
     p_doel_tenant_id uuid,
@@ -79,10 +93,12 @@ SECURITY DEFINER
 SET search_path = clm, pg_temp
 AS $$
 DECLARE
-    v_user_id uuid;
-    v_role    text;
+    v_user_id           uuid;
+    v_external_subject  text;
+    v_role              text;
+    v_tenant_actief     boolean;
 BEGIN
-    SELECT s.user_id INTO v_user_id
+    SELECT s.user_id, s.external_subject INTO v_user_id, v_external_subject
       FROM clm.sessie s
      WHERE s.token_hash = p_huidige_token_hash
        AND s.verloopt_op > now();
@@ -93,20 +109,30 @@ BEGIN
 
     SELECT m.role INTO v_role
       FROM clm.tenant_membership m
-      JOIN clm.tenant t ON t.tenant_id = m.tenant_id
      WHERE m.user_id = v_user_id
        AND m.tenant_id = p_doel_tenant_id
        AND m.deleted_at IS NULL
-       AND (m.verloopt_op IS NULL OR m.verloopt_op > now())
-       AND t.deleted_at IS NULL;
+       AND (m.verloopt_op IS NULL OR m.verloopt_op > now());
 
     IF v_role IS NULL THEN
         RETURN;
     END IF;
 
+    PERFORM set_config('app.current_tenant_id', p_doel_tenant_id::text, true);
+
+    SELECT t.deleted_at IS NULL INTO v_tenant_actief
+      FROM clm.tenant t WHERE t.tenant_id = p_doel_tenant_id;
+
+    IF v_tenant_actief IS NOT TRUE THEN
+        RETURN;
+    END IF;
+
     RETURN QUERY
-    INSERT INTO clm.sessie (token_hash, user_id, tenant_id, role, verloopt_op)
+    INSERT INTO clm.sessie (
+        token_hash, user_id, tenant_id, role, external_subject, verloopt_op
+    )
     VALUES (p_nieuwe_token_hash, v_user_id, p_doel_tenant_id, v_role,
+            v_external_subject,
             now() + p_geldigheid)
     RETURNING clm.sessie.sessie_id, clm.sessie.user_id,
               clm.sessie.tenant_id, clm.sessie.role;
@@ -114,10 +140,10 @@ END;
 $$;--> statement-breakpoint
 
 COMMENT ON FUNCTION clm.sessie_wisselen(text, uuid, text, interval) IS
-    'Maakt, vanuit een bestaande geldige sessie, een tweede sessie aan voor een tenant waar de gebruiker een geldig membership op heeft — geen Entra-login nodig. Gebruikt door platformbeheer om na support-toegang direct te wisselen (spec 2026-08-27-platformbeheer-uitbreiding-design.md, sectie 5a). De oorspronkelijke sessie blijft bestaan.';--> statement-breakpoint
+    'Maakt, vanuit een bestaande geldige sessie, een tweede sessie aan voor een tenant waar de gebruiker een geldig membership op heeft — geen Entra-login nodig. Gebruikt door platformbeheer om na support-toegang direct te wisselen (spec 2026-08-27-platformbeheer-uitbreiding-design.md, sectie 5a). De oorspronkelijke sessie blijft bestaan. Zet zelf app.current_tenant_id vóór het lezen van clm.tenant (FORCE RLS) — zie de code-commentaar erboven.';--> statement-breakpoint
 
 REVOKE ALL ON FUNCTION clm.sessie_wisselen(text, uuid, text, interval) FROM PUBLIC;--> statement-breakpoint
-GRANT EXECUTE ON FUNCTION clm.sessie_wisselen(text, uuid, text, interval) TO clm_api, clm_admin;--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION clm.sessie_wisselen(text, uuid, text, interval) TO clm_migrator, clm_api, clm_admin;--> statement-breakpoint
 
 -- ── 4. clm.eigen_tenant_vinden() ─────────────────────────────────────────────
 --
@@ -149,7 +175,7 @@ COMMENT ON FUNCTION clm.eigen_tenant_vinden(uuid) IS
     'Zoekt de blijvende (niet-support) tenant van een gebruiker, voor de terugkeer-route na support-toegang (spec 2026-08-27-platformbeheer-uitbreiding-design.md, sectie 5c). SECURITY DEFINER omdat clm.tenant_membership RLS heeft op de sessie-tenant — vanuit een support-sessie zou een gewone query de eigen tenant nooit vinden.';--> statement-breakpoint
 
 REVOKE ALL ON FUNCTION clm.eigen_tenant_vinden(uuid) FROM PUBLIC;--> statement-breakpoint
-GRANT EXECUTE ON FUNCTION clm.eigen_tenant_vinden(uuid) TO clm_api, clm_admin;--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION clm.eigen_tenant_vinden(uuid) TO clm_migrator, clm_api, clm_admin;--> statement-breakpoint
 
 -- ── 5. sessie_aanmaken(): ook een gedeactiveerde tenant blokkeert login ──────
 --
@@ -157,6 +183,14 @@ GRANT EXECUTE ON FUNCTION clm.eigen_tenant_vinden(uuid) TO clm_api, clm_admin;--
 -- deleted_at, maar niet tenant.deleted_at — die kolom bestond toen nog
 -- niet. Zonder deze aanpassing kan een lid van een gedeactiveerde tenant
 -- alsnog inloggen.
+--
+-- ⚠ Zelfde valkuil als sessie_wisselen() hierboven: clm.tenant heeft FORCE
+-- ROW LEVEL SECURITY, dus een JOIN clm.tenant in dezelfde SELECT als
+-- clm.tenant_membership/clm."user" (die geen FORCE hebben) levert altijd nul
+-- rijen op — óók binnen deze SECURITY DEFINER-functie, óók als eigenaar.
+-- Gemeten tijdens het testen van deze migratie: sessie_aanmaken() faalde
+-- stil (geen sessie, geen fout) zodra de tenant-JOIN erbij kwam. Membership
+-- eerst vinden, dán pas context zetten en clm.tenant apart controleren.
 
 CREATE OR REPLACE FUNCTION clm.sessie_aanmaken(
     p_token_hash text,
@@ -169,24 +203,32 @@ SECURITY DEFINER
 SET search_path = clm, pg_temp
 AS $$
 DECLARE
-    v_user_id   uuid;
-    v_tenant_id uuid;
-    v_role      text;
+    v_user_id       uuid;
+    v_tenant_id     uuid;
+    v_role          text;
+    v_tenant_actief boolean;
 BEGIN
     SELECT m.user_id, m.tenant_id, m.role
       INTO v_user_id, v_tenant_id, v_role
       FROM clm.tenant_membership m
       JOIN clm."user" u ON u.user_id = m.user_id
-      JOIN clm.tenant t ON t.tenant_id = m.tenant_id
      WHERE u.external_subject = p_external_subject
        AND p_external_subject IS NOT NULL
        AND u.deleted_at IS NULL
        AND m.deleted_at IS NULL
-       AND t.deleted_at IS NULL
      ORDER BY m.created_at
      LIMIT 1;
 
     IF v_user_id IS NULL THEN
+        RETURN;
+    END IF;
+
+    PERFORM set_config('app.current_tenant_id', v_tenant_id::text, true);
+
+    SELECT t.deleted_at IS NULL INTO v_tenant_actief
+      FROM clm.tenant t WHERE t.tenant_id = v_tenant_id;
+
+    IF v_tenant_actief IS NOT TRUE THEN
         RETURN;
     END IF;
 
@@ -204,4 +246,4 @@ END;
 $$;--> statement-breakpoint
 
 COMMENT ON FUNCTION clm.sessie_aanmaken(text, text, interval) IS
-    'Maakt een sessie voor de eerste (oudste) membership van een geverifieerd subject. Sluit sinds migratie 0033 ook een gedeactiveerde tenant uit (t.deleted_at), naast een gedeactiveerd lid of membership.';--> statement-breakpoint
+    'Maakt een sessie voor de eerste (oudste) membership van een geverifieerd subject. Sluit sinds migratie 0033 ook een gedeactiveerde tenant uit (t.deleted_at, via set_config i.p.v. een JOIN — clm.tenant heeft FORCE RLS), naast een gedeactiveerd lid of membership.';--> statement-breakpoint

@@ -394,6 +394,7 @@ export const TEST_IDS = {
     andereTenant: id('44'),
     klantAdmin: id('45'),
     gedeactiveerdeTenant: id('46'),
+    openTenant: id('47'),
   },
 } as const;
 

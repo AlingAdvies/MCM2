@@ -245,4 +245,11 @@ export const DEFINER_FUNCTIES: Readonly<Record<string, FunctieContract>> = {
     searchPath: 'search_path=clm, pg_temp',
     execute: ['clm_migrator'],
   },
+
+  // Platformbeheer-uitbreiding (0033): een tweede sessie aanmaken zonder
+  // Entra-login, en de blijvende tenant van een gebruiker opzoeken. Beide
+  // hebben SECURITY DEFINER nodig om langs de FORCE RLS van clm.tenant en
+  // clm.tenant_membership heen te komen — zie de commentaren in de migratie.
+  sessie_wisselen: DEFINER_STANDAARD,
+  eigen_tenant_vinden: DEFINER_STANDAARD,
 };

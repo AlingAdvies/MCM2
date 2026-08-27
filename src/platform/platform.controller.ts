@@ -368,9 +368,7 @@ export class PlatformController {
   ) {
     const sessie = request.sessie!;
 
-    const eigenTenantId = await this.platform.eigenTenantVinden(
-      sessie.userId,
-    );
+    const eigenTenantId = await this.platform.eigenTenantVinden(sessie.userId);
 
     if (!eigenTenantId) {
       throw new NotFoundException('Geen eigen tenant gevonden.');
