@@ -143,12 +143,23 @@ moet daarom rekening houden met drie gevallen voor het opgegeven e-mailadres:
    — de bestaande rij wordt bijgewerkt (`UPDATE`: nieuwe rol, `deleted_at =
    NULL`), niet een nieuwe rij aangemaakt — zie §7 voor de reden. Nieuw
    token, nieuwe mail.
-3. **Bestaat, met een actieve membership** — bij deze tenant (dubbele
-   uitnodiging) of bij een andere tenant. Beide worden vooraf gecontroleerd en
-   geven een duidelijke fout (`ConflictException`, "dit e-mailadres heeft al
-   toegang" / "dit e-mailadres heeft al toegang tot een andere tenant") — niet
-   de rauwe database-constraint-fout van
-   `tenant_membership_een_actief_per_gebruiker`.
+3. **Bestaat, met een actieve membership bij déze tenant** (dubbele
+   uitnodiging) — vooraf gecontroleerd, geeft een duidelijke
+   `ConflictException` ("dit e-mailadres heeft al toegang tot deze tenant").
+
+**Besluit (eigenaar, 27-08), gevonden tijdens het implementeren: geen
+cross-tenant check.** Een e-mailadres met een actieve membership bij een
+*andere* tenant wordt hier bewust **niet** gecontroleerd en dus gewoon
+opnieuw uitgenodigd (nieuwe, losse `user`-rij). Reden: RLS beperkt elke query
+binnen `withTenant()` principieel tot de eigen tenant (ADR-008, geen
+BYPASSRLS) — een cross-tenant check zou een aparte, tenant-overstijgende
+`SECURITY DEFINER`-functie vragen, zoals `sessie_aanmaken()` en
+`koppel_eerste_login()` die al hebben. `PlatformController.tenantAanmaken()`
+doet om dezelfde reden ook geen cross-tenant e-mailcontrole. Risico dat
+hiermee geaccepteerd is: hetzelfde e-mailadres kan los bij meerdere tenants
+een `user`-rij krijgen — verwarrend voor de betrokkene, maar geen
+beveiligingslek: de tenant-isolatie zelf (elke rij hoort bij precies één
+tenant, RLS blijft van kracht) blijft volledig intact.
 
 ### 5b. Rol wijzigen en intrekken — laatste-admin-check
 
@@ -282,9 +293,10 @@ Conform MCM2-CLAUDE.md §15b horen deze te falen vóórdat de code bestaat.
     op (de bestaande rij bijgewerkt, `deleted_at = NULL`, nieuwe rol/token);
     de intrekking en de heruitnodiging staan beide apart in
     `audit.audit_event`.
-11. Uitnodigen van een e-mailadres met een al-actieve membership (eigen of
-    andere tenant) geeft een duidelijke `ConflictException`, geen
-    database-constraint-crash.
+11. Uitnodigen van een e-mailadres met een al-actieve membership bij déze
+    tenant geeft een duidelijke `ConflictException`, geen
+    database-constraint-crash. Bij een andere tenant is dit bewust geen
+    tegenproef — zie het besluit in §5a hierboven.
 
 ---
 

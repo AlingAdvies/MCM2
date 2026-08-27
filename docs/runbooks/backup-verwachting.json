@@ -22,10 +22,15 @@
     "Deze lijst is teruggezet naar de volledige, werkelijke stand.",
     "",
     "Migratie 0031 (25-08, audit-bewijsvoering) voegde ref.compliance_thema en",
-    "clm.vendor_compliance_thema toe. Bijgewerkt bij het afronden van die feature."
+    "clm.vendor_compliance_thema toe. Bijgewerkt bij het afronden van die feature.",
+    "",
+    "Migratie 0032 (27-08, issue #75) voegt GEEN tabel toe — alleen een vierde",
+    "toegestane rolwaarde ('user') op twee bestaande CHECK-constraints",
+    "(tenant_membership_role_check, sessie_role_check). De migratiestand hieronder",
+    "is toch bijgewerkt, want verify:onderhoud vergelijkt puur het migratienummer."
   ],
-  "bijgewerkt": "2026-08-26",
-  "migratiestand": "0031_compliance_thema",
+  "bijgewerkt": "2026-08-27",
+  "migratiestand": "0032_tenant_membership_rol_user",
   "tabellen": [
     "audit.audit_event",
     "clm.contract",
