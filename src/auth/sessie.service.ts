@@ -268,6 +268,49 @@ export class SessieService {
   }
 
   /**
+   * Wisselt vanuit een bestaande geldige sessie naar een tweede sessie voor
+   * een andere tenant — geen Entra-login nodig (platformbeheer-uitbreiding,
+   * spec §5a/§5b).
+   *
+   * Geeft `null` als het huidige token ongeldig is, of als er geen geldig
+   * membership op de doeltenant staat. Beide gevallen krijgen dezelfde
+   * uitkomst — de aanroeper heeft aan het onderscheid niets, en het
+   * verklapt geen informatie over wélke tenants bestaan.
+   */
+  async wisselen(
+    huidigRuwToken: unknown,
+    doelTenantId: string,
+  ): Promise<NieuweSessie | null> {
+    if (!heeftGeldigeSessieVorm(huidigRuwToken)) {
+      return null;
+    }
+
+    const huidigeHash = hashSessieToken(huidigRuwToken);
+    const nieuwToken = genereerSessieToken();
+    const nieuweHash = hashSessieToken(nieuwToken);
+
+    const resultaat = await this.db.db.execute<SessieRij>(
+      sql`SELECT * FROM clm.sessie_wisselen(
+            ${huidigeHash}, ${doelTenantId}, ${nieuweHash},
+            ${GELDIGHEID_INTERVAL}::interval)`,
+    );
+
+    const rij = resultaat.rows[0];
+
+    if (!rij) {
+      return null;
+    }
+
+    return {
+      token: nieuwToken,
+      sessieId: rij.sessie_id,
+      userId: rij.user_id,
+      tenantId: rij.tenant_id,
+      role: rij.role,
+    };
+  }
+
+  /**
    * Beëindigt de sessie. Verwijdert de rij en ruimt meteen verlopen sessies op.
    *
    * Werpt niet bij een onbekend token: uitloggen moet altijd slagen. Wie op
