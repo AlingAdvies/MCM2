@@ -1,6 +1,6 @@
 import { InvoerFout } from '../vendor/vendor-invoer';
 
-import type { NieuweTenant } from './platform.service';
+import type { NieuweTenant, TenantWijziging } from './platform.service';
 
 /**
  * Validatie van wat het beheerscherm opstuurt bij het aanmaken van een tenant.
@@ -63,6 +63,20 @@ export function leesNieuweTenant(body: unknown): NieuweTenant {
     naam: verplichteTekst(invoer.naam, 'naam', MAX_NAAM),
     adminNaam: verplichteTekst(invoer.adminNaam, 'adminNaam', MAX_NAAM),
     adminEmail: email(invoer.adminEmail, 'adminEmail'),
+    antwoordEmail: optioneelEmail(invoer.antwoordEmail, 'antwoordEmail'),
+  };
+}
+
+/** Validatie voor `PUT /platform/tenants/:id` (platformbeheer-uitbreiding). */
+export function leesTenantWijziging(body: unknown): TenantWijziging {
+  if (typeof body !== 'object' || body === null) {
+    throw new InvoerFout('body', 'Verwacht een JSON-object.');
+  }
+
+  const invoer = body as Record<string, unknown>;
+
+  return {
+    naam: verplichteTekst(invoer.naam, 'naam', MAX_NAAM),
     antwoordEmail: optioneelEmail(invoer.antwoordEmail, 'antwoordEmail'),
   };
 }

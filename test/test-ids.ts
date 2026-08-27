@@ -387,6 +387,14 @@ export const TEST_IDS = {
     reviewer: id('3f'),
     andereTenant: id('40'),
   },
+  'platform-uitbreiding': {
+    platformbeheerder: id('41'),
+    eigenTenant: id('42'),
+    doelTenant: id('43'),
+    andereTenant: id('44'),
+    klantAdmin: id('45'),
+    gedeactiveerdeTenant: id('46'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */

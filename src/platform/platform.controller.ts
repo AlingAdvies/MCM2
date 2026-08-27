@@ -6,10 +6,15 @@ import {
   NotFoundException,
   Param,
   Post,
+  Put,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 
+import { cookieInstellingen } from '../auth/sessie';
+import { SessieService } from '../auth/sessie.service';
 import {
   TenantContextGuard,
   type RequestMetSessie,
@@ -17,7 +22,11 @@ import {
 import { UitnodigingVerzender } from '../mail/uitnodiging-verzender.service';
 import { InvoerFout } from '../vendor/vendor-invoer';
 import { PlatformAdminGuard } from './platform-admin.guard';
-import { leesNieuweTenant, leesSupportReden } from './platform-invoer';
+import {
+  leesNieuweTenant,
+  leesSupportReden,
+  leesTenantWijziging,
+} from './platform-invoer';
 import { PlatformService } from './platform.service';
 
 /**
@@ -45,6 +54,7 @@ export class PlatformController {
   constructor(
     private readonly platform: PlatformService,
     private readonly uitnodigingen: UitnodigingVerzender,
+    private readonly sessies: SessieService,
   ) {}
 
   @Post('tenants')
@@ -216,6 +226,45 @@ export class PlatformController {
   }
 
   /**
+   * Past naam en/of antwoordEmail van een bestaande tenant aan
+   * (platformbeheer-uitbreiding).
+   */
+  @Put('tenants/:id')
+  async tenantWijzigen(@Param('id') id: string, @Body() body: unknown) {
+    try {
+      const invoer = leesTenantWijziging(body);
+      const tenant = await this.platform.tenantWijzigen(id, invoer);
+
+      if (!tenant) {
+        throw new NotFoundException('Onbekende tenant.');
+      }
+
+      return tenant;
+    } catch (fout) {
+      if (fout instanceof InvoerFout) {
+        throw new BadRequestException({
+          veld: fout.veld,
+          melding: fout.message,
+        });
+      }
+      throw fout;
+    }
+  }
+
+  /**
+   * Deactiveert een tenant (soft-delete, platformbeheer-uitbreiding). Geen
+   * hard delete — zie de spec §4 voor de afweging.
+   */
+  @Post('tenants/:id/deactiveren')
+  async tenantDeactiveren(@Param('id') id: string) {
+    const gelukt = await this.platform.tenantDeactiveren(id);
+
+    if (!gelukt) {
+      throw new NotFoundException('Onbekende of al gedeactiveerde tenant.');
+    }
+  }
+
+  /**
    * Tijdelijke support-toegang tot één tenant.
    *
    * Geen impersonatie: de beheerder komt binnen als zichzelf, in de rol
@@ -249,5 +298,102 @@ export class PlatformController {
       }
       throw fout;
     }
+  }
+
+  /**
+   * Eén-klik toegang: support-toegang toekennen én meteen wisselen, zonder
+   * apart reden-formulier (platformbeheer-uitbreiding, spec §5b). De reden
+   * is een vaste tekst — dit is precies wat "één klik" betekent.
+   */
+  @Post('sessie/wisselen')
+  async sessieWisselen(
+    @Body() body: unknown,
+    @Req() request: RequestMetSessie,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const tenantId = (body as { tenantId?: unknown })?.tenantId;
+
+    if (typeof tenantId !== 'string' || tenantId.trim() === '') {
+      throw new BadRequestException({
+        veld: 'tenantId',
+        melding: 'tenantId is verplicht.',
+      });
+    }
+
+    const bestaat = await this.platform.tenantLezen(tenantId);
+
+    if (!bestaat) {
+      throw new NotFoundException('Onbekende tenant.');
+    }
+
+    const sessie = request.sessie!;
+
+    await this.platform.supportToegangGeven(
+      tenantId,
+      sessie.userId,
+      'Platformbeheer',
+    );
+
+    const nieuweSessie = await this.sessies.wisselen(
+      request.sessieToken,
+      tenantId,
+    );
+
+    if (!nieuweSessie) {
+      throw new NotFoundException('Wisselen niet gelukt.');
+    }
+
+    const sessieCookie = cookieInstellingen();
+    response.cookie(sessieCookie.naam, nieuweSessie.token, {
+      httpOnly: sessieCookie.httpOnly,
+      secure: sessieCookie.secure,
+      sameSite: sessieCookie.sameSite,
+      path: sessieCookie.path,
+      maxAge: sessieCookie.maxAge,
+    });
+
+    return { tenantId: nieuweSessie.tenantId, rol: nieuweSessie.role };
+  }
+
+  /**
+   * Terug naar de eigen (blijvende) tenant, vanuit een support-sessie
+   * (platformbeheer-uitbreiding, spec §5c). Geen tenant-id in de invoer:
+   * dat zou het frontend-Sessie-model met een tenant-id belasten, wat
+   * MCM2-CLAUDE.md §6 uitsluit.
+   */
+  @Post('sessie/eigen-tenant')
+  async sessieEigenTenant(
+    @Req() request: RequestMetSessie,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const sessie = request.sessie!;
+
+    const eigenTenantId = await this.platform.eigenTenantVinden(
+      sessie.userId,
+    );
+
+    if (!eigenTenantId) {
+      throw new NotFoundException('Geen eigen tenant gevonden.');
+    }
+
+    const nieuweSessie = await this.sessies.wisselen(
+      request.sessieToken,
+      eigenTenantId,
+    );
+
+    if (!nieuweSessie) {
+      throw new NotFoundException('Wisselen niet gelukt.');
+    }
+
+    const sessieCookie = cookieInstellingen();
+    response.cookie(sessieCookie.naam, nieuweSessie.token, {
+      httpOnly: sessieCookie.httpOnly,
+      secure: sessieCookie.secure,
+      sameSite: sessieCookie.sameSite,
+      path: sessieCookie.path,
+      maxAge: sessieCookie.maxAge,
+    });
+
+    return { tenantId: nieuweSessie.tenantId, rol: nieuweSessie.role };
   }
 }
