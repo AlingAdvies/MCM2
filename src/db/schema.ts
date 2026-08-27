@@ -120,6 +120,8 @@ export const tenantMembership = clm.table(
       .notNull()
       .references(() => tenant.tenantId, { onDelete: 'restrict' }),
     // 'admin' beheert leveranciers, vragenlijsten en rondes.
+    // 'user' (contractbeheerder) mag hetzelfde als 'admin', behalve
+    // tenant-gebruikersbeheer zelf (issue #75).
     // 'reviewer' vult interne beoordelingen in en leest resultaten.
     // 'support' kijkt mee vanuit het platform: lezen, tijdelijk, en
     // herkenbaar als zodanig in de audit trail (ADR-015).
