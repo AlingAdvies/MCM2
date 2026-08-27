@@ -59,7 +59,7 @@ export class ContractController {
   }
 
   @Post()
-  @VereistRol('admin')
+  @VereistRol('admin', 'user')
   @HttpCode(201)
   async maakAan(
     @Req() request: RequestMetSessie,
@@ -109,7 +109,7 @@ export class ContractController {
   }
 
   @Patch(':id')
-  @VereistRol('admin')
+  @VereistRol('admin', 'user')
   async wijzig(
     @Req() request: RequestMetSessie,
     @Param('vendorId') vendorId: string,
@@ -138,7 +138,7 @@ export class ContractController {
   }
 
   @Delete(':id')
-  @VereistRol('admin')
+  @VereistRol('admin', 'user')
   @HttpCode(204)
   async verwijder(
     @Req() request: RequestMetSessie,
@@ -180,7 +180,7 @@ export class ContractController {
   }
 
   @Put(':id/survey-templates')
-  @VereistRol('admin')
+  @VereistRol('admin', 'user')
   async zetSurveyTemplates(
     @Req() request: RequestMetSessie,
     @Param('vendorId') vendorId: string,

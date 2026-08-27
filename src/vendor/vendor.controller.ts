@@ -75,8 +75,10 @@ export class VendorController {
    * 201 bij succes, 400 bij ongeldige invoer (met het veld erbij), 409 wanneer
    * het KvK-nummer al bestaat binnen deze tenant.
    */
+  // `user` mag hetzelfde als `admin` op deze route (issue #75) — de
+  // uitzonderingen staan in vragenlijst-beheer.controller.ts.
   @Post()
-  @VereistRol('admin')
+  @VereistRol('admin', 'user')
   @HttpCode(201)
   async maakAan(@Req() request: RequestMetSessie, @Body() body: unknown) {
     const sessie = request.sessie!;
@@ -126,12 +128,13 @@ export class VendorController {
   /**
    * Wijzigt een leverancier. Alleen de meegestuurde velden.
    *
-   * `@VereistRol('admin')`: een reviewer mag lezen maar niet schrijven. De
-   * controle staat hier en niet alleen in het scherm — een verborgen knop bij
-   * een open route is geen beveiliging.
+   * `@VereistRol('admin', 'user')`: een reviewer mag lezen maar niet
+   * schrijven. `user` mag hetzelfde als `admin` (issue #75). De controle
+   * staat hier en niet alleen in het scherm — een verborgen knop bij een
+   * open route is geen beveiliging.
    */
   @Patch(':id')
-  @VereistRol('admin')
+  @VereistRol('admin', 'user')
   async wijzig(
     @Req() request: RequestMetSessie,
     @Param('id') id: string,
@@ -166,7 +169,7 @@ export class VendorController {
    * key-fout omgezet, zelfde patroon als alsRefFout()).
    */
   @Put(':id/compliance-themas')
-  @VereistRol('admin')
+  @VereistRol('admin', 'user')
   async zetComplianceThemas(
     @Req() request: RequestMetSessie,
     @Param('id') id: string,
@@ -195,7 +198,7 @@ export class VendorController {
 
   /** Verwijdert een leverancier — soft delete, inclusief zijn contactpersonen. */
   @Delete(':id')
-  @VereistRol('admin')
+  @VereistRol('admin', 'user')
   @HttpCode(204)
   async verwijder(@Req() request: RequestMetSessie, @Param('id') id: string) {
     const sessie = request.sessie!;
@@ -210,7 +213,7 @@ export class VendorController {
   // ── Contactpersonen ──────────────────────────────────────────────────────
 
   @Post(':id/contacts')
-  @VereistRol('admin')
+  @VereistRol('admin', 'user')
   @HttpCode(201)
   async voegContactToe(
     @Req() request: RequestMetSessie,
@@ -241,7 +244,7 @@ export class VendorController {
   }
 
   @Patch(':id/contacts/:contactId')
-  @VereistRol('admin')
+  @VereistRol('admin', 'user')
   async wijzigContact(
     @Req() request: RequestMetSessie,
     @Param('id') id: string,
@@ -273,7 +276,7 @@ export class VendorController {
   }
 
   @Delete(':id/contacts/:contactId')
-  @VereistRol('admin')
+  @VereistRol('admin', 'user')
   @HttpCode(204)
   async verwijderContact(
     @Req() request: RequestMetSessie,

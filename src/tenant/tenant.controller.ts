@@ -33,7 +33,8 @@ import { TenantService } from './tenant.service';
  *
  * Het antwoordadres bepaalt waar vragen van leveranciers van de héle
  * organisatie heen gaan. Een beoordelaar hoort dat niet te kunnen verleggen.
- * Backendcontrole met `@VereistRol('admin')`, niet alleen een verborgen
+ * Backendcontrole met `@VereistRol('admin', 'user')` (issue #75), niet
+ * alleen een verborgen
  * menu-item — een route die alleen in het scherm dicht zit, is niet dicht.
  *
  * Lezen mag wél iedereen met een sessie: het scherm toont de instellingen ook
@@ -63,7 +64,7 @@ export class TenantController {
   }
 
   @Patch('instellingen')
-  @VereistRol('admin')
+  @VereistRol('admin', 'user')
   async wijzigen(@Req() request: RequestMetSessie, @Body() body: unknown) {
     try {
       return await this.tenants.wijzigen(
