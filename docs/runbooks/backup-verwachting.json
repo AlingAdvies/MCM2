@@ -27,10 +27,15 @@
     "Migratie 0032 (27-08, issue #75) voegt GEEN tabel toe — alleen een vierde",
     "toegestane rolwaarde ('user') op twee bestaande CHECK-constraints",
     "(tenant_membership_role_check, sessie_role_check). De migratiestand hieronder",
-    "is toch bijgewerkt, want verify:onderhoud vergelijkt puur het migratienummer."
+    "is toch bijgewerkt, want verify:onderhoud vergelijkt puur het migratienummer.",
+    "",
+    "Migratie 0033 (27-08, platformbeheer-uitbreiding) voegt GEEN tabel toe —",
+    "alleen deleted_at op clm.tenant (bestaande tabel), twee nieuwe SECURITY",
+    "DEFINER-functies (sessie_wisselen, eigen_tenant_vinden) en een uitgebreide",
+    "trigger op clm.tenant. Migratiestand bijgewerkt, tabellenlijst niet."
   ],
   "bijgewerkt": "2026-08-27",
-  "migratiestand": "0032_tenant_membership_rol_user",
+  "migratiestand": "0033_platformbeheer_wijzigen_verwijderen",
   "tabellen": [
     "audit.audit_event",
     "clm.contract",
