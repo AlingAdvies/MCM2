@@ -1174,14 +1174,14 @@ git commit -m "feat(contract): 'andere contracten bij deze leverancier' binnen h
 
 ### Taak 8: Volledige verificatie
 
-- [ ] **Step 1: Backend**
+- [x] **Step 1: Backend**
 
 ```powershell
 cd C:\DEV\Work\MCM2
 npm run verify:volledig
 ```
 
-- [ ] **Step 2: Frontend, los**
+- [x] **Step 2: Frontend, los**
 
 ```powershell
 cd ..\MCM2-frontend
@@ -1191,7 +1191,8 @@ npx tsc --noEmit
 npx playwright test
 ```
 
-- [ ] **Step 3: Handmatige doorloop**
+- [ ] **Step 3: Handmatige doorloop** — laat ik bewust aan de eigenaar; niet
+  zelf uitgevoerd, alleen de geautomatiseerde delen (Step 1-2).
 
 ```powershell
 cd ..\MCM2
@@ -1202,7 +1203,7 @@ Log in, ga naar "Contracten" in het menu, controleer de lijst, filter op
 status, klik een contract aan en bevestig dat het leveranciersscherm opent
 met dat contract al uitgeklapt en gescrold in beeld.
 
-- [ ] **Step 4: `docs/STATUS.md` bijwerken**
+- [x] **Step 4: `docs/STATUS.md` bijwerken**
 
 Korte entry: issue #173/#171 gebouwd, backend + frontend, welke branch,
 verify-status.
