@@ -232,6 +232,13 @@
       "when": 1787068800006,
       "tag": "0032_tenant_membership_rol_user",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1787068800007,
+      "tag": "0033_platformbeheer_wijzigen_verwijderen",
+      "breakpoints": true
     }
   ]
 }
