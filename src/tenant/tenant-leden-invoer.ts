@@ -1,0 +1,57 @@
+import { isGeldigMailadres } from '../mail/mail-adres';
+import { InvoerFout } from '../vendor/vendor-invoer';
+
+/**
+ * Validatie van wat het scherm voor tenant-gebruikersbeheer opstuurt
+ * (issue #75). Zelfde stijl en dezelfde `InvoerFout` als `vendor-invoer.ts`
+ * en `tenant-invoer.ts`.
+ *
+ * `isGeldigMailadres()` en niet een eigen regex: zelfde reden als in
+ * `tenant-invoer.ts` — het mailkanaal, de database en elk invoerscherm
+ * horen hetzelfde e-mailadres toe te staan.
+ */
+
+/** Rollen die via deze route toegekend mogen worden. 'support' nooit — dat
+ * gaat uitsluitend via PlatformService.supportToegangGeven(). */
+const TOEGESTANE_ROLLEN = ['admin', 'user', 'reviewer'] as const;
+type ToegestaneRol = (typeof TOEGESTANE_ROLLEN)[number];
+
+export interface NieuwLid {
+  email: string;
+  rol: ToegestaneRol;
+}
+
+export interface RolWijziging {
+  rol: ToegestaneRol;
+}
+
+function leesRol(waarde: unknown): ToegestaneRol {
+  if (
+    typeof waarde !== 'string' ||
+    !TOEGESTANE_ROLLEN.includes(waarde as ToegestaneRol)
+  ) {
+    throw new InvoerFout('rol', 'Kies admin, user of reviewer.');
+  }
+  return waarde as ToegestaneRol;
+}
+
+export function leesNieuwLid(body: unknown): NieuwLid {
+  if (typeof body !== 'object' || body === null) {
+    throw new InvoerFout('email', 'Verwacht een JSON-object.');
+  }
+  const { email, rol } = body as Record<string, unknown>;
+
+  if (typeof email !== 'string' || !isGeldigMailadres(email)) {
+    throw new InvoerFout('email', 'Vul een geldig e-mailadres in.');
+  }
+
+  return { email, rol: leesRol(rol) };
+}
+
+export function leesRolWijziging(body: unknown): RolWijziging {
+  if (typeof body !== 'object' || body === null) {
+    throw new InvoerFout('rol', 'Verwacht een JSON-object.');
+  }
+  const { rol } = body as Record<string, unknown>;
+  return { rol: leesRol(rol) };
+}
