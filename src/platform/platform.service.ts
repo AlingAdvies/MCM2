@@ -42,6 +42,11 @@ export interface TenantOverzicht {
   readonly aantalLeden: number;
 }
 
+export interface TenantWijziging {
+  readonly naam: string;
+  readonly antwoordEmail?: string;
+}
+
 /**
  * Eén regel uit de tenantlijst (ADR-017).
  *
@@ -365,5 +370,123 @@ export class PlatformService {
         aantalLeden: Number(rows[0].leden),
       };
     });
+  }
+
+  /**
+   * Past naam en/of antwoordEmail van een bestaande tenant aan
+   * (platformbeheer-uitbreiding, spec §3).
+   *
+   * Zelfde unieke-naam-afhandeling als tenantAanmaken(): een conflict op
+   * de naam-constraints wordt een leesbare 409, geen 500.
+   */
+  async tenantWijzigen(
+    tenantId: string,
+    invoer: TenantWijziging,
+  ): Promise<TenantOverzicht | null> {
+    return this.db.withTenant(tenantId, async (tx) => {
+      const voor = await tx.execute<{
+        name: string;
+        antwoord_email: string | null;
+      }>(
+        sql`SELECT name, antwoord_email FROM clm.tenant WHERE tenant_id = ${tenantId}`,
+      );
+
+      if (voor.rows.length === 0) {
+        return null;
+      }
+
+      try {
+        await tx.execute(
+          sql`UPDATE clm.tenant
+                 SET name = ${invoer.naam},
+                     antwoord_email = ${invoer.antwoordEmail ?? null}
+               WHERE tenant_id = ${tenantId}`,
+        );
+      } catch (fout) {
+        if (isUniekeNaamFout(fout)) {
+          throw new ConflictException(
+            `Er bestaat al een tenant met de naam '${invoer.naam}'.`,
+          );
+        }
+        throw fout;
+      }
+
+      await tx.execute(
+        sql`INSERT INTO audit.audit_event
+              (tenant_id, action_type, entity_type, entity_id, old_values, new_values)
+            VALUES (${tenantId}, 'tenant_gewijzigd', 'tenant', ${tenantId},
+                    ${JSON.stringify({
+                      naam: voor.rows[0].name,
+                      antwoordEmail: voor.rows[0].antwoord_email,
+                    })}::jsonb,
+                    ${JSON.stringify({
+                      naam: invoer.naam,
+                      antwoordEmail: invoer.antwoordEmail ?? null,
+                    })}::jsonb)`,
+      );
+
+      const na = await tx.execute<{
+        tenant_id: string;
+        name: string;
+        created_at: string;
+        leden: string;
+      }>(
+        sql`SELECT t.tenant_id, t.name, t.created_at,
+                   (SELECT count(*) FROM clm.tenant_membership m
+                     WHERE m.tenant_id = t.tenant_id AND m.deleted_at IS NULL) AS leden
+              FROM clm.tenant t
+             WHERE t.tenant_id = ${tenantId}`,
+      );
+
+      return {
+        tenantId: na.rows[0].tenant_id,
+        naam: na.rows[0].name,
+        aangemaaktOp: new Date(na.rows[0].created_at),
+        aantalLeden: Number(na.rows[0].leden),
+      };
+    });
+  }
+
+  /**
+   * Deactiveert een tenant (soft-delete, spec §4). Geeft `false` als de
+   * tenant onbekend is of al gedeactiveerd was — de aanroeper vertaalt dat
+   * naar 404, niet naar een stille 200.
+   */
+  async tenantDeactiveren(tenantId: string): Promise<boolean> {
+    return this.db.withTenant(tenantId, async (tx) => {
+      const resultaat = await tx.execute(
+        sql`UPDATE clm.tenant
+               SET deleted_at = now()
+             WHERE tenant_id = ${tenantId}
+               AND deleted_at IS NULL`,
+      );
+
+      if (resultaat.rowCount === 0) {
+        return false;
+      }
+
+      await tx.execute(
+        sql`INSERT INTO audit.audit_event
+              (tenant_id, action_type, entity_type, entity_id)
+            VALUES (${tenantId}, 'tenant_gedeactiveerd', 'tenant', ${tenantId})`,
+      );
+
+      return true;
+    });
+  }
+
+  /**
+   * Zoekt de blijvende (niet-support) tenant van een gebruiker — voor de
+   * terugkeer-route na support-toegang (spec §5c). Draait buiten
+   * withTenant(): clm.eigen_tenant_vinden() is SECURITY DEFINER en omzeilt
+   * de RLS-policy van clm.tenant_membership bewust, om dezelfde reden als
+   * clm.sessie_wisselen() dat doet — zie de migratie.
+   */
+  async eigenTenantVinden(userId: string): Promise<string | null> {
+    const resultaat = await this.db.db.execute<{
+      eigen_tenant_vinden: string | null;
+    }>(sql`SELECT clm.eigen_tenant_vinden(${userId})`);
+
+    return resultaat.rows[0]?.eigen_tenant_vinden ?? null;
   }
 }
