@@ -42,6 +42,14 @@ const TENANT_ID = '00000000-0000-0000-0000-0000000000d0';
 const USER_ID = '00000000-0000-0000-0000-0000000000d1';
 const SUBJECT = 'oid-verify-volledig';
 
+// Eigen tenant/gebruiker voor de platformbeheer-uitbreiding-tests, los van
+// de gewone Doorloop-sessie hierboven. platformbeheer.spec.ts bewijst
+// expliciet dat een gewone tenant-admin GEEN platformbeheerder is — die
+// gebruiker zelf platformbeheerder maken zou die tegenproef breken.
+const PLATFORM_TENANT_ID = '00000000-0000-0000-0000-0000000000d2';
+const PLATFORM_USER_ID = '00000000-0000-0000-0000-0000000000d3';
+const PLATFORM_SUBJECT = 'oid-verify-volledig-platform';
+
 const isWindows = process.platform === 'win32';
 
 function draai(commando, argumenten, opties = {}) {
@@ -529,6 +537,48 @@ function maakSessie() {
 }
 
 /**
+ * Zet een eigen tenant/gebruiker/sessie op als platformbeheerder, voor de
+ * platformbeheer-uitbreiding-e2e-tests. Losse identiteit van maakSessie()
+ * hierboven — zie de toelichting bij PLATFORM_TENANT_ID.
+ */
+function maakPlatformbeheerderSessie() {
+  const opzet = [
+    `INSERT INTO clm.tenant (tenant_id, name) VALUES ('${PLATFORM_TENANT_ID}', 'Doorloop Platformbeheerder Thuisbasis') ON CONFLICT DO NOTHING;`,
+    `INSERT INTO clm.\\"user\\" (user_id, tenant_id, full_name, external_subject) VALUES ('${PLATFORM_USER_ID}', '${PLATFORM_TENANT_ID}', 'Doorloop Platformbeheerder', '${PLATFORM_SUBJECT}') ON CONFLICT DO NOTHING;`,
+    `INSERT INTO clm.tenant_membership (user_id, tenant_id, role) VALUES ('${PLATFORM_USER_ID}', '${PLATFORM_TENANT_ID}', 'admin') ON CONFLICT DO NOTHING;`,
+    `INSERT INTO clm.platform_admin (user_id) VALUES ('${PLATFORM_USER_ID}') ON CONFLICT DO NOTHING;`,
+  ];
+
+  for (const sql of opzet) {
+    const uitkomst = psql(
+      `SET app.current_tenant_id = '${PLATFORM_TENANT_ID}'; ${sql}`,
+      'clm_migrator',
+    );
+
+    if (!uitkomst.ok) {
+      return { ok: false, reden: uitkomst.uitvoer.trim() };
+    }
+  }
+
+  const token = randomBytes(32).toString('base64url');
+  const hash = createHash('sha256').update(token, 'utf8').digest('hex');
+
+  const sessie = psql(
+    `SELECT tenant_id FROM clm.sessie_aanmaken('${hash}', '${PLATFORM_SUBJECT}', '8 hours'::interval);`,
+    'clm_migrator',
+  );
+
+  if (!sessie.ok || !sessie.uitvoer.includes(PLATFORM_TENANT_ID)) {
+    return {
+      ok: false,
+      reden: `sessie_aanmaken() gaf geen sessie terug: ${sessie.uitvoer.trim()}`,
+    };
+  }
+
+  return { ok: true, cookie: `mcm2_sessie=${token}` };
+}
+
+/**
  * Controleert of de ECHTE omgevingen het schema hebben dat deze code verwacht.
  *
  * ── Waarom deze stap er is ──────────────────────────────────────────────────
@@ -808,11 +858,28 @@ function main() {
 
     console.log('  Sessie aangemaakt via clm.sessie_aanmaken().');
 
+    const platformSessie = maakPlatformbeheerderSessie();
+
+    if (!platformSessie.ok) {
+      console.error(
+        `\nROOD: geen platformbeheerder-sessie kunnen maken.\n${platformSessie.reden}`,
+      );
+      stopMetFout();
+    }
+
+    console.log(
+      '  Platformbeheerder-sessie aangemaakt (losse identiteit van de Doorloop-sessie).',
+    );
+
     kop(5, stappen, 'Browsertest tegen de draaiende stack');
 
     const browser = draai('npm', ['run', 'e2e'], {
       env: {
         BEHEER_COOKIE: sessie.cookie,
+        // Losse identiteit — geen platformbeheerder, expres, zodat
+        // platformbeheer.spec.ts (geen toegang voor een gewone beheerder)
+        // die tegenproef kan blijven bewijzen.
+        PLATFORM_COOKIE: platformSessie.cookie,
         PORTAL_URL: 'http://localhost:3000',
       },
       cwd: '../MCM2-frontend',

@@ -262,6 +262,11 @@ export class PlatformController {
     if (!gelukt) {
       throw new NotFoundException('Onbekende of al gedeactiveerde tenant.');
     }
+
+    // Een lege body zou de frontend-helper verstuur() breken: die roept
+    // altijd res.json() aan, en dat gooit een parse-fout op een leeg
+    // antwoord. Zie platformService.ts, deactiveerTenant().
+    return {};
   }
 
   /**
