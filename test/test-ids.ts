@@ -373,6 +373,14 @@ export const TEST_IDS = {
     tenant: id('f7'),
     userRol: id('f8'),
   },
+  'tenant-leden': {
+    tenant: id('f9'),
+    admin: id('fa'),
+    tweedeAdmin: id('fb'),
+    reviewer: id('fc'),
+    andereTenant: id('fd'),
+    adminAndereTenant: id('fe'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */

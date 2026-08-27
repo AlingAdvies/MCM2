@@ -91,18 +91,31 @@ export class TenantLedenService {
     );
 
     return this.db.withTenant(tenantId, async (tx) => {
-      // Bestaat er al een user-rij met dit e-mailadres?
+      // Bestaat er al een user-rij met dit e-mailadres bínnen deze tenant?
+      //
+      // Bewust geen check op een andere tenant: RLS beperkt elke query in
+      // deze transactie tot tenantId (ADR-008, geen BYPASSRLS), dus een
+      // gebruiker van een andere tenant is hier principieel onzichtbaar.
+      // PlatformController.tenantAanmaken() doet om dezelfde reden ook geen
+      // cross-tenant e-mailcontrole — dat zou een aparte, tenant-overstijgende
+      // SECURITY DEFINER-functie vragen (zoals sessie_aanmaken()), en de
+      // eigenaar heeft besloten dat niet te bouwen voor dit issue (27-08):
+      // hetzelfde e-mailadres kan los bij meerdere tenants terechtkomen, wat
+      // verwarrend kan zijn maar geen beveiligingslek is — de tenant-
+      // isolatie zelf blijft intact.
       const bestaand = await tx.execute<{
         user_id: string;
-        actieve_membership_tenant: string | null;
+        actieve_membership: boolean;
         ingetrokken_membership: boolean;
       }>(
         sql`SELECT u.user_id,
-                   (SELECT m2.tenant_id FROM clm.tenant_membership m2
-                     WHERE m2.user_id = u.user_id
-                       AND m2.deleted_at IS NULL
-                       AND m2.role <> 'support'
-                     LIMIT 1) AS actieve_membership_tenant,
+                   EXISTS (
+                     SELECT 1 FROM clm.tenant_membership m2
+                      WHERE m2.user_id = u.user_id
+                        AND m2.tenant_id = ${tenantId}
+                        AND m2.deleted_at IS NULL
+                        AND m2.role <> 'support'
+                   ) AS actieve_membership,
                    EXISTS (
                      SELECT 1 FROM clm.tenant_membership m3
                       WHERE m3.user_id = u.user_id
@@ -117,11 +130,9 @@ export class TenantLedenService {
       if (bestaand.rows.length > 0) {
         const rij = bestaand.rows[0];
 
-        if (rij.actieve_membership_tenant !== null) {
+        if (rij.actieve_membership) {
           throw new ConflictException(
-            rij.actieve_membership_tenant === tenantId
-              ? 'Dit e-mailadres heeft al toegang tot deze tenant.'
-              : 'Dit e-mailadres heeft al toegang tot een andere tenant.',
+            'Dit e-mailadres heeft al toegang tot deze tenant.',
           );
         }
 
