@@ -488,7 +488,7 @@ git commit -m "fix: verify:volledig-bevindingen na GET /contracts"
 - Modify: `src/core/services/contractService.ts`
 - Modify: `src/core/models/contract.ts`
 
-- [ ] **Step 1: Voeg het nieuwe model toe**
+- [x] **Step 1: Voeg het nieuwe model toe**
 
 In `src/core/models/contract.ts`, na de bestaande `Contract`-interface:
 
@@ -498,7 +498,7 @@ export interface ContractTenantBreed extends Contract {
 }
 ```
 
-- [ ] **Step 2: Voeg de mock-data toe**
+- [x] **Step 2: Voeg de mock-data toe**
 
 Bekijk `src/data/contract.mock.ts` voor het bestaande `MOCK_CONTRACTEN`-
 patroon, en voeg een `vendorNaam`-afgeleide export toe:
@@ -519,7 +519,7 @@ niet, voeg `import { MOCK_VENDORS } from './vendor.mock';` toe (pas het pad
 aan als het bestand elders staat — zoek met
 `Get-ChildItem -Recurse -Filter vendor.mock.ts`).
 
-- [ ] **Step 3: Voeg de service-functie toe**
+- [x] **Step 3: Voeg de service-functie toe**
 
 In `src/core/services/contractService.ts`, na `haalContracten`:
 
@@ -541,13 +541,13 @@ export async function haalContractenTenantBreed(): Promise<
 Voeg `ContractTenantBreed` en `MOCK_CONTRACTEN_TENANT_BREED` toe aan de
 bestaande imports bovenaan het bestand.
 
-- [ ] **Step 4: Typecheck**
+- [x] **Step 4: Typecheck**
 
 ```powershell
 npx tsc --noEmit
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/core/services/contractService.ts src/core/models/contract.ts src/data/contract.mock.ts
