@@ -238,12 +238,36 @@ Volgorde in de handler:
 
 ### 5c. Terugkeer
 
+**Herzien tijdens het plannen** — het oorspronkelijke idee ("de frontend
+bewaart het tenant-id van vóór de wissel") botst met een bestaande,
+bewuste regel: het `Sessie`-model in de frontend bevat nooit een tenant-id
+(MCM2-CLAUDE.md §6, bewaakt door een CI-poort). Een tenant-id lokaal
+onthouden om terug te kunnen zou precies dat omzeilen.
+
+De oplossing gebruikt een bestaand gegeven in plaats van nieuwe frontend-
+state: een gebruiker heeft precies één **blijvende** (niet-support)
+membership — de unieke index op `(user_id, tenant_id)` staat sowieso maar
+één blijvend lidmaatschap per persoon toe (zie
+`mcm2-twee-identiteiten-niet-twee-memberships`). Een nieuwe route,
+`POST /platform/sessie/eigen-tenant`, zoekt die membership op aan de hand
+van `sessie.userId` (geen invoer nodig) en wisselt daarnaartoe via
+dezelfde `clm.sessie_wisselen()`-functie uit §5a. Geen tenant-id gaat over
+de lijn in welke richting dan ook.
+
+`PlatformService.eigenTenantVinden(userId)`:
+
+```sql
+SELECT tenant_id FROM clm.tenant_membership
+ WHERE user_id = ${userId}
+   AND role != 'support'
+   AND deleted_at IS NULL
+ ORDER BY created_at
+ LIMIT 1
+```
+
 Zolang de sessierol `support` is, toont de sidebar/`OmgevingBanner` een
 regel "Support-toegang bij [tenantnaam] — Terug naar platformbeheer". Die
-link roept dezelfde `/platform/sessie/wisselen`-route aan, nu met de
-platformbeheerder-tenant als doel (bekend uit de sessie vóór de eerste
-wissel — de frontend bewaart dat tenant-id lokaal, niet de backend: er is
-geen "sessie-geschiedenis"-concept nodig voor één stap terug).
+link roept `POST /platform/sessie/eigen-tenant` aan (geen body).
 
 ### 5d. Frontend
 
@@ -251,7 +275,9 @@ geen "sessie-geschiedenis"-concept nodig voor één stap terug).
   Bewerken/Deactiveren. Klik → `POST /platform/sessie/wisselen` →
   `router.push('/beheer/leden')`.
 - `OmgevingBanner` (of een vergelijkbare, altijd zichtbare plek): toont de
-  terugkeer-link zodra `sessie.rol === 'support'`.
+  terugkeer-link zodra `sessie.rol === 'support'`, roept
+  `POST /platform/sessie/eigen-tenant` aan en navigeert daarna naar
+  `/beheer/platform`.
 
 ## 6. Wat bewust buiten scope blijft
 
@@ -302,5 +328,6 @@ Eén nieuwe, handgeschreven migratie:
 9. Eén-klik "Openen": één aanroep resulteert in een support-membership mét
    reden 'Platformbeheer' én een bruikbaar nieuw sessiecookie voor die
    tenant.
-10. Terugkeer: de link vanuit een support-sessie wisselt terug naar de
-    oorspronkelijke tenant-rol (niet opnieuw 'support').
+10. Terugkeer: `POST /platform/sessie/eigen-tenant` vanuit een support-
+    sessie wisselt terug naar de oorspronkelijke, blijvende tenant-rol
+    (niet opnieuw 'support', en geen tenant-id in de request-body nodig).
