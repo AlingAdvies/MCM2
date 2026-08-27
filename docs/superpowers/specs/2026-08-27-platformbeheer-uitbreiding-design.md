@@ -218,6 +218,29 @@ tenant.
 Zelfde rechtenmodel als de bestaande sessiefuncties: `REVOKE ALL ... FROM
 PUBLIC`, `GRANT EXECUTE ... TO clm_api, clm_admin`.
 
+**Bevinding tijdens het bouwen — een pre-existing gat, nu voor het eerst
+zichtbaar:** `clm."user"` is aan precies één tenant gebonden (verplichte
+`tenant_id`, RLS op die kolom). Een support-sessie heeft in de doeltenant
+alleen een `tenant_membership`-rij, geen eigen `clm.user`-rij. De bestaande
+`SessieService.profiel()` (gebruikt door `GET /auth/sessie`, en dus door
+elk scherm dat toont wie is ingelogd) deed een `JOIN clm.tenant` op
+`clm."user"`, en die vond binnen een support-sessie niets — 401 "De
+gebruiker bestaat niet meer" bij een verder volledig geldige sessie.
+
+Dit gat bestond al vóór dit plan — het is inherent aan hoe ADR-015
+support-toegang modelleert — maar werd nooit blootgelegd omdat er nooit
+een echte `GET /auth/sessie`-aanroep vanuit een support-sessie werd getest
+(`platformbeheer.spec.ts` test uitdrukkelijk alleen de databaselaag
+rechtstreeks, met een reden die dat expliciet benoemt). De eerste échte
+end-to-end support-sessietest van deze feature legde het bloot.
+
+**Fix:** een vierde functie, `clm.gebruikersnaam(p_user_id)` (SECURITY
+DEFINER, zelfde patroon als `eigen_tenant_vinden()`), haalt de naam los
+van de tenantcontext op. `SessieService.profiel()` gebruikt die voor de
+naam en blijft `withTenant()` + `clm.tenant` gebruiken voor de
+tenantnaam — dat werkt al voor een support-sessie, want de tenant zelf
+bestaat daar wél.
+
 ### 5b. Backend-route
 
 `POST /platform/sessie/wisselen`, body `{ tenantId }`. Binnen
