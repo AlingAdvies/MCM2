@@ -2,6 +2,51 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-27 (vervolg 3) — platformbeheer-uitbreiding gebouwd: tenant
+wijzigen/deactiveren, en een één-klik "Openen"-knop voor support-toegang
+(support-toegang toekennen én meteen wisselen, zonder apart reden-formulier).
+`verify:volledig` groen (backend + frontend), op de branch
+`feat/platformbeheer-uitbreiding` in beide repo's, nog niet gemerged.**
+
+Backend: `PUT /platform/tenants/:id` (wijzigen), `POST
+/platform/tenants/:id/deactiveren` (soft-delete via een nieuwe
+`deleted_at`-kolom op `clm.tenant`), `POST /platform/sessie/wisselen` en
+`POST /platform/sessie/eigen-tenant` (terugkeer). Vier nieuwe of aangepaste
+databasefuncties: `sessie_wisselen()`, `eigen_tenant_vinden()`,
+`gebruikersnaam()` (alle drie `SECURITY DEFINER`) en een herschreven
+`sessie_aanmaken()` die ook `tenant.deleted_at` checkt.
+
+**Vier echte bugs gevonden tijdens het bouwen, alle vier gefixt:**
+- `clm.tenant` heeft `FORCE ROW LEVEL SECURITY` (migratie 0011) — die geldt
+  óók voor de eigenaar van een `SECURITY DEFINER`-functie. Een gewone `JOIN
+  clm.tenant` binnen zo'n functie gaf daardoor stil 0 rijen. Opgelost door
+  eerst de membership te vinden (geen FORCE op die tabel), dan pas
+  `app.current_tenant_id` te zetten en `clm.tenant` apart te lezen.
+- Kolomambiguïteit: een losse `SELECT tenant_id`/`role` binnen een functie
+  met `RETURNS TABLE (..., tenant_id uuid, role text)` botste met de
+  impliciete outputvariabelen van diezelfde naam — opgelost met een
+  tabelalias.
+- **Een pre-existing gat, nu voor het eerst blootgelegd:** `clm."user"` is
+  aan precies één tenant gebonden. Een support-sessie heeft in de
+  doeltenant geen eigen `user`-rij, alleen een `tenant_membership`-rij.
+  `SessieService.profiel()` (gebruikt door `GET /auth/sessie`, dus elk
+  scherm) deed een `JOIN clm.tenant` op `clm."user"` en vond dan niets —
+  401 "De gebruiker bestaat niet meer" bij een verder geldige sessie. Dit
+  gat bestond al vóór dit plan (inherent aan hoe ADR-015 support-toegang
+  modelleert) maar werd nooit blootgelegd: er was nog nooit een echte `GET
+  /auth/sessie`-aanroep vanuit een support-sessie getest —
+  `platformbeheer.spec.ts` test uitdrukkelijk alleen de databaselaag
+  rechtstreeks, met een reden die dat expliciet benoemt. Gefixt met een
+  nieuwe `clm.gebruikersnaam()`-functie die de naam los van tenantcontext
+  ophaalt.
+- Na een sessiewissel bleef de zittende `AppLayout` de oude sessie tonen:
+  client-side navigatie (`router.push`) laat de layout gemount, en zijn
+  `useEffect` (sessie ophalen) draait dan niet opnieuw. Vervangen door
+  `window.location.assign()` voor een volledige paginaherlading.
+
+Spec: `docs/superpowers/specs/2026-08-27-platformbeheer-uitbreiding-design.md`.
+Plan: `docs/superpowers/plans/2026-08-27-platformbeheer-uitbreiding.md`.
+
 **2026-08-27 (vervolg 2) — contracten-toppagina gebouwd (issue #173/#171): een
 tenant-brede contractenlijst op `/beheer/contracten`, met eigen sidebar-item,
 klikbare statusfilters en een dagen-tot-einddatum-indicator. Een klik op een

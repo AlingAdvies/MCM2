@@ -43,13 +43,13 @@ Exporteer de twee getoonde variabelen (`MIGRATION_DATABASE_URL`,
 - Create: `drizzle/0033_platformbeheer_wijzigen_verwijderen.sql`
 - Modify: `drizzle/meta/_journal.json`
 
-- [ ] **Step 1: Bekijk het bestaande trigger-patroon**
+- [x] **Step 1: Bekijk het bestaande trigger-patroon**
 
 ```powershell
 Get-Content drizzle/0026_tenantregister.sql
 ```
 
-- [ ] **Step 2: Schrijf de migratie**
+- [x] **Step 2: Schrijf de migratie**
 
 Maak `drizzle/0033_platformbeheer_wijzigen_verwijderen.sql`:
 
@@ -201,7 +201,7 @@ REVOKE ALL ON FUNCTION clm.eigen_tenant_vinden(uuid) FROM PUBLIC;--> statement-b
 GRANT EXECUTE ON FUNCTION clm.eigen_tenant_vinden(uuid) TO clm_api, clm_admin;--> statement-breakpoint
 ```
 
-- [ ] **Step 3: Voeg toe aan de journal**
+- [x] **Step 3: Voeg toe aan de journal**
 
 In `drizzle/meta/_journal.json`, aan het einde van de `entries`-array (na
 idx 32):
@@ -219,7 +219,7 @@ idx 32):
 Let op de komma na de vorige entry (idx 32) — die moet er nu bij staan
 omdat dit niet meer de laatste entry is.
 
-- [ ] **Step 4: Migratie toepassen op de wegwerpdatabase**
+- [x] **Step 4: Migratie toepassen op de wegwerpdatabase**
 
 ```powershell
 npx tsx scripts/migrate.js
@@ -227,7 +227,7 @@ npx tsx scripts/migrate.js
 
 Verwacht: geen fouten, migratie 0033 toegepast.
 
-- [ ] **Step 5: Handmatig teruglezen**
+- [x] **Step 5: Handmatig teruglezen**
 
 ```powershell
 docker exec <container> psql -U postgres -d postgres -c "\d clm.tenant" 2>&1 | Select-String "deleted_at"
@@ -236,7 +236,7 @@ docker exec <container> psql -U postgres -d postgres -c "\d clm.tenant" 2>&1 | S
 Verwacht: `deleted_at | timestamp with time zone |` staat erin. (Containernaam
 staat in de uitvoer van `npm run test:db`.)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add drizzle/0033_platformbeheer_wijzigen_verwijderen.sql drizzle/meta/_journal.json
@@ -250,13 +250,13 @@ git commit -m "feat(platform): migratie — tenant.deleted_at, trigger-uitbreidi
 **Files:**
 - Modify: `src/platform/platform.service.ts`
 
-- [ ] **Step 1: Bekijk de bestaande tenantAanmaken() en tenantLezen()**
+- [x] **Step 1: Bekijk de bestaande tenantAanmaken() en tenantLezen()**
 
 ```powershell
 Get-Content src/platform/platform.service.ts | Select-String -Pattern "async tenantAanmaken|async tenantLezen" -Context 0,30
 ```
 
-- [ ] **Step 2: Voeg TenantWijziging-interface en tenantWijzigen() toe**
+- [x] **Step 2: Voeg TenantWijziging-interface en tenantWijzigen() toe**
 
 In `src/platform/platform.service.ts`, na de `TenantOverzicht`-interface
 (rond regel 43):
@@ -345,7 +345,7 @@ klasse:
   }
 ```
 
-- [ ] **Step 3: Voeg tenantDeactiveren() toe**
+- [x] **Step 3: Voeg tenantDeactiveren() toe**
 
 Direct na `tenantWijzigen()`:
 
@@ -379,7 +379,7 @@ Direct na `tenantWijzigen()`:
   }
 ```
 
-- [ ] **Step 4: Voeg eigenTenantVinden() toe**
+- [x] **Step 4: Voeg eigenTenantVinden() toe**
 
 Direct na `tenantDeactiveren()` (gebruikt door de sessie-terugkeer-route in
 Taak 3). Roept `clm.eigen_tenant_vinden()` aan (Taak 1) in plaats van een
@@ -407,13 +407,13 @@ omzeilt dat bewust en gecontroleerd, net als `sessie_wisselen()` zelf.
   }
 ```
 
-- [ ] **Step 5: Typecheck**
+- [x] **Step 5: Typecheck**
 
 ```powershell
 npx tsc --noEmit
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/platform/platform.service.ts
@@ -427,13 +427,13 @@ git commit -m "feat(platform): tenantWijzigen, tenantDeactiveren, eigenTenantVin
 **Files:**
 - Modify: `src/auth/sessie.service.ts`
 
-- [ ] **Step 1: Bekijk het bestaande aanmaken()-patroon**
+- [x] **Step 1: Bekijk het bestaande aanmaken()-patroon**
 
 ```powershell
 Get-Content src/auth/sessie.service.ts | Select-String -Pattern "async aanmaken" -Context 0,40
 ```
 
-- [ ] **Step 2: Voeg wisselen() toe**
+- [x] **Step 2: Voeg wisselen() toe**
 
 In `src/auth/sessie.service.ts`, na de bestaande `oplossen()`-methode, vóór
 `beeindigen()`:
@@ -483,13 +483,13 @@ In `src/auth/sessie.service.ts`, na de bestaande `oplossen()`-methode, vóór
   }
 ```
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 ```powershell
 npx tsc --noEmit
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/auth/sessie.service.ts
@@ -505,7 +505,7 @@ git commit -m "feat(auth): SessieService.wisselen() — nieuwe sessie zonder Ent
 - Modify: `src/platform/platform-invoer.ts`
 - Test: `test/test-ids.ts`
 
-- [ ] **Step 1: Registreer de test-ids**
+- [x] **Step 1: Registreer de test-ids**
 
 In `test/test-ids.ts`, na het laatste blok (`'contracten-overzicht'`, vóór
 de afsluitende `} as const;`):
@@ -521,7 +521,7 @@ de afsluitende `} as const;`):
   },
 ```
 
-- [ ] **Step 2: Voeg leesTenantWijziging() toe aan platform-invoer.ts**
+- [x] **Step 2: Voeg leesTenantWijziging() toe aan platform-invoer.ts**
 
 In `src/platform/platform-invoer.ts`, na `leesNieuweTenant()`:
 
@@ -549,7 +549,7 @@ import type { NieuweTenant, TenantWijziging } from './platform.service';
 
 (Vervang de bestaande `import type { NieuweTenant } from './platform.service';`.)
 
-- [ ] **Step 3: Voeg de vier routes toe aan PlatformController**
+- [x] **Step 3: Voeg de vier routes toe aan PlatformController**
 
 In `src/platform/platform.controller.ts`:
 
@@ -742,7 +742,7 @@ de klasse:
   }
 ```
 
-- [ ] **Step 4: Registreer SessieService in PlatformModule**
+- [x] **Step 4: Registreer SessieService in PlatformModule**
 
 `SessieService` wordt al door `AuthModule` geëxporteerd, en
 `PlatformModule` importeert `AuthModule` al (`src/platform/platform.module.ts`)
@@ -755,7 +755,7 @@ Get-Content src/platform/platform.module.ts
 
 Verwacht: `imports: [AuthModule, MailModule]` staat er al.
 
-- [ ] **Step 5: Typecheck**
+- [x] **Step 5: Typecheck**
 
 ```powershell
 npx tsc --noEmit
@@ -763,7 +763,7 @@ npx tsc --noEmit
 
 Verwacht: geen fouten.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/platform/platform.controller.ts src/platform/platform-invoer.ts test/test-ids.ts
@@ -777,13 +777,13 @@ git commit -m "feat(platform): routes — tenant wijzigen/deactiveren, sessie wi
 **Files:**
 - Create: `test/platform-uitbreiding.e2e-spec.ts`
 
-- [ ] **Step 1: Bekijk het bestaande platformbeheer.e2e-spec.ts als sjabloon**
+- [x] **Step 1: Bekijk het bestaande platformbeheer.e2e-spec.ts als sjabloon**
 
 ```powershell
 Get-Content test/platformbeheer.e2e-spec.ts | Select-String -Pattern "function migratieUrl|function withTenantContext" -Context 0,20
 ```
 
-- [ ] **Step 2: Schrijf de volledige testsuite**
+- [x] **Step 2: Schrijf de volledige testsuite**
 
 Maak `test/platform-uitbreiding.e2e-spec.ts`:
 
@@ -1200,7 +1200,7 @@ describe('Platformbeheer-uitbreiding (e2e)', () => {
 });
 ```
 
-- [ ] **Step 3: Run, diagnosticeer elke afwijking**
+- [x] **Step 3: Run, diagnosticeer elke afwijking**
 
 ```powershell
 npx jest test/platform-uitbreiding.e2e-spec.ts --forceExit
@@ -1288,7 +1288,7 @@ tegenproef voor tegenproef 7 uit de spec. Laat de HTTP-aanroep in de test
 staan als documentatie van dat onderscheid, maar vertrouw op de
 `wisselResultaat`-assertie.
 
-- [ ] **Step 4: Volledige e2e-run (regressie-check)**
+- [x] **Step 4: Volledige e2e-run (regressie-check)**
 
 ```powershell
 npx jest --forceExit
@@ -1299,7 +1299,7 @@ en de bestaande `platformbeheer.e2e-spec.ts`/`platform-routes.e2e-spec.ts`
 (die laatste twee mogen niet breken door de trigger- of
 `sessie_aanmaken()`-wijziging).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add drizzle/0033_platformbeheer_wijzigen_verwijderen.sql test/platform-uitbreiding.e2e-spec.ts
@@ -1310,7 +1310,7 @@ git commit -m "test(platform): e2e-dekking voor wijzigen/deactiveren/sessiewisse
 
 ### Taak 6: Backend — verify:volledig
 
-- [ ] **Step 1**
+- [x] **Step 1**
 
 ```powershell
 npm run verify:volledig
@@ -1322,7 +1322,7 @@ Verwacht: groen. Diagnosticeer en fix elk falen vóór verdergaan (CLAUDE.md,
 `docs/STATUS.md`) mag genegeerd worden na een herhaalde, schone run —
 elk ander falen niet.
 
-- [ ] **Step 2: Commit eventuele fixes apart**
+- [x] **Step 2: Commit eventuele fixes apart**
 
 ```bash
 git add -A
@@ -1337,7 +1337,7 @@ git commit -m "fix: verify:volledig-bevindingen na platformbeheer-uitbreiding (b
 - Modify: `src/core/models/platform.ts`
 - Modify: `src/core/services/platformService.ts`
 
-- [ ] **Step 1: Voeg de nieuwe modellen toe**
+- [x] **Step 1: Voeg de nieuwe modellen toe**
 
 In `src/core/models/platform.ts`, na `NieuweTenantInvoer`:
 
@@ -1363,7 +1363,7 @@ export interface SessieWisselResultaat {
 }
 ```
 
-- [ ] **Step 2: Voeg de service-functies toe**
+- [x] **Step 2: Voeg de service-functies toe**
 
 In `src/core/services/platformService.ts`, na `maakTenantAan()`:
 
@@ -1475,13 +1475,13 @@ import {
 } from '@/core/api/client';
 ```
 
-- [ ] **Step 3: Typecheck**
+- [x] **Step 3: Typecheck**
 
 ```powershell
 npx tsc --noEmit
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/core/models/platform.ts src/core/services/platformService.ts
@@ -1496,13 +1496,13 @@ git commit -m "feat(platform): modellen en service — wijzigen, deactiveren, se
 - Modify: `src/app/beheer/platform/page.tsx`
 - Test: `e2e/platform-uitbreiding.spec.ts`
 
-- [ ] **Step 1: Bekijk het bestaande tenantrij-/formulierpatroon**
+- [x] **Step 1: Bekijk het bestaande tenantrij-/formulierpatroon**
 
 ```powershell
 Get-Content src/app/beheer/platform/page.tsx | Select-String -Pattern "data-testid=.tenant-rij" -Context 5,15
 ```
 
-- [ ] **Step 2: Schrijf de falende Playwright-test**
+- [x] **Step 2: Schrijf de falende Playwright-test**
 
 Maak `e2e/platform-uitbreiding.spec.ts`:
 
@@ -1606,7 +1606,7 @@ test.describe('Platformbeheer-uitbreiding', () => {
 });
 ```
 
-- [ ] **Step 3: Run, verwacht FAIL**
+- [x] **Step 3: Run, verwacht FAIL**
 
 ```powershell
 npx playwright test e2e/platform-uitbreiding.spec.ts
@@ -1614,7 +1614,7 @@ npx playwright test e2e/platform-uitbreiding.spec.ts
 
 Verwacht: FAIL — de knoppen bestaan nog niet.
 
-- [ ] **Step 4: Bouw de bewerk-flow**
+- [x] **Step 4: Bouw de bewerk-flow**
 
 In `src/app/beheer/platform/page.tsx`:
 
@@ -1912,7 +1912,7 @@ Voeg vóór de sluitende `</AppLayout>` (helemaal onderaan, na de bestaande
       )}
 ```
 
-- [ ] **Step 5: Voeg de terugkeer-link toe aan OmgevingBanner**
+- [x] **Step 5: Voeg de terugkeer-link toe aan OmgevingBanner**
 
 Bekijk eerst de huidige inhoud:
 
@@ -1958,19 +1958,19 @@ mock-data/omgeving-melding, met dezelfde stijl):
       )}
 ```
 
-- [ ] **Step 6: Run, verwacht PASS**
+- [x] **Step 6: Run, verwacht PASS**
 
 ```powershell
 npx playwright test e2e/platform-uitbreiding.spec.ts
 ```
 
-- [ ] **Step 7: Volledige Playwright-suite (regressie-check)**
+- [x] **Step 7: Volledige Playwright-suite (regressie-check)**
 
 ```powershell
 npx playwright test
 ```
 
-- [ ] **Step 8: Typecheck, format, lint**
+- [x] **Step 8: Typecheck, format, lint**
 
 ```powershell
 npx tsc --noEmit
@@ -1978,7 +1978,7 @@ npm run format
 npm run lint
 ```
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add src/app/beheer/platform/page.tsx src/shared/components/layout/OmgevingBanner.tsx e2e/platform-uitbreiding.spec.ts
@@ -1989,14 +1989,16 @@ git commit -m "feat(platform): bewerk/deactiveer/openen-acties + terugkeer-link"
 
 ### Taak 9: Volledige verificatie
 
-- [ ] **Step 1: Backend**
+- [x] **Step 1: Backend**
 
 ```powershell
 cd C:\DEV\Work\MCM2
 npm run verify:volledig
 ```
 
-- [ ] **Step 2: Frontend, los**
+- [x] **Step 2: Frontend, los** — gedekt door dezelfde `verify:volledig`-run
+  (die draait format:check/lint/typecheck/playwright al voor de
+  frontend-repo).
 
 ```powershell
 cd ..\MCM2-frontend
@@ -2012,7 +2014,7 @@ npx playwright test
   klik "Openen" op een echte tenant om te bevestigen dat de wissel voelt
   als één klik.
 
-- [ ] **Step 4: `docs/STATUS.md` bijwerken**
+- [x] **Step 4: `docs/STATUS.md` bijwerken**
 
 Korte entry: welke issue/feature, backend + frontend, welke branch,
 verify-status, en de twee ontwerpaanpassingen die tijdens het bouwen aan
