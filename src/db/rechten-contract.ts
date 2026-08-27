@@ -252,4 +252,9 @@ export const DEFINER_FUNCTIES: Readonly<Record<string, FunctieContract>> = {
   // clm.tenant_membership heen te komen — zie de commentaren in de migratie.
   sessie_wisselen: DEFINER_STANDAARD,
   eigen_tenant_vinden: DEFINER_STANDAARD,
+
+  // De naam van een gebruiker ophalen los van tenantcontext (0033) — nodig
+  // voor SessieService.profiel() bij een support-sessie, waar de
+  // gebruiker geen eigen clm.user-rij in de doeltenant heeft.
+  gebruikersnaam: DEFINER_STANDAARD,
 };

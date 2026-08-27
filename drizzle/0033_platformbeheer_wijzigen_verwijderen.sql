@@ -177,6 +177,43 @@ COMMENT ON FUNCTION clm.eigen_tenant_vinden(uuid) IS
 REVOKE ALL ON FUNCTION clm.eigen_tenant_vinden(uuid) FROM PUBLIC;--> statement-breakpoint
 GRANT EXECUTE ON FUNCTION clm.eigen_tenant_vinden(uuid) TO clm_migrator, clm_api, clm_admin;--> statement-breakpoint
 
+-- ── 5. clm.gebruikersnaam() — een gat blootgelegd door de eerste échte
+--    end-to-end support-sessietest ─────────────────────────────────────────
+--
+-- clm."user" is gebonden aan precies één tenant (tenant_id NOT NULL,
+-- RLS-policy user_isolation: tenant_id = current_tenant_id()). Een
+-- platformbeheerder die via support-toegang naar een andere tenant wisselt
+-- heeft daar GEEN clm.user-rij — alleen een clm.tenant_membership-rij met
+-- role = 'support'. SessieService.profiel() deed tot nu toe een gewone
+-- JOIN clm.tenant op clm."user", en die vindt binnen de support-tenant
+-- niets: de gebruiker "bestaat" daar simpelweg niet als rij.
+--
+-- Dit gat bestond al vóór deze migratie (het bestaande support-toegang-
+-- mechanisme via ADR-015 heeft hetzelfde probleem), maar werd nooit
+-- blootgelegd omdat er nooit een echte GET /auth/sessie-aanroep vanuit een
+-- support-sessie werd getest — zie de toelichting bovenaan
+-- platform-uitbreiding.e2e-spec.ts en platformbeheer.spec.ts.
+--
+-- Oplossing: de naam ophalen los van de tenantcontext, via user_id — geen
+-- tenant in de invoer of uitvoer, dus geen cross-tenant-lek.
+
+CREATE FUNCTION clm.gebruikersnaam(p_user_id uuid)
+RETURNS text
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = clm, pg_temp
+AS $$
+    SELECT full_name FROM clm."user"
+     WHERE user_id = p_user_id
+       AND deleted_at IS NULL;
+$$;--> statement-breakpoint
+
+COMMENT ON FUNCTION clm.gebruikersnaam(uuid) IS
+    'Naam van een gebruiker, los van tenantcontext — nodig voor SessieService.profiel() bij een support-sessie: clm."user" is aan één tenant gebonden en de gebruiker heeft in de doeltenant geen eigen rij. Migratie 0033.';--> statement-breakpoint
+
+REVOKE ALL ON FUNCTION clm.gebruikersnaam(uuid) FROM PUBLIC;--> statement-breakpoint
+GRANT EXECUTE ON FUNCTION clm.gebruikersnaam(uuid) TO clm_migrator, clm_api, clm_admin;--> statement-breakpoint
+
 -- ── 5. sessie_aanmaken(): ook een gedeactiveerde tenant blokkeert login ──────
 --
 -- De membership-lookup in 0010 checkt user.deleted_at en membership.

@@ -234,25 +234,42 @@ export class SessieService {
    * blijven. Dit is één extra query die alleen loopt wanneer een scherm er om
    * vraagt — de sidebar, één keer per paginalading.
    *
-   * Gaat door withTenant(), dus RLS geldt: de query kan per constructie geen
-   * gebruiker of tenant van iemand anders opleveren, ook niet bij een fout in
-   * de WHERE-clausule.
+   * ── Waarom de naam niet meer via een JOIN op clm.tenant komt ────────────
+   *
+   * `clm."user"` is aan precies één tenant gebonden (RLS: tenant_id =
+   * current_tenant_id()). Bij een support-sessie (platformbeheer-
+   * uitbreiding, migratie 0033) is `context.tenantId` de tenant waar
+   * iemand te gast is — en daar heeft hij geen eigen `user`-rij, alleen een
+   * `tenant_membership`-rij met `role = 'support'`. Een JOIN vond dan
+   * niets: `profiel()` gaf `null` en de gebruiker kreeg 401 "De gebruiker
+   * bestaat niet meer" bij een geldige sessie. Gemeten via de eerste échte
+   * end-to-end support-sessietest (platform-uitbreiding.e2e-spec.ts).
+   *
+   * `clm.gebruikersnaam()` (SECURITY DEFINER, 0033) haalt de naam los van
+   * de tenantcontext op. De tenantnaam blijft wél via `withTenant()` +
+   * `clm.tenant` — dat werkt al voor een support-sessie, want de tenant
+   * zelf bestáát daar, alleen de gebruiker niet als eigen rij.
    */
   async profiel(
     context: SessieContext,
   ): Promise<{ naam: string; tenantNaam: string } | null> {
+    const naamResultaat = await this.db.db.execute<{
+      gebruikersnaam: string | null;
+    }>(sql`SELECT clm.gebruikersnaam(${context.userId})`);
+
+    const naam = naamResultaat.rows[0]?.gebruikersnaam;
+
+    if (!naam) {
+      return null;
+    }
+
     return this.db.withTenant(
       context.tenantId,
       async (tx) => {
-        const resultaat = await tx.execute<{
-          naam: string;
-          tenant_naam: string;
-        }>(
-          sql`SELECT u.full_name AS naam, t.name AS tenant_naam
-              FROM clm."user" u
-              JOIN clm.tenant t ON t.tenant_id = u.tenant_id
-             WHERE u.user_id = ${context.userId}
-               AND u.deleted_at IS NULL`,
+        const resultaat = await tx.execute<{ tenant_naam: string }>(
+          sql`SELECT t.name AS tenant_naam
+                FROM clm.tenant t
+               WHERE t.tenant_id = ${context.tenantId}`,
         );
 
         const rij = resultaat.rows[0];
@@ -261,7 +278,7 @@ export class SessieService {
           return null;
         }
 
-        return { naam: rij.naam, tenantNaam: rij.tenant_naam };
+        return { naam, tenantNaam: rij.tenant_naam };
       },
       'medewerker',
     );
