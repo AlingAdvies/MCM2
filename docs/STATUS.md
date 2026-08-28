@@ -2,6 +2,65 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-28 (vervolg 5) — Coupa-schema-uitbreiding (#185-#189) volledig
+uitgerold naar AWS-productie (migratie 0034, run 33192327879, herstart na
+een FK-constraint-naamfix — zie hieronder), backend + frontend gemerged
+naar main in beide repo's. Daarna: robuustheidsregels aangescherpt na een
+externe architectuurbeoordeling, en een nieuw normatief architectuurdocument
+opgezet (`docs/ARCHITECTUUR.md`).**
+
+**Wat gebouwd is (backend + frontend, beide repo's, beide gemerged):**
+- Vijf nieuwe velden uit de Coupa-gap-analyse (`docs/Transdev_Gap_Analyse_rev_1.csv`):
+  `vendor.coupaSupplierNumber`, `contract.contractType`,
+  `contract.dpaAanwezig` (tri-state), `ref.business_risk_tier` (Tier 1/2/3)
+  + `contract.businessRiskTierCode`, en `ref.vendor_category` omgezet van
+  platform-breed naar tenant-scoped (eigen RLS-policy, nieuw beheerscherm
+  `/vendor-categorieen`).
+- Frontend kreeg alle bijbehorende schermdelen: categorie-dropdown live
+  opgehaald i.p.v. hardcoded, nieuwe formuliersecties "Classificatie" en
+  "Cybersecurity & IT-compliance" op het contractformulier, nieuw
+  beheerscherm voor vendor-categorieën. Aanleiding: de backend-velden waren
+  eerst zonder scherm gebouwd — de eigenaar ontdekte dit zelf. Zie de
+  robuustheidsregel hieronder.
+- Kolomlabel "Criticaliteit" → "Cyber Criticaliteit" in het
+  leveranciersscherm (frontend), om verwarring met de nieuwe
+  `businessRiskTier` te voorkomen. Klaar, wacht op de eerstvolgende
+  reguliere uitrol (bewust niet los uitgerold).
+
+**Productie-incident, opgelost (drie pogingen):** migratie 0034 droppte een
+foreign key met een aangenomen, Drizzle-gegenereerde naam
+(`vendor_category_code_vendor_category_code_fk`). Klopte lokaal en op de
+wegwerpcontainer, maar productie had dezelfde constraint onder een andere
+naam (`vendor_category_code_fkey`, ontstaan buiten de migratieketen).
+`DROP CONSTRAINT IF EXISTS` op de verkeerde naam faalt niet zichtbaar — de
+migratie liep pas vast op een latere stap. Opgelost met een
+naam-onafhankelijke opzoeking (`DO $$ ... $$`-blok tegen `pg_constraint`,
+zie `drizzle/0034_coupa_schema_uitbreiding.sql`). Productie is op geen
+moment beschadigd geweest: de mislukte pogingen faalden vóór de eerste
+daadwerkelijke wijziging aan `vendor_category`.
+
+**Twee robuustheidsrondes naar aanleiding van dit incident:**
+1. Eigen review van alle instructiedocumenten (backend + frontend) na het
+   incident: `CLAUDE.md` §2 uitgebreid met constraint-/index-/sequence-namen
+   (met dit incident als concreet voorbeeld + een naam-onafhankelijke
+   opzoekquery); `MCM2-CLAUDE.md` §1a aangescherpt — front-end-consequentie
+   van elke backend-wijziging is nu verplicht en automatisch te melden, niet
+   pas bij twijfel; `MCM2-frontend/CLAUDE.md` toegevoegd (bestond nog niet).
+2. Externe architectuurbeoordeling op een graphify-kennisgraaf van beide
+   repo's samen (3244 nodes, 5725 edges) bevestigde onafhankelijk dezelfde
+   conclusie (versnipperde documentatie, geen samenvattend
+   architectuurdocument) en voegde een nieuw punt toe: `SECURITY DEFINER`-
+   functies als apart risicoprofiel. Resultaat: `docs/ARCHITECTUUR.md`
+   (nieuw, normatief, vier "platformgaranties" — bewust niet "contract"
+   genoemd, botst met `clm.contract`), plus een kwartaal-auditregel voor
+   `SECURITY DEFINER`-functies in `MCM2-CLAUDE.md` §6 en de
+   onderhoudskalender.
+
+Issues #185-#189 blijven open (elk becommentarieerd met wat gebouwd is) —
+het onderliggende doel, de Coupa-CSV-uploadtool (#190), is nog niet gebouwd.
+
+---
+
 **2026-08-27 (vervolg 4) — platformbeheer-uitbreiding gemerged naar main
 (beide repo's), gestaged (rookproef groen) en uitgerold naar AWS-productie
 (migratiestand 33, teruggelezen en gelijk aan het journal). Werkwijzeles
@@ -3195,40 +3254,42 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 ## Huidige branch en Git-status
 
-**Stand op 2026-08-23** (geverifieerd met `git status` en `git branch -vv` in
-beide repo's, ná de sessie leveranciersscherm-dichtheid):
+**Stand op 2026-08-28, avond** (geverifieerd met `git status` en `git log -1`
+in beide repo's, bij sessieafsluiting):
+
+| Repo | Branch | Werkboom | Gepusht |
+|---|---|---|---|
+| MCM2 | `main` | schoon op `cf96f0e`, op het moment van deze update alleen `docs/STATUS.md` (deze bewerking, wordt hierna gecommit) + twee pre-existing, niet door deze sessie aangemaakte items (`docs/runbooks/backup-bewijs.json` gewijzigd, `nis2-scaffold_1.zip` untracked — geen van beide aangeraakt, bewust laten staan) | ja |
+| MCM2-frontend | `main` | schoon op `1c5db61` | ja |
+
+**Geen open feature branch in beide repo's** — alle werk van deze sessie
+(Coupa-schema-uitbreiding #185-#189, robuustheidsregels, normatief
+architectuurdocument, label-fix "Cyber Criticaliteit") is rechtstreeks op
+`main` gecommit en gepusht, per stuk, zonder tussentijdse branch. Reden: elke
+wijziging was hetzij een geslaagde productie-uitrol volgend op een reeds
+goedgekeurde branch (Coupa-feature, zie hieronder) hetzij een documentatie-
+/cosmetica-wijziging die volgens de eigen regels geen aparte branch vereist.
+
+**De Coupa-schema-uitbreiding zelf liep wél via een feature branch**,
+inmiddels volledig afgehandeld: gebouwd, getest, gemerged naar `main` in
+beide repo's, gestaged, en succesvol uitgerold naar AWS-productie (migratie
+0034, workflow-run 33192327879). Branch is niet meer apart terug te vinden
+in de git-historie van deze sessie — gemerged en (naar verwachting, conform
+het branch-ritueel) lokaal en op GitHub verwijderd.
+
+---
+
+**Stand op 2026-08-23** (voorgaande sessie, ter historie):
 
 | Repo | Branch | Werkboom | Gepusht |
 |---|---|---|---|
 | MCM2 | `main` | schoon, op `888d56b` | ja |
-| MCM2 | `docs/contractmanagement-design` | schoon, 18 commits vóór `main` | **ja, vandaag voor het eerst** |
+| MCM2 | `docs/contractmanagement-design` | schoon, 18 commits vóór `main` | ja |
 | MCM2-frontend | `main` | schoon, op `b774463` | ja |
-| MCM2-frontend | `feat/contractmanagement-scherm` | schoon, 12 commits vóór `main` | **ja, vandaag voor het eerst** |
+| MCM2-frontend | `feat/contractmanagement-scherm` | schoon, 12 commits vóór `main` | ja |
 
-**Twee openstaande branches, allebei vandaag voor het eerst gepusht en van een
-open PR voorzien:**
-
-- **`docs/contractmanagement-design`** (backend, MCM2) — spec
-  (`2026-08-23-leveranciersscherm-dichtheid-design.md`) en plan
-  (`2026-08-23-leveranciersscherm-dichtheid.md`) voor de UI-herziening.
-  Bevat ook het eerder gebouwde contractmanagement-datamodel (migraties
-  0027/0028) uit de sessie van 22-08. Zuiver documentatie op deze branch,
-  geen backend-codewijziging vandaag. **Nog geen PR** — dit is
-  documentatie-only en hoeft niet per se een eigen PR te krijgen vóór de
-  frontend-PR gemerged is; zie "Eerstvolgende goedgekeurde stap".
-- **`feat/contractmanagement-scherm`** (frontend, MCM2-frontend) — de
-  daadwerkelijke implementatie: badge-strip, twee kolommen,
-  `ContactpersoonModal`, uitklapbare contractrij, wachtlijst-label,
-  urgentiekleur. **PR #15** open:
-  <https://github.com/AlingAdvies/MCM2-frontend/pull/15>. Preview door de
-  eigenaar bekeken en akkoord bevonden vóór de PR werd aangemaakt.
-
-**Verificatie vóór de PR** (conform §10 CI-verplichtingen, handmatig
-gedraaid omdat er geen `verify:volledig`-equivalent in MCM2-frontend
-bestaat): `typecheck`, `lint` (0 warnings) en `format:check` alle drie
-schoon; volledige e2e-suite tegen de demo-stack 71 passed / 4 failed / 5
-skipped. De vier faalgevallen zijn bevestigd niet-gerelateerd aan deze
-wijziging — zie "Actieve blokkades" hieronder en de comment op #83.
+Beide branches zijn sinds die datum afgehandeld (gemerged of geparkeerd) —
+zie de tussenliggende STATUS.md-entries voor het verloop.
 
 ---
 
@@ -3306,23 +3367,38 @@ wijziging — zie "Actieve blokkades" hieronder en de comment op #83.
 
 ## Eerstvolgende goedgekeurde stap
 
-**Stand 2026-08-23.** In deze volgorde, zoals besproken met de eigenaar:
+**Stand 2026-08-28.** Geen expliciet vastgelegde volgende stap van de
+eigenaar bij sessieafsluiting — de sessie eindigde met opruimwerk
+(architectuurdocument, terminologie-fix, sessieafsluiting), niet met een
+nieuwe opdracht. Bij de eerstvolgende sessie is dit relevant:
 
-1. **PR #15 (MCM2-frontend) beoordelen en mergen of bewust parkeren.**
-   Preview al bekeken en akkoord bevonden; wacht op de merge/parkeer-keuze
-   van de eigenaar volgens het git-ritueel.
-2. **`docs/contractmanagement-design` (backend) afhandelen** — bevat
-   uitsluitend documentatie (spec + plan) bovenop het al eerder gebouwde
-   contractmanagement-datamodel van 22-08. Zelfde merge/parkeer-vraag als
-   bij de frontend-branch.
-3. **Issue #174 — opzegtermijn-veld + waarschuwing (front+backend), direct
-   hierna.** Expliciet door de eigenaar als eerstvolgende prioriteit
-   aangewezen: reëel schaderisico van stilzwijgende contractverlenging.
-4. **Issue #173 — Contract 360 als eigen toppagina.** Later, apart
-   traject; bewust niet meegenomen in de huidige UI-ronde.
-5. **"21 augustus II" punt 1+2** (issues #171, #172: contracten in de
-   linkerbalk, dashboard-hernoeming + 90-dagen-widget) — ander deel van
-   het scherm/de navigatie, staat los van de bovenstaande volgorde.
+1. **Label-fix "Cyber Criticaliteit" (frontend) wacht op de eerstvolgende
+   reguliere uitrol** — bewust niet los naar productie gebracht (puur
+   cosmetisch, geen haast). Gecommit op `main` (`f58bb84`), niet vergeten
+   bij de volgende deploy-ronde.
+2. **Issue #190 — Coupa-CSV-uploadtool** is de enige nog niet gebouwde stap
+   uit de gap-analyse van 28-08. Issues #185-#189 (de datamodelvelden)
+   zijn allemaal al gebouwd en uitgerold; #190 is de tool die ze
+   daadwerkelijk gebruikt bij een import. Nog niet uitgewerkt tot spec.
+3. **Issue #180 — pilot-scope vaststellen** blijft de overkoepelende
+   prioriteit boven losse features (zie [[mcm2-pilot-versus-roadmap]] in
+   memory) — nog open, `priority:before-pilot`.
+4. **Onderhoudskalender-taken die nu voor het eerst genoteerd staan**
+   (SECURITY DEFINER-kwartaalaudit, periodieke `/graphify`-controle) hebben
+   nog geen eerste uitvoering gehad — dat gebeurt op hun eerste natuurlijke
+   moment, niet per se meteen.
+
+<details>
+<summary>Vorige eerstvolgende stap (2026-08-23, sindsdien afgehandeld)</summary>
+
+1. ~~PR #15 (MCM2-frontend) beoordelen en mergen of bewust parkeren.~~
+2. ~~`docs/contractmanagement-design` (backend) afhandelen.~~
+3. ~~Issue #174 — opzegtermijn-veld + waarschuwing.~~
+4. Issue #173 — Contract 360 als eigen toppagina. **Nog open.**
+5. Issues #171, #172 — contracten in de linkerbalk, dashboard-hernoeming.
+   **Nog open.**
+
+</details>
 
 <details>
 <summary>Vorige eerstvolgende stap (2026-08-04, inmiddels ver voorbij — laten staan als historie)</summary>
