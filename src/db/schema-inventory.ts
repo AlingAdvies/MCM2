@@ -65,10 +65,16 @@ export function inventariseerSchema(): TabelInventaris[] {
 }
 
 /**
- * Schema's waarin tenantgebonden tabellen kunnen staan. `ref` valt hier bewust
- * buiten: dat bevat tenant-agnostische lookup-data zonder RLS.
+ * Schema's waarin tenantgebonden tabellen kunnen staan.
+ *
+ * `ref` stond hier tot migratie 0034 bewust buiten: het bevatte alleen
+ * tenant-agnostische lookup-data zonder RLS. Sinds die migratie is
+ * `ref.vendor_category` tenant-scoped (#186, elke tenant beheert zijn eigen
+ * lijst) — de overige `ref`-tabellen blijven tenant-agnostisch, maar het
+ * schema als geheel bevat nu minstens één tenantgebonden tabel, dus telt
+ * mee voor de RLS-verificatie hieronder.
  */
-export const TENANT_SCHEMAS = ['clm', 'audit'] as const;
+export const TENANT_SCHEMAS = ['clm', 'audit', 'ref'] as const;
 
 /**
  * Tabellen met een `tenant_id` die bewust géén RLS hebben.

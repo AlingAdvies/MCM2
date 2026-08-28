@@ -32,12 +32,30 @@ ALTER TABLE clm.contract ADD COLUMN business_risk_tier_code text
 -- ── 5. ref.vendor_category wordt tenant-scoped (#186) ──────────────────────
 -- Was platform-breed (geen tenant_id, geen RLS). Wordt nu tenant-data: elke
 -- tenant beheert zijn eigen lijst via het nieuwe /vendor-categories-scherm.
--- Bestaande rijen zijn feitelijk AlingAdvies' lijst — die claimt de migratie
--- hier expliciet, in plaats van ze verweesd te laten.
-ALTER TABLE ref.vendor_category ADD COLUMN tenant_id uuid;--> statement-breakpoint
+--
+-- De bestaande 10 rijen (baseline-seed uit migratie 0000: it_services,
+-- consultancy, maintenance, ...) zijn GEEN tenant-specifieke data — ze zijn
+-- platform-brede voorbeeldwaarden. Ze worden hier verwijderd, niet aan een
+-- tenant toegewezen: vanaf nu krijgt elke tenant zijn eigen kopie van de
+-- standaardset via PlatformService.tenantAanmaken() (zie
+-- src/vendor-category/vendor-category-seed.ts, dezelfde 10 waarden).
+-- Bestaande tenants (AlingAdvies, Transdev) krijgen die standaardset
+-- achteraf via een eenmalige seed-actie — bewust GEEN onderdeel van deze
+-- migratie: een migratie met een hardcoded productie-tenant-id zou op elke
+-- andere omgeving (wegwerpcontainer, staging) falen zodra die tenant daar
+-- niet bestaat.
+-- vendor.category_code's bestaande FK naar vendor_category(code) moet als
+-- EERSTE weg: hij steunt op de index achter vendor_category_pkey, en houdt
+-- die anders vast zodra we die primary key hieronder droppen ("cannot drop
+-- constraint ... because other objects depend on it" — bleek bij het
+-- testen op de wegwerpcontainer, niet iets dat inline .references() zonder
+-- eigen constraint-naam zou doen; Drizzle blijkt hier wél een losse,
+-- benoemde FK te genereren).
+ALTER TABLE clm.vendor DROP CONSTRAINT IF EXISTS vendor_category_code_vendor_category_code_fk;--> statement-breakpoint
 
-UPDATE ref.vendor_category
-    SET tenant_id = 'c9f2a68a-73e2-4f64-8e32-e3e010331edb';--> statement-breakpoint
+DELETE FROM ref.vendor_category;--> statement-breakpoint
+
+ALTER TABLE ref.vendor_category ADD COLUMN tenant_id uuid;--> statement-breakpoint
 
 ALTER TABLE ref.vendor_category ALTER COLUMN tenant_id SET NOT NULL;--> statement-breakpoint
 
@@ -48,12 +66,7 @@ ALTER TABLE ref.vendor_category
 ALTER TABLE ref.vendor_category DROP CONSTRAINT vendor_category_pkey;--> statement-breakpoint
 ALTER TABLE ref.vendor_category ADD PRIMARY KEY (tenant_id, code);--> statement-breakpoint
 
--- vendor.category_code wijst nu naar een samengestelde sleutel. De
--- bestaande kolom-FK (op alleen code) bestaat niet als losse constraint
--- (Drizzle's .references() genereert 'm inline) — check en verwijder hem
--- als hij bestaat, voeg de samengestelde FK toe.
-ALTER TABLE clm.vendor DROP CONSTRAINT IF EXISTS vendor_category_code_vendor_category_code_fk;--> statement-breakpoint
-
+-- vendor.category_code wijst nu naar de samengestelde sleutel hierboven.
 ALTER TABLE clm.vendor
     ADD CONSTRAINT vendor_category_tenant_fk
     FOREIGN KEY (tenant_id, category_code)

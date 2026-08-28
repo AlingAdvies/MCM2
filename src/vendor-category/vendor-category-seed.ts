@@ -8,20 +8,28 @@ import { sql } from 'drizzle-orm';
  * hernoemen, verwijderen en aanvullen via /vendor-categories raakt deze
  * standaardset niet.
  *
- * Overgenomen uit AlingAdvies' bestaande lijst (migratie 0034 claimt die
- * rijen voor AlingAdvies' eigen tenant_id). Zie
+ * Dit zijn dezelfde 10 waarden die vóór migratie 0034 al als platform-brede
+ * baseline-seed bestonden (migratie 0000) — die rijen zijn bij 0034
+ * verwijderd (ze waren geen tenant-specifieke data), en leven hier verder
+ * als de standaardset voor elke nieuwe tenant. Bestaande tenants
+ * (AlingAdvies, Transdev) krijgen deze set achteraf via een eenmalige,
+ * losse seed-actie — geen onderdeel van de migratie zelf. Zie
  * docs/superpowers/specs/2026-08-28-coupa-schema-uitbreiding-design.md.
  */
 export const STANDAARD_VENDOR_CATEGORIEEN: ReadonlyArray<{
   code: string;
   label: string;
 }> = [
-  { code: 'ict', label: 'ICT' },
-  { code: 'hr', label: 'HR' },
-  { code: 'facilitair', label: 'Facilitair' },
-  { code: 'financieel', label: 'Financieel' },
-  { code: 'juridisch', label: 'Juridisch' },
-  { code: 'overig', label: 'Overig' },
+  { code: 'it_services', label: 'IT-diensten' },
+  { code: 'consultancy', label: 'Consultancy' },
+  { code: 'maintenance', label: 'Onderhoud' },
+  { code: 'consulting', label: 'Advies' },
+  { code: 'energy', label: 'Energie' },
+  { code: 'facilities', label: 'Facilitair' },
+  { code: 'insurance', label: 'Verzekeringen' },
+  { code: 'security', label: 'Beveiliging' },
+  { code: 'telecom', label: 'Telecom' },
+  { code: 'other', label: 'Overig' },
 ];
 
 /**
