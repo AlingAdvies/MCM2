@@ -37,7 +37,13 @@ Ga nooit uit van een oplossing omdat die eerder genoemd, gepland of deels gebouw
 *Vastgelegd 2026-08-22, na een sessie waarin een complete backend
 (migratie, service, API) werd gebouwd en voor "klaar" werd aangezien
 zonder dat er een scherm bestond om hem te gebruiken. Dat werd pas
-duidelijk toen de eigenaar vroeg om een preview.*
+duidelijk toen de eigenaar vroeg om een preview. Aangescherpt 2026-08-28,
+na de Coupa-schema-uitbreiding: vijf nieuwe backend-velden waren volledig
+gebouwd en getest vóórdat opviel dat er geen scherm was dat ze toonde. De
+eigenaar moest dit zelf ontdekken door een nieuwe leverancier aan te
+maken. §1a bestond al, maar "stel bij twijfel een vraag" bleek in de
+praktijk overslaanbaar wanneer er geen moment van twijfel was — de
+backend-wijziging voelde op zichzelf compleet aan.*
 
 De eigenaar denkt vanuit het product, niet vanuit lagen als "backend" en
 "frontend" — die scheiding is voor jou vanzelfsprekend, voor hem niet. Een
@@ -49,6 +55,15 @@ lijken. Vandaar:
   gekozen voor backend-only (bijvoorbeeld een interne migratie of een API
   die een al bestaand scherm bedient). Die keuze hoort een vraag te zijn,
   niet een aanname.
+- **Verplicht en automatisch, niet alleen bij twijfel — bij elke wijziging
+  die in deze map (`MCM2`, backend) wordt opgepakt: expliciet vaststellen
+  of dit front-end-consequenties heeft**, en dat *hardop* melden aan de
+  eigenaar — ook wanneer het antwoord "nee" is. Dit is geen vraag die je
+  jezelf stilzwijgend beantwoordt: benoem de conclusie altijd zichtbaar in
+  je bericht ("dit raakt/raakt niet het scherm, omdat...").
+- Blijkt er een front-end-consequentie: **die wordt direct meegebouwd in
+  dezelfde ronde**, niet als losse vervolgstap of apart issue — tenzij de
+  eigenaar expliciet kiest voor gefaseerd opleveren.
 - Stel bij twijfel een basale vraag, ook als hij vanzelfsprekend lijkt:
   "moet dit ook een scherm krijgen?", "is dit compleet genoeg om te
   testen/previewen?", "waar in de bestaande navigatie hoort dit?". Een
@@ -615,6 +630,9 @@ Een wijziging is pas “klaar” wanneer:
 [ ] Namen en paden opgezocht, niet gereconstrueerd, zie §15c
 [ ] RLS read/write-isolatietest toegevoegd bij tenantdata
 [ ] Migratie getest op lege database, indien schema gewijzigd
+[ ] Front-end-consequentie expliciet vastgesteld en gemeld, zie §1a
+[ ] Bij DROP/ALTER CONSTRAINT: naam opgezocht tegen een gevulde omgeving
+    (niet alleen de lege wegwerpdatabase), zie CLAUDE.md §"2. Verzin nooit..."
 [ ] Docker production build geslaagd
 [ ] Feature flag toegevoegd en standaard uit, indien klant-/domeinspecifiek
 [ ] Documentatie, ADR en/of runbook bijgewerkt

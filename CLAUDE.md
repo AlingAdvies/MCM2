@@ -199,7 +199,7 @@ Aanleiding: op 2026-08-07 wisten de e2e-tests de demo-database leeg omdat
 > anders blokkeren op precies het commando dat hem moet vullen. Niet-lokaal
 > zonder markering blijft geblokkeerd.
 
-**2. Verzin nooit een commando — en ook geen kolomnaam of route.**
+**2. Verzin nooit een commando — en ook geen kolomnaam, route of constraint-naam.**
 Staat het niet in `package.json`, dan bestaat het niet:
 ```powershell
 (Get-Content package.json | ConvertFrom-Json).scripts
@@ -215,6 +215,32 @@ elk een mislukte query. Opzoeken kost één commando:
 SELECT string_agg(column_name, ', ' ORDER BY ordinal_position)
   FROM information_schema.columns WHERE table_schema='clm' AND table_name='<tabel>';
 ```
+
+**Constraint-, index- en sequence-namen zijn hetzelfde risico, en zijn op
+2026-08-28 ook daadwerkelijk misgegaan.** Migratie 0034 droppte een foreign
+key met een aangenomen, door Drizzle gegenereerde naam
+(`vendor_category_code_vendor_category_code_fk`). Die naam klopte op de
+lokale wegwerpdatabase, maar productie had dezelfde constraint onder een
+andere naam (`vendor_category_code_fkey` — ontstaan buiten de
+migratieketen om). `DROP CONSTRAINT IF EXISTS <geraden-naam>` faalt in dat
+geval niet — hij mist gewoon stilzwijgend, en de migratie loopt vast op een
+latere stap die wél op het bestaan van die constraint rekent. Dit kostte
+drie mislukte pogingen op productie voordat het werd herkend. **Zoek een
+constraint-naam daarom altijd op aan de hand van wat hij doet, niet aan de
+hand van een aangenomen naam:**
+```sql
+SELECT con.conname
+FROM pg_constraint con
+JOIN pg_class rel ON rel.oid = con.conrelid
+JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+WHERE con.contype = 'f' AND nsp.nspname = '<schema>' AND rel.relname = '<tabel>';
+```
+Test dit **niet alleen tegen een lege wegwerpdatabase** — die kent de naam
+sowieso niet, want er is niets om te vinden, dus de opzoekquery levert daar
+altijd "niet gevonden" en de `IF EXISTS`-tak slaagt schijnbaar probleemloos.
+Een `DROP`/`ALTER` op een bestaande, al gevulde constraint moet vóór
+uitrol ook gecontroleerd zijn tegen een omgeving die de constraint al heeft
+(staging, of een handmatig opgebouwde replica van productie's structuur).
 
 **3. Een handgeschreven migratie moet in `drizzle/meta/_journal.json`.**
 Anders slaat Drizzle hem over en meldt `migrate:deploy` alsnog "Migraties
