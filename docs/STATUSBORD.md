@@ -17,7 +17,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 ## Op prioriteit, over alle thema's heen
 
 **P0 — voor elke volgende regel productiecode** — 2 open
-**Vóór de pilot** — 7 open
+**Vóór de pilot** — 8 open
 **Vóór bredere productie** — 12 open
 **Later — bewust uitgesteld** — 2 open
 
@@ -25,8 +25,9 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ## Per thema
 
-### Product — vragenlijst, leveranciers, contracten, meldingen (19)
+### Product — vragenlijst, leveranciers, contracten, meldingen (20)
 
+- [#190](https://github.com/AlingAdvies/MCM2/issues/190) `before-pilot` — Contractdata-uploadtool: Coupa-CSV importeren in MCM2
 - [#23](https://github.com/AlingAdvies/MCM2/issues/23) `before-production` — MVM_V2-frontend-inconsistenties oplossen (tenant demo vs. transdev, vendors-lijstpagina)
 - [#187](https://github.com/AlingAdvies/MCM2/issues/187) `later` — Contracttype-veld toevoegen (placeholder, richting volwaardig contractmanagement)
 - [#52](https://github.com/AlingAdvies/MCM2/issues/52) — Restrisico virusscan vastleggen als bewuste beslissing, met opschalingsvoorwaarde
@@ -111,4 +112,4 @@ bestaande thema's past.
 
 ---
 
-**Totaal open:** 53
+**Totaal open:** 54
