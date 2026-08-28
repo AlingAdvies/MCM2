@@ -164,9 +164,9 @@ describe('/vendor-categories (e2e)', () => {
     expect((res.body as VeldFoutBody).veld).toBe('code');
   });
 
-  it('PUT wijzigt het label', async () => {
+  it('PATCH wijzigt het label', async () => {
     const res = await request(server)
-      .put(`/vendor-categories/${CODE_A}`)
+      .patch(`/vendor-categories/${CODE_A}`)
       .set('Cookie', cookieAdminA)
       .send({ label: 'Aangepast label' })
       .expect(200);

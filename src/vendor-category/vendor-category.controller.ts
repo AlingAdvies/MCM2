@@ -7,8 +7,8 @@ import {
   HttpCode,
   NotFoundException,
   Param,
+  Patch,
   Post,
-  Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -84,7 +84,7 @@ export class VendorCategoryController {
     }
   }
 
-  @Put(':code')
+  @Patch(':code')
   @VereistRol('admin')
   async wijzig(
     @Req() request: RequestMetSessie,
