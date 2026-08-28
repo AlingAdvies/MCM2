@@ -54,7 +54,35 @@ ALTER TABLE clm.contract ADD COLUMN business_risk_tier_code text
 -- deze migratieketen, met eigen logging, één keer per omgeving handmatig
 -- te draaien). Nieuwe tenants krijgen de standaardset automatisch via
 -- PlatformService.tenantAanmaken().
-ALTER TABLE clm.vendor DROP CONSTRAINT IF EXISTS vendor_category_code_vendor_category_code_fk;--> statement-breakpoint
+-- Naam-onafhankelijk: eerdere versies van deze migratie gokten de
+-- constraint-naam (vendor_category_code_vendor_category_code_fk), maar
+-- bleek op de demo-database een andere door Drizzle gegenereerde naam te
+-- hebben, en op productie weer een andere (vendor_category_code_fkey —
+-- kennelijk uit een oudere, handmatige of Prisma-achtige aanmaak van vóór
+-- deze tabel onder Drizzle-beheer kwam). Een DROP CONSTRAINT ... IF EXISTS
+-- op de verkeerde naam faalt niet, maar laat de echte constraint ongemoeid
+-- staan — en dan faalt de PRIMARY KEY-drop verderop alsnog, met de
+-- migratie al gedeeltelijk uitgevoerd. Zoek de constraint daarom op aan de
+-- hand van wat hij DOET (een FK op clm.vendor die naar ref.vendor_category
+-- verwijst), niet aan de hand van een aangenomen naam.
+DO $$
+DECLARE
+    fk_naam text;
+BEGIN
+    SELECT con.conname INTO fk_naam
+    FROM pg_constraint con
+    JOIN pg_class rel ON rel.oid = con.conrelid
+    JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+    JOIN pg_class frel ON frel.oid = con.confrelid
+    JOIN pg_namespace fnsp ON fnsp.oid = frel.relnamespace
+    WHERE con.contype = 'f'
+      AND nsp.nspname = 'clm' AND rel.relname = 'vendor'
+      AND fnsp.nspname = 'ref' AND frel.relname = 'vendor_category';
+
+    IF fk_naam IS NOT NULL THEN
+        EXECUTE format('ALTER TABLE clm.vendor DROP CONSTRAINT %I', fk_naam);
+    END IF;
+END $$;--> statement-breakpoint
 
 UPDATE clm.vendor SET category_code = NULL WHERE category_code IS NOT NULL;--> statement-breakpoint
 
