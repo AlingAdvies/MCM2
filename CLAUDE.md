@@ -126,13 +126,14 @@ laatste is precies wat de proefopstelling nog niet AWS-vormig maakt.
 
 ---
 
-## Lees deze drie, in deze volgorde, vóór je iets doet
+## Lees deze vier, in deze volgorde, vóór je iets doet
 
 | # | Bestand | Waarvoor |
 |---|---|---|
 | 1 | **`docs/runbooks/commandos-en-omgeving.md`** | Welk commando bestaat er echt, waar praat het naartoe, wat mag nooit |
-| 2 | `MCM2-CLAUDE.md` | Rol, werkmodus, architectuurregels, §14 sessiestartprotocol |
-| 3 | `docs/STATUS.md` | Waar het project nu staat |
+| 2 | **`docs/ARCHITECTUUR.md`** | Wat het systeem garandeert — tenantcontext, sessie, RLS/rollen, deployment — kort en toetsbaar, vóór je een van die grenzen raakt |
+| 3 | `MCM2-CLAUDE.md` | Rol, werkmodus, architectuurregels, §14 sessiestartprotocol |
+| 4 | `docs/STATUS.md` | Waar het project nu staat |
 
 Alle runbooks staan geïndexeerd in **`docs/runbooks/README.md`**; wat er
 terugkeert en wanneer, staat in **`docs/runbooks/onderhoudskalender.md`**.
@@ -297,10 +298,11 @@ Losse commando's bewijzen niets (§15a). Let op: `npm run lint` en
 ```text
 Security en actuele blokkades
   -> docs/runbooks/commandos-en-omgeving.md   (wat technisch kan en mag)
-    -> MCM2-CLAUDE.md                          (hoe we werken)
-      -> actuele ADR's en docs/STATUS.md
-        -> projectdocumentatie
-          -> oude plannen, pilots en sessiehistorie
+    -> docs/ARCHITECTUUR.md                    (wat het systeem garandeert)
+      -> MCM2-CLAUDE.md                        (hoe we werken)
+        -> actuele ADR's en docs/STATUS.md
+          -> projectdocumentatie
+            -> oude plannen, pilots en sessiehistorie
 ```
 
 Zolang we in deze architectuur werken — NestJS, Drizzle met handgeschreven

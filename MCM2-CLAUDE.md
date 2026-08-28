@@ -547,6 +547,7 @@ Houd documentatie kort, feitelijk en actueel.
 
 | Bestand/map | Doel |
 |---|---|
+| `docs/ARCHITECTUUR.md` | Wat het systeem garandeert, per platformcontract — kort, toetsbaar, normatief |
 | `docs/STATUS.md` | Eén actuele waarheid: fase, blockers, laatste bewezen tests, eerstvolgende stap |
 | GitHub Issues (`AlingAdvies/MCM2`) | De actuele backlog: bugs, features en chores, gelabeld met type (`bug`/`enhancement`/`chore`) en prioriteit (`priority:p0`/`priority:before-pilot`/`priority:before-production`/`priority:later`) |
 | `docs/adr/` | Definitieve besluiten: context, opties, besluit, gevolgen en reviewmoment |
@@ -614,10 +615,11 @@ Bij conflicten geldt deze prioriteit:
 ```text
 Security en expliciete actuele blokkades
   -> docs/runbooks/commandos-en-omgeving.md   (wat technisch kan en mag)
-    -> dit MCM2-CLAUDE.md                      (hoe we werken)
-      -> actuele ADR's en STATUS.md
-        -> projectdocumentatie
-          -> oude plannen, pilots en sessiehistorie
+    -> docs/ARCHITECTUUR.md                    (wat het systeem garandeert)
+      -> dit MCM2-CLAUDE.md                    (hoe we werken)
+        -> actuele ADR's en STATUS.md
+          -> projectdocumentatie
+            -> oude plannen, pilots en sessiehistorie
 ```
 
 ---
