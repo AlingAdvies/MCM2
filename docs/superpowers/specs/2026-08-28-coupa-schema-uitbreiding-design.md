@@ -60,33 +60,66 @@ kan ze via het nieuwe beheerscherm (hieronder) hernoemen, verwijderen of
 aanvullen. Er is geen synchronisatie en geen "reset naar standaard" — de
 seed is een eenmalige kopie op t=0, daarna volledig los van de bron.
 
-**Bestaande tenants (AlingAdvies, Transdev):**
-- AlingAdvies: de migratie zelf zet `tenant_id` op AlingAdvies' eigen
-  tenant-id voor de bestaande rijen — geen aparte seed-stap, de rijen
-  bestaan al en worden "geclaimd" door de tenant die ze feitelijk al
-  gebruikt.
-- Transdev: bestond al vóór dit schema er was, dus krijgt de standaardset
-  niet automatisch via `tenantAanmaken()`. Vraagt een eenmalige,
-  handmatige seed-actie na de migratie (los script of SQL, niet
-  onderdeel van de migratie zelf — Transdev's situatie is eenmalig).
+**Bestaande tenants (herzien — zie "Wat er onderweg misging" hieronder):**
+géén seed-actie in de migratie zelf. Een los, herhaalbaar script
+(`scripts/seed-vendor-categorieen.js`, `npm run seed:vendor-categorieen --
+--extern`) zaait de standaardset voor elke bestaande tenant die nog geen
+categorie heeft — één keer per omgeving handmatig te draaien, ná de
+migratie. Idempotent: een tenant die al categorieën heeft (via het
+scherm, of een eerdere run) wordt overgeslagen.
 
-### Migratie (schets)
+### Migratie (schets, puur structuur — zie de toelichting in de
+### migratie zelf voor de volledige redenering)
 
 ```sql
-ALTER TABLE ref.vendor_category ADD COLUMN tenant_id uuid;
-UPDATE ref.vendor_category SET tenant_id = '<alingadvies-tenant-id>';
-ALTER TABLE ref.vendor_category ALTER COLUMN tenant_id SET NOT NULL;
-ALTER TABLE ref.vendor_category DROP CONSTRAINT vendor_category_pkey;
-ALTER TABLE ref.vendor_category ADD PRIMARY KEY (tenant_id, code);
+ALTER TABLE clm.vendor DROP CONSTRAINT IF EXISTS vendor_category_code_vendor_category_code_fk;
+UPDATE clm.vendor SET category_code = NULL WHERE category_code IS NOT NULL;
+DELETE FROM ref.vendor_category;
+ALTER TABLE ref.vendor_category ADD COLUMN tenant_id uuid NOT NULL;
 ALTER TABLE ref.vendor_category
   ADD CONSTRAINT vendor_category_tenant_fk
   FOREIGN KEY (tenant_id) REFERENCES clm.tenant(tenant_id) ON DELETE CASCADE;
+ALTER TABLE ref.vendor_category DROP CONSTRAINT vendor_category_pkey;
+ALTER TABLE ref.vendor_category ADD PRIMARY KEY (tenant_id, code);
+ALTER TABLE clm.vendor
+  ADD CONSTRAINT vendor_category_tenant_fk
+  FOREIGN KEY (tenant_id, category_code)
+  REFERENCES ref.vendor_category(tenant_id, code)
+  ON DELETE SET NULL;
 ```
 
 `vendor.category_code` blijft een tekstveld; de FK-relatie in Drizzle moet
 worden herzien naar een samengestelde sleutel (`tenant_id`, `category_code`)
 in plaats van alleen `category_code`, zodat een vendor niet naar een
 categorie van een andere tenant kan wijzen.
+
+### Wat er onderweg misging (en waarom de aanpak hierboven anders is dan
+### het oorspronkelijke ontwerp)
+
+De eerste versie van deze migratie probeerde de bestaande platform-brede
+categorieën (baseline-seed uit migratie 0000) direct te herverdelen: eerst
+claimen voor AlingAdvies' tenant-id (hardcoded), later — na feedback dat
+een migratie niet van een specifiek productie-tenant-id mag afhangen — een
+multi-tenant `INSERT ... SELECT FROM clm.tenant`.
+
+Bij het testen tegen de demo-database (391 vendors, bestaande
+`vendor.category_code`-verwijzingen) bleek dat een schemamigratie die
+bestaande data probeert te herverdelen structureel fragiel is: elke
+afwijkende databasetoestand (een tenant die zijn categorieën al zelf had
+aangepast, een ander aantal tenants) kan zo'n migratie opnieuw laten
+falen. Drie iteraties waren nodig om alleen al de demo-database soepel te
+laten migreren — een teken dat de aanpak zelf niet houdbaar was, niet dat
+er nog één randgeval miste.
+
+**Besluit:** een schemamigratie hoort niet af te hangen van de actuele
+inhoud van de data. Migratie 0034 maakt daarom bestaande
+`vendor.category_code`-waarden expliciet leeg (in plaats van te raden
+welke tenant welke waarde "hoort" te claimen) en zaait geen data. Het
+zaaien van de standaardset voor bestaande tenants is een aparte,
+herhaalbare actie (`scripts/seed-vendor-categorieen.js`), losgekoppeld van
+de migratieketen. Een tenant-admin ziet na de migratie tijdelijk "geen
+categorie" op zijn vendors totdat het script gedraaid is of hij het zelf
+instelt — een eerlijke, zichtbare tussenstand in plaats van een gegokte.
 
 ### Beheerscherm
 
