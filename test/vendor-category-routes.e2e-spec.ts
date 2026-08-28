@@ -16,8 +16,7 @@ import { TEST_IDS } from './test-ids';
  * Zie docs/superpowers/specs/2026-08-28-coupa-schema-uitbreiding-design.md.
  */
 
-const { tenantA, tenantB, adminA, userA } =
-  TEST_IDS['vendor-category-routes'];
+const { tenantA, tenantB, adminA, userA } = TEST_IDS['vendor-category-routes'];
 
 const STEMPEL = Date.now();
 const SUBJECT_ADMIN_A = `oid-vcr-admin-a-${STEMPEL}`;
@@ -37,20 +36,15 @@ async function verwijderTestdata(client: Client): Promise<void> {
   for (const tenant of [tenantA, tenantB]) {
     await client.query('BEGIN');
     await client.query(`SET LOCAL app.current_tenant_id = '${tenant}'`);
-    await client.query(
-      'DELETE FROM ref.vendor_category WHERE tenant_id = $1',
-      [tenant],
-    );
+    await client.query('DELETE FROM ref.vendor_category WHERE tenant_id = $1', [
+      tenant,
+    ]);
     await client.query(
       'DELETE FROM clm.tenant_membership WHERE tenant_id = $1',
       [tenant],
     );
-    await client.query('DELETE FROM clm."user" WHERE tenant_id = $1', [
-      tenant,
-    ]);
-    await client.query('DELETE FROM clm.tenant WHERE tenant_id = $1', [
-      tenant,
-    ]);
+    await client.query('DELETE FROM clm."user" WHERE tenant_id = $1', [tenant]);
+    await client.query('DELETE FROM clm.tenant WHERE tenant_id = $1', [tenant]);
     await client.query('COMMIT');
   }
 }

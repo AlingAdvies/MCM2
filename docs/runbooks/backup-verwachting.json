@@ -32,10 +32,15 @@
     "Migratie 0033 (27-08, platformbeheer-uitbreiding) voegt GEEN tabel toe —",
     "alleen deleted_at op clm.tenant (bestaande tabel), twee nieuwe SECURITY",
     "DEFINER-functies (sessie_wisselen, eigen_tenant_vinden) en een uitgebreide",
-    "trigger op clm.tenant. Migratiestand bijgewerkt, tabellenlijst niet."
+    "trigger op clm.tenant. Migratiestand bijgewerkt, tabellenlijst niet.",
+    "",
+    "Migratie 0034 (28-08, Coupa-schema-uitbreiding, #185-#189) voegt",
+    "ref.business_risk_tier toe. ref.vendor_category bleef in naam gelijk maar",
+    "kreeg een tenant_id-kolom en RLS (was platform-breed, is nu tenant-data) —",
+    "geen wijziging in deze lijst nodig voor die tabel zelf."
   ],
-  "bijgewerkt": "2026-08-27",
-  "migratiestand": "0033_platformbeheer_wijzigen_verwijderen",
+  "bijgewerkt": "2026-08-28",
+  "migratiestand": "0034_coupa_schema_uitbreiding",
   "tabellen": [
     "audit.audit_event",
     "clm.contract",
@@ -62,6 +67,7 @@
     "clm.vendor_contact",
     "clm.vendor_tag",
     "ref.business_criticality",
+    "ref.business_risk_tier",
     "ref.compliance_status",
     "ref.compliance_thema",
     "ref.contract_status",
