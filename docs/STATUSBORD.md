@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-08-28 12:47 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-08-28 12:48 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -25,7 +25,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ## Per thema
 
-### Product — vragenlijst, leveranciers, contracten, meldingen (17)
+### Product — vragenlijst, leveranciers, contracten, meldingen (19)
 
 - [#23](https://github.com/AlingAdvies/MCM2/issues/23) `before-production` — MVM_V2-frontend-inconsistenties oplossen (tenant demo vs. transdev, vendors-lijstpagina)
 - [#187](https://github.com/AlingAdvies/MCM2/issues/187) `later` — Contracttype-veld toevoegen (placeholder, richting volwaardig contractmanagement)
@@ -44,6 +44,8 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#172](https://github.com/AlingAdvies/MCM2/issues/172) — Dashboard: 'Start' hernoemen en overzicht van bijna-verlopen contracten
 - [#185](https://github.com/AlingAdvies/MCM2/issues/185) — Coupa-import: contract.coupaSupplierNumber toevoegen als matchsleutel
 - [#186](https://github.com/AlingAdvies/MCM2/issues/186) — Vendor-categorielijst: Coupa 'Commodity' overnemen + categorieën tenant-uitbreidbaar maken
+- [#188](https://github.com/AlingAdvies/MCM2/issues/188) — Business-risk-classificatie (Tier 1/2/3) als apart veld, los van vendor-categorie
+- [#189](https://github.com/AlingAdvies/MCM2/issues/189) — DPA-vlag (Ja/Nee) overnemen bij contract-import
 
 ### Beheermenu (4)
 
@@ -109,4 +111,4 @@ bestaande thema's past.
 
 ---
 
-**Totaal open:** 51
+**Totaal open:** 53
