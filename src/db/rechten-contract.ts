@@ -178,6 +178,7 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   'ref.vendor_category': LEZEN_EN_SCHRIJVEN,
   'ref.contract_status': LEZEN_EN_SCHRIJVEN,
   'ref.compliance_thema': LEZEN_EN_SCHRIJVEN,
+  'ref.business_risk_tier': LEZEN_EN_SCHRIJVEN,
 };
 
 /**
