@@ -9,6 +9,7 @@ import { MailModule } from './mail/mail.module';
 import { PlatformModule } from './platform/platform.module';
 import { SurveyModule } from './survey/survey.module';
 import { TenantModule } from './tenant/tenant.module';
+import { VendorCategoryModule } from './vendor-category/vendor-category.module';
 import { VendorModule } from './vendor/vendor.module';
 
 @Module({
@@ -18,6 +19,7 @@ import { VendorModule } from './vendor/vendor.module';
     SurveyModule,
     AuthModule,
     VendorModule,
+    VendorCategoryModule,
     ContractModule,
     MailModule,
     PlatformModule,
