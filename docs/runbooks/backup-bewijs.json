@@ -1,5 +1,5 @@
 {
-  "gecontroleerdOp": "2026-08-28T16:14:33.865Z",
+  "gecontroleerdOp": "2026-08-28T16:23:12.090Z",
   "dumpGemaaktOp": "2026-08-28T10:58:16.204Z",
   "dumpNaam": "mcm2-2026-08-28_10-58-08.dump",
   "dumpBytes": 158995,
@@ -7,12 +7,11 @@
     "A",
     "B"
   ],
-  "goed": false,
-  "problemen": [
-    "incompleet"
-  ],
+  "goed": true,
+  "problemen": [],
   "bevindingen": [
     "Laatste dump: mcm2-2026-08-28_10-58-08.dump (5 uur oud)",
-    "saxombp: 3 minuten oud, 6 dump(s) bewaard"
+    "saxombp: 12 minuten oud, 6 dump(s) bewaard",
+    "Compleet: 29 tabellen"
   ]
 }
