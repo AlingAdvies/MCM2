@@ -2,7 +2,7 @@
 
 **Type:** D — routineoperaties
 **Eigenaar:** de eigenaar (Chris)
-**Laatste update:** 2026-08-10
+**Laatste update:** 2026-08-28
 **Vereiste toegang:** deze PC, Docker Desktop, Telegram, GitHub
 **Raakt:** ADR-011 (backup- en hersteleisen), Issue #19, #48, #58
 
@@ -88,6 +88,8 @@ npm run backup:controle
 | **Wekelijks** | Staging wakker houden: één query tegen `clm-staging3` | Een gratis Supabase-project pauzeert na 7 dagen zonder databaseactiviteit. Pauzeert staging, dan faalt de eerstvolgende uitrol met een verbindingsfout die naar de verkeerde oorzaak wijst. | — (§5) |
 | **Bij elke migratie** | Eerst op staging draaien, dan pas op productie | Staging draait dezelfde Postgres-versie, regio en pooler als productie. Een migratie die daar slaagt, slaagt in productie — dat is de hele reden dat staging niet op saxombp staat. | — (§5) |
 | **Maandelijks** en **na elke uitrol naar productie** | `npm run verify:omgevingen` | Legt de drie omgevingen naast elkaar: migratiestand, tabellen, tenantgrens, rollen, markering. Dit is de controle die op 04-08 gemeld zou hebben dat productie 9 van de 18 tabellen miste. **Draait niet in CI** — de acceptatiedatabase is alleen via saxombp bereikbaar, dus dit is een commando dat gedraaid moet wórden. Vereist Tailscale. | [commandos-en-omgeving.md](commandos-en-omgeving.md) |
+| **Per kwartaal** | Alle `SECURITY DEFINER`-functies gezamenlijk beoordelen: minimal privilege, vaste `search_path`, actuele GRANTs, invoervalidatie, misbruikscenario's | Zo'n functie draait met de rechten van de eigenaar, niet van de aanroeper — een fout erin omzeilt RLS volledig. Externe architectuurbeoordeling 28-08 vroeg hier expliciet om. | — (§5, MCM2-CLAUDE.md §6) |
+| **Per kwartaal** | `/graphify` opnieuw draaien op beide repo's (backend + frontend samen) en het rapport doorlezen op nieuwe god nodes, onduidelijke relaties en documentatieconflicten | Complexiteit groeit onopgemerkt; de graaf maakt zichtbaar wat losse code-review mist. Externe architectuurbeoordeling 28-08 stelde dit voor als terugkerend instrument. | — (§5) |
 
 ### Gebeurtenisgebonden — geen ritme, maar een trigger
 

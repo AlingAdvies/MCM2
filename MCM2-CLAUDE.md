@@ -330,6 +330,32 @@ Doe geen ORM-migratie, nieuwe Prisma-workaround of domeinuitbreiding zonder expl
 - Gebruik één centrale `TenantTransactionService`; domeincode mag niet zelfstandig de databaseclient openen.
 - Iedere nieuwe tabel met `tenant_id` krijgt geautomatiseerde cross-tenant read- én write-tests.
 
+### SECURITY DEFINER-functies — verhoogd risico, periodieke audit verplicht
+
+*Vastgelegd 2026-08-28, naar aanleiding van een externe architectuurbeoordeling
+op de graphify-kennisgraaf. `SECURITY DEFINER` is een verdedigbare, bewuste
+oplossing voor het RLS-kip-ei-probleem (een lookup die moet gebeuren vóórdat
+de tenantcontext bekend is, bijv. `resolve_survey_token`, `sessie_aanmaken`,
+`koppel_eerste_login`) — maar zo'n functie draait met de rechten van de
+functie-eigenaar, niet van de aanroeper, en een fout erin omzeilt RLS
+volledig, niet gedeeltelijk. Dat is een ander risicoprofiel dan gewone
+applicatiecode en verdient een eigen regel, niet alleen de algemene
+migratieregels uit §7.*
+
+- Elke nieuwe `SECURITY DEFINER`-functie krijgt bij aanmaak een vaste
+  `search_path` (voorkomt search-path-hijacking), minimale GRANTs (alleen wat
+  de functie werkelijk nodig heeft, nooit "voor de zekerheid" breder), en
+  expliciete invoervalidatie — ook als de aanroep alleen intern lijkt te
+  gebeuren.
+- Alle bestaande `SECURITY DEFINER`-functies worden **elk kwartaal**
+  gezamenlijk beoordeeld op: minimal privilege, vaste `search_path`, actuele
+  GRANTs, invoervalidatie, en of er een misbruikscenario is te bedenken
+  waarbij de functie buiten zijn bedoelde aanroeppad wordt bereikt. Zie
+  `docs/runbooks/onderhoudskalender.md` voor de vaste taak.
+- Een nieuwe `SECURITY DEFINER`-functie is een architectuurkeuze, geen
+  implementatiedetail: motiveer in de migratie zelf (commentaar) waarom een
+  gewone `SECURITY INVOKER`-functie of RLS-policy niet volstaat.
+
 ### Bij onverwacht Supabase/PostgreSQL-rolgedrag: opzoeken, niet gokken
 
 Loop je tegen een onverwachte permission-fout, roluitzondering of ander rolrechten-gedrag aan (bijv. `permission denied to grant role`, `permission denied for schema`, afwijkend `GRANT`/`OWNER TO`-gedrag): zoek dit eerst gericht op in `https://supabase.com/docs` en de officiële PostgreSQL-documentatie (`postgresql.org/docs/current/`) vóórdat je een volgende SQL-variant probeert tegen de database. Trial-and-error tegen een gedeelde database — ook Supabase's testomgeving — is geen vervanging voor het lezen van de bron.
