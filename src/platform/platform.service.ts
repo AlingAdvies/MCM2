@@ -6,6 +6,7 @@ import {
   hashUitnodigingstoken,
 } from '../auth/uitnodigingstoken';
 import { DatabaseService } from '../db/database.service';
+import { seedVendorCategorieenSql } from '../vendor-category/vendor-category-seed';
 
 /** Hoe lang support-toegang standaard geldig is. */
 export const SUPPORT_TOEGANG_UREN = 8;
@@ -211,6 +212,10 @@ export class PlatformService {
         sql`INSERT INTO clm.tenant_membership (user_id, tenant_id, role)
             VALUES (${userId}, ${tenantId}, 'admin')`,
       );
+
+      // Standaardset vendor-categorieën (#186) — eenmalige kopie, geen
+      // levende koppeling. Zie vendor-category-seed.ts.
+      await tx.execute(seedVendorCategorieenSql(tenantId));
 
       await tx.execute(
         sql`INSERT INTO audit.audit_event
