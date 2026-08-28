@@ -17,7 +17,9 @@
 > Die beoordeling adviseerde expliciet: *"de belangrijkste investering vanaf
 > hier is het voorkomen dat de opgebouwde kennis versnipperd raakt — houd de
 > actuele architectuur compact, normatief en toetsbaar, en behandel de
-> kernketens als formele platformcontracts."* Dit document is dat.
+> kernketens als formele platformcontracts."* Dit document is dat — hieronder
+> **"platformgarantie"** genoemd, om verwarring met `clm.contract` (het
+> domeinbegrip contract/vendor-contract in de app zelf) te voorkomen.
 > (`docs/architecture-review/2026-08-28-graphify-architectuurbeoordeling.md`)
 >
 > **Houd dit actueel.** Een garantie die hier staat maar niet meer klopt is
@@ -28,22 +30,26 @@
 
 ---
 
-## Hoe een contract hier werkt
+## Hoe een platformgarantie hier werkt
 
-Elk platformcontract hieronder volgt hetzelfde vaste patroon:
+*Let op: "platformgarantie" hieronder is een architectuurterm, geen verwijzing
+naar `clm.contract` (het vendor-/leverancierscontract in de applicatie zelf —
+zie `src/contract/` en `docs/adr/`). Ze hebben niets met elkaar te maken.*
+
+Elke platformgarantie hieronder volgt hetzelfde vaste patroon:
 
 - **Garantie** — één zin: wat wordt beloofd, aan de rest van het systeem.
 - **Wordt afgedwongen door** — de exacte code die dit waarmaakt.
 - **Wordt bewezen door** — de tests die falen zodra de garantie breekt.
 - **Mag gewijzigd worden via** — de ADR('s) die hierover gaan.
 
-Vier contracten dekken de grenzen waar een fout het duurst is: wie de tenant
-bepaalt, wie ingelogd is, wat de database wel/niet toestaat, en hoe code
-productie bereikt.
+Vier platformgaranties dekken de grenzen waar een fout het duurst is: wie de
+tenant bepaalt, wie ingelogd is, wat de database wel/niet toestaat, en hoe
+code productie bereikt.
 
 ---
 
-## Contract 1 — Tenantcontext & database-toegang
+## Platformgarantie 1 — Tenantcontext & database-toegang
 
 **Garantie.** De actieve tenant komt uitsluitend uit een server-side,
 gehashte lookup tegen de database (sessiecookie of surveytoken) — nooit uit
@@ -76,7 +82,7 @@ op, nooit een fout die per ongeluk alles teruggeeft.
 
 ---
 
-## Contract 2 — Sessie & authenticatie
+## Platformgarantie 2 — Sessie & authenticatie
 
 **Garantie.** Interne gebruikers loggen in via OIDC met PKCE tegen een
 provider-agnostische configuratie. Na verificatie van het ID-token krijgt de
@@ -96,7 +102,7 @@ server-side na 8 uur inactiviteit (glijdend venster).
   acceptatie/productie).
 - Migratie `0010_sessie.sql` — tabel `clm.sessie` is volledig dicht voor de
   runtime-rol (`REVOKE ALL`); toegang uitsluitend via drie
-  `SECURITY DEFINER`-functies (zie Contract 3).
+  `SECURITY DEFINER`-functies (zie Platformgarantie 3).
 
 **Wordt bewezen door**
 - `test/sessie.e2e-spec.ts` — de tabel is dicht voor de runtime-rol; elke
@@ -114,7 +120,7 @@ server-side na 8 uur inactiviteit (glijdend venster).
 
 ---
 
-## Contract 3 — Database-rollen & RLS
+## Platformgarantie 3 — Database-rollen & RLS
 
 **Garantie.** De applicatie draait altijd als een runtime-rol zonder
 `BYPASSRLS` en zonder ownership. RLS geldt met `FORCE` ook voor de
@@ -171,7 +177,7 @@ volgen `REVOKE ALL ... FROM PUBLIC` + gerichte `GRANT EXECUTE`.
 
 ---
 
-## Contract 4 — Deployment & backup/herstel
+## Platformgarantie 4 — Deployment & backup/herstel
 
 **Garantie.** Elke uitrol naar productie doorloopt vier remmen: handmatig
 akkoord, actueel backupbewijs, vastgestelde migratiestand vóór/na, en
@@ -215,8 +221,9 @@ als gegenereerd bewijsbestand, en het meetregister in
 
 ## Extra — huidige productieopstelling (AWS)
 
-*Feitelijke stand, geen garantie — dit verandert vaker dan de contracten
-hierboven en hoort bij elke wijziging hier bijgewerkt te worden.*
+*Feitelijke stand, geen garantie — dit verandert vaker dan de
+platformgaranties hierboven en hoort bij elke wijziging hier bijgewerkt te
+worden.*
 
 **AWS.** Account "AlingAdvies", regio `eu-west-1`. **ECS Express Mode** (App
 Runner is losgelaten — accepteert sinds 30-04-2026 geen nieuwe klanten meer).
