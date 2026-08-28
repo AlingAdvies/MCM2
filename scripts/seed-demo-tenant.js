@@ -309,6 +309,26 @@ async function tenantAanmaken(db) {
             VALUES (${DEMO_TENANT_ID}, ${DEMO_TENANT_NAAM})`,
       );
 
+      // Standaardset vendor-categorieën (#186, migratie 0034). Dit script
+      // gaat niet via PlatformService.tenantAanmaken() — dezelfde seed
+      // hoort hier dus apart te staan. ON CONFLICT DO NOTHING: idempotent
+      // voor het geval dit script met --tenant tegen een tenant draait die
+      // zijn categorieën al heeft (de normale platformroute zaait ze al).
+      await tx.execute(
+        sql`INSERT INTO ref.vendor_category (tenant_id, code, label) VALUES
+              (${DEMO_TENANT_ID}, 'it_services', 'IT-diensten'),
+              (${DEMO_TENANT_ID}, 'consultancy', 'Consultancy'),
+              (${DEMO_TENANT_ID}, 'maintenance', 'Onderhoud'),
+              (${DEMO_TENANT_ID}, 'consulting', 'Advies'),
+              (${DEMO_TENANT_ID}, 'energy', 'Energie'),
+              (${DEMO_TENANT_ID}, 'facilities', 'Facilitair'),
+              (${DEMO_TENANT_ID}, 'insurance', 'Verzekeringen'),
+              (${DEMO_TENANT_ID}, 'security', 'Beveiliging'),
+              (${DEMO_TENANT_ID}, 'telecom', 'Telecom'),
+              (${DEMO_TENANT_ID}, 'other', 'Overig')
+            ON CONFLICT (tenant_id, code) DO NOTHING`,
+      );
+
       return { nieuw: true, naam: DEMO_TENANT_NAAM };
     }),
   );

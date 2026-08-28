@@ -2,6 +2,7 @@ import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
   date,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -21,14 +22,37 @@ export const clm = pgSchema('clm');
 export const ref = pgSchema('ref');
 export const audit = pgSchema('audit');
 
-// ─── ref schema: lookup-tabellen (bewust geen RLS, tenant-agnostisch) ──────
+// ─── ref schema: lookup-tabellen (tenant-agnostisch, tenzij vermeld) ───────
 
-export const vendorCategory = ref.table('vendor_category', {
+// Tenant-scoped sinds migratie 0034 (#186): was platform-breed en RLS-vrij,
+// elke tenant beheert nu zijn eigen lijst via /vendor-categories. Seed-bij-
+// aanmaak in PlatformService.tenantAanmaken(), daarna volledig los van de
+// bron — geen levende koppeling.
+export const vendorCategory = ref.table(
+  'vendor_category',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'cascade' }),
+    code: text('code').notNull(),
+    label: text('label').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.tenantId, t.code] })],
+);
+
+export const businessCriticality = ref.table('business_criticality', {
   code: text('code').primaryKey(),
   label: text('label').notNull(),
 });
 
-export const businessCriticality = ref.table('business_criticality', {
+// Transdev-achtige enterprise-brede business-risk-classificatie
+// (Tier 1/2/3, #188). Geen relatie met businessCriticality hierboven — dat
+// is het resultaat van de IT-risk-assessment (bepaalt survey-relevantie,
+// zie src/survey/contractmanager.service.ts). business_risk_tier is een
+// ANDER assessment, bewust niet samengevoegd ondanks de gelijkenis in
+// waarden. Globaal (geen tenant_id): net als businessCriticality een
+// generieke schaal, geen tenant-specifieke lijst.
+export const businessRiskTier = ref.table('business_risk_tier', {
   code: text('code').primaryKey(),
   label: text('label').notNull(),
 });
@@ -241,9 +265,10 @@ export const vendor = clm.table(
     incorporationDate: date('incorporation_date'),
     sbiCode: text('sbi_code'),
     sbiDescription: text('sbi_description'),
-    categoryCode: text('category_code').references(() => vendorCategory.code, {
-      onDelete: 'set null',
-    }),
+    // Geen losse .references() meer: sinds migratie 0034 wijst dit naar de
+    // samengestelde sleutel (tenant_id, code) van vendorCategory — zie de
+    // foreignKey() onderaan deze tabeldefinitie.
+    categoryCode: text('category_code'),
     businessCriticalityCode: text('business_criticality_code').references(
       () => businessCriticality.code,
       { onDelete: 'set null' },
@@ -262,6 +287,10 @@ export const vendor = clm.table(
     }),
     lastReviewDate: date('last_review_date'),
     nextReviewDate: date('next_review_date'),
+    // Matchsleutel Coupa ↔ MCM2 (#185). Nullable: een tenant zonder Coupa
+    // laat dit veld leeg. Gebruikt door de uploadtool (#190) om een
+    // bestaande vendor te herkennen bij een herhaalde import.
+    coupaSupplierNumber: text('coupa_supplier_number'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -271,6 +300,11 @@ export const vendor = clm.table(
   (t) => [
     uniqueIndex('vendor_tenant_id_kvk_number_key').on(t.tenantId, t.kvkNumber),
     index('vendor_tenant_id_idx').on(t.tenantId),
+    foreignKey({
+      name: 'vendor_category_tenant_fk',
+      columns: [t.tenantId, t.categoryCode],
+      foreignColumns: [vendorCategory.tenantId, vendorCategory.code],
+    }).onDelete('set null'),
   ],
 );
 
@@ -399,6 +433,19 @@ export const contract = clm.table(
     startDate: date('start_date'),
     endDate: date('end_date'),
     note: text('note'),
+    // Placeholder-veld (#187): vrije tekst uit Coupa's "Contract type"
+    // (Raamovereenkomst, Dienstenovereenkomst, ...). Wordt pas echt relevant
+    // zodra MCM2 breder als contractmanagement-tool gebruikt wordt.
+    contractType: text('contract_type'),
+    // Tri-state: null = onbekend, niet "nee" (#189). Het achterliggende
+    // document is bewust niet in scope — apart, later traject.
+    dpaAanwezig: boolean('dpa_aanwezig'),
+    // Transdev's enterprise-brede business-risk-classificatie (#188), per
+    // contract — zie de uitleg bij ref.business_risk_tier hierboven.
+    businessRiskTierCode: text('business_risk_tier_code').references(
+      () => businessRiskTier.code,
+      { onDelete: 'set null' },
+    ),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1037,8 +1084,8 @@ export const vendorRelations = relations(vendor, ({ one, many }) => ({
     references: [user.userId],
   }),
   category: one(vendorCategory, {
-    fields: [vendor.categoryCode],
-    references: [vendorCategory.code],
+    fields: [vendor.tenantId, vendor.categoryCode],
+    references: [vendorCategory.tenantId, vendorCategory.code],
   }),
   businessCriticality: one(businessCriticality, {
     fields: [vendor.businessCriticalityCode],

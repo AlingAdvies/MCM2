@@ -1,0 +1,78 @@
+opmerkingen Vendor IT survey
+
+27 augustus
+
+andere landingpage na inloggen via entra id
+
+
+
+
+
+21 augustus III
+Leverancier scherm:
+1: stamgegevens, classificatie en contactpersonen sterk indikken. gebruik meer breedte van het scherm. let op gebruikers gebruiken pc met groot scherm. ik wil veel grotere informatie dichtheid
+2: contactpersoon toeveogen moet een 'fold out''  zijn, niet altijd open.
+3: in de lijst contratcen moet ieder contract 'open te klikken zijn', en niet alleen door op edit te klikken. bestaande contract velden moeten door open kliken direct zichtbaar worden.(ook de velden die er later nog aan toegevoegd gaan worden)
+4: bug ? bekijk microsoft, contract m365, er is vragenlijst gekoppeld, die zie ik niet terug als ik in 'vragenlijst' naar de wachtlijst ga
+
+
+21 augustus II
+nieuwe contracten:
+1: ook in linkerbalk overzicht contracten
+2: in 'start'  naam vervangen door dashboard. In dashboard ook dashboard opnemen met contracten die binnen 90 dagen verlopen (ook als status van contract niet is ingevuld)
+3: ook mogelijkheid om nieuw contactpersoon direct bij aanmaken contract aan te maken
+4: bij aanmkaen contract ook direct kunnen kiezen voor survey, niet per se achteraf
+
+
+
+21 augustus
+1: uitklaplijst bij 'rondes'werkt prima. nu ook kolommen toevoegen in de uitklap: naam van vendor, emailadres van de gebruikte contactpsersoon
+2: overweging: nu contactpersonen per vendor, na toevoeging van contracten (en koppeling met vendors, daar ook contactpersoon per contract (met default de leading) contactpersoon van de vendor. vraag of we nu dus niet eerst de contract feature moeten boouwen om in een keer de juiste velden in te richten. 
+2a: Bij contract veld, ook direct meegeven of en welke survey van toepassing is. meerdere mogelijk.
+2b: ook notitieveld bij contactpersoon inrichten. "bv is vervanger van xyz voor it zaken"
+2c: notitieveld bij contractveld inrichten: bv " verwachten geen verlenging na dec-27' 
+
+productidee : (intake)leveranciersbeoordeling. obv z-cert excel vragenlijst.
+
+
+
+
+20 augustus
+roadmap maken: 
+stap 1 goede vendor it risk vrageblijst 
+stap 1b, e mail uitstuur faciliteit
+stap 2 degelijke eenvoudige contractmanagement feature
+stap 3 goede vendor third party risk features
+stap 4 andere features voor nis2 compliance
+
+in de vragenlijst moet een link zitten naar mailadres van uitstuurder, nu is er nog geen enkele referentie.
+in /beheer/vragenlijsten is nu sprake van 'rondes' iedere uitnodiging is nu een ronde, rondes is een feature voor later.
+
+Nu nadenken over wat de gebriuker direct wil zien.
+
+bij leveranciers moet veld komen voor contractbeheerder / contactpersoon
+er moet een contractveld worden opgesteld dat ook linked naar type leverancier, en/of veld voor vragenlijst.
+er moet 'bulk upload' zijn voor leveranciers stamdata
+vanuit leveranciers lijst moet makkelijk aangevinkt kunnen worden: type leveracnier
+er moet bulk upoad zijn voor contract data: leverancier, begin einddatum
+bij leverancier er is nu een vrij keuzeveld met compliance status. denk over koppeling met status na beoordeling ?
+In instellingen van tennant beheerder: Uitnodigingen worden verstuurd namens AlingAdvies. Vult u hieronder een adres in, dan komen antwoorden van leveranciers daar terecht in plaats van bij het platform. Laat u het leeg, dan verwijst de uitnodiging naar “uw contactpersoon”.   CHECK DAT HIER naam van TENNANT komt
+
+nieuwe feature: vragenlijst bouwer
+
+hoe werkt sso met entra id?
+
+
+
+
+
+
+
+https://clm.alingadvies.nl/portal/survey/tyfe-VPbotMupcuAOWpTHsgs2zhxY77a9nimUAi5JcA
+
+uitnodiging vragenlijst testlev1
+
+
+
+https://clm.alingadvies.nl/portal/survey/xz2Ha7wKeJQ8RNC6gzokiUod_3L6Nl7yaPpuLlCiHyY
+uitnodiging vragenlijst testlev2

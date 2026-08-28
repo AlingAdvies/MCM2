@@ -396,6 +396,12 @@ export const TEST_IDS = {
     gedeactiveerdeTenant: id('46'),
     openTenant: id('47'),
   },
+  'vendor-category-routes': {
+    tenantA: id('48'),
+    tenantB: id('49'),
+    adminA: id('4a'),
+    userA: id('4b'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */
