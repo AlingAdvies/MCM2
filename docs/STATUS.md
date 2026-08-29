@@ -2,6 +2,77 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-29 — Vier kleine productie-bugs gevonden en opgelost, alle vier
+uitgerold naar AWS-productie. Aanleiding: de eigenaar meldde dat een
+tenant-uitnodigingslink naar `localhost` wees.**
+
+**Wat gebouwd en uitgerold is (backend PR #193, frontend PR #18, deploy-script
+PR #194, plus de eerdere `UITNODIGING_BASIS_URL`-fix zonder eigen PR-nummer
+hier genoteerd):**
+
+1. **Tenant-uitnodigingslink naar localhost.** `TenantLedenService.uitnodigingsLink()`
+   (`src/tenant/tenant-leden.service.ts`) las `process.env.APP_BASE_URL`, een
+   variabele die nergens wordt ingericht (niet in `deploy-inrichten.js`, niet
+   in `docker-compose.omgeving.yml`, niet in de AWS-task-definitie). Viel
+   daardoor altijd terug op `http://localhost:3000`. `PlatformService` gebruikt
+   voor dezelfde link al de juiste variabele, `UITNODIGING_BASIS_URL` — nu
+   gelijkgetrokken. Geverifieerd tegen de draaiende AWS-task-definitie
+   (`default-mcm2-api`, revisie 24): die variabele stond daar al correct op
+   `https://clm.alingadvies.nl`.
+
+2. **Ingetrokken tenant-lid bleef kiesbaar als contractbeheerder** (PR #193).
+   `TenantService.gebruikers()` (`src/tenant/tenant.service.ts`, bron van
+   `GET /tenant/gebruikers`, de contractbeheerder-dropdown) filterde alleen
+   `clm."user".deleted_at IS NULL` — niet `tenant_membership.deleted_at`, de
+   laag die daadwerkelijk bepaalt of iemand nog toegang tot déze tenant heeft.
+   Gevonden bij Transdev: na het intrekken van Kees Aling's toegang bleef hij
+   gewoon kiesbaar bij een nieuw contract. Fix: join met `tenant_membership`
+   en filter daar op `deleted_at IS NULL`. **Bewust niet aangepast:** bestaande
+   `contract.owner_user_id`-koppelingen tonen de naam nog via een kale
+   `LEFT JOIN` zonder membership-check — een naam mag blijven staan tot
+   handmatige vervanging, alleen de *keuze* moest een ingetrokken lid
+   uitsluiten. Issue #192 aangemaakt voor de bredere vraag (moet zo'n
+   bestaande naam een "geen toegang meer"-markering krijgen, ook bij
+   vendor-eigenaar/reviewer/notitie-auteur — hetzelfde `LEFT JOIN`-patroon
+   komt op vijf plekken voor).
+
+3. **`/` toonde een lege placeholder na login** (frontend PR #18).
+   `auth.service.ts` stuurt na een succesvolle Entra-login naar `/`
+   (`naLoginBestemming()`), maar die route toonde nog een vergeten
+   placeholderpagina ("wordt vervangen zodra het leverancierportaal er
+   staat") met alleen een link naar Leveranciers. `beheer/page.tsx` is al
+   langer het bedoelde startscherm. Fix: `/` redirect nu (307) naar `/beheer`.
+
+4. **Die redirect brak drie gezondheidscontroles** die nog `200` op `/`
+   verwachtten, gevonden in deze volgorde:
+   - de frontend-CI-healthcheck (PR #18, tweede commit) — getest nu `/beheer`;
+   - `scripts/deploy.js`'s eigen rookproef (PR #194) — zelfde fix, ontdekt
+     toen de staging-uitrol op deze check faalde met "kreeg 307" ondanks een
+     gezonde container;
+   - **de AWS Application Load Balancer targetgroup-healthcheck** (twee
+     target groups op poort 3000, `ecs-gateway-tg-f56fa33...` en
+     `ecs-gateway-tg-7a3700...`) — dit veroorzaakte de eerste mislukte
+     productie-uitrol (run 33257656570): ECS's deployment circuit breaker
+     rolde de nieuwe frontend-taak na ~29 minuten terug omdat de ALB hem
+     nooit gezond keurde. Buiten de repo, alleen in de AWS Console op te
+     lossen — het Health check path op beide target groups is handmatig
+     gewijzigd van `/` naar `/beheer` (Success codes ongewijzigd op `200`).
+     Tweede uitrolpoging (run 33262154689) slaagde.
+
+**Bijvangst, niet direct aan deze bugs gerelateerd:** tijdens het onderzoek
+naar waarom Entra steeds automatisch met het verkeerde account (Cornelis'
+Gmail-account i.p.v. het bedoelde werkaccount) inlogde, bleek de oorzaak
+Dashlane's "automatisch aanmelden"-functie te zijn (niet Chrome, niet een
+Windows Primary Refresh Token, niet een Entra-cookiesessie — cookies wissen
+loste niets op). Uitgezet in Dashlane; geen codewijziging.
+
+**Eindstatus, bevestigd op productie na de tweede uitrol:**
+`https://clm.alingadvies.nl/` → 307, `/beheer` → 200, `/api/backend/health`
+→ commit `ae81e15779f5`. `npm run verify:volledig` groen na elke fix
+(96 passed / 3 skipped op de laatste ronde).
+
+---
+
 **2026-08-28 (vervolg 5) — Coupa-schema-uitbreiding (#185-#189) volledig
 uitgerold naar AWS-productie (migratie 0034, run 33192327879, herstart na
 een FK-constraint-naamfix — zie hieronder), backend + frontend gemerged
