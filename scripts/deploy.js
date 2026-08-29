@@ -295,8 +295,10 @@ function rookproef(omgeving) {
     ...(FRONTEND_MEE
       ? [
           {
+            // Getest wordt /beheer, niet /: sinds 2026-08-29 stuurt / bewust
+            // door (307) naar /beheer, het scherm waarmee de app opent.
             wat: 'frontend serveert een pagina',
-            commando: `curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:${omgeving.frontendPoort}/`,
+            commando: `curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://localhost:${omgeving.frontendPoort}/beheer`,
             verwacht: (uit) => uit === '200',
           },
           {
