@@ -162,9 +162,19 @@ export class TenantService {
         user_id: string;
         full_name: string;
       }>(
-        sql`SELECT user_id, full_name FROM clm."user"
-             WHERE deleted_at IS NULL
-             ORDER BY full_name`,
+        // `deleted_at IS NULL` op clm."user" filtert alleen verwijderde
+        // personen, niet een ingetrokken tenant_membership (migratie 0004:
+        // RLS isoleert op tenant_id, zacht verwijderen is een zaak van de
+        // query). Zonder de join op tenant_membership bleef een lid met
+        // ingetrokken toegang hier gewoon kiesbaar als contractbeheerder —
+        // gevonden 2026-08-29 bij Transdev, Kees Aling.
+        sql`SELECT u.user_id, u.full_name FROM clm."user" u
+             JOIN clm.tenant_membership m
+               ON m.user_id = u.user_id
+              AND m.tenant_id = ${tenantId}
+              AND m.deleted_at IS NULL
+             WHERE u.deleted_at IS NULL
+             ORDER BY u.full_name`,
       );
 
       return rows.map((r) => ({
