@@ -292,8 +292,18 @@ export class TenantLedenService {
     }
   }
 
+  /**
+   * Zelfde variabele en fallback als PlatformService.uitnodigingsLink
+   * (src/platform/platform.controller.ts) — dat is de plek waar
+   * deploy-inrichten.js / docker-compose.omgeving.yml de basis-URL per
+   * omgeving neerzetten. Deze methode las tot 2026-08-29 per ongeluk
+   * `APP_BASE_URL`, een variabele die nergens werd ingericht, waardoor elke
+   * tenant-uitnodiging op elke omgeving terugviel op `localhost:3000`.
+   */
   private uitnodigingsLink(token: string): string {
-    const basis = process.env.APP_BASE_URL ?? 'http://localhost:3000';
+    const basis = (
+      process.env.UITNODIGING_BASIS_URL ?? 'http://localhost:3000'
+    ).replace(/\/+$/, '');
     return `${basis}/api/backend/auth/login?uitnodiging=${encodeURIComponent(token)}`;
   }
 }
