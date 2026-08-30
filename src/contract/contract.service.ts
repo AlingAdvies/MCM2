@@ -32,6 +32,9 @@ export interface ContractSamenvatting {
   noticePeriodDays: number | null;
   warningDaysBefore: number;
   autoRenews: string | null;
+  contractType: string | null;
+  dpaAanwezig: boolean | null;
+  businessRiskTierCode: string | null;
 }
 
 export interface ContractTenantBreed extends ContractSamenvatting {
@@ -53,6 +56,9 @@ export interface NieuwContract {
   noticePeriodDays?: number | null;
   warningDaysBefore?: number;
   autoRenews?: string | null;
+  contractType?: string | null;
+  dpaAanwezig?: boolean | null;
+  businessRiskTierCode?: string | null;
 }
 
 export interface ContractDetail {
@@ -74,6 +80,9 @@ export interface ContractDetail {
   noticePeriodDays: number | null;
   warningDaysBefore: number;
   autoRenews: string | null;
+  contractType: string | null;
+  dpaAanwezig: boolean | null;
+  businessRiskTierCode: string | null;
 }
 
 /**
@@ -94,6 +103,9 @@ export interface ContractWijziging {
   noticePeriodDays?: number | null;
   warningDaysBefore?: number;
   autoRenews?: string | null;
+  contractType?: string | null;
+  dpaAanwezig?: boolean | null;
+  businessRiskTierCode?: string | null;
 }
 
 interface ContractRij extends Record<string, unknown> {
@@ -111,6 +123,9 @@ interface ContractRij extends Record<string, unknown> {
   notice_period_days: number | null;
   warning_days_before: number;
   auto_renews: string | null;
+  contract_type: string | null;
+  dpa_aanwezig: boolean | null;
+  business_risk_tier_code: string | null;
 }
 
 interface ContractDetailRij extends Record<string, unknown> {
@@ -132,6 +147,9 @@ interface ContractDetailRij extends Record<string, unknown> {
   notice_period_days: number | null;
   warning_days_before: number;
   auto_renews: string | null;
+  contract_type: string | null;
+  dpa_aanwezig: boolean | null;
+  business_risk_tier_code: string | null;
 }
 
 function alsTekst(waarde: Date | string): string {
@@ -166,6 +184,7 @@ export class ContractService {
                      c.vendor_contact_id, c.owner_user_id, c.status_code,
                      c.start_date, c.end_date, c.created_at,
                      c.notice_period_days, c.warning_days_before, c.auto_renews,
+                     c.contract_type, c.dpa_aanwezig, c.business_risk_tier_code,
                      vc.full_name AS vendor_contact_naam,
                      u.full_name AS owner_naam
                 FROM clm.contract c
@@ -190,6 +209,9 @@ export class ContractService {
           noticePeriodDays: r.notice_period_days,
           warningDaysBefore: r.warning_days_before,
           autoRenews: r.auto_renews,
+          contractType: r.contract_type,
+          dpaAanwezig: r.dpa_aanwezig,
+          businessRiskTierCode: r.business_risk_tier_code,
         }));
       },
       'medewerker',
@@ -217,6 +239,7 @@ export class ContractService {
                      c.vendor_contact_id, c.owner_user_id, c.status_code,
                      c.value_eur, c.start_date, c.end_date, c.created_at,
                      c.notice_period_days, c.warning_days_before, c.auto_renews,
+                     c.contract_type, c.dpa_aanwezig, c.business_risk_tier_code,
                      vc.full_name AS vendor_contact_naam,
                      u.full_name AS owner_naam,
                      v.name AS vendor_naam
@@ -246,6 +269,9 @@ export class ContractService {
           noticePeriodDays: r.notice_period_days,
           warningDaysBefore: r.warning_days_before,
           autoRenews: r.auto_renews,
+          contractType: r.contract_type,
+          dpaAanwezig: r.dpa_aanwezig,
+          businessRiskTierCode: r.business_risk_tier_code,
         }));
       },
       'medewerker',
@@ -280,7 +306,8 @@ export class ContractService {
                 (tenant_id, vendor_id, name, contract_number,
                  vendor_contact_id, owner_user_id, status_code, value_eur,
                  start_date, end_date, note,
-                 notice_period_days, warning_days_before, auto_renews)
+                 notice_period_days, warning_days_before, auto_renews,
+                 contract_type, dpa_aanwezig, business_risk_tier_code)
               VALUES (${tenantId}, ${vendorId}, ${invoer.name.trim()},
                       ${leegIsNull(invoer.contractNumber)},
                       ${invoer.vendorContactId ?? null},
@@ -292,7 +319,10 @@ export class ContractService {
                       ${leegIsNull(invoer.note)},
                       ${invoer.noticePeriodDays ?? null},
                       ${invoer.warningDaysBefore ?? 90},
-                      ${invoer.autoRenews ?? null})
+                      ${invoer.autoRenews ?? null},
+                      ${leegIsNull(invoer.contractType)},
+                      ${invoer.dpaAanwezig ?? null},
+                      ${leegIsNull(invoer.businessRiskTierCode)})
               RETURNING contract_id`,
         );
 
@@ -381,6 +411,19 @@ export class ContractService {
         }
         if (wijziging.autoRenews !== undefined) {
           zetten.push(sql`auto_renews = ${wijziging.autoRenews}`);
+        }
+        if (wijziging.contractType !== undefined) {
+          zetten.push(
+            sql`contract_type = ${leegIsNull(wijziging.contractType)}`,
+          );
+        }
+        if (wijziging.dpaAanwezig !== undefined) {
+          zetten.push(sql`dpa_aanwezig = ${wijziging.dpaAanwezig}`);
+        }
+        if (wijziging.businessRiskTierCode !== undefined) {
+          zetten.push(
+            sql`business_risk_tier_code = ${leegIsNull(wijziging.businessRiskTierCode)}`,
+          );
         }
 
         if (zetten.length > 0) {
@@ -571,6 +614,7 @@ export class ContractService {
                  c.vendor_contact_id, c.owner_user_id, c.status_code,
                  c.value_eur, c.start_date, c.end_date, c.note,
                  c.notice_period_days, c.warning_days_before, c.auto_renews,
+                 c.contract_type, c.dpa_aanwezig, c.business_risk_tier_code,
                  c.created_at, c.updated_at,
                  vc.full_name AS vendor_contact_naam,
                  u.full_name AS owner_naam
@@ -607,6 +651,9 @@ export class ContractService {
       noticePeriodDays: rij.notice_period_days,
       warningDaysBefore: rij.warning_days_before,
       autoRenews: rij.auto_renews,
+      contractType: rij.contract_type,
+      dpaAanwezig: rij.dpa_aanwezig,
+      businessRiskTierCode: rij.business_risk_tier_code,
     };
   }
 }

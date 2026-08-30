@@ -52,6 +52,8 @@ export interface NieuweVendor {
   city?: string | null;
   country?: string | null;
   website?: string | null;
+  categoryCode?: string | null;
+  coupaSupplierNumber?: string | null;
   contact?: {
     fullName: string;
     email?: string | null;
@@ -98,6 +100,7 @@ export interface VendorDetail {
   categoryCode: string | null;
   businessCriticalityCode: string | null;
   complianceStatusCode: string | null;
+  coupaSupplierNumber: string | null;
   createdAt: string;
   updatedAt: string | null;
   contacten: Contactpersoon[];
@@ -128,6 +131,7 @@ export interface VendorWijziging {
   categoryCode?: string | null;
   businessCriticalityCode?: string | null;
   complianceStatusCode?: string | null;
+  coupaSupplierNumber?: string | null;
 }
 
 /** Wat er nodig is om een contactpersoon toe te voegen of te wijzigen. */
@@ -168,6 +172,7 @@ interface VendorDetailRij extends Record<string, unknown> {
   category_code: string | null;
   business_criticality_code: string | null;
   compliance_status_code: string | null;
+  coupa_supplier_number: string | null;
   created_at: Date | string;
   updated_at: Date | string | null;
 }
@@ -319,13 +324,17 @@ export class VendorService {
           vendor_id: string;
           name: string;
         }>(
-          sql`INSERT INTO clm.vendor (tenant_id, name, kvk_number, city, country, website)
+          sql`INSERT INTO clm.vendor
+                (tenant_id, name, kvk_number, city, country, website,
+                 category_code, coupa_supplier_number)
             VALUES (${tenantId},
                     ${invoer.name.trim()},
                     ${kvk},
                     ${leegIsNull(invoer.city)},
                     ${leegIsNull(invoer.country) ?? 'NL'},
-                    ${leegIsNull(invoer.website)})
+                    ${leegIsNull(invoer.website)},
+                    ${leegIsNull(invoer.categoryCode)},
+                    ${leegIsNull(invoer.coupaSupplierNumber)})
             RETURNING vendor_id, name`,
         );
 
@@ -478,6 +487,11 @@ export class VendorService {
         if (wijziging.complianceStatusCode !== undefined) {
           zetten.push(
             sql`compliance_status_code = ${leegIsNull(wijziging.complianceStatusCode)}`,
+          );
+        }
+        if (wijziging.coupaSupplierNumber !== undefined) {
+          zetten.push(
+            sql`coupa_supplier_number = ${leegIsNull(wijziging.coupaSupplierNumber)}`,
           );
         }
 
@@ -765,7 +779,8 @@ export class VendorService {
       sql`SELECT vendor_id, name, kvk_number, vestigingsnummer,
                  statutory_name, city, country, website,
                  category_code, business_criticality_code,
-                 compliance_status_code, created_at, updated_at
+                 compliance_status_code, coupa_supplier_number,
+                 created_at, updated_at
             FROM clm.vendor
            WHERE vendor_id = ${vendorId} AND deleted_at IS NULL`,
     );
@@ -802,6 +817,7 @@ export class VendorService {
       categoryCode: rij.category_code,
       businessCriticalityCode: rij.business_criticality_code,
       complianceStatusCode: rij.compliance_status_code,
+      coupaSupplierNumber: rij.coupa_supplier_number,
       createdAt: alsTekst(rij.created_at),
       updatedAt: alsTekstOfNull(rij.updated_at),
       contacten: contacten.rows.map((c) => ({

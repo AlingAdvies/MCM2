@@ -229,6 +229,35 @@ describe('Vendorroutes (e2e)', () => {
 
       expect(alsAangemaakt(aanmaak.body).contactId).toBeNull();
     });
+
+    // Gevonden 2026-08-30: categoryCode en coupaSupplierNumber stonden al op
+    // het aanmaakformulier, maar leesNieuweVendor() las ze niet uit de body en
+    // de INSERT nam ze niet mee. Wijzigen achteraf (PATCH) werkte voor
+    // categoryCode al wel — alleen het aanmaakpad was stuk. Teruglezen via
+    // GET, niet via de POST-respons: AanmaakAntwoord heeft alleen vendorId/
+    // name/contactId.
+    it('slaat categoryCode en coupaSupplierNumber op bij aanmaken', async () => {
+      const aanmaak = await request(server)
+        .post('/vendors')
+        .set('Cookie', cookieA)
+        .send({
+          name: 'Met Coupa-koppeling B.V.',
+          coupaSupplierNumber: 'SUP-00042',
+        })
+        .expect(201);
+
+      const vendorId = alsAangemaakt(aanmaak.body).vendorId;
+
+      const detail = await request(server)
+        .get(`/vendors/${vendorId}`)
+        .set('Cookie', cookieA)
+        .expect(200);
+
+      expect(
+        (detail.body as { coupaSupplierNumber: string | null })
+          .coupaSupplierNumber,
+      ).toBe('SUP-00042');
+    });
   });
 
   describe('de tenantgrens houdt stand', () => {

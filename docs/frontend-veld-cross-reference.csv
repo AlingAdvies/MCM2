@@ -1,0 +1,43 @@
+Scherm;Frontend-veldnaam;Databaseveld;Omschrijving;Transdev-veld (gap-analyse rev1)
+Leveranciers > Nieuwe leverancier (formulier);Naam;vendor.name;Naam van de leverancier. Verplicht.;Supplier Name
+Leveranciers > Nieuwe leverancier (formulier);KvK-nummer;vendor.kvk_number;Acht cijfers, volgens de hint in het formulier.;(geen)
+Leveranciers > Nieuwe leverancier (formulier);Plaats;vendor.city;(geen toelichting in de code);(geen)
+Leveranciers > Nieuwe leverancier (formulier);Website;vendor.website;(geen toelichting in de code);(geen)
+Leveranciers > Nieuwe leverancier (formulier);Categorie;vendor.category_code;Tenant-eigen categorielijst sinds migratie 0034 (voorheen platform-breed), beheerd via het Vendor-categorieën-scherm.;Classificatie
+Leveranciers > Nieuwe leverancier (formulier);Coupa-leveranciersnummer;vendor.coupa_supplier_number;Optioneel — matchsleutel tussen Coupa en MCM2 voor de (nog te bouwen) uploadtool #190.;Supplier Number (Coupa-interne sleutel — "de matching sleutel tussen Coupa en MCM2", toelichting eigenaar)
+Leveranciers > Nieuwe leverancier (formulier);Naam contactpersoon;vendor_contact.full_name;Verplichte eerste contactpersoon, nodig om een vragenlijst te kunnen versturen.;Contact Persoon / Contact Persoon Email
+Leveranciers > Nieuwe leverancier (formulier);E-mailadres (contactpersoon);vendor_contact.email;Idem, e-mailadres van dezelfde contactpersoon.;Contact Persoon / Contact Persoon Email
+Leveranciers > Detail > Stamgegevens;Naam;vendor.name;Zelfde veld als in het aanmaakformulier, hier bewerkbaar.;Supplier Name
+Leveranciers > Detail > Stamgegevens;Statutaire naam;vendor.statutory_name;Geen apart formulierveld in het aanmaakformulier — alleen hier bewerkbaar.;(geen)
+Leveranciers > Detail > Stamgegevens;KvK-nummer;vendor.kvk_number;Acht cijfers.;(geen)
+Leveranciers > Detail > Stamgegevens;Leveranciersnummer;vendor.vestigingsnummer;"Hint in de UI: ""voor matching met uw ERP-systeem"". Let op: het frontend-label ""Leveranciersnummer"" wijst naar de kolom vestigingsnummer, niet naar een apart leveranciersnummer-veld.";(geen — mogelijk gerelateerd aan Supplier Account #, maar die is expliciet "niet overnemen" in de gap-analyse)
+Leveranciers > Detail > Stamgegevens;Coupa-leveranciersnummer;vendor.coupa_supplier_number;Zelfde veld als in het aanmaakformulier.;Supplier Number
+Leveranciers > Detail > Stamgegevens;Plaats;vendor.city;;(geen)
+Leveranciers > Detail > Stamgegevens;Land;vendor.country;Database-default 'NL' als er niets wordt ingevuld. Geen apart veld in het aanmaakformulier.;(geen)
+Leveranciers > Detail > Stamgegevens;Website;vendor.website;;(geen)
+Leveranciers > Detail > Classificatiebadges (badge-strip);Compliancestatus (badge);vendor.compliance_status_code;Badge toont het label of "Geen compliancestatus". Klik opent hetzelfde bewerkveld als hieronder, of springt door naar de Contracten-sectie als onComplianceKlik is meegegeven.;ISO 27001 (gedeeltelijk — "past onder de bestaande compliance-status, maar die is nu één vrij veld", toelichting gap-analyse)
+Leveranciers > Detail > Classificatiebadges (bewerkveld);Compliancestatus;vendor.compliance_status_code;Bewerkveld-label is hier letterlijk "Compliancestatus" (badge en bewerkveld gebruiken dezelfde tekst).;ISO 27001 (zie hierboven)
+Leveranciers > Detail > Classificatiebadges (badge-strip);Cyber criticaliteit: [waarde] (badge);vendor.business_criticality_code;"Badge-tekst is samengesteld (""Cyber criticaliteit: "" + label). LET OP: het bewerkveld eronder heeft een ANDER label (""Bedrijfskritiek"") voor dezelfde kolom — inconsistentie in de UI zelf, niet in deze tabel.";Leverancier risico profiel
+Leveranciers > Detail > Classificatiebadges (bewerkveld);Bedrijfskritiek;vendor.business_criticality_code;Zie de opmerking hierboven — zelfde kolom als de "Cyber criticaliteit"-badge, ander label in het bewerkveld.;Leverancier risico profiel
+Leveranciers > Detail > Classificatiebadges (badge-strip + bewerkveld);Categorie;vendor.category_code;Zelfde veld als in het aanmaakformulier, hier ook los bewerkbaar via de badge.;Classificatie
+Leveranciers > Detail > Classificatiebadges (bewerkveld);Compliance-thema's;vendor_compliance_thema (koppeltabel, meerkeuze via zetComplianceThemas);Meerkeuzeveld, geen enkelvoudige kolom — een leverancier kan meerdere compliance-thema's hebben.;(geen directe match — mogelijk gerelateerd aan IB&P/MSR, geen 1-op-1)
+Leveranciers > Detail > Contactpersonen;Naam;vendor_contact.full_name;;Contact Persoon / Contact Persoon Email
+Leveranciers > Detail > Contactpersonen;E-mailadres;vendor_contact.email;;Contact Persoon / Contact Persoon Email
+Leveranciers > Detail > Contactpersonen;Functie;vendor_contact.job_title;;(geen)
+Leveranciers > Detail > Contactpersonen;Notitie;vendor_contact.role_description;"LET OP: het frontend-label ""Notitie"" wijst naar de kolom role_description, niet naar een apart notitieveld.";(geen)
+Leveranciers > Detail > Contactpersonen;Primaire contactpersoon;vendor_contact.is_primary;Checkbox. Toelichting in de UI: "krijgt de vragenlijst toegestuurd".;(geen)
+Leveranciers > Detail > Contracten (lijst + formulier);Naam;contract.name;;Contract Name
+Leveranciers > Detail > Contracten (lijst + formulier);Contractnummer;contract.contract_number;;Contract #
+Leveranciers > Detail > Contracten (lijst + formulier);Status;contract.status_code;Vaste keuzes in de UI: Actief/Verlopen/Opgezegd. Berekend, niet losstaand van de einddatum — zie contract.service.ts.;(geen directe match — Coupa's eigen "Status" is expliciet "niet overnemen", Coupa-workflowstatus)
+Leveranciers > Detail > Contracten (lijst + formulier);Begindatum;contract.start_date;;Starts
+Leveranciers > Detail > Contracten (lijst + formulier);Einddatum;contract.end_date;Bepaalt ook de "binnen 90 dagen"-indicator (#172).;Expires
+Leveranciers > Detail > Contracten (lijst + formulier);Waarde (EUR);contract.value_eur;;(geen directe match)
+Leveranciers > Detail > Contracten (formulier, tenzij verborgen);Contactpersoon;contract.vendor_contact_id;Dropdown met de contactpersonen van de betreffende leverancier. NULL betekent: gebruik de is_primary-contactpersoon van de vendor (applicatielogica, geen database-default).;Contact Persoon / Contact Persoon Email
+Leveranciers > Detail > Contracten (formulier);Contractbeheerder;contract.owner_user_id;Dropdown met tenant-gebruikers. Sinds 29-08 alleen gebruikers met een actief tenant_membership (zie mcm2-membership-filter-ontbreekt-op-vijf-plekken).;(geen directe match)
+Leveranciers > Detail > Contracten (formulier);Notitie;contract.note;Vrij tekstveld (textarea). LET OP: het label is hier "Notitie", niet "Opmerking" of "Remarks".;Remarks (deels — "logboek van uitvraag-updates", toelichting gap-analyse) / Description (deels, zie gap-analyse toelichting: "kan op note of eigen veld")
+Leveranciers > Detail > Contracten (formulier);Opzegtermijn (dagen);contract.notice_period_days;Opzegtermijn in dagen vóór end_date. Nullable. Gebouwd na de gap-analyse (migratie 0029).;Term of notice (date) / Term of notice (months)
+Leveranciers > Detail > Contracten (formulier);Waarschuwingstermijn (dagen);contract.warning_days_before;Hoeveel dagen vóór de referentiedatum gewaarschuwd wordt. Default 90. Gebouwd na de gap-analyse (migratie 0029).;(geen directe match — nieuw veld, niet in de oorspronkelijke Coupa-kolommen)
+Leveranciers > Detail > Contracten (formulier);Verlengt automatisch;contract.auto_renews;Ja/Nee/Onbekend, default Onbekend. Gebouwd na de gap-analyse (migratie 0029).;Automatic Renewal
+Leveranciers > Detail > Contracten (formulier, Classificatie-sectie);Contracttype;contract.contract_type;"Vrije tekst, hint: ""bijv. Raamovereenkomst"". Placeholder-veld (#187) tot MCM2 breder contractmanagement wordt.";Contract type
+Leveranciers > Detail > Contracten (formulier, Classificatie-sectie);Business-risk-tier;contract.business_risk_tier_code;Transdev's enterprise-brede business-risk-classificatie per contract (#188).;Contract classification
+Leveranciers > Detail > Contracten (formulier, Cybersecurity & IT-compliance-sectie);DPA aanwezig;contract.dpa_aanwezig;"Tri-state (Ja/Nee/onbekend — NULL bij aanmaken). Toelichting in de UI: ""alleen relevant voor cybersecurity/IT-contracten"". Het onderliggende document zelf is nog niet gebouwd — alleen de vlag.";DPA
