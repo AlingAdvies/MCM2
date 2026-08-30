@@ -451,17 +451,24 @@ async function main() {
   // ── 9-10. Frontend ──────────────────────────────────────────────────────
   kop('Frontend-image draait en serveert het portaal');
 
-  const home = await http(FRONTEND);
+  // /beheer, niet /: sinds 2026-08-29 stuurt / bewust door (307) naar
+  // /beheer, het scherm waarmee de app opent (de oude placeholderpagina met
+  // de "Live backend"-tekst bestaat niet meer).
+  const home = await http(`${FRONTEND}/beheer`);
   if (home.status === 200) {
     ok('startpagina antwoordt 200');
   } else {
     fout(`startpagina gaf ${home.status}`);
   }
 
-  if (home.tekst.includes('Live backend')) {
+  // beheer/page.tsx toont data-testid="mock-melding" alléén als
+  // gebruiktMockData waar is — de omgekeerde bewijsvorm van de oude
+  // "Live backend"-tekst, maar hetzelfde doel: aantonen dat er geen
+  // NEXT_PUBLIC_API_URL ontbreekt.
+  if (!home.tekst.includes('data-testid="mock-melding"')) {
     ok('frontend draait op de echte backend, niet op mock data');
   } else {
-    fout('frontend draait op mock data — NEXT_PUBLIC_MOCK_DATA staat aan');
+    fout('frontend draait op mock data — NEXT_PUBLIC_API_URL ontbreekt');
   }
 
   // Het doorgeefluik zelf (Issue #51). De controle hierboven bewijst alleen dat

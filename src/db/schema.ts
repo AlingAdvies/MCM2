@@ -86,6 +86,10 @@ export const tenant = clm.table(
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
+    // Migratie 0033. Soft-delete: NULL = actief. Een gedeactiveerde tenant
+    // kan niet meer inloggen (sessie_aanmaken, sessie_wisselen) en verdwijnt
+    // uit clm.tenant_register. Geen reactiveren-pad.
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
   },
   (t) => [
     uniqueIndex('tenant_name_key').on(t.name),
@@ -114,6 +118,10 @@ export const user = clm.table(
     // Migratie 0023. Tot wanneer een oid aan deze rij gekoppeld mag worden bij
     // de eerste login. NULL is de veilige stand: niet koppelbaar.
     koppelbaarTot: timestamp('koppelbaar_tot', { withTimezone: true }),
+    // Migratie 0024. SHA-256 van het uitnodigingstoken, hex. NULL betekent:
+    // geen openstaande uitnodiging. Wordt gewist zodra de koppeling gelukt
+    // is — een token werkt precies één keer.
+    uitnodigingHash: text('uitnodiging_hash'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -124,6 +132,9 @@ export const user = clm.table(
     uniqueIndex('user_external_subject_key')
       .on(t.externalSubject)
       .where(sql`${t.externalSubject} IS NOT NULL`),
+    uniqueIndex('user_uitnodiging_hash_key')
+      .on(t.uitnodigingHash)
+      .where(sql`${t.uitnodigingHash} IS NOT NULL`),
   ],
 );
 
@@ -446,6 +457,18 @@ export const contract = clm.table(
       () => businessRiskTier.code,
       { onDelete: 'set null' },
     ),
+    // Migratie 0029. Opzegtermijn in dagen vóór end_date. Nullable: niet elk
+    // contract heeft dit bekend.
+    noticePeriodDays: integer('notice_period_days'),
+    // Migratie 0029. Hoeveel dagen vóór de referentiedatum (opzegdatum, of
+    // end_date zonder opzegtermijn) gewaarschuwd wordt. Instelbaar per
+    // contract, default 90.
+    warningDaysBefore: integer('warning_days_before').notNull().default(90),
+    // Migratie 0029. ja/nee/onbekend — door de contractbeheerder zelf
+    // vastgesteld, geen afgeleide waarde. Default onbekend (NULL) bij
+    // aanmaken. CHECK in de database, bewust geen ref-tabel (drie vaste,
+    // niet-tenant-configureerbare waarden).
+    autoRenews: text('auto_renews'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -910,6 +933,10 @@ export const responseNote = clm.table(
       .defaultNow(),
     // Intrekken kan wel, wissen niet — net als bij een oordeel.
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    // Migratie 0030. werk: losse werkaantekening. vastgesteld: een na overleg
+    // met de leverancier overeengekomen wijziging, vastgelegd naast het
+    // onaangetaste oorspronkelijke antwoord. CHECK in de database.
+    soort: text('soort').notNull().default('werk'),
   },
   (t) => [
     index('response_note_tenant_id_idx').on(t.tenantId),
