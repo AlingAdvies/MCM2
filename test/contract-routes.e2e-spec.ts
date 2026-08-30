@@ -403,6 +403,111 @@ describe('Contractroutes (e2e)', () => {
     expect((gewijzigd.body as { autoRenews: string }).autoRenews).toBe('nee');
   });
 
+  // Gevonden 2026-08-30: contractType, dpaAanwezig en businessRiskTierCode
+  // stonden sinds de Coupa-schema-uitbreiding (#187-#189) al op het
+  // contractformulier en in de database, maar contract.service.ts las, sloeg
+  // op noch gaf ze terug — in geen enkele van de drie routes. Alles wat een
+  // gebruiker op die velden invulde ging stilzwijgend verloren. Geen
+  // bestaande test dekte dit.
+  it('admin kan contractType, dpaAanwezig en businessRiskTierCode meegeven bij aanmaken', async () => {
+    const respons = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({
+        name: 'Contract met Coupa-classificatie',
+        contractType: 'Raamovereenkomst',
+        dpaAanwezig: true,
+        businessRiskTierCode: 'tier_1',
+      });
+
+    expect(respons.status).toBe(201);
+    expect((respons.body as { contractType: string }).contractType).toBe(
+      'Raamovereenkomst',
+    );
+    expect((respons.body as { dpaAanwezig: boolean }).dpaAanwezig).toBe(true);
+    expect(
+      (respons.body as { businessRiskTierCode: string }).businessRiskTierCode,
+    ).toBe('tier_1');
+  });
+
+  it('contractType, dpaAanwezig en businessRiskTierCode zijn null wanneer niet meegegeven', async () => {
+    const respons = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Contract zonder classificatie' });
+
+    expect(respons.status).toBe(201);
+    expect(
+      (respons.body as { contractType: string | null }).contractType,
+    ).toBeNull();
+    expect(
+      (respons.body as { dpaAanwezig: boolean | null }).dpaAanwezig,
+    ).toBeNull();
+    expect(
+      (
+        respons.body as {
+          businessRiskTierCode: string | null;
+        }
+      ).businessRiskTierCode,
+    ).toBeNull();
+  });
+
+  it('admin kan contractType, dpaAanwezig en businessRiskTierCode wijzigen op een bestaand contract', async () => {
+    const aangemaakt = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Wijzigtest classificatie' });
+
+    const contractId = alsContract(aangemaakt.body).contractId;
+
+    const gewijzigd = await request(server)
+      .patch(`/vendors/${vendorId}/contracts/${contractId}`)
+      .set('Cookie', adminCookie)
+      .send({
+        contractType: 'Dienstenovereenkomst',
+        dpaAanwezig: false,
+        businessRiskTierCode: 'tier_2',
+      });
+
+    expect(gewijzigd.status).toBe(200);
+    expect((gewijzigd.body as { contractType: string }).contractType).toBe(
+      'Dienstenovereenkomst',
+    );
+    expect((gewijzigd.body as { dpaAanwezig: boolean }).dpaAanwezig).toBe(
+      false,
+    );
+    expect(
+      (gewijzigd.body as { businessRiskTierCode: string }).businessRiskTierCode,
+    ).toBe('tier_2');
+
+    // Teruglezen via GET, niet alleen de PATCH-respons vertrouwen — zelfde
+    // discipline als "vertrouw geen enkele geruststellende melding".
+    const opgehaald = await request(server)
+      .get(`/vendors/${vendorId}/contracts/${contractId}`)
+      .set('Cookie', adminCookie);
+
+    expect(opgehaald.status).toBe(200);
+    expect((opgehaald.body as { contractType: string }).contractType).toBe(
+      'Dienstenovereenkomst',
+    );
+    expect((opgehaald.body as { dpaAanwezig: boolean }).dpaAanwezig).toBe(
+      false,
+    );
+    expect(
+      (opgehaald.body as { businessRiskTierCode: string }).businessRiskTierCode,
+    ).toBe('tier_2');
+  });
+
+  it('weigert een niet-boolean dpaAanwezig', async () => {
+    const respons = await request(server)
+      .post(`/vendors/${vendorId}/contracts`)
+      .set('Cookie', adminCookie)
+      .send({ name: 'Hosting', dpaAanwezig: 'ja' });
+
+    expect(respons.status).toBe(400);
+    expect((respons.body as { veld: string }).veld).toBe('DPA aanwezig');
+  });
+
   it('koppelt en ontkoppelt vragenlijst-templates aan een contract', async () => {
     await client.query('BEGIN');
     await client.query(`SET LOCAL app.current_tenant_id = '${tenant}'`);

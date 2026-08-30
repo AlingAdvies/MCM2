@@ -158,6 +158,23 @@ function optioneelAutoRenews(waarde: unknown, veld: string): string | null {
   return waarde;
 }
 
+/**
+ * Tri-state: null = onbekend, niet "nee" (#189). Geen tekst-encodering zoals
+ * autoRenews — de kolom is een echte boolean, en de frontend stuurt ook een
+ * echte boolean of null, nooit de string 'ja'/'nee'.
+ */
+function optioneelBoolean(waarde: unknown, veld: string): boolean | null {
+  if (waarde === undefined || waarde === null) {
+    return null;
+  }
+
+  if (typeof waarde !== 'boolean') {
+    throw new InvoerFout(veld, `${veld} moet ja of nee zijn.`);
+  }
+
+  return waarde;
+}
+
 function controleerDatumVolgorde(
   startDate: string | null,
   endDate: string | null,
@@ -209,6 +226,13 @@ export function leesNieuwContract(body: unknown): NieuwContract {
     // waarschuwingstermijn, nooit "geen".
     warningDaysBefore: warningDaysBefore ?? 90,
     autoRenews: optioneelAutoRenews(ruw.autoRenews, 'Verlengt automatisch'),
+    contractType: optioneleTekst(ruw.contractType, 'Contracttype', MAX_KORT),
+    dpaAanwezig: optioneelBoolean(ruw.dpaAanwezig, 'DPA aanwezig'),
+    businessRiskTierCode: optioneleTekst(
+      ruw.businessRiskTierCode,
+      'Business-risk-tier',
+      MAX_KORT,
+    ),
   };
 }
 
@@ -274,6 +298,23 @@ export function leesContractWijziging(body: unknown): ContractWijziging {
     wijziging.autoRenews = optioneelAutoRenews(
       ruw.autoRenews,
       'Verlengt automatisch',
+    );
+  }
+  if ('contractType' in ruw) {
+    wijziging.contractType = optioneleTekst(
+      ruw.contractType,
+      'Contracttype',
+      MAX_KORT,
+    );
+  }
+  if ('dpaAanwezig' in ruw) {
+    wijziging.dpaAanwezig = optioneelBoolean(ruw.dpaAanwezig, 'DPA aanwezig');
+  }
+  if ('businessRiskTierCode' in ruw) {
+    wijziging.businessRiskTierCode = optioneleTekst(
+      ruw.businessRiskTierCode,
+      'Business-risk-tier',
+      MAX_KORT,
     );
   }
 

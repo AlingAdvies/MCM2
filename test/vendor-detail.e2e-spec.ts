@@ -48,6 +48,7 @@ interface DetailAntwoord {
   city: string | null;
   website: string | null;
   categoryCode: string | null;
+  coupaSupplierNumber: string | null;
   updatedAt: string | null;
   contacten: ContactAntwoord[];
 }
@@ -291,6 +292,29 @@ describe('Vendordetail en contactpersonen (e2e)', () => {
         .set('Cookie', adminCookie)
         .send({ categoryCode: 'bestaat-niet' })
         .expect(400);
+    });
+
+    // Gevonden 2026-08-30: coupaSupplierNumber ontbrak volledig in
+    // vendor.service.ts — niet in VendorDetail, niet in VendorWijziging, niet
+    // in de UPDATE-statement, niet in de detail-SELECT. Een wijziging op dit
+    // veld werd stilzwijgend genegeerd.
+    it('wijzigt en leest coupaSupplierNumber', async () => {
+      const gewijzigd = await request(server)
+        .patch(`/vendors/${vendorId}`)
+        .set('Cookie', adminCookie)
+        .send({ coupaSupplierNumber: 'SUP-00099' })
+        .expect(200);
+
+      expect(alsDetail(gewijzigd.body).coupaSupplierNumber).toBe('SUP-00099');
+
+      // Teruglezen via een aparte GET — niet alleen de PATCH-respons
+      // vertrouwen.
+      const opgehaald = await request(server)
+        .get(`/vendors/${vendorId}`)
+        .set('Cookie', adminCookie)
+        .expect(200);
+
+      expect(alsDetail(opgehaald.body).coupaSupplierNumber).toBe('SUP-00099');
     });
 
     it('geeft 404 voor een leverancier van een andere tenant', async () => {

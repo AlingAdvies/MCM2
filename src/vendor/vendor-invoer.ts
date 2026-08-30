@@ -180,6 +180,12 @@ export function leesNieuweVendor(body: unknown): NieuweVendor {
     city: optioneleTekst(ruw.city, 'Plaats', MAX_KORT),
     country: optioneleTekst(ruw.country, 'Land', MAX_KORT),
     website: optioneleTekst(ruw.website, 'Website', MAX_URL),
+    categoryCode: optioneleTekst(ruw.categoryCode, 'Categorie', MAX_KORT),
+    coupaSupplierNumber: optioneleTekst(
+      ruw.coupaSupplierNumber,
+      'Coupa-leveranciersnummer',
+      MAX_KORT,
+    ),
   };
 
   const contact = ruw.contact;
@@ -288,6 +294,13 @@ export function leesVendorWijziging(body: unknown): VendorWijziging {
     wijziging.complianceStatusCode = optioneleTekst(
       ruw.complianceStatusCode,
       'Compliancestatus',
+      MAX_KORT,
+    );
+  }
+  if ('coupaSupplierNumber' in ruw) {
+    wijziging.coupaSupplierNumber = optioneleTekst(
+      ruw.coupaSupplierNumber,
+      'Coupa-leveranciersnummer',
       MAX_KORT,
     );
   }
