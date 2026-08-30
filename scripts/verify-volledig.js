@@ -124,9 +124,19 @@ function wachtOpStack(maxSeconden = 120) {
       ['-s', '-o', isWindows ? 'NUL' : '/dev/null', '-w', '%{http_code}', 'http://localhost:5001/health'],
       { stil: true },
     );
+    // /beheer, niet /: sinds 2026-08-29 stuurt / bewust door (307) naar
+    // /beheer, het scherm waarmee de app opent. Zelfde correctie als eerder
+    // op de frontend-CI-check, deploy.js's rookproef en de AWS ALB.
     const web = draai(
       'curl',
-      ['-s', '-o', isWindows ? 'NUL' : '/dev/null', '-w', '%{http_code}', 'http://localhost:3000/'],
+      [
+        '-s',
+        '-o',
+        isWindows ? 'NUL' : '/dev/null',
+        '-w',
+        '%{http_code}',
+        'http://localhost:3000/beheer',
+      ],
       { stil: true },
     );
 

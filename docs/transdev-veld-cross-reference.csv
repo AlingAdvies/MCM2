@@ -1,0 +1,26 @@
+Transdev-veldnaam (gap-analyse);Omschrijving;Databaseveld;Frontend-veldnaam
+Ondersteuning kern activiteiten;Los risicocriterium, geen equivalent. Vraagt eigen veld of hergebruik van businessCriticality?;(nog niet gebouwd);(nog niet gebouwd)
+Data gevoeligheid;Geen exacte match — riskScore is numeriek, dit is een schaal (Geen/Beperkt/...). Check of dit hetzelfde concept is.;vendor.risk_score;(geen — geen formulierveld in de frontend)
+Leverancier risico profiel;Ligt dicht bij de bestaande criticality-codelijst — waarden vergelijken vóór mapping.;vendor.business_criticality_code;Cyber criticaliteit
+Hosting locatie;Geen veld op vendor of contract. NIS2-relevant (dataresidentie).;(nog niet gebouwd);(nog niet gebouwd)
+Classificatie;"Naam suggereert overlap — waarden in de sample (High/Medium/Low) zijn geen categorie maar impact. Mogelijk toch nieuw veld. Toelichting eigenaar: dit is de Transdev-interne classificatie, conclusie van de IT risk analyse uit de rijen hierboven.";vendor.category_code;Categorie
+IB&P;Informatiebeveiliging & Privacy-classificatie (High/Medium/Low). Kernveld voor NIS2, nog geen plek.;(nog niet gebouwd);(nog niet gebouwd)
+MSR;Minimum Security Requirements ondertekend (Ja/Nee) — leverancierscompliance, geen equivalent.;(nog niet gebouwd);(nog niet gebouwd)
+ISO 27001;Past onder de bestaande compliance-status, maar die is nu één vrij veld — dit is één specifiek certificaat ernaast.;vendor.compliance_status_code;Compliancestatus
+Contract Name;Directe match.;contract.name;Naam
+Contract #;Directe match.;contract.contract_number;Contractnummer
+Supplier Name;Sleutel voor matching/aanmaken van de vendor bij import.;vendor.name;Naam
+Starts;Directe match.;contract.start_date;Begindatum
+Expires;Directe match. Bepaalt ook de "binnen 90 dagen"-indicator (#172).;contract.end_date;Einddatum
+Contact Persoon / Contact Persoon Email;Vraagt matching-logica: bestaande vendorContact vinden of nieuwe aanmaken bij import. Kan contactpersoon zijn op vendor-niveau of op contract-niveau.;contract.vendor_contact_id;Contactpersoon
+Description;Vrije tekst, vaak inhoudelijk (zie sample: scope-omschrijvingen). Kan op note of eigen veld. Toelichting eigenaar: beschrijvend, contracttype en omschrijving.;(nog niet gebouwd — mogelijk samen met Remarks in contract.note);(geen eigen veld — zie Notitie)
+Remarks;In de sample: logboek van uitvraag-updates. Eén vrij tekstveld bestaat al — past inhoud of is dit een apart historie-veld? Toelichting eigenaar: opmerking.;contract.note;Notitie
+Term of notice (date) / Term of notice (months);Opzegtermijn — inmiddels gebouwd na de gap-analyse (migratie 0029).;contract.notice_period_days;Opzegtermijn (dagen)
+(afgeleid van Term of notice) waarschuwingstermijn;Niet in de oorspronkelijke Coupa-kolom, bijgebouwd samen met de opzegtermijn.;contract.warning_days_before;Waarschuwingstermijn (dagen)
+Automatic Renewal;Ja/Nee — mogelijk relevant, maar overlapt met opzegtermijn-spec. Inmiddels gebouwd (migratie 0029) als apart drieslag-veld (ja/nee/onbekend).;contract.auto_renews;Verlengt automatisch
+Pilot Survey Proces;Ja/Nee-vlag of contract al in een surveyproces zit — koppeltabel bestaat, deze vlag niet.;contract_survey_template (koppeltabel, geen losse vlag);(nog niet gebouwd als los veld)
+Compliance Docu via web verkrijgbaar;URL naar leverancierscertificeringen (trust center e.d.). Nuttig veld, nog geen plek.;(nog niet gebouwd);(nog niet gebouwd)
+DPA;"Verwerkersovereenkomst-vlag — overlapt met ""Compliance Docu""/ISO-thema. Toelichting eigenaar: kan een geüpload document zijn, moet in de app terugvindbaar zijn.";contract.dpa_aanwezig (tri-state: onbekend/ja/nee — het onderliggende document zelf is nog niet gebouwd);DPA aanwezig
+Contract type;"Coupa-contractsoort (Raamovereenkomst/Dienstenovereenkomst). Toelichting eigenaar: is wel handig. Inmiddels gebouwd (#187) als vrij tekstveld, placeholder tot MCM2 breder contractmanagement wordt.";contract.contract_type;Contracttype
+Contract classification;"Coupa Tier 1/2/3 — overlapt met ""Leverancier risico profiel"". Inmiddels gebouwd (#188) als Transdev-brede business-risk-classificatie per contract.";contract.business_risk_tier_code;Business-risk-tier
+Commodity;Transdev-inkoopcategorie (ICT/HR/CAPEX). Toelichting eigenaar: akkoord, zie commentaar in de gap-analyse voor context.;(nog niet gebouwd);(nog niet gebouwd)

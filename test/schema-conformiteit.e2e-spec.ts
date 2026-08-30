@@ -379,6 +379,74 @@ describe('Schema-conformiteit (e2e)', () => {
     expect(ontbrekend).toEqual([]);
   });
 
+  it('heeft op elke tabel exact de kolommen die het schema verwacht', async () => {
+    // Bewaakt de andere kant van 2026-08-29's bevinding: een handgeschreven
+    // migratie kan de database prima wijzigen zonder dat schema.ts ooit
+    // wordt bijgewerkt (drizzle-kit generate is stuk, zie Issue #96) — de
+    // applicatie leest schema.ts namelijk nergens voor haar eigen queries
+    // (die schrijven kolomnamen rechtstreeks in SQL). Vier kolommen waren zo
+    // jarenlang onopgemerkt uit de pas gelopen: contract.notice_period_days/
+    // warning_days_before/auto_renews (migratie 0029), response_note.soort
+    // (0030), tenant.deleted_at (0033), user.uitnodiging_hash (0024).
+    //
+    // pg_attribute/pg_class/pg_namespace, niet information_schema.columns —
+    // zelfde reden als de DEFAULT-test hierboven: clm.sessie is voor de
+    // huidige rol soms wél, soms niet leesbaar via information_schema,
+    // afhankelijk van de rol waarmee dit script draait. pg_attribute toont
+    // de kolom onafhankelijk van GRANT's.
+    const { rows } = await client.query<{
+      volledige_naam: string;
+      column_name: string;
+    }>(
+      `SELECT n.nspname || '.' || c.relname AS volledige_naam,
+              a.attname                     AS column_name
+         FROM pg_attribute a
+         JOIN pg_class c     ON c.oid = a.attrelid
+         JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname IN ('clm', 'ref', 'audit')
+          AND c.relkind = 'r'
+          AND a.attnum > 0
+          AND NOT a.attisdropped`,
+    );
+
+    const kolommenInDbPerTabel = new Map<string, Set<string>>();
+    for (const r of rows) {
+      const set = kolommenInDbPerTabel.get(r.volledige_naam) ?? new Set();
+      set.add(r.column_name);
+      kolommenInDbPerTabel.set(r.volledige_naam, set);
+    }
+
+    const ontbrekendInSchema: string[] = [];
+    const ontbrekendInDb: string[] = [];
+
+    for (const tabel of verwachteTabellen) {
+      const kolommenInDb = kolommenInDbPerTabel.get(tabel.volledigeNaam);
+      // Een tabel die niet bestaat, is al gemeld door de test hierboven
+      // ("bevat elke tabel uit het schema ook daadwerkelijk in de
+      // database") — hier alleen kolomverschillen op tabellen die wél in
+      // beide voorkomen, anders dubbel gemeld.
+      if (!kolommenInDb) continue;
+
+      const kolommenInSchema = new Set(tabel.kolommen.map((k) => k.naam));
+
+      for (const kolom of kolommenInDb) {
+        if (!kolommenInSchema.has(kolom)) {
+          ontbrekendInSchema.push(`${tabel.volledigeNaam}.${kolom}`);
+        }
+      }
+      for (const kolom of kolommenInSchema) {
+        if (!kolommenInDb.has(kolom)) {
+          ontbrekendInDb.push(`${tabel.volledigeNaam}.${kolom}`);
+        }
+      }
+    }
+
+    expect({ ontbrekendInSchema, ontbrekendInDb }).toEqual({
+      ontbrekendInSchema: [],
+      ontbrekendInDb: [],
+    });
+  });
+
   it('draait niet als een rol die RLS omzeilt', async () => {
     const { rows } = await client.query<{ rolbypassrls: boolean }>(
       'SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user',
