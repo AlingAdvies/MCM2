@@ -85,6 +85,9 @@ export interface RondeSamenvatting {
   startedAt: string | null;
   closesAt: string | null;
   revokedAt: string | null;
+  /** Null wanneer deze ronde bij het starten niet aan een contract gekoppeld is. */
+  contractId: string | null;
+  contractNaam: string | null;
   /** Hoeveel deelnemers er zijn uitgenodigd. */
   aantalDeelnemers: number;
   /** Hoeveel daarvan hebben ingediend. */
@@ -234,6 +237,8 @@ interface RondeRij extends Record<string, unknown> {
   started_at: Date | string | null;
   closes_at: Date | string | null;
   revoked_at: Date | string | null;
+  contract_id: string | null;
+  contract_naam: string | null;
   aantal_deelnemers: string | number;
   aantal_ingediend: string | number;
 }
@@ -463,6 +468,8 @@ export class VragenlijstBeheerService {
                      r.started_at,
                      r.closes_at,
                      r.revoked_at,
+                     r.contract_id,
+                     c.name AS contract_naam,
                      (SELECT count(*) FROM clm.survey_response s
                        WHERE s.run_id = r.run_id)              AS aantal_deelnemers,
                      (SELECT count(*) FROM clm.survey_response s
@@ -470,6 +477,7 @@ export class VragenlijstBeheerService {
                          AND s.submitted_at IS NOT NULL)       AS aantal_ingediend
                 FROM clm.survey_run r
                 JOIN clm.survey_template t ON t.template_id = r.template_id
+                LEFT JOIN clm.contract c ON c.contract_id = r.contract_id
                ORDER BY r.started_at DESC NULLS FIRST, t.name`,
         );
 
@@ -575,6 +583,8 @@ export class VragenlijstBeheerService {
                      r.started_at,
                      r.closes_at,
                      r.revoked_at,
+                     r.contract_id,
+                     c.name AS contract_naam,
                      (SELECT count(*) FROM clm.survey_response s
                        WHERE s.run_id = r.run_id)              AS aantal_deelnemers,
                      (SELECT count(*) FROM clm.survey_response s
@@ -582,6 +592,7 @@ export class VragenlijstBeheerService {
                          AND s.submitted_at IS NOT NULL)       AS aantal_ingediend
                 FROM clm.survey_run r
                 JOIN clm.survey_template t ON t.template_id = r.template_id
+                LEFT JOIN clm.contract c ON c.contract_id = r.contract_id
                WHERE r.run_id = ${runId}`,
         );
 
@@ -794,6 +805,8 @@ export class VragenlijstBeheerService {
       startedAt: iso(r.started_at),
       closesAt: iso(r.closes_at),
       revokedAt: iso(r.revoked_at),
+      contractId: r.contract_id,
+      contractNaam: r.contract_naam,
       aantalDeelnemers: getal(r.aantal_deelnemers),
       aantalIngediend: getal(r.aantal_ingediend),
     };

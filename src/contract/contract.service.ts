@@ -41,6 +41,8 @@ export interface ContractTenantBreed extends ContractSamenvatting {
   vendorId: string;
   vendorNaam: string;
   valueEur: string | null;
+  vendorCategoryCode: string | null;
+  vendorBusinessCriticalityCode: string | null;
 }
 
 export interface NieuwContract {
@@ -233,6 +235,8 @@ export class ContractService {
             vendor_id: string;
             vendor_naam: string;
             value_eur: string | null;
+            vendor_category_code: string | null;
+            vendor_business_criticality_code: string | null;
           }
         >(
           sql`SELECT c.contract_id, c.vendor_id, c.name, c.contract_number,
@@ -242,7 +246,9 @@ export class ContractService {
                      c.contract_type, c.dpa_aanwezig, c.business_risk_tier_code,
                      vc.full_name AS vendor_contact_naam,
                      u.full_name AS owner_naam,
-                     v.name AS vendor_naam
+                     v.name AS vendor_naam,
+                     v.category_code AS vendor_category_code,
+                     v.business_criticality_code AS vendor_business_criticality_code
                 FROM clm.contract c
                 LEFT JOIN clm.vendor_contact vc ON vc.contact_id = c.vendor_contact_id
                 LEFT JOIN clm."user" u ON u.user_id = c.owner_user_id
@@ -272,6 +278,8 @@ export class ContractService {
           contractType: r.contract_type,
           dpaAanwezig: r.dpa_aanwezig,
           businessRiskTierCode: r.business_risk_tier_code,
+          vendorCategoryCode: r.vendor_category_code,
+          vendorBusinessCriticalityCode: r.vendor_business_criticality_code,
         }));
       },
       'medewerker',

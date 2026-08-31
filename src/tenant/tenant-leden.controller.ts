@@ -17,7 +17,11 @@ import {
   type RequestMetSessie,
 } from '../auth/tenant-context.guard';
 import { InvoerFout } from '../vendor/vendor-invoer';
-import { leesNieuwLid, leesRolWijziging } from './tenant-leden-invoer';
+import {
+  leesGegevensWijziging,
+  leesNieuwLid,
+  leesRolWijziging,
+} from './tenant-leden-invoer';
 import { TenantLedenService } from './tenant-leden.service';
 
 /**
@@ -82,6 +86,31 @@ export class TenantLedenController {
         request.sessie!.tenantId,
         userId,
         leesRolWijziging(body).rol,
+      );
+    } catch (fout) {
+      if (fout instanceof InvoerFout) {
+        throw new BadRequestException({
+          veld: fout.veld,
+          melding: fout.message,
+        });
+      }
+      throw fout;
+    }
+  }
+
+  @Put(':userId')
+  @VereistRol('admin', 'support')
+  @HttpCode(204)
+  async gegevensWijzigen(
+    @Req() request: RequestMetSessie,
+    @Param('userId') userId: string,
+    @Body() body: unknown,
+  ) {
+    try {
+      await this.leden.gegevensWijzigen(
+        request.sessie!.tenantId,
+        userId,
+        leesGegevensWijziging(body),
       );
     } catch (fout) {
       if (fout instanceof InvoerFout) {
