@@ -402,6 +402,10 @@ export const TEST_IDS = {
     adminA: id('4a'),
     userA: id('4b'),
   },
+  'contract-import': {
+    tenant: id('4c'),
+    andereTenant: id('4d'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */

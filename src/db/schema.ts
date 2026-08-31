@@ -481,6 +481,104 @@ export const contract = clm.table(
   ],
 );
 
+// ─── clm schema: admin-only contract-import (#198) ─────────────────────────
+// Zie docs/superpowers/specs/2026-08-31-contract-import-design.md, migratie 0035.
+
+export const importJob = clm.table(
+  'import_job',
+  {
+    jobId: uuid('job_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'cascade' }),
+    // v1 kent uitsluitend 'contract'. Los veld i.p.v. alleen migratie 0035's
+    // scope, zodat een toekomstig tweede importtype geen migratie op deze
+    // tabel vraagt — alleen een nieuwe waarde en een eigen module.
+    importType: text('import_type').notNull(),
+    createdByUserId: uuid('created_by_user_id')
+      .notNull()
+      .references(() => user.userId, { onDelete: 'restrict' }),
+    filename: text('filename').notNull(),
+    fileHash: text('file_hash').notNull(),
+    rowCount: integer('row_count').notNull(),
+    status: text('status').notNull(), // 'preview' | 'bevestigd'
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
+  },
+  (t) => [index('import_job_tenant_id_idx').on(t.tenantId)],
+);
+
+export const importRow = clm.table(
+  'import_row',
+  {
+    rowId: uuid('row_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'cascade' }),
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => importJob.jobId, { onDelete: 'cascade' }),
+    rowNumber: integer('row_number').notNull(),
+    rawData: jsonb('raw_data').notNull(),
+    normalizedData: jsonb('normalized_data').notNull(),
+    findings: jsonb('findings').notNull(),
+    importable: boolean('importable').notNull(),
+    result: text('result'), // null tot bevestigd: 'created' | 'skipped' | 'failed'
+    createdContractId: uuid('created_contract_id').references(
+      () => contract.contractId,
+      { onDelete: 'set null' },
+    ),
+    // Vier aparte kolommen (created vs. matched, per entiteit) i.p.v. één:
+    // het resultaatscherm moet apart tonen wat déze import nieuw aanmaakte
+    // versus hergebruikte (besluit eigenaar, 2026-08-31).
+    createdVendorId: uuid('created_vendor_id').references(
+      () => vendor.vendorId,
+      { onDelete: 'set null' },
+    ),
+    matchedVendorId: uuid('matched_vendor_id').references(
+      () => vendor.vendorId,
+      { onDelete: 'set null' },
+    ),
+    createdContactId: uuid('created_contact_id').references(
+      () => vendorContact.contactId,
+      { onDelete: 'set null' },
+    ),
+    matchedContactId: uuid('matched_contact_id').references(
+      () => vendorContact.contactId,
+      { onDelete: 'set null' },
+    ),
+  },
+  (t) => [
+    index('import_row_tenant_id_idx').on(t.tenantId),
+    index('import_row_job_id_idx').on(t.jobId),
+  ],
+);
+
+// Extra contactgegevens (email_2, full_name_2, ...) die niet in het
+// primaire paar pasten — hulplijst, geen vendor_contact-rij, geen
+// koppeling. Zie migratie 0036, design-document §10.3.
+export const importExtraContact = clm.table(
+  'import_extra_contact',
+  {
+    extraContactId: uuid('extra_contact_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'cascade' }),
+    rowId: uuid('row_id')
+      .notNull()
+      .references(() => importRow.rowId, { onDelete: 'cascade' }),
+    volgnummer: integer('volgnummer').notNull(),
+    email: text('email'),
+    fullName: text('full_name'),
+  },
+  (t) => [
+    index('import_extra_contact_tenant_id_idx').on(t.tenantId),
+    index('import_extra_contact_row_id_idx').on(t.rowId),
+  ],
+);
+
 export const contractSurveyTemplate = clm.table(
   'contract_survey_template',
   {

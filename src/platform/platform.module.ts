@@ -23,6 +23,6 @@ import { PlatformService } from './platform.service';
   imports: [AuthModule, MailModule],
   controllers: [PlatformController],
   providers: [PlatformService, PlatformAdminGuard],
-  exports: [PlatformService],
+  exports: [PlatformService, PlatformAdminGuard],
 })
 export class PlatformModule {}

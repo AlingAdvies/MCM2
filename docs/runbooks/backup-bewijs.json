@@ -1,5 +1,5 @@
 {
-  "gecontroleerdOp": "2026-08-30T11:34:26.333Z",
+  "gecontroleerdOp": "2026-08-31T07:00:04.387Z",
   "dumpGemaaktOp": "2026-08-30T07:25:50.958Z",
   "dumpNaam": "mcm2-2026-08-30_07-25-44.dump",
   "dumpBytes": 163697,
@@ -7,11 +7,12 @@
     "A",
     "B"
   ],
-  "goed": true,
-  "problemen": [],
+  "goed": false,
+  "problemen": [
+    "docker_uit"
+  ],
   "bevindingen": [
-    "Laatste dump: mcm2-2026-08-30_07-25-44.dump (4 uur oud)",
-    "saxombp: 7 uur oud, 8 dump(s) bewaard",
-    "Compleet: 30 tabellen"
+    "Laatste dump: mcm2-2026-08-30_07-25-44.dump (23 uur oud)",
+    "saxombp: 2 uur oud, 9 dump(s) bewaard"
   ]
 }
