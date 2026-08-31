@@ -1,0 +1,4 @@
+contract.name,contract.contract_number,contract.contract_type,contract.start_date,contract.end_date,contract.note,vendor.name,vendor.category_code,vendor.coupa_supplier_number,vendor_contact.email,vendor_contact.full_name
+Hosting 2024-2027,CN-1001,Dienstenovereenkomst,01-01-2024,31-12-2027,Jaarlijkse indexatie,Acme B.V.,it,SUP-001,jan@acme.nl,Jan Jansen
+Onderhoud kantoorapparatuur,CN-1002,Raamovereenkomst,15-03-2024,,,Beta N.V.,facilitair,SUP-002,info@beta.nl,Inkoopafdeling
+Consultancy Q1,,Adviesovereenkomst,01-01-2026,31-03-2026,Eenmalige opdracht,Acme B.V.,it,SUP-001,jan@acme.nl,Jan Jansen

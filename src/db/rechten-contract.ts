@@ -109,6 +109,14 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   // redenering als contract_survey_template hierboven.
   'clm.vendor_compliance_thema': ['SELECT', 'INSERT', 'DELETE'],
 
+  // clm.import_job / clm.import_row (0035, #198): admin-only contract-import.
+  // Een job/rij die eenmaal bevestigd is, wordt niet meer gewijzigd of
+  // verwijderd door de applicatie — het is het traceerbaarheidsspoor van de
+  // import. UPDATE is wél nodig: bevestigen zet import_job.status en
+  // import_row.result/created_*/matched_* na aanmaak van de preview-rijen.
+  'clm.import_job': NIET_VERWIJDEREN,
+  'clm.import_row': NIET_VERWIJDEREN,
+
   // ── Van nature append-only ─────────────────────────────────────────────────
   //
   // Een oordeel, een notitie of een koppeling verdwijnt niet: hij wordt zacht

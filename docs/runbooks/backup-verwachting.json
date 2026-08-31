@@ -54,14 +54,19 @@
     "eerste daadwerkelijke wijziging aan vendor_category, dus productie bleef",
     "steeds op migratiestand 0033 tot deze succesvolle uitrol. De eerstvolgende",
     "backupcontrole zal ref.business_risk_tier terecht missen totdat er een",
-    "nieuwe dump is gemaakt — dat is normaal, verwacht gedrag, geen kip-ei."
+    "nieuwe dump is gemaakt — dat is normaal, verwacht gedrag, geen kip-ei.",
+    "",
+    "Migratie 0035 (31-08, admin-only contract-import, #198) voegt",
+    "clm.import_job en clm.import_row toe."
   ],
-  "bijgewerkt": "2026-08-28",
-  "migratiestand": "0034_coupa_schema_uitbreiding",
+  "bijgewerkt": "2026-08-31",
+  "migratiestand": "0035_contract_import",
   "tabellen": [
     "audit.audit_event",
     "clm.contract",
     "clm.contract_survey_template",
+    "clm.import_job",
+    "clm.import_row",
     "clm.omgeving",
     "clm.platform_admin",
     "clm.response_note",

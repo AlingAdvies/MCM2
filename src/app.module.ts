@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { ContractImportModule } from './contract-import/contract-import.module';
 import { ContractModule } from './contract/contract.module';
 import { DatabaseModule } from './db/database.module';
 import { HealthModule } from './health/health.module';
@@ -21,6 +22,7 @@ import { VendorModule } from './vendor/vendor.module';
     VendorModule,
     VendorCategoryModule,
     ContractModule,
+    ContractImportModule,
     MailModule,
     PlatformModule,
     TenantModule,
