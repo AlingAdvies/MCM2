@@ -246,6 +246,41 @@ export class TenantLedenService {
     });
   }
 
+  /**
+   * Naam en e-mailadres van een bestaand lid wijzigen (echte UPDATE — geen
+   * verwijderen/opnieuw-aanmaken, zie het besluit van de eigenaar 31-08:
+   * rol en 'sinds'-datum van het lidmaatschap blijven intact).
+   */
+  async gegevensWijzigen(
+    tenantId: string,
+    userId: string,
+    wijziging: { naam: string; email: string },
+  ): Promise<void> {
+    return this.db.withTenant(tenantId, async (tx) => {
+      const dubbel = await tx.execute<{ aantal: string }>(
+        sql`SELECT count(*) AS aantal
+              FROM clm."user" u
+              JOIN clm.tenant_membership m ON m.user_id = u.user_id
+             WHERE m.tenant_id = ${tenantId}
+               AND m.deleted_at IS NULL
+               AND u.user_id <> ${userId}
+               AND u.email = ${wijziging.email}`,
+      );
+
+      if (Number(dubbel.rows[0].aantal) > 0) {
+        throw new ConflictException(
+          'Dit e-mailadres is al in gebruik door een ander lid van deze tenant.',
+        );
+      }
+
+      await tx.execute(
+        sql`UPDATE clm."user"
+               SET full_name = ${wijziging.naam}, email = ${wijziging.email}
+             WHERE user_id = ${userId}`,
+      );
+    });
+  }
+
   async intrekken(tenantId: string, userId: string): Promise<void> {
     return this.db.withTenant(tenantId, async (tx) => {
       await this.weigerAlsLaatsteAdmin(tx, tenantId, userId);

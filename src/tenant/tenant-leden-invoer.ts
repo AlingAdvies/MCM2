@@ -29,6 +29,11 @@ export interface RolWijziging {
   rol: ToegestaneRol;
 }
 
+export interface GegevensWijziging {
+  naam: string;
+  email: string;
+}
+
 function leesRol(waarde: unknown): ToegestaneRol {
   if (
     typeof waarde !== 'string' ||
@@ -72,4 +77,17 @@ export function leesRolWijziging(body: unknown): RolWijziging {
   }
   const { rol } = body as Record<string, unknown>;
   return { rol: leesRol(rol) };
+}
+
+export function leesGegevensWijziging(body: unknown): GegevensWijziging {
+  if (typeof body !== 'object' || body === null) {
+    throw new InvoerFout('email', 'Verwacht een JSON-object.');
+  }
+  const { email, naam } = body as Record<string, unknown>;
+
+  if (typeof email !== 'string' || !isGeldigMailadres(email)) {
+    throw new InvoerFout('email', 'Vul een geldig e-mailadres in.');
+  }
+
+  return { email, naam: leesNaam(naam) };
 }
