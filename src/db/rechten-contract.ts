@@ -117,6 +117,10 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   'clm.import_job': NIET_VERWIJDEREN,
   'clm.import_row': NIET_VERWIJDEREN,
 
+  // clm.import_extra_contact (0036, #198): puur append-only hulplijst, wordt
+  // nooit bijgewerkt of verwijderd door de applicatie.
+  'clm.import_extra_contact': ['SELECT', 'INSERT'],
+
   // ── Van nature append-only ─────────────────────────────────────────────────
   //
   // Een oordeel, een notitie of een koppeling verdwijnt niet: hij wordt zacht

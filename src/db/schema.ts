@@ -556,6 +556,29 @@ export const importRow = clm.table(
   ],
 );
 
+// Extra contactgegevens (email_2, full_name_2, ...) die niet in het
+// primaire paar pasten — hulplijst, geen vendor_contact-rij, geen
+// koppeling. Zie migratie 0036, design-document §10.3.
+export const importExtraContact = clm.table(
+  'import_extra_contact',
+  {
+    extraContactId: uuid('extra_contact_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'cascade' }),
+    rowId: uuid('row_id')
+      .notNull()
+      .references(() => importRow.rowId, { onDelete: 'cascade' }),
+    volgnummer: integer('volgnummer').notNull(),
+    email: text('email'),
+    fullName: text('full_name'),
+  },
+  (t) => [
+    index('import_extra_contact_tenant_id_idx').on(t.tenantId),
+    index('import_extra_contact_row_id_idx').on(t.rowId),
+  ],
+);
+
 export const contractSurveyTemplate = clm.table(
   'contract_survey_template',
   {

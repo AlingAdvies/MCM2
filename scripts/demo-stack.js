@@ -527,7 +527,10 @@ function wachtOpStack(maxSeconden = 120) {
 
   while (Date.now() < einde) {
     const api = httpCode(`http://localhost:${API_POORT}/health`);
-    const web = httpCode(`http://localhost:${WEB_POORT}/`);
+    // '/' redirect sinds 29-08 (307) naar '/beheer' — zie de andere drie
+    // plekken die dezelfde aanname hadden (CI, verify-volledig.js, de AWS
+    // ALB-targetgroup). Dit is de vierde.
+    const web = httpCode(`http://localhost:${WEB_POORT}/beheer`);
 
     if (api === '200' && web === '200') {
       return { ok: true };
@@ -1021,7 +1024,7 @@ function status() {
     ]).uitvoer) === DEMO_CONTAINER;
 
   const api = httpCode(`http://localhost:${API_POORT}/health`);
-  const web = httpCode(`http://localhost:${WEB_POORT}/`);
+  const web = httpCode(`http://localhost:${WEB_POORT}/beheer`);
 
   console.log('');
   console.log(`  database   ${draaitDb ? 'draait' : 'staat uit'} (poort ${DB_POORT})`);

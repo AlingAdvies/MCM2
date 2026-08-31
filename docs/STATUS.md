@@ -2,6 +2,77 @@
 
 ## Laatst bijgewerkt
 
+**2026-08-30 — Schema-drift tussen `src/db/schema.ts` en de echte database
+gevonden en gedicht, twee opslagbugs in contract/vendor daarbij aan het licht
+gekomen en gefixt, volledige doorloop naar AWS-productie. Onderweg ook een
+race-condition in de backup-controle gevonden en opgelost. Aanleiding: het
+maken van een cross-reference-CSV voor het handmatig vullen van tenant
+Transdev met data.**
+
+1. **Schema-drift.** `src/db/schema.ts` liep uit de pas met de database:
+   vier kolommen bestonden al via eerdere migraties (0024, 0029, 0030, 0033)
+   maar stonden niet in het Drizzle-schema (`tenant.deletedAt`,
+   `user.uitnodigingHash`, `responseNote.soort`, en drie kolommen op
+   `contract`: `noticePeriodDays`, `warningDaysBefore`, `autoRenews`).
+   Schema.ts bijgewerkt zodat het weer overeenkomt. **Om herhaling te
+   voorkomen:** een nieuwe e2e-test
+   (`test/schema-conformiteit.e2e-spec.ts`) vergelijkt voortaan bij elke
+   `verify:volledig`-run elke tabel kolom-voor-kolom tegen de echte database
+   en faalt met een leesbare lijst zodra ze uit de pas lopen.
+
+2. **Twee grote opslagbugs ontdekt tijdens het maken van een
+   veld-voor-veld-cross-reference met invulformaten** (leveranciers +
+   contracten, t.b.v. de handmatige Transdev-datavulling):
+   - **Contract:** `contractType`, `dpaAanwezig` en `businessRiskTierCode`
+     stonden al in het schema en de formulieren, maar ontbraken volledig in
+     de `INSERT`/`UPDATE`/`SELECT`-queries van `contract.service.ts` — een
+     ingevulde waarde werd stilzwijgend nooit weggeschreven of teruggelezen.
+   - **Vendor:** `categoryCode` en `coupaSupplierNumber` hadden hetzelfde
+     gat in `vendor.service.ts`.
+   - **Geen dataverlies vastgesteld** (bevestigd door de eigenaar) — de
+     velden stonden simpelweg nog nooit goed ingevuld, dus er was niets om
+     te verliezen.
+   - Beide gefixt (`contract.service.ts`, `contract-invoer.ts`,
+     `vendor.service.ts`, `vendor-invoer.ts`), met nieuwe e2e-tests
+     (`test/contract-routes.e2e-spec.ts`, `test/vendor-routes.e2e-spec.ts`,
+     `test/vendor-detail.e2e-spec.ts`) die aanmaken, wijzigen en teruglezen
+     dekken — zodat een toekomstige regressie hier niet nog eens
+     onopgemerkt blijft.
+
+3. **Volledige doorloop:** fix → `verify:volledig` groen → feature branch →
+   PR → CI groen → merge naar `main` → staging (migraties + rookproef) →
+   `productie-aws.yml` met akkoord. Eerste poging blokkeerde op de
+   backup-poort ("Backup: TE OUD (43 uur)") — zie punt 4. Na de fix: run
+   `33309304853` volledig groen, `/api/backend/health` bevestigt commit
+   `5f5d39a2` op productie, geen downtime gemeten tijdens de uitrol.
+
+4. **Race-condition in de backup-controle, gevonden tijdens het uitzoeken
+   van de "te oude backup"-melding.** De daadwerkelijke dump was gezond
+   (163.697 bytes); het probleem was dat het lokale bewijsbestand nooit was
+   gecommit, en toen het opnieuw gegenereerd werd, kwam er `dumpBytes: 0`
+   uit. Oorzaak: de Windows-taken "MCM2 databasebackup" (07:00) en
+   "MCM2 backupcontrole" (07:30) hebben allebei `StartWhenAvailable=True`;
+   na een periode dat de laptop uit stond, liepen ze na een inhaalstart
+   vlak na elkaar (9:25:43 vs. 9:25:52) — de controle las de dump terwijl
+   die nog geschreven werd. Opgelost door de trigger van "MCM2
+   backupcontrole" te verzetten naar 09:00 (marge nu 2 uur i.p.v. 30
+   minuten), uitgevoerd door Claude op expliciet verzoek van de eigenaar.
+   Backupcontrole daarna opnieuw gedraaid, het schone bewijs
+   (`docs/runbooks/backup-bewijs.json`, `dumpBytes: 163697`) gecommit.
+
+5. **Twee cross-reference-documenten toegevoegd** (niet gecommit, op
+   verzoek van de eigenaar): `docs/frontend-veld-cross-reference.csv` en
+   `docs/transdev-veld-cross-reference.csv` — hulpmiddel voor het handmatig
+   vullen van tenant Transdev, inclusief voorgeschreven invulformaat per
+   veld.
+
+6. **Nieuw referentiedocument:** `docs/technisch-overzicht.md` (niet
+   gecommit) — samenvatting van stack, architectuur, testmethodiek en
+   OTAP-straat in één leesbaar document, plus een gepubliceerde
+   HTML-versie als Artifact.
+
+---
+
 **2026-08-29 — Vier kleine productie-bugs gevonden en opgelost, alle vier
 uitgerold naar AWS-productie. Aanleiding: de eigenaar meldde dat een
 tenant-uitnodigingslink naar `localhost` wees.**

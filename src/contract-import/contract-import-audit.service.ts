@@ -27,6 +27,8 @@ export class ContractImportAuditService {
         hergebruikteVendors: number;
         aangemaakteContacten: number;
         hergebruikteContacten: number;
+        aangemaakteCategorieen: number;
+        extraContactenGevonden: number;
         overgeslagen: number;
       };
     },

@@ -57,14 +57,18 @@
     "nieuwe dump is gemaakt — dat is normaal, verwacht gedrag, geen kip-ei.",
     "",
     "Migratie 0035 (31-08, admin-only contract-import, #198) voegt",
-    "clm.import_job en clm.import_row toe."
+    "clm.import_job en clm.import_row toe.",
+    "",
+    "Migratie 0036 (31-08, zelfde feature, bevindingen na het eerste gebruik",
+    "met echt Transdev-testbestand) voegt clm.import_extra_contact toe."
   ],
   "bijgewerkt": "2026-08-31",
-  "migratiestand": "0035_contract_import",
+  "migratiestand": "0036_contract_import_extra_contact",
   "tabellen": [
     "audit.audit_event",
     "clm.contract",
     "clm.contract_survey_template",
+    "clm.import_extra_contact",
     "clm.import_job",
     "clm.import_row",
     "clm.omgeving",

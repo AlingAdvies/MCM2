@@ -253,6 +253,13 @@
       "when": 1787068800009,
       "tag": "0035_contract_import",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1787068800010,
+      "tag": "0036_contract_import_extra_contact",
+      "breakpoints": true
     }
   ]
 }

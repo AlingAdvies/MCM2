@@ -541,6 +541,336 @@ describe('Contract-import (e2e, #198)', () => {
       const resultaat = bevestig.body as { aangemaakteContacten: number };
       expect(resultaat.aangemaakteContacten).toBe(2);
     });
+
+    it('maakt een contactpersoon aan met alleen een e-mailadres (geen naam)', async () => {
+      // Besluit eigenaar 31-08: alleen-email of alleen-naam is niet langer
+      // 'onvolledig' — eerdere versie sloeg dit soort contacten over.
+      const coupaNummer = `SUP-ALLEENMAIL-${STEMPEL}`;
+      const naam = `Alleen-mail-vendor-${STEMPEL}`;
+
+      const preview = await request(server)
+        .post('/platform/contract-import/preview')
+        .set('Cookie', platformCookie)
+        .attach(
+          'file',
+          csv(
+            `Contract A,CN-A,,,,,${naam},,${coupaNummer},security@voorbeeld.nl,`,
+          ),
+          { filename: 'contracten.csv', contentType: 'text/csv' },
+        );
+      const jobId = (preview.body as { jobId: string }).jobId;
+
+      const bevestig = await request(server)
+        .post(`/platform/contract-import/${jobId}/bevestigen`)
+        .set('Cookie', platformCookie)
+        .send({});
+
+      const resultaat = bevestig.body as { aangemaakteContacten: number };
+      expect(resultaat.aangemaakteContacten).toBe(1);
+
+      // full_name is NOT NULL in clm.vendor_contact — zonder een naam in de
+      // bron gebruikt de import het e-mailadres zelf als voorlopige naam
+      // (besluit eigenaar 31-08).
+      const contactRijen = await selecteerBinnenTenant<{
+        email: string;
+        full_name: string;
+      }>(
+        client,
+        tenant,
+        `SELECT email, full_name FROM clm.vendor_contact
+           WHERE email = $1`,
+        ['security@voorbeeld.nl'],
+      );
+      expect(contactRijen).toHaveLength(1);
+      expect(contactRijen[0].full_name).toBe('security@voorbeeld.nl');
+    });
+
+    it('maakt een contactpersoon aan met alleen een naam (geen e-mailadres)', async () => {
+      const coupaNummer = `SUP-ALLEENNAAM-${STEMPEL}`;
+      const naam = `Alleen-naam-vendor-${STEMPEL}`;
+
+      const preview = await request(server)
+        .post('/platform/contract-import/preview')
+        .set('Cookie', platformCookie)
+        .attach(
+          'file',
+          csv(`Contract A,CN-A,,,,,${naam},,${coupaNummer},,Patrick Scheun`),
+          { filename: 'contracten.csv', contentType: 'text/csv' },
+        );
+      const jobId = (preview.body as { jobId: string }).jobId;
+
+      const bevestig = await request(server)
+        .post(`/platform/contract-import/${jobId}/bevestigen`)
+        .set('Cookie', platformCookie)
+        .send({});
+
+      const resultaat = bevestig.body as { aangemaakteContacten: number };
+      expect(resultaat.aangemaakteContacten).toBe(1);
+    });
+
+    it('hergebruikt een alleen-email-contact bij een tweede rij met dezelfde email (NULL-veilige match)', async () => {
+      const coupaNummer = `SUP-NULLMATCH-${STEMPEL}`;
+      const naam = `Nullmatch-vendor-${STEMPEL}`;
+
+      const preview = await request(server)
+        .post('/platform/contract-import/preview')
+        .set('Cookie', platformCookie)
+        .attach(
+          'file',
+          csv(
+            `Contract A,CN-A,,,,,${naam},,${coupaNummer},info@voorbeeld.nl,`,
+            `Contract B,CN-B,,,,,${naam},,${coupaNummer},info@voorbeeld.nl,`,
+          ),
+          { filename: 'contracten.csv', contentType: 'text/csv' },
+        );
+      const jobId = (preview.body as { jobId: string }).jobId;
+
+      const bevestig = await request(server)
+        .post(`/platform/contract-import/${jobId}/bevestigen`)
+        .set('Cookie', platformCookie)
+        .send({});
+
+      const resultaat = bevestig.body as {
+        aangemaakteContacten: number;
+        hergebruikteContacten: number;
+      };
+      expect(resultaat.aangemaakteContacten).toBe(1);
+      expect(resultaat.hergebruikteContacten).toBe(1);
+    });
+  });
+
+  describe('Business-criticality en business-risk-tier (#198, gevonden 31-08)', () => {
+    it('slaat beide velden correct op als de brontekst herkend wordt', async () => {
+      const naam = `Criticality-vendor-${STEMPEL}`;
+      const coupaNummer = `SUP-CRIT-${STEMPEL}`;
+
+      const koppen =
+        'contract.name;contract.contract_number;vendor.name;vendor.coupa_supplier_number;vendor.business_criticality_code;contract.business_risk_tier_code';
+      const bestand = Buffer.from(
+        [
+          koppen,
+          `Contract A;CN-A;${naam};${coupaNummer};Hoog;Tier 2  Medium impact`,
+        ].join('\n'),
+        'utf8',
+      );
+
+      const preview = await request(server)
+        .post('/platform/contract-import/preview')
+        .set('Cookie', platformCookie)
+        .attach('file', bestand, {
+          filename: 'contracten.csv',
+          contentType: 'text/csv',
+        });
+      const jobId = (preview.body as { jobId: string }).jobId;
+
+      await request(server)
+        .post(`/platform/contract-import/${jobId}/bevestigen`)
+        .set('Cookie', platformCookie)
+        .send({});
+
+      const vendorRijen = await selecteerBinnenTenant<{
+        business_criticality_code: string | null;
+      }>(
+        client,
+        tenant,
+        'SELECT business_criticality_code FROM clm.vendor WHERE coupa_supplier_number = $1',
+        [coupaNummer],
+      );
+      expect(vendorRijen[0].business_criticality_code).toBe('high');
+
+      const contractRijen = await selecteerBinnenTenant<{
+        business_risk_tier_code: string | null;
+      }>(
+        client,
+        tenant,
+        `SELECT c.business_risk_tier_code FROM clm.contract c
+           JOIN clm.vendor v ON v.vendor_id = c.vendor_id
+          WHERE v.coupa_supplier_number = $1`,
+        [coupaNummer],
+      );
+      expect(contractRijen[0].business_risk_tier_code).toBe('tier_2');
+    });
+
+    it('laat beide velden leeg bij een niet-herkende waarde, blokkeert de rij niet', async () => {
+      const naam = `Onbekend-crit-vendor-${STEMPEL}`;
+      const coupaNummer = `SUP-ONBEKEND-${STEMPEL}`;
+
+      const koppen =
+        'contract.name;contract.contract_number;vendor.name;vendor.coupa_supplier_number;vendor.business_criticality_code;contract.business_risk_tier_code';
+      const bestand = Buffer.from(
+        [
+          koppen,
+          `Contract A;CN-A;${naam};${coupaNummer};Onduidelijk;Geen idee`,
+        ].join('\n'),
+        'utf8',
+      );
+
+      const preview = await request(server)
+        .post('/platform/contract-import/preview')
+        .set('Cookie', platformCookie)
+        .attach('file', bestand, {
+          filename: 'contracten.csv',
+          contentType: 'text/csv',
+        });
+
+      const previewBody = preview.body as {
+        jobId: string;
+        beoordeling: { rijen: { importeerbaar: boolean }[] };
+      };
+      expect(previewBody.beoordeling.rijen[0].importeerbaar).toBe(true);
+
+      const bevestig = await request(server)
+        .post(`/platform/contract-import/${previewBody.jobId}/bevestigen`)
+        .set('Cookie', platformCookie)
+        .send({});
+
+      const resultaat = bevestig.body as { aangemaakteContracten: number };
+      expect(resultaat.aangemaakteContracten).toBe(1);
+
+      const vendorRijen = await selecteerBinnenTenant<{
+        business_criticality_code: string | null;
+      }>(
+        client,
+        tenant,
+        'SELECT business_criticality_code FROM clm.vendor WHERE coupa_supplier_number = $1',
+        [coupaNummer],
+      );
+      expect(vendorRijen[0].business_criticality_code).toBeNull();
+    });
+  });
+
+  describe('Categorie-aanmaak (#198, bevindingen 31-08)', () => {
+    it('maakt een onbekende categorie aan i.p.v. hem leeg te laten', async () => {
+      const naam = `Categorie-vendor-${STEMPEL}`;
+      const categorieTekst = `Vastgoed & Facility Management ${STEMPEL}`;
+
+      const preview = await request(server)
+        .post('/platform/contract-import/preview')
+        .set('Cookie', platformCookie)
+        .attach(
+          'file',
+          csv(
+            `Contract A,CN-CAT,,,,,${naam},${categorieTekst},SUP-CAT-${STEMPEL},,`,
+          ),
+          { filename: 'contracten.csv', contentType: 'text/csv' },
+        );
+      const jobId = (preview.body as { jobId: string }).jobId;
+
+      const bevestig = await request(server)
+        .post(`/platform/contract-import/${jobId}/bevestigen`)
+        .set('Cookie', platformCookie)
+        .send({});
+
+      const resultaat = bevestig.body as {
+        aangemaakteCategorieen: number;
+        rijen: { categorieAangemaakt: boolean }[];
+      };
+      expect(resultaat.aangemaakteCategorieen).toBe(1);
+      expect(resultaat.rijen[0].categorieAangemaakt).toBe(true);
+
+      const categorieRijen = await selecteerBinnenTenant<{
+        code: string;
+        label: string;
+      }>(
+        client,
+        tenant,
+        'SELECT code, label FROM ref.vendor_category WHERE label = $1',
+        [categorieTekst],
+      );
+      expect(categorieRijen).toHaveLength(1);
+    });
+
+    it('hergebruikt een net aangemaakte categorie binnen dezelfde import', async () => {
+      const naam1 = `Categorie-vendor-a-${STEMPEL}`;
+      const naam2 = `Categorie-vendor-b-${STEMPEL}`;
+      const categorieTekst = `Nieuwe categorie ${STEMPEL}`;
+
+      const preview = await request(server)
+        .post('/platform/contract-import/preview')
+        .set('Cookie', platformCookie)
+        .attach(
+          'file',
+          csv(
+            `Contract A,CN-A,,,,,${naam1},${categorieTekst},SUP-CATA-${STEMPEL},,`,
+            `Contract B,CN-B,,,,,${naam2},${categorieTekst},SUP-CATB-${STEMPEL},,`,
+          ),
+          { filename: 'contracten.csv', contentType: 'text/csv' },
+        );
+      const jobId = (preview.body as { jobId: string }).jobId;
+
+      const bevestig = await request(server)
+        .post(`/platform/contract-import/${jobId}/bevestigen`)
+        .set('Cookie', platformCookie)
+        .send({});
+
+      const resultaat = bevestig.body as { aangemaakteCategorieen: number };
+      expect(resultaat.aangemaakteCategorieen).toBe(1);
+
+      const categorieRijen = await selecteerBinnenTenant(
+        client,
+        tenant,
+        'SELECT code FROM ref.vendor_category WHERE label = $1',
+        [categorieTekst],
+      );
+      expect(categorieRijen).toHaveLength(1);
+    });
+  });
+
+  describe('Extra contactgegevens (#198, bevindingen 31-08)', () => {
+    it('legt vendor_contact.email_2/full_name_2 apart vast, zonder ze te verwerken als het primaire contact', async () => {
+      const naam = `Extracontact-vendor-${STEMPEL}`;
+
+      const koppenMetExtra =
+        'contract.name;contract.contract_number;contract.contract_type;contract.start_date;contract.end_date;contract.note;vendor.name;vendor.category_code;vendor.coupa_supplier_number;vendor_contact.email;vendor_contact.full_name;vendor_contact.email_2;vendor_contact.full_name_2';
+      const rij = `Contract met extra contact;CN-EXTRA;;;;;${naam};;SUP-EXTRA-${STEMPEL};jan@voorbeeld.nl;Jan Jansen;afdeling@voorbeeld.nl;Inkoopafdeling`;
+      const bestand = Buffer.from([koppenMetExtra, rij].join('\n'), 'utf8');
+
+      const preview = await request(server)
+        .post('/platform/contract-import/preview')
+        .set('Cookie', platformCookie)
+        .attach('file', bestand, {
+          filename: 'contracten.csv',
+          contentType: 'text/csv',
+        });
+
+      expect(preview.status).toBe(201);
+      const previewBody = preview.body as {
+        jobId: string;
+        beoordeling: { rijen: { bevindingen: { code: string }[] }[] };
+      };
+      expect(
+        previewBody.beoordeling.rijen[0].bevindingen.map((b) => b.code),
+      ).toContain('extra_contactgegevens_gevonden');
+
+      const bevestig = await request(server)
+        .post(`/platform/contract-import/${previewBody.jobId}/bevestigen`)
+        .set('Cookie', platformCookie)
+        .send({});
+
+      const resultaat = bevestig.body as {
+        extraContactenGevonden: number;
+        aangemaakteContacten: number;
+      };
+      expect(resultaat.extraContactenGevonden).toBe(1);
+      // Het primaire paar (Jan Jansen) is het enige dat een echte
+      // vendor_contact-rij oplevert — de extra blijft in de hulptabel.
+      expect(resultaat.aangemaakteContacten).toBe(1);
+
+      const extraRijen = await selecteerBinnenTenant<{
+        email: string;
+        full_name: string;
+      }>(
+        client,
+        tenant,
+        `SELECT ec.email, ec.full_name FROM clm.import_extra_contact ec
+           JOIN clm.import_row ir ON ir.row_id = ec.row_id
+          WHERE ir.job_id = $1`,
+        [previewBody.jobId],
+      );
+      expect(extraRijen).toHaveLength(1);
+      expect(extraRijen[0].email).toBe('afdeling@voorbeeld.nl');
+      expect(extraRijen[0].full_name).toBe('Inkoopafdeling');
+    });
   });
 
   describe('Tenantisolatie', () => {
