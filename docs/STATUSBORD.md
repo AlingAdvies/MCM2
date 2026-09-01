@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-09-01 12:39 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-09-01 12:50 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -101,12 +101,13 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#24](https://github.com/AlingAdvies/MCM2/issues/24) `later` — Later-lijst: uitgestelde items zonder concrete trigger
 - [#54](https://github.com/AlingAdvies/MCM2/issues/54) — Unittestlaag voor pure functies (bestandsvalidatie, antwoordvalidatie, opslagsleutel)
 
-### ⚠ Niet ingedeeld (5)
+### ⚠ Niet ingedeeld (6)
 
 Deze issues missen een `thema:*`-label. Voeg er een toe op GitHub, of
 maak een nieuw thema aan in `scripts/statusbord.js` als geen van de
 bestaande thema's past.
 
+- [#206](https://github.com/AlingAdvies/MCM2/issues/206) — FORCE ROW LEVEL SECURITY ontbreekt op 8 tabellen
 - [#205](https://github.com/AlingAdvies/MCM2/issues/205) — Archiveerfunctie voor vragenlijst-rondes (periode-afsluiting)
 - [#197](https://github.com/AlingAdvies/MCM2/issues/197) `before-production` — Vragenlijst aanmaken/importeren door tenant- of platformbeheerder ontbreekt
 - [#192](https://github.com/AlingAdvies/MCM2/issues/192) — Visuele markering voor gebruiker zonder actief tenant-membership bij historische koppelingen
@@ -115,4 +116,4 @@ bestaande thema's past.
 
 ---
 
-**Totaal open:** 57
+**Totaal open:** 58
