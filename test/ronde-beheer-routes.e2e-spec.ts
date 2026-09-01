@@ -804,6 +804,105 @@ describe('Ronde-beheerroutes (e2e)', () => {
       .expect(403);
   });
 
+  // ── Archiveren (issue #205) ──────────────────────────────────────────────
+
+  it('archiveert een ronde in draft in één actie', async () => {
+    const runId = await nieuweRonde();
+
+    const antwoord = await request(server)
+      .post(`/admin/survey/runs/${runId}/archiveer`)
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(200);
+
+    expect((antwoord.body as RondeAntwoord).status).toBe('archived');
+  });
+
+  it('archiveert een ronde in active in één actie', async () => {
+    const runId = await nieuweRonde();
+
+    await request(server)
+      .patch(`/admin/survey/runs/${runId}/status`)
+      .set('Cookie', cookieAdminA)
+      .send({ status: 'active' })
+      .expect(200);
+
+    const antwoord = await request(server)
+      .post(`/admin/survey/runs/${runId}/archiveer`)
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(200);
+
+    expect((antwoord.body as RondeAntwoord).status).toBe('archived');
+  });
+
+  it('archiveert een ronde in finished in één actie', async () => {
+    const runId = await nieuweRonde();
+
+    await request(server)
+      .patch(`/admin/survey/runs/${runId}/status`)
+      .set('Cookie', cookieAdminA)
+      .send({ status: 'active' })
+      .expect(200);
+    await request(server)
+      .patch(`/admin/survey/runs/${runId}/status`)
+      .set('Cookie', cookieAdminA)
+      .send({ status: 'finished' })
+      .expect(200);
+
+    const antwoord = await request(server)
+      .post(`/admin/survey/runs/${runId}/archiveer`)
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(200);
+
+    expect((antwoord.body as RondeAntwoord).status).toBe('archived');
+  });
+
+  it('accepteert archiveren van een al gearchiveerde ronde zonder te klagen', async () => {
+    const runId = await nieuweRonde();
+
+    await request(server)
+      .post(`/admin/survey/runs/${runId}/archiveer`)
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(200);
+
+    await request(server)
+      .post(`/admin/survey/runs/${runId}/archiveer`)
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(200);
+  });
+
+  it('weigert een reviewer die wil archiveren', async () => {
+    const runId = await nieuweRonde();
+
+    await request(server)
+      .post(`/admin/survey/runs/${runId}/archiveer`)
+      .set('Cookie', cookieReviewer)
+      .send({})
+      .expect(403);
+  });
+
+  it('geeft 404 bij het archiveren van een niet-bestaande ronde', async () => {
+    await request(server)
+      .post('/admin/survey/runs/00000000-0000-0000-0000-00000000dead/archiveer')
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(404);
+  });
+
+  it('laat tenant B niet archiveren van een ronde van tenant A', async () => {
+    const runId = await nieuweRonde();
+
+    await request(server)
+      .post(`/admin/survey/runs/${runId}/archiveer`)
+      .set('Cookie', cookieAdminB)
+      .send({})
+      .expect(404);
+  });
+
   it('laat geen deelnemers meer toe zodra de ronde is afgerond', async () => {
     const runId = await nieuweRonde();
 

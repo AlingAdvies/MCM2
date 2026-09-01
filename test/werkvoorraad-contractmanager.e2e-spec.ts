@@ -5,6 +5,8 @@ import { Client } from 'pg';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
+import { randomUUID } from 'node:crypto';
+
 import { AppModule } from '../src/app.module';
 import { cookieInstellingen } from '../src/auth/sessie';
 import { SessieService } from '../src/auth/sessie.service';
@@ -57,6 +59,16 @@ const SUBJECT_B = `oid-wv-b-${Date.now()}`;
 const HASH_VAN_MIJ = `${'7'.repeat(48)}7a11e70000000001`;
 const HASH_VAN_COLLEGA = `${'7'.repeat(48)}7a11e70000000002`;
 const HASH_ZONDER = `${'7'.repeat(48)}7a11e70000000003`;
+const HASH_ARCHIVED = `${'7'.repeat(48)}7a11e70000000004`;
+const HASH_REVOKED = `${'7'.repeat(48)}7a11e70000000005`;
+
+// Eigen fixture voor het archiveer/intrek-filter (issue #205): los van de
+// hoofdronde RUN_A, zodat een archived/revoked ronde niet de bestaande
+// 'van mij'/'organisatie'-tests raakt.
+const RUN_ARCHIVED = randomUUID();
+const RUN_REVOKED = randomUUID();
+const RESPONSE_ARCHIVED = randomUUID();
+const RESPONSE_REVOKED = randomUUID();
 
 interface WerkvoorraadBody {
   scope: string;
@@ -160,6 +172,41 @@ describe('Werkvoorraad contractmanager (e2e)', () => {
         [responseId, tenantA, RUN_A, vendorId, hash],
       );
     }
+
+    // Twee losse rondes voor het archiveer/intrek-filter (issue #205): één
+    // 'archived', één 'active' met revoked_at gezet. Beide horen bij
+    // VENDOR_VAN_MIJ zodat ze zonder het filter in 'van mij' zouden
+    // opduiken.
+    await client.query(
+      `INSERT INTO clm.survey_run
+         (run_id, tenant_id, template_id, status, survey_kind, is_test,
+          started_at)
+       VALUES ($1, $2, $3, 'archived', 'vendor_compliance', true, now())`,
+      [RUN_ARCHIVED, tenantA, TEMPLATE_A],
+    );
+    await client.query(
+      `INSERT INTO clm.survey_response
+         (response_id, tenant_id, run_id, vendor_id, subject_vendor_id,
+          token_hash, status, expires_at)
+       VALUES ($1, $2, $3, $4, $4, $5, 'pending', now() + interval '30 days')`,
+      [RESPONSE_ARCHIVED, tenantA, RUN_ARCHIVED, VENDOR_VAN_MIJ, HASH_ARCHIVED],
+    );
+
+    await client.query(
+      `INSERT INTO clm.survey_run
+         (run_id, tenant_id, template_id, status, survey_kind, is_test,
+          started_at, revoked_at)
+       VALUES ($1, $2, $3, 'active', 'vendor_compliance', true, now(), now())`,
+      [RUN_REVOKED, tenantA, TEMPLATE_A],
+    );
+    await client.query(
+      `INSERT INTO clm.survey_response
+         (response_id, tenant_id, run_id, vendor_id, subject_vendor_id,
+          token_hash, status, expires_at)
+       VALUES ($1, $2, $3, $4, $4, $5, 'pending', now() + interval '30 days')`,
+      [RESPONSE_REVOKED, tenantA, RUN_REVOKED, VENDOR_VAN_MIJ, HASH_REVOKED],
+    );
+
     await client.query('COMMIT');
 
     await client.query('BEGIN');
@@ -244,6 +291,25 @@ describe('Werkvoorraad contractmanager (e2e)', () => {
       expect(mijne?.eigenaarUserId).toBe(MANAGER_A);
       expect(mijne?.eigenaarNaam).toBe('Manager van A');
       expect(mijne?.vendorNaam).toBe('Leverancier van mij');
+    });
+
+    // Issue #205: vóór dit filter bleef een gearchiveerde of ingetrokken
+    // ronde voor altijd als 'opgestuurd, nog niet terug' in dit overzicht
+    // staan, zonder enige manier om hem eruit te krijgen.
+    it('toont geen respons van een gearchiveerde ronde', async () => {
+      const { werkvoorraad } = await haal();
+
+      expect(werkvoorraad.map((w) => w.responseId)).not.toContain(
+        RESPONSE_ARCHIVED,
+      );
+    });
+
+    it('toont geen respons van een ingetrokken ronde', async () => {
+      const { werkvoorraad } = await haal();
+
+      expect(werkvoorraad.map((w) => w.responseId)).not.toContain(
+        RESPONSE_REVOKED,
+      );
     });
   });
 

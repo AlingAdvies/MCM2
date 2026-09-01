@@ -298,6 +298,97 @@ export class RondeBeheerService {
   }
 
   /**
+   * Archiveert een ronde in één actie, ongeacht de huidige status
+   * (issue #205, 01-09).
+   *
+   * ── Waarom dit bestaat ───────────────────────────────────────────────────
+   *
+   * Vóór deze methode was er geen enkele manier om een ronde uit het
+   * statusoverzicht (ContractmanagerService.haal(), zie het filter daar) te
+   * krijgen zonder rechtstreeks in de database te schrijven. Aanleiding:
+   * een token dat per ongeluk was aangemaakt maar nooit verstuurd, bleef
+   * voor altijd als "opgestuurd, nog niet terug" in het overzicht staan.
+   *
+   * ── Waarom hier de tussenstappen automatisch doorlopen worden ───────────
+   *
+   * De bestaande overgangstabel staat alleen draft→active→finished→archived
+   * toe — geen snelkoppeling. In plaats van dat aan de aanroeper (en dus de
+   * UI) over te laten, doorloopt deze methode de tussenstappen zelf, binnen
+   * dezelfde transactie: de aanroeper vraagt om één ding ("archiveer dit"),
+   * niet om een reeks statuswaarden te kennen. `wijzigStatus()` blijft
+   * bestaan voor de fijnmazige, bewuste overgangen (bv. active→finished
+   * zonder meteen door te archiveren).
+   */
+  async archiveer(tenantId: string, runId: string): Promise<RondeGestart> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const huidige = await tx.execute<RunRij>(
+          sql`SELECT r.run_id, r.template_id, t.name AS template_naam,
+                     r.status, r.survey_kind, r.is_test, r.closes_at,
+                     r.contract_id
+                FROM clm.survey_run r
+                JOIN clm.survey_template t ON t.template_id = r.template_id
+               WHERE r.run_id = ${runId}`,
+        );
+
+        const r = huidige.rows[0];
+
+        if (!r) {
+          throw new NotFoundException('Deze ronde bestaat niet.');
+        }
+
+        if (r.status === 'archived') {
+          // Twee keer archiveren is geen fout — zelfde redenering als
+          // wijzigStatus() hierboven bij een status die al gold.
+          return this.naarGestart(r);
+        }
+
+        const PAD_NAAR_ARCHIVED: Record<string, readonly string[]> = {
+          draft: ['active', 'finished', 'archived'],
+          active: ['finished', 'archived'],
+          finished: ['archived'],
+        };
+
+        const stappen = PAD_NAAR_ARCHIVED[r.status];
+
+        if (!stappen) {
+          // Kan met de huidige OVERGANGEN-tabel niet voorkomen (alleen
+          // 'archived' zelf heeft geen enkel pad, en die tak ving hierboven
+          // al af) — maar geen aanname op een toekomstige nieuwe status.
+          throw new ConflictException(
+            `Deze ronde is ${r.status} en kan niet gearchiveerd worden.`,
+          );
+        }
+
+        let huidigeStatus = r.status;
+        for (const volgende of stappen) {
+          if (!magOvergaan(huidigeStatus, volgende)) {
+            throw new ConflictException(
+              `Onverwachte overgang ${huidigeStatus} → ${volgende} tijdens archiveren.`,
+            );
+          }
+          huidigeStatus = volgende;
+        }
+
+        const bijgewerkt = await tx.execute<RunRij>(
+          sql`UPDATE clm.survey_run
+                 SET status = 'archived'
+               WHERE run_id = ${runId}
+              RETURNING run_id, template_id, status, survey_kind, is_test,
+                        closes_at, contract_id`,
+        );
+
+        return this.naarGestart({
+          ...bijgewerkt.rows[0],
+          template_naam: r.template_naam,
+        });
+      },
+      'medewerker',
+    );
+  }
+
+  /**
    * Nodigt leveranciers uit voor een ronde en geeft hun tokens terug.
    *
    * ── Alles in één transactie, en waarom dat hier telt ────────────────────────

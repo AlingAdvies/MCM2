@@ -640,6 +640,24 @@ export class VragenlijstBeheerController {
   }
 
   /**
+   * Archiveert een ronde in één actie, ongeacht de huidige status
+   * (issue #205) — doorloopt zelf de tussenstappen van de overgangstabel.
+   *
+   * @VereistRol('admin'): zelfde grens als wijzigStatus() hierboven.
+   */
+  @Post('runs/:id/archiveer')
+  @VereistRol('admin')
+  @HttpCode(200)
+  async archiveerRonde(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+  ) {
+    const sessie = request.sessie!;
+
+    return this.rondes.archiveer(sessie.tenantId, id);
+  }
+
+  /**
    * Nodigt leveranciers uit en geeft de tokenlinks terug.
    *
    * ── Waarom dit antwoord bijzonder is ────────────────────────────────────────
