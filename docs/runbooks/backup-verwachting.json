@@ -73,10 +73,16 @@
     "backupcontrole van 01-09 09:00 draaide tegen een dump van ná die uitrol",
     "en meldde de drie import-tabellen terecht als 'onbekend' omdat deze",
     "lijst toen nog op 0034 stond — dat was een vergeten opruimstap, geen",
-    "probleem met de backup zelf. Deze lijst is nu bijgewerkt."
+    "probleem met de backup zelf. Deze lijst is nu bijgewerkt.",
+    "",
+    "Migratie 0037 (01-09, beheerder uploadt namens leverancier) voegt GEEN",
+    "tabel toe — alleen uploaded_by_user_id en uploaded_by_admin op de",
+    "bestaande clm.survey_attachment, plus een herziene RLS-policy op die",
+    "tabel. Migratiestand bijgewerkt, tabellenlijst niet — zelfde soort",
+    "wijziging als migratie 0032/0033 hierboven."
   ],
   "bijgewerkt": "2026-09-01",
-  "migratiestand": "0036_contract_import_extra_contact",
+  "migratiestand": "0037_bijlage_namens_leverancier",
   "tabellen": [
     "audit.audit_event",
     "clm.contract",

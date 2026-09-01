@@ -59,6 +59,18 @@ const ATTACHMENT_A = randomUUID();
 const ATTACHMENT_STORAGE_KEY = `beheer-test/${ATTACHMENT_A}.pdf`;
 const ATTACHMENT_INHOUD = Buffer.from('%PDF-1.7\ntest-certificaat');
 
+// Eigen fixture voor 'namens leverancier toevoegen' — zie de toelichting bij
+// de insert in beforeAll().
+const TEMPLATE_UPLOAD = randomUUID();
+const QUESTION_UPLOAD = randomUUID();
+const RUN_UPLOAD = randomUUID();
+const RESPONSE_UPLOAD = randomUUID();
+const TOKEN_HASH_UPLOAD = `${'1'.repeat(48)}deadbeefcafe1234`;
+const PDF_BESTAND = Buffer.concat([
+  Buffer.from('%PDF-1.7\n'),
+  Buffer.from('door-de-beheerder-opgehaald'),
+]);
+
 interface LijstAntwoord {
   vragenlijsten: Array<{
     templateId: string;
@@ -271,6 +283,40 @@ describe('Vragenlijst-beheerroutes (e2e)', () => {
     );
     await client.query('COMMIT');
 
+    // Eigen, geïsoleerde fixture voor 'namens leverancier toevoegen'
+    // (hieronder): een aparte template/run/response met een upload-vraag.
+    // Los van TEMPLATE_A/RESPONSE_A, want v1/v2 daar staan bewust op
+    // allows_upload=false en de bestaande aantalVragen/aantalItems-tests
+    // rekenen op precies die twee vragen.
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL app.current_tenant_id = '${tenantA}'`);
+    await client.query(
+      `INSERT INTO clm.survey_template (template_id, tenant_id, name, version)
+       VALUES ($1, $2, 'upload-test-lijst', 1)`,
+      [TEMPLATE_UPLOAD, tenantA],
+    );
+    await client.query(
+      `INSERT INTO clm.survey_question
+         (question_id, tenant_id, template_id, position, question_key, title,
+          body, answer_type, is_required, allows_upload, max_files, config)
+       VALUES ($1, $2, $3, 1, 'uv1', 'Upload-vraag', 'Toelichting', 'confirmation',
+               false, true, 1, '{}'::jsonb)`,
+      [QUESTION_UPLOAD, tenantA, TEMPLATE_UPLOAD],
+    );
+    await client.query(
+      `INSERT INTO clm.survey_run (run_id, tenant_id, template_id, status, survey_kind, is_test)
+       VALUES ($1, $2, $3, 'active', 'vendor_compliance', true)`,
+      [RUN_UPLOAD, tenantA, TEMPLATE_UPLOAD],
+    );
+    await client.query(
+      `INSERT INTO clm.survey_response
+         (response_id, tenant_id, run_id, vendor_id, subject_vendor_id,
+          token_hash, status, expires_at, submitted_at)
+       VALUES ($1, $2, $3, $4, $4, $5, 'submitted', now() + interval '30 days', now())`,
+      [RESPONSE_UPLOAD, tenantA, RUN_UPLOAD, VENDOR_A, TOKEN_HASH_UPLOAD],
+    );
+    await client.query('COMMIT');
+
     // Vragenlijst in B, zodat de tenantgrens iets te verbergen heeft.
     await client.query('BEGIN');
     await client.query(`SET LOCAL app.current_tenant_id = '${tenantB}'`);
@@ -407,12 +453,15 @@ describe('Vragenlijst-beheerroutes (e2e)', () => {
         .expect(200);
 
       const rondes = (antwoord.body as RondesAntwoord).rondes;
+      // filter i.p.v. toHaveLength(1): de upload-fixture (zie beforeAll)
+      // heeft ook een eigen ronde in tenant A.
+      const ronde = rondes.find((r) => r.runId === RUN_A);
 
-      expect(rondes).toHaveLength(1);
-      expect(rondes[0].templateNaam).toBe('beheer-test-lijst');
-      expect(rondes[0].status).toBe('active');
-      expect(rondes[0].aantalDeelnemers).toBe(1);
-      expect(rondes[0].aantalIngediend).toBe(0);
+      expect(ronde).toBeDefined();
+      expect(ronde!.templateNaam).toBe('beheer-test-lijst');
+      expect(ronde!.status).toBe('active');
+      expect(ronde!.aantalDeelnemers).toBe(1);
+      expect(ronde!.aantalIngediend).toBe(0);
     });
 
     it('toont de deelnemer met leveranciersnaam', async () => {
@@ -665,6 +714,103 @@ describe('Vragenlijst-beheerroutes (e2e)', () => {
     });
   });
 
+  describe('een bijlage toevoegen namens de leverancier', () => {
+    const upload = () =>
+      request(server)
+        .post(`/admin/survey/responses/${RESPONSE_UPLOAD}/attachments`)
+        .query({ question: 'uv1' })
+        .set('Cookie', cookieA);
+
+    it('slaat het bestand op, ook al is de respons al ingediend', async () => {
+      // RESPONSE_UPLOAD staat op 'submitted' — dat is precies het scenario:
+      // het bewijs komt later boven water dan de indiening zelf.
+      const res = await upload()
+        .attach('file', PDF_BESTAND, 'van-website-gehaald.pdf')
+        .expect(201);
+
+      expect((res.body as { contentType: string }).contentType).toBe(
+        'application/pdf',
+      );
+
+      // RLS: survey_attachment eist app.current_tenant_id, dus lezen (en
+      // opruimen) gebeurt binnen dezelfde tenant-context als de fixture.
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL app.current_tenant_id = '${tenantA}'`);
+
+      const rij = await client.query<{
+        uploaded_by_admin: boolean;
+        uploaded_by_user_id: string;
+        original_name: string;
+      }>(
+        `SELECT uploaded_by_admin, uploaded_by_user_id, original_name
+           FROM clm.survey_attachment
+          WHERE response_id = $1`,
+        [RESPONSE_UPLOAD],
+      );
+
+      expect(rij.rows).toHaveLength(1);
+      expect(rij.rows[0].uploaded_by_admin).toBe(true);
+      expect(rij.rows[0].uploaded_by_user_id).toBe(userA);
+      expect(rij.rows[0].original_name).toBe('van-website-gehaald.pdf');
+
+      // Opruimen: de volgende test in dit blok verwacht een lege staat.
+      await client.query(
+        'DELETE FROM clm.survey_attachment WHERE response_id = $1',
+        [RESPONSE_UPLOAD],
+      );
+      await client.query('COMMIT');
+    });
+
+    it('respecteert max_files, ook voor de beheerder', async () => {
+      // uv1 staat op max_files = 1 (besluit eigenaar 01-09: dezelfde
+      // limiet geldt, ongeacht wie uploadt).
+      await upload().attach('file', PDF_BESTAND, 'eerste.pdf').expect(201);
+
+      await upload()
+        .attach('file', PDF_BESTAND, 'tweede.pdf')
+        .expect(422)
+        .expect((res) => {
+          expect((res.body as { reason: string }).reason).toBe(
+            'too_many_files',
+          );
+        });
+
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL app.current_tenant_id = '${tenantA}'`);
+      await client.query(
+        'DELETE FROM clm.survey_attachment WHERE response_id = $1',
+        [RESPONSE_UPLOAD],
+      );
+      await client.query('COMMIT');
+    });
+
+    it('weigert een reviewer — dit is een schrijfactie, geen leesroute', async () => {
+      await request(server)
+        .post(`/admin/survey/responses/${RESPONSE_UPLOAD}/attachments`)
+        .query({ question: 'uv1' })
+        .set('Cookie', cookieReviewer)
+        .attach('file', PDF_BESTAND, 'certificaat.pdf')
+        .expect(403);
+    });
+
+    it('geeft 404 bij een vraag die niet bij deze respons hoort', async () => {
+      await request(server)
+        .post(`/admin/survey/responses/${RESPONSE_UPLOAD}/attachments`)
+        .query({ question: 'onbestaand' })
+        .set('Cookie', cookieA)
+        .attach('file', PDF_BESTAND, 'certificaat.pdf')
+        .expect(404);
+    });
+
+    it('geeft 400 zonder de question-parameter', async () => {
+      await request(server)
+        .post(`/admin/survey/responses/${RESPONSE_UPLOAD}/attachments`)
+        .set('Cookie', cookieA)
+        .attach('file', PDF_BESTAND, 'certificaat.pdf')
+        .expect(400);
+    });
+  });
+
   describe('de uitvragen van één leverancier', () => {
     /**
      * ── Waarom deze route bestaat ─────────────────────────────────────────
@@ -684,13 +830,15 @@ describe('Vragenlijst-beheerroutes (e2e)', () => {
       const { uitvragen } = antwoord.body as {
         uitvragen: Array<Record<string, unknown>>;
       };
+      // find i.p.v. toHaveLength(1): de upload-fixture (zie beforeAll) zit
+      // op dezelfde vendor.
+      const uitvraag = uitvragen.find((u) => u.responseId === RESPONSE_A);
 
-      expect(uitvragen).toHaveLength(1);
-      expect(uitvragen[0].responseId).toBe(RESPONSE_A);
-      expect(uitvragen[0].runId).toBe(RUN_A);
-      expect(uitvragen[0].status).toBe('pending');
-      expect(uitvragen[0].ingediendOp).toBeNull();
-      expect(uitvragen[0].templateNaam).toBeTruthy();
+      expect(uitvraag).toBeDefined();
+      expect(uitvraag!.runId).toBe(RUN_A);
+      expect(uitvraag!.status).toBe('pending');
+      expect(uitvraag!.ingediendOp).toBeNull();
+      expect(uitvraag!.templateNaam).toBeTruthy();
     });
 
     it('lekt het token niet', async () => {

@@ -260,6 +260,13 @@
       "when": 1787068800010,
       "tag": "0036_contract_import_extra_contact",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1787068800011,
+      "tag": "0037_bijlage_namens_leverancier",
+      "breakpoints": true
     }
   ]
 }
