@@ -1,6 +1,11 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
+import { randomUUID } from 'node:crypto';
 import { Client } from 'pg';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -50,6 +55,10 @@ const SUBJECT_REVIEWER = `oid-vlb-r-${Date.now()}`;
  */
 const TOKEN_HASH = `${'0'.repeat(48)}deadbeefcafe1234`;
 
+const ATTACHMENT_A = randomUUID();
+const ATTACHMENT_STORAGE_KEY = `beheer-test/${ATTACHMENT_A}.pdf`;
+const ATTACHMENT_INHOUD = Buffer.from('%PDF-1.7\ntest-certificaat');
+
 interface LijstAntwoord {
   vragenlijsten: Array<{
     templateId: string;
@@ -93,8 +102,9 @@ async function verwijderTestdata(client: Client): Promise<void> {
     await client.query('BEGIN');
     await client.query(`SET LOCAL app.current_tenant_id = '${tenant}'`);
     for (const tabel of [
-      // Antwoorden vóór de respons: survey_answer heeft een FK naar
+      // Bijlagen en antwoorden vóór de respons: beide hebben een FK naar
       // survey_response, dus andersom weigert Postgres de DELETE.
+      'clm.survey_attachment',
       'clm.survey_answer',
       'clm.survey_response',
       'clm.survey_run',
@@ -120,9 +130,17 @@ describe('Vragenlijst-beheerroutes (e2e)', () => {
   let cookieA: string;
   let cookieB: string;
   let cookieReviewer: string;
+  let uploadMap: string;
   const cookieNaam = cookieInstellingen().naam;
 
   beforeAll(async () => {
+    // Eigen tijdelijke map, zelfde patroon als bijlage-upload.e2e-spec.ts:
+    // de downloadroute leest een echt bestand van schijf.
+    uploadMap = await mkdtemp(join(tmpdir(), 'mcm2-vlb-uploads-'));
+    process.env.UPLOAD_DIR = uploadMap;
+    await mkdir(join(uploadMap, 'beheer-test'), { recursive: true });
+    await writeFile(join(uploadMap, ATTACHMENT_STORAGE_KEY), ATTACHMENT_INHOUD);
+
     client = new Client({ connectionString: process.env.DATABASE_URL });
     await client.connect();
     await verwijderTestdata(client);
@@ -231,6 +249,26 @@ describe('Vragenlijst-beheerroutes (e2e)', () => {
         WHERE q.template_id = $3 AND q.question_key = 'v1'`,
       [tenantA, RESPONSE_A, TEMPLATE_A],
     );
+
+    // Eén bijlage bij v1, voor de downloadroute-tests hieronder.
+    await client.query(
+      `INSERT INTO clm.survey_attachment
+         (attachment_id, tenant_id, response_id, question_id, original_name,
+          storage_key, content_type, byte_size, sha256)
+       SELECT $1, $2, $3, q.question_id, 'certificaat.pdf', $4,
+              'application/pdf', $5, $6
+         FROM clm.survey_question q
+        WHERE q.template_id = $7 AND q.question_key = 'v1'`,
+      [
+        ATTACHMENT_A,
+        tenantA,
+        RESPONSE_A,
+        ATTACHMENT_STORAGE_KEY,
+        ATTACHMENT_INHOUD.length,
+        '0'.repeat(64),
+        TEMPLATE_A,
+      ],
+    );
     await client.query('COMMIT');
 
     // Vragenlijst in B, zodat de tenantgrens iets te verbergen heeft.
@@ -270,6 +308,8 @@ describe('Vragenlijst-beheerroutes (e2e)', () => {
     await app.close();
     await verwijderTestdata(client);
     await client.end();
+    await rm(uploadMap, { recursive: true, force: true });
+    delete process.env.UPLOAD_DIR;
   }, 30000);
 
   describe('zonder geldige sessie is er geen toegang', () => {
@@ -534,6 +574,25 @@ describe('Vragenlijst-beheerroutes (e2e)', () => {
       expect(alsTekst).not.toContain('storageKey');
     });
 
+    it('geeft de bijlage terug in het antwoord, met de juiste naam en grootte', async () => {
+      const body = await haalAntwoorden(cookieA);
+
+      const v1 = body.antwoorden.find((a) => a.questionKey === 'v1') as {
+        bijlagen: Array<{
+          attachmentId: string;
+          originalName: string;
+          byteSize: number;
+          contentType: string;
+        }>;
+      };
+
+      expect(v1.bijlagen).toHaveLength(1);
+      expect(v1.bijlagen[0].attachmentId).toBe(ATTACHMENT_A);
+      expect(v1.bijlagen[0].originalName).toBe('certificaat.pdf');
+      expect(v1.bijlagen[0].byteSize).toBe(ATTACHMENT_INHOUD.length);
+      expect(v1.bijlagen[0].contentType).toBe('application/pdf');
+    });
+
     it('laat een reviewer de antwoorden lezen', async () => {
       // Voor een reviewer is dit de kernroute: beoordelen kan niet zonder de
       // antwoorden te zien.
@@ -559,6 +618,50 @@ describe('Vragenlijst-beheerroutes (e2e)', () => {
         )
         .set('Cookie', cookieA)
         .expect(404);
+    });
+  });
+
+  describe('het downloaden van een bijlage', () => {
+    it('geeft de bytes van het bestand terug, met de juiste headers', async () => {
+      const res = await request(server)
+        .get(`/admin/survey/attachments/${ATTACHMENT_A}`)
+        .set('Cookie', cookieA)
+        .expect(200);
+
+      expect(res.headers['content-type']).toBe('application/pdf');
+      expect(res.headers['content-disposition']).toContain('certificaat.pdf');
+      expect(Buffer.compare(res.body as Buffer, ATTACHMENT_INHOUD)).toBe(0);
+    });
+
+    it('laat een reviewer de bijlage ook downloaden', async () => {
+      // Zelfde regel als bij de antwoordenroute: beoordelen kan niet zonder
+      // het geüploade bewijs te kunnen openen.
+      await request(server)
+        .get(`/admin/survey/attachments/${ATTACHMENT_A}`)
+        .set('Cookie', cookieReviewer)
+        .expect(200);
+    });
+
+    it('geeft tenant B een 404 op de bijlage van A', async () => {
+      // RLS maakt de rij onzichtbaar — zelfde patroon als de andere
+      // tenantgrens-tests hierboven.
+      await request(server)
+        .get(`/admin/survey/attachments/${ATTACHMENT_A}`)
+        .set('Cookie', cookieB)
+        .expect(404);
+    });
+
+    it('geeft 404 op een niet-bestaande bijlage', async () => {
+      await request(server)
+        .get('/admin/survey/attachments/00000000-0000-0000-0000-00000000dead')
+        .set('Cookie', cookieA)
+        .expect(404);
+    });
+
+    it('geeft geen toegang zonder geldige sessie', async () => {
+      await request(server)
+        .get(`/admin/survey/attachments/${ATTACHMENT_A}`)
+        .expect(401);
     });
   });
 

@@ -10,8 +10,10 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 
 import { UitnodigingVerzender } from '../mail/uitnodiging-verzender.service';
 import { RolGuard, VereistRol } from '../auth/rol.guard';
@@ -20,6 +22,7 @@ import {
   type RequestMetSessie,
 } from '../auth/tenant-context.guard';
 import { ContractService } from '../contract/contract.service';
+import { BestandOpslagService } from './bestand-opslag.service';
 import { ContractmanagerService } from './contractmanager.service';
 import { NotitieService } from './notitie.service';
 import { RondeBeheerService } from './ronde-beheer.service';
@@ -89,6 +92,7 @@ export class VragenlijstBeheerController {
     private readonly notities_: NotitieService,
     private readonly contractmanagers: ContractmanagerService,
     private readonly contracten: ContractService,
+    private readonly opslag: BestandOpslagService,
   ) {}
 
   /** Alle vragenlijsten van deze tenant, met aantallen vragen en rondes. */
@@ -161,6 +165,41 @@ export class VragenlijstBeheerController {
     const sessie = request.sessie!;
 
     return this.beheer.antwoorden(sessie.tenantId, id);
+  }
+
+  /**
+   * Downloadt één bijlage bij een antwoord.
+   *
+   * Geen `@VereistRol`: zelfde regel als `antwoorden()` hierboven — een
+   * reviewer moet een geüpload certificaat kunnen openen om te kunnen
+   * beoordelen.
+   *
+   * `storage_key` verlaat de service nooit naar de client (zie de toelichting
+   * bij `VragenlijstBeheerService.bijlageOpzoeken()`) — deze route leest hem
+   * op, geeft hem meteen door aan `BestandOpslagService.lees()`, en stuurt
+   * alleen de bytes terug.
+   */
+  @Get('attachments/:id')
+  async bijlageDownloaden(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Res() res: Response,
+  ) {
+    const sessie = request.sessie!;
+
+    const bijlage = await this.beheer.bijlageOpzoeken(sessie.tenantId, id);
+    const inhoud = await this.opslag.lees(bijlage.storageKey);
+
+    res.set({
+      'Content-Type': bijlage.contentType,
+      // 'attachment' i.p.v. 'inline': een geüpload PDF/afbeelding hoort
+      // gedownload te worden, niet in de browser te renderen naast de
+      // beheerinterface. encodeURIComponent voorkomt problemen met
+      // aanhalingstekens of niet-ASCII-tekens in de oorspronkelijke naam.
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(bijlage.originalName)}"`,
+      'Content-Length': String(inhoud.length),
+    });
+    res.send(inhoud);
   }
 
   /** Alle oordelen over één respons, nieuwste eerst. */
