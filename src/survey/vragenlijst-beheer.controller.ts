@@ -667,7 +667,7 @@ export class VragenlijstBeheerController {
    */
   @Post('runs/:id/participants/:responseId/intrekken')
   @VereistRol('admin')
-  @HttpCode(204)
+  @HttpCode(200)
   async trekDeelnemerIn(
     @Req() request: RequestMetSessie,
     @Param('id') id: string,
@@ -675,7 +675,7 @@ export class VragenlijstBeheerController {
   ) {
     const sessie = request.sessie!;
 
-    await this.rondes.trekDeelnemerIn(sessie.tenantId, id, responseId);
+    return this.rondes.trekDeelnemerIn(sessie.tenantId, id, responseId);
   }
 
   /**

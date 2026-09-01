@@ -929,7 +929,7 @@ describe('Ronde-beheerroutes (e2e)', () => {
       .post(`/admin/survey/runs/${runId}/participants/${responseId}/intrekken`)
       .set('Cookie', cookieAdminA)
       .send({})
-      .expect(204);
+      .expect(200);
 
     const ronde = await request(server)
       .get(`/admin/survey/runs/${runId}`)
@@ -969,7 +969,7 @@ describe('Ronde-beheerroutes (e2e)', () => {
       )
       .set('Cookie', cookieAdminA)
       .send({})
-      .expect(204);
+      .expect(200);
 
     const ronde = await request(server)
       .get(`/admin/survey/runs/${runId}`)
@@ -998,13 +998,13 @@ describe('Ronde-beheerroutes (e2e)', () => {
       .post(`/admin/survey/runs/${runId}/participants/${responseId}/intrekken`)
       .set('Cookie', cookieAdminA)
       .send({})
-      .expect(204);
+      .expect(200);
 
     await request(server)
       .post(`/admin/survey/runs/${runId}/participants/${responseId}/intrekken`)
       .set('Cookie', cookieAdminA)
       .send({})
-      .expect(204);
+      .expect(200);
   });
 
   it('weigert het intrekken van een al ingediende deelnemer', async () => {

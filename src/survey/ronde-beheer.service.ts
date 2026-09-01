@@ -413,7 +413,7 @@ export class RondeBeheerService {
     tenantId: string,
     runId: string,
     responseId: string,
-  ): Promise<void> {
+  ): Promise<{ responseId: string; status: string }> {
     return this.db.withTenant(
       tenantId,
       async (tx) => {
@@ -436,7 +436,7 @@ export class RondeBeheerService {
         if (r.status === 'revoked') {
           // Twee keer intrekken is geen fout — zelfde redenering als
           // archiveer()/wijzigStatus() hierboven.
-          return;
+          return { responseId: r.response_id, status: r.status };
         }
 
         if (r.status !== 'pending') {
@@ -445,11 +445,20 @@ export class RondeBeheerService {
           );
         }
 
-        await tx.execute(
+        const bijgewerkt = await tx.execute<{
+          response_id: string;
+          status: string;
+        }>(
           sql`UPDATE clm.survey_response
                  SET status = 'revoked'
-               WHERE response_id = ${responseId}`,
+               WHERE response_id = ${responseId}
+              RETURNING response_id, status`,
         );
+
+        return {
+          responseId: bijgewerkt.rows[0].response_id,
+          status: bijgewerkt.rows[0].status,
+        };
       },
       'medewerker',
     );
