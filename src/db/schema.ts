@@ -895,6 +895,15 @@ export const surveyAttachment = clm.table(
     // bestand niet gewijzigd is sinds indiening. Zelfde redenering als achter
     // de append-only audit trail.
     sha256: text('sha256').notNull(),
+    // NULL = de leverancier uploadde dit zelf via het portaal (bestaand
+    // gedrag). Gevuld: welke medewerker het namens de leverancier heeft
+    // toegevoegd (migratie 0037). Zie de kolomcommentaren in die migratie
+    // voor waarom dit twee kolommen zijn i.p.v. één NULL-check.
+    uploadedByUserId: uuid('uploaded_by_user_id').references(
+      () => user.userId,
+      { onDelete: 'set null' },
+    ),
+    uploadedByAdmin: boolean('uploaded_by_admin').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

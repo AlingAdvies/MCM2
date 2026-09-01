@@ -5,14 +5,20 @@ import {
   Delete,
   Get,
   HttpCode,
+  NotFoundException,
   Param,
   Patch,
+  PayloadTooLargeException,
   Post,
   Query,
   Req,
   Res,
+  UnprocessableEntityException,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 
 import { UitnodigingVerzender } from '../mail/uitnodiging-verzender.service';
@@ -23,6 +29,8 @@ import {
 } from '../auth/tenant-context.guard';
 import { ContractService } from '../contract/contract.service';
 import { BestandOpslagService } from './bestand-opslag.service';
+import { BijlageBeheerService } from './bijlage-beheer.service';
+import { MAX_BESTANDSGROOTTE } from './bestand-validatie';
 import { ContractmanagerService } from './contractmanager.service';
 import { NotitieService } from './notitie.service';
 import { RondeBeheerService } from './ronde-beheer.service';
@@ -93,6 +101,7 @@ export class VragenlijstBeheerController {
     private readonly contractmanagers: ContractmanagerService,
     private readonly contracten: ContractService,
     private readonly opslag: BestandOpslagService,
+    private readonly bijlagenBeheer: BijlageBeheerService,
   ) {}
 
   /** Alle vragenlijsten van deze tenant, met aantallen vragen en rondes. */
@@ -200,6 +209,91 @@ export class VragenlijstBeheerController {
       'Content-Length': String(inhoud.length),
     });
     res.send(inhoud);
+  }
+
+  /**
+   * Voegt een bijlage toe namens de leverancier (besluit van de eigenaar,
+   * 01-09): een leverancier publiceert een certificaat soms op zijn eigen
+   * website in plaats van het te uploaden, en de contractbeheerder wil dat
+   * bewijs dan zelf ophalen en vastleggen bij de vraag.
+   *
+   * `@VereistRol('admin')`: bewust strenger dan de leesroutes hierboven
+   * (waar een reviewer ook mag) — dit is een schrijfactie die de
+   * leverancier normaal zelf doet, en die bevoegdheid hoort bij dezelfde rol
+   * die ook contracten en leveranciers beheert.
+   *
+   * Geen `niet-meer-open`-status zoals bij het leverancierspad: dit mag
+   * juist ook ná indienen, dat is het hele scenario.
+   */
+  @Post('responses/:id/attachments')
+  @VereistRol('admin')
+  @HttpCode(201)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_BESTANDSGROOTTE, files: 1 },
+    }),
+  )
+  async bijlageToevoegen(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Query('question') questionKey: string | undefined,
+    @UploadedFile()
+    bestand:
+      { originalname: string; mimetype?: string; buffer: Buffer } | undefined,
+  ) {
+    const sessie = request.sessie!;
+
+    if (!questionKey) {
+      throw new BadRequestException(
+        'Geef met de parameter `question` aan bij welke vraag dit bestand hoort.',
+      );
+    }
+
+    if (!bestand) {
+      throw new BadRequestException('Er is geen bestand meegestuurd.');
+    }
+
+    const uitkomst = await this.bijlagenBeheer.voegToeAlsBeheer(
+      sessie.tenantId,
+      id,
+      questionKey,
+      sessie.userId,
+      bestand,
+    );
+
+    switch (uitkomst.status) {
+      case 'opgeslagen':
+        return {
+          status: 'opgeslagen' as const,
+          attachmentId: uitkomst.attachmentId,
+          contentType: uitkomst.contentType,
+        };
+
+      case 'afgekeurd':
+        if (uitkomst.reden === 'te-groot') {
+          throw new PayloadTooLargeException('Dit bestand is groter dan 5 MB.');
+        }
+        throw new UnprocessableEntityException({
+          status: 'invalid_file',
+          reason: uitkomst.reden,
+        });
+
+      case 'onbekende-vraag':
+        throw new NotFoundException('Deze vraag hoort niet bij deze respons.');
+
+      case 'geen-upload-vraag':
+        throw new UnprocessableEntityException({
+          status: 'invalid_file',
+          reason: 'question_accepts_no_files',
+        });
+
+      case 'te-veel-bestanden':
+        throw new UnprocessableEntityException({
+          status: 'invalid_file',
+          reason: 'too_many_files',
+          maximum: uitkomst.maximum,
+        });
+    }
   }
 
   /** Alle oordelen over één respons, nieuwste eerst. */

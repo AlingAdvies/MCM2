@@ -138,6 +138,10 @@ export interface BijlageSamenvatting {
   contentType: string;
   byteSize: number;
   createdAt: string;
+  /** true wanneer een medewerker dit namens de leverancier heeft toegevoegd
+   * (migratie 0037) — false voor een bestaande bijlage die de leverancier
+   * zelf uploadde. */
+  uploadedByAdmin: boolean;
 }
 
 /**
@@ -160,6 +164,8 @@ export interface AntwoordDetail {
   body: string;
   answerType: string;
   isRequired: boolean;
+  allowsUpload: boolean;
+  maxFiles: number;
   categoryId: string | null;
   categorieNaam: string | null;
   /** Null wanneer deze vraag niet is beantwoord. */
@@ -251,6 +257,8 @@ interface AntwoordRij extends Record<string, unknown> {
   body: string;
   answer_type: string;
   is_required: boolean;
+  allows_upload: boolean;
+  max_files: number;
   category_id: string | null;
   categorie_naam: string | null;
   answer_id: string | null;
@@ -270,6 +278,7 @@ interface BijlageRij extends Record<string, unknown> {
   content_type: string;
   byte_size: number;
   created_at: Date | string;
+  uploaded_by_admin: boolean;
 }
 
 interface ResponsRij extends Record<string, unknown> {
@@ -696,6 +705,8 @@ export class VragenlijstBeheerService {
                      q.body,
                      q.answer_type,
                      q.is_required,
+                     q.allows_upload,
+                     q.max_files,
                      q.category_id,
                      c.name AS categorie_naam,
                      a.answer_id,
@@ -721,7 +732,8 @@ export class VragenlijstBeheerService {
                      original_name,
                      content_type,
                      byte_size,
-                     created_at
+                     created_at,
+                     uploaded_by_admin
                 FROM clm.survey_attachment
                WHERE response_id = ${responseId}
                ORDER BY created_at`,
@@ -736,6 +748,7 @@ export class VragenlijstBeheerService {
             contentType: b.content_type,
             byteSize: b.byte_size,
             createdAt: iso(b.created_at) ?? '',
+            uploadedByAdmin: b.uploaded_by_admin,
           });
           perVraag.set(b.question_id, lijst);
         }
@@ -748,6 +761,8 @@ export class VragenlijstBeheerService {
           body: r.body,
           answerType: r.answer_type,
           isRequired: r.is_required,
+          allowsUpload: r.allows_upload,
+          maxFiles: r.max_files,
           categoryId: r.category_id,
           categorieNaam: r.categorie_naam,
           antwoord: r.answer_id

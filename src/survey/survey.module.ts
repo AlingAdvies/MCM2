@@ -10,6 +10,7 @@ import { SurveyTokenService } from './survey-token.service';
 import { AntwoordConceptService } from './antwoord-concept.service';
 import { AntwoordIndienService } from './antwoord-indienen.service';
 import { BestandOpslagService } from './bestand-opslag.service';
+import { BijlageBeheerService } from './bijlage-beheer.service';
 import { BijlageService } from './bijlage.service';
 import { BeoordelaarService } from './beoordelaar.service';
 import { BeoordelingService } from './beoordeling.service';
@@ -59,6 +60,7 @@ import { VragenlijstLeesService } from './vragenlijst-lezen.service';
     AntwoordConceptService,
     BestandOpslagService,
     BijlageService,
+    BijlageBeheerService,
   ],
   exports: [
     SurveyAuditService,
@@ -76,6 +78,7 @@ import { VragenlijstLeesService } from './vragenlijst-lezen.service';
     AntwoordConceptService,
     BestandOpslagService,
     BijlageService,
+    BijlageBeheerService,
   ],
 })
 export class SurveyModule {}
