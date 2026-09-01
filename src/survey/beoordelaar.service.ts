@@ -187,6 +187,12 @@ export class BeoordelaarService {
    * Een respons die nog openstaat valt niet te beoordelen (migratie 0015-logica
    * in BeoordelingService). Hem hier tonen zou een werkvoorraad opleveren waar
    * je niets mee kunt.
+   *
+   * ── Gearchiveerd of ingetrokken telt niet mee (01-09, issue #205) ───────────
+   *
+   * Zelfde filter als ContractmanagerService.haal(): een ronde die is
+   * gearchiveerd of ingetrokken hoort niet meer als openstaand werk te tellen,
+   * ook al is er al ingediend.
    */
   async werkvoorraad(
     tenantId: string,
@@ -221,6 +227,8 @@ export class BeoordelaarService {
                       AND tr.user_id = ${userId}
                 LEFT JOIN clm.vendor v     ON v.vendor_id = s.vendor_id
                WHERE s.submitted_at IS NOT NULL
+                 AND r.status <> 'archived'
+                 AND r.revoked_at IS NULL
                ORDER BY s.submitted_at DESC`,
         );
 

@@ -298,6 +298,173 @@ export class RondeBeheerService {
   }
 
   /**
+   * Archiveert een ronde in één actie, ongeacht de huidige status
+   * (issue #205, 01-09).
+   *
+   * ── Waarom dit bestaat ───────────────────────────────────────────────────
+   *
+   * Vóór deze methode was er geen enkele manier om een ronde uit het
+   * statusoverzicht (ContractmanagerService.haal(), zie het filter daar) te
+   * krijgen zonder rechtstreeks in de database te schrijven. Aanleiding:
+   * een token dat per ongeluk was aangemaakt maar nooit verstuurd, bleef
+   * voor altijd als "opgestuurd, nog niet terug" in het overzicht staan.
+   *
+   * ── Waarom hier de tussenstappen automatisch doorlopen worden ───────────
+   *
+   * De bestaande overgangstabel staat alleen draft→active→finished→archived
+   * toe — geen snelkoppeling. In plaats van dat aan de aanroeper (en dus de
+   * UI) over te laten, doorloopt deze methode de tussenstappen zelf, binnen
+   * dezelfde transactie: de aanroeper vraagt om één ding ("archiveer dit"),
+   * niet om een reeks statuswaarden te kennen. `wijzigStatus()` blijft
+   * bestaan voor de fijnmazige, bewuste overgangen (bv. active→finished
+   * zonder meteen door te archiveren).
+   */
+  async archiveer(tenantId: string, runId: string): Promise<RondeGestart> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const huidige = await tx.execute<RunRij>(
+          sql`SELECT r.run_id, r.template_id, t.name AS template_naam,
+                     r.status, r.survey_kind, r.is_test, r.closes_at,
+                     r.contract_id
+                FROM clm.survey_run r
+                JOIN clm.survey_template t ON t.template_id = r.template_id
+               WHERE r.run_id = ${runId}`,
+        );
+
+        const r = huidige.rows[0];
+
+        if (!r) {
+          throw new NotFoundException('Deze ronde bestaat niet.');
+        }
+
+        if (r.status === 'archived') {
+          // Twee keer archiveren is geen fout — zelfde redenering als
+          // wijzigStatus() hierboven bij een status die al gold.
+          return this.naarGestart(r);
+        }
+
+        const PAD_NAAR_ARCHIVED: Record<string, readonly string[]> = {
+          draft: ['active', 'finished', 'archived'],
+          active: ['finished', 'archived'],
+          finished: ['archived'],
+        };
+
+        const stappen = PAD_NAAR_ARCHIVED[r.status];
+
+        if (!stappen) {
+          // Kan met de huidige OVERGANGEN-tabel niet voorkomen (alleen
+          // 'archived' zelf heeft geen enkel pad, en die tak ving hierboven
+          // al af) — maar geen aanname op een toekomstige nieuwe status.
+          throw new ConflictException(
+            `Deze ronde is ${r.status} en kan niet gearchiveerd worden.`,
+          );
+        }
+
+        let huidigeStatus = r.status;
+        for (const volgende of stappen) {
+          if (!magOvergaan(huidigeStatus, volgende)) {
+            throw new ConflictException(
+              `Onverwachte overgang ${huidigeStatus} → ${volgende} tijdens archiveren.`,
+            );
+          }
+          huidigeStatus = volgende;
+        }
+
+        const bijgewerkt = await tx.execute<RunRij>(
+          sql`UPDATE clm.survey_run
+                 SET status = 'archived'
+               WHERE run_id = ${runId}
+              RETURNING run_id, template_id, status, survey_kind, is_test,
+                        closes_at, contract_id`,
+        );
+
+        return this.naarGestart({
+          ...bijgewerkt.rows[0],
+          template_naam: r.template_naam,
+        });
+      },
+      'medewerker',
+    );
+  }
+
+  /**
+   * Trekt de uitnodiging van één deelnemer in — een vergissing bij één
+   * leverancier binnen een ronde, in tegenstelling tot `archiveer()` (de
+   * hele ronde, bijvoorbeeld bij een periode-afsluiting).
+   *
+   * ── Waarom dit veld al bestond, alleen de schrijfkant niet ────────────────
+   *
+   * `survey_response.status` kent `'revoked'` al als toegestane waarde
+   * (CHECK-constraint, migratie 0005) en het leverancierspad
+   * (`survey-token.service.ts`) weigert al netjes een ingetrokken token —
+   * maar er was nooit een route om die status vanaf de beheerkant te
+   * ZETTEN. Deze methode is die ontbrekende schrijfkant, geen nieuw
+   * concept.
+   *
+   * ── Waarom niet zomaar op elke status ──────────────────────────────────────
+   *
+   * Intrekken van een al ingediende respons zou bewijsmateriaal ongedaan
+   * maken — dat hoort niet bij "ik heb me vergist bij het uitnodigen".
+   * Alleen 'pending' mag naar 'revoked'; een 'submitted' of al 'revoked'
+   * respons levert een 409 op, met de reden erbij.
+   */
+  async trekDeelnemerIn(
+    tenantId: string,
+    runId: string,
+    responseId: string,
+  ): Promise<{ responseId: string; status: string }> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const huidige = await tx.execute<{
+          response_id: string;
+          status: string;
+        }>(
+          sql`SELECT response_id, status FROM clm.survey_response
+               WHERE response_id = ${responseId} AND run_id = ${runId}`,
+        );
+
+        const r = huidige.rows[0];
+
+        if (!r) {
+          throw new NotFoundException(
+            'Deze deelnemer bestaat niet binnen deze ronde.',
+          );
+        }
+
+        if (r.status === 'revoked') {
+          // Twee keer intrekken is geen fout — zelfde redenering als
+          // archiveer()/wijzigStatus() hierboven.
+          return { responseId: r.response_id, status: r.status };
+        }
+
+        if (r.status !== 'pending') {
+          throw new ConflictException(
+            `Deze deelnemer is al ${r.status === 'submitted' ? 'ingediend' : r.status} en kan niet meer worden ingetrokken.`,
+          );
+        }
+
+        const bijgewerkt = await tx.execute<{
+          response_id: string;
+          status: string;
+        }>(
+          sql`UPDATE clm.survey_response
+                 SET status = 'revoked'
+               WHERE response_id = ${responseId}
+              RETURNING response_id, status`,
+        );
+
+        return {
+          responseId: bijgewerkt.rows[0].response_id,
+          status: bijgewerkt.rows[0].status,
+        };
+      },
+      'medewerker',
+    );
+  }
+
+  /**
    * Nodigt leveranciers uit voor een ronde en geeft hun tokens terug.
    *
    * ── Alles in één transactie, en waarom dat hier telt ────────────────────────

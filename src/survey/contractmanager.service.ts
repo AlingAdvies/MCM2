@@ -155,6 +155,20 @@ export class ContractmanagerService {
         // LEFT JOIN op vendor: bij UC2 is vendor_id leeg (dan vult een collega
         // in over een leverancier). Een INNER JOIN zou die responses stil laten
         // verdwijnen uit het overzicht dat de centrale waarheid moet zijn.
+        //
+        // r.status <> 'archived' / r.revoked_at IS NULL (01-09, issue #205):
+        // een gearchiveerde of ingetrokken RONDE hoort hier niet meer te
+        // tellen. Vóór deze aanpassing bleef zo'n ronde permanent zichtbaar
+        // als 'opgestuurd, nog niet terug' — er was geen enkel mechanisme
+        // (ook niet via de bestaande statusroute) om hem hier te laten
+        // verdwijnen. Bewust hier gefilterd en niet in bepaalStatus():
+        // bepaalStatus() bepaalt de status van een tellende respons, dit
+        // filter bepaalt of hij nog meetelt.
+        //
+        // s.status <> 'revoked' (01-09, zelfde issue): het fijnmazige geval
+        // — één ingetrokken DEELNEMER binnen een verder gewone ronde
+        // (RondeBeheerService.trekDeelnemerIn()). Los van de twee filters
+        // hierboven, die over de hele ronde gaan.
         const resultaat = await tx.execute<StatusRij>(
           sql`SELECT s.response_id,
                      s.run_id,
@@ -192,7 +206,10 @@ export class ContractmanagerService {
                 JOIN clm.survey_template t ON t.template_id = r.template_id
                 LEFT JOIN clm.vendor v     ON v.vendor_id = s.vendor_id
                 LEFT JOIN clm."user" o     ON o.user_id = v.owner_user_id
-               WHERE (${eigenaarUserId}::uuid IS NULL
+               WHERE r.status <> 'archived'
+                 AND r.revoked_at IS NULL
+                 AND s.status <> 'revoked'
+                 AND (${eigenaarUserId}::uuid IS NULL
                       OR v.owner_user_id = ${eigenaarUserId}::uuid)
                  AND (${sql.param(themaCodes)}::text[] = '{}'
                       OR EXISTS (
