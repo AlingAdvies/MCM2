@@ -658,6 +658,27 @@ export class VragenlijstBeheerController {
   }
 
   /**
+   * Trekt de uitnodiging van één deelnemer binnen een ronde in — een
+   * vergissing bij één leverancier, in tegenstelling tot `archiveerRonde()`
+   * hierboven (de hele ronde). Zie de toelichting bij
+   * `RondeBeheerService.trekDeelnemerIn()`.
+   *
+   * @VereistRol('admin'): zelfde grens als de andere schrijfroutes hier.
+   */
+  @Post('runs/:id/participants/:responseId/intrekken')
+  @VereistRol('admin')
+  @HttpCode(204)
+  async trekDeelnemerIn(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Param('responseId') responseId: string,
+  ) {
+    const sessie = request.sessie!;
+
+    await this.rondes.trekDeelnemerIn(sessie.tenantId, id, responseId);
+  }
+
+  /**
    * Nodigt leveranciers uit en geeft de tokenlinks terug.
    *
    * ── Waarom dit antwoord bijzonder is ────────────────────────────────────────

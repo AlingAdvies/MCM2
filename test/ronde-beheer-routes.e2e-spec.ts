@@ -903,6 +903,168 @@ describe('Ronde-beheerroutes (e2e)', () => {
       .expect(404);
   });
 
+  // ── Eén deelnemer intrekken (issue #205, fijnmazig) ─────────────────────
+
+  async function nodigUit(runId: string, vendorId: string): Promise<string> {
+    await request(server)
+      .patch(`/admin/survey/runs/${runId}/status`)
+      .set('Cookie', cookieAdminA)
+      .send({ status: 'active' })
+      .expect(200);
+
+    const antwoord = await request(server)
+      .post(`/admin/survey/runs/${runId}/participants`)
+      .set('Cookie', cookieAdminA)
+      .send({ vendorIds: [vendorId] })
+      .expect(201);
+
+    return (antwoord.body as UitnodigingAntwoord).uitnodigingen[0].responseId;
+  }
+
+  it('trekt een pending deelnemer in', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    await request(server)
+      .post(`/admin/survey/runs/${runId}/participants/${responseId}/intrekken`)
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(204);
+
+    const ronde = await request(server)
+      .get(`/admin/survey/runs/${runId}`)
+      .set('Cookie', cookieAdminA)
+      .expect(200);
+
+    const deelnemer = (
+      ronde.body as {
+        deelnemers: Array<{ responseId: string; status: string }>;
+      }
+    ).deelnemers.find((d) => d.responseId === responseId);
+
+    expect(deelnemer?.status).toBe('revoked');
+  });
+
+  it('laat de andere deelnemer ongemoeid bij het intrekken van één deelnemer', async () => {
+    const runId = await nieuweRonde();
+    await request(server)
+      .patch(`/admin/survey/runs/${runId}/status`)
+      .set('Cookie', cookieAdminA)
+      .send({ status: 'active' })
+      .expect(200);
+
+    const antwoord = await request(server)
+      .post(`/admin/survey/runs/${runId}/participants`)
+      .set('Cookie', cookieAdminA)
+      .send({ vendorIds: [VENDOR_1, VENDOR_2] })
+      .expect(201);
+
+    const { uitnodigingen } = antwoord.body as UitnodigingAntwoord;
+    const eerste = uitnodigingen.find((u) => u.vendorId === VENDOR_1)!;
+    const tweede = uitnodigingen.find((u) => u.vendorId === VENDOR_2)!;
+
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${eerste.responseId}/intrekken`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(204);
+
+    const ronde = await request(server)
+      .get(`/admin/survey/runs/${runId}`)
+      .set('Cookie', cookieAdminA)
+      .expect(200);
+
+    const deelnemers = (
+      ronde.body as {
+        deelnemers: Array<{ responseId: string; status: string }>;
+      }
+    ).deelnemers;
+
+    expect(
+      deelnemers.find((d) => d.responseId === eerste.responseId)?.status,
+    ).toBe('revoked');
+    expect(
+      deelnemers.find((d) => d.responseId === tweede.responseId)?.status,
+    ).toBe('pending');
+  });
+
+  it('accepteert intrekken van een al ingetrokken deelnemer zonder te klagen', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    await request(server)
+      .post(`/admin/survey/runs/${runId}/participants/${responseId}/intrekken`)
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(204);
+
+    await request(server)
+      .post(`/admin/survey/runs/${runId}/participants/${responseId}/intrekken`)
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(204);
+  });
+
+  it('weigert het intrekken van een al ingediende deelnemer', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    // Rechtstreeks in de database op 'submitted' zetten — er is geen route
+    // in deze suite om daadwerkelijk in te dienen zonder het volledige
+    // leverancierspad (zie portaal-uc1.spec.ts voor die weg). RLS eist een
+    // tenantcontext, anders raakt de UPDATE stil 0 rijen.
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL app.current_tenant_id = '${tenantA}'`);
+    await client.query(
+      `UPDATE clm.survey_response SET status = 'submitted', submitted_at = now()
+        WHERE response_id = $1`,
+      [responseId],
+    );
+    await client.query('COMMIT');
+
+    await request(server)
+      .post(`/admin/survey/runs/${runId}/participants/${responseId}/intrekken`)
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(409);
+  });
+
+  it('weigert een reviewer die een deelnemer wil intrekken', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    await request(server)
+      .post(`/admin/survey/runs/${runId}/participants/${responseId}/intrekken`)
+      .set('Cookie', cookieReviewer)
+      .send({})
+      .expect(403);
+  });
+
+  it('geeft 404 bij het intrekken van een niet-bestaande deelnemer', async () => {
+    const runId = await nieuweRonde();
+
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/00000000-0000-0000-0000-00000000dead/intrekken`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(404);
+  });
+
+  it('laat tenant B niet intrekken bij een deelnemer van tenant A', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    await request(server)
+      .post(`/admin/survey/runs/${runId}/participants/${responseId}/intrekken`)
+      .set('Cookie', cookieAdminB)
+      .send({})
+      .expect(404);
+  });
+
   it('laat geen deelnemers meer toe zodra de ronde is afgerond', async () => {
     const runId = await nieuweRonde();
 

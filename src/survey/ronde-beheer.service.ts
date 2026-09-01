@@ -389,6 +389,73 @@ export class RondeBeheerService {
   }
 
   /**
+   * Trekt de uitnodiging van één deelnemer in — een vergissing bij één
+   * leverancier binnen een ronde, in tegenstelling tot `archiveer()` (de
+   * hele ronde, bijvoorbeeld bij een periode-afsluiting).
+   *
+   * ── Waarom dit veld al bestond, alleen de schrijfkant niet ────────────────
+   *
+   * `survey_response.status` kent `'revoked'` al als toegestane waarde
+   * (CHECK-constraint, migratie 0005) en het leverancierspad
+   * (`survey-token.service.ts`) weigert al netjes een ingetrokken token —
+   * maar er was nooit een route om die status vanaf de beheerkant te
+   * ZETTEN. Deze methode is die ontbrekende schrijfkant, geen nieuw
+   * concept.
+   *
+   * ── Waarom niet zomaar op elke status ──────────────────────────────────────
+   *
+   * Intrekken van een al ingediende respons zou bewijsmateriaal ongedaan
+   * maken — dat hoort niet bij "ik heb me vergist bij het uitnodigen".
+   * Alleen 'pending' mag naar 'revoked'; een 'submitted' of al 'revoked'
+   * respons levert een 409 op, met de reden erbij.
+   */
+  async trekDeelnemerIn(
+    tenantId: string,
+    runId: string,
+    responseId: string,
+  ): Promise<void> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const huidige = await tx.execute<{
+          response_id: string;
+          status: string;
+        }>(
+          sql`SELECT response_id, status FROM clm.survey_response
+               WHERE response_id = ${responseId} AND run_id = ${runId}`,
+        );
+
+        const r = huidige.rows[0];
+
+        if (!r) {
+          throw new NotFoundException(
+            'Deze deelnemer bestaat niet binnen deze ronde.',
+          );
+        }
+
+        if (r.status === 'revoked') {
+          // Twee keer intrekken is geen fout — zelfde redenering als
+          // archiveer()/wijzigStatus() hierboven.
+          return;
+        }
+
+        if (r.status !== 'pending') {
+          throw new ConflictException(
+            `Deze deelnemer is al ${r.status === 'submitted' ? 'ingediend' : r.status} en kan niet meer worden ingetrokken.`,
+          );
+        }
+
+        await tx.execute(
+          sql`UPDATE clm.survey_response
+                 SET status = 'revoked'
+               WHERE response_id = ${responseId}`,
+        );
+      },
+      'medewerker',
+    );
+  }
+
+  /**
    * Nodigt leveranciers uit voor een ronde en geeft hun tokens terug.
    *
    * ── Alles in één transactie, en waarom dat hier telt ────────────────────────
