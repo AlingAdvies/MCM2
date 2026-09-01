@@ -794,6 +794,49 @@ export class VragenlijstBeheerService {
     );
   }
 
+  /**
+   * Zoekt één bijlage op voor download — tenant-gescoped, net als elke andere
+   * methode hier. Geeft `storage_key` bewust wél terug: dat mag hier, in
+   * tegenstelling tot een lijstroute (zie `ronde()`), omdat de aanroeper
+   * (`GET .../attachments/:id`, hieronder) het meteen doorgeeft aan
+   * `BestandOpslagService.lees()` en nooit naar de client stuurt.
+   */
+  async bijlageOpzoeken(
+    tenantId: string,
+    attachmentId: string,
+  ): Promise<{
+    storageKey: string;
+    originalName: string;
+    contentType: string;
+  }> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const { rows } = await tx.execute<{
+          storage_key: string;
+          original_name: string;
+          content_type: string;
+        }>(
+          sql`SELECT storage_key, original_name, content_type
+                FROM clm.survey_attachment
+               WHERE attachment_id = ${attachmentId}`,
+        );
+
+        const rij = rows[0];
+        if (!rij) {
+          throw new NotFoundException('Deze bijlage bestaat niet.');
+        }
+
+        return {
+          storageKey: rij.storage_key,
+          originalName: rij.original_name,
+          contentType: rij.content_type,
+        };
+      },
+      'medewerker',
+    );
+  }
+
   private naarRonde(r: RondeRij): RondeSamenvatting {
     return {
       runId: r.run_id,
