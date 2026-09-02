@@ -25,9 +25,12 @@ oorspronkelijke tekst staat in de git-historie van dit bestand.*
 1. **Productie draait op AWS** (`clm.alingadvies.nl`, ECS Express Mode) en
    wordt echt gebruikt — voor klanten én demo. Staging en acceptatie draaien
    op `saxombp`.
-2. **Transdev Nederland is de eerste echte klant-tenant**, met echte
-   gebruikers. Daarnaast bestaan op productie: AlingAdvies (de eigenaar),
-   demo, Bizaline en Platformbeheer.
+2. **Twee tenants met een eigen, blijvende rol naast elkaar op productie:**
+   **Transdev Nederland is de betalende klant**, met echte gebruikers.
+   **AlingAdvies is de tenant van de eigenaar en blijft bewust in gebruik
+   voor demonstratie én handmatig testen** — dat is een keuze, geen
+   overblijfsel. Daarnaast bestaan op productie: demo, Bizaline en
+   Platformbeheer.
 3. **Productiedata is klantdata**: backup, RLS, `beschermd`-markering, geen
    e2e-suites ertegen. Dit gold eerst voor mock data; inmiddels is het echt.
 4. **Elke wijziging loopt door de keten**: eerst staging + rookproef, daarna
