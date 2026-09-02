@@ -2,6 +2,113 @@
 
 ## Laatst bijgewerkt
 
+**2026-09-02 — Drie sporen in één sessie: vragenlijst-intro naar productie,
+een uurlijkse Telegram-melding bij geaccepteerde Transdev-uitnodigingen, en
+een documentatie-herziening (CLAUDE.md §0/§0b + memory-index) tegen
+documentatie-drift.**
+
+1. **Vragenlijst-intro aangevuld en volledig uitgerold (PR #208).** De
+   intro van `transdev-annual-vendor-it-risk` (versie opgehoogd naar 2)
+   meldt nu: link 30 dagen geldig, doorsturen naar een collega mag, en na
+   'Submit' (Indienen) zijn antwoorden definitief. Volledige keten: merge →
+   staging op saxombp (`deploy:staging`, rookproef groen) →
+   `productie-aws.yml` run 33621480006 volledig groen. NB: de seed staat op
+   v2 in de repo; inlezen in een omgeving blijft een expliciete
+   `seed-vragenlijsten.js`-actie, dat gebeurt nergens automatisch.
+2. **Nieuwe voorziening: Telegram-melding bij een geaccepteerde
+   tenant-uitnodiging (PR #209 + #210).** `scripts/uitnodiging-controle.js`
+   (met geteste modules `uitnodiging-nieuwe-leden.js` en
+   `uitnodiging-status.js`, tests in `test/`) leest elk uur read-only de
+   actieve leden van tenant Transdev Nederland op productie
+   (`PRODUCTIE_RUNTIME_URL`, rol `clm_api_runtime`) en meldt nieuwe
+   acceptaties via de bestaande Telegram-bot. Windows-taak
+   `MCM2 tenant-uitnodigingscontrole` (elk uur, wrapper
+   `uitnodiging-controle-taak.cmd`, zelfde instellingen als de
+   backup-taken) is aangemaakt én handmatig bewezen: echte testuitnodiging
+   geaccepteerd op productie → precies één Telegram-bericht (door de
+   eigenaar ontvangen bevestigd), tweede run meldt terecht niets, testleden
+   daarna weer ingetrokken. Runbook:
+   `docs/runbooks/uitnodigingscontrole.md`.
+3. **RLS-les opnieuw bevestigd, nu gemeten:** een naam-lookup op
+   `clm.tenant` kan principieel niet zonder al bekende tenantcontext
+   (FORCE RLS + `tenant_isolation`-policy), en **`clm_migrator` heeft op
+   productie géén BYPASSRLS** (`rolbypassrls: false`, gemeten) — de eerdere
+   aanname van wel was fout. Oplossing conform ADR-017: tenant-UUID
+   éénmalig opgezocht via `clm.tenant_register` en vast in het script, plus
+   expliciete `set_config('app.current_tenant_id', …)` vóór de leden-query.
+4. **Bug gevonden en bewust geparkeerd (issue #212):** de
+   tenant-leden-intrekken-route geeft 204 zonder body waardoor de frontend
+   een misleidende foutmelding toont terwijl het intrekken wél slaagt —
+   zelfde patroon als de op 01-09 gefixte survey-route (8c54164), deze route
+   is toen niet meegenomen.
+5. **Documentatie-herziening tegen drift (PR #211),** op verzoek van de
+   eigenaar na een read-only onderzoek van de memory-directory: (a)
+   `CLAUDE.md` §0/§0b herschreven naar de gemeten werkelijkheid — het
+   OTAP-doel is behaald, productie draait op AWS, **Transdev Nederland is de
+   betalende klant-tenant en AlingAdvies blijft bewust naast haar bestaan
+   voor demo en handmatig testen**, de 1-op-1-relatie met de
+   `MCM2-frontend`-repo staat er nu expliciet in, en de TD/AA-splitsing is
+   opgenomen als verkennende richting, géén besluit; (b)
+   `docs/advies-td-aa-splitsing.md` + `docs/evaluatie-advies-td-aa-splitsing.md`
+   (stonden ongetrackt) nu in git; (c) de memory-index (`MEMORY.md`)
+   geherstructureerd onder vijf koppen zonder informatieverlies en de
+   memory `mcm2-doel-en-middelen` gemarkeerd als deels achterhaald met
+   verwijzing naar het nieuwe §0/§0b. Bewust géén nieuw
+   `docs/PROJECT-STATUS.md` — dat zou concurreren met dit logboek en het
+   statusbord.
+6. **Opruiming:** zes stale remote-branch-verwijzingen bleken op GitHub al
+   verwijderd; lokaal geprunet. Export
+   `docs/exports/transdev-annual-vendor-it-risk-v2.docx` (referentie voor
+   doorsturen) staat bewust lokaal en ongetrackt.
+
+---
+
+**2026-09-01 — Fijnmazig intrekken/archiveren voor vragenlijstrondes gebouwd
+en naar productie uitgerold (issue #205). Aanleiding: een per ongeluk
+aangemaakte, nooit verstuurde uitnodiging bij vendor Bizaline in tenant
+Transdev, die niet uit het statusoverzicht te krijgen was.**
+
+1. **Twee complementaire acties, niet één.** Eerste versie deed alleen
+   ronde-brede archivering (`ronde-beheer.service.ts: archiveer()`,
+   route `POST /admin/survey/runs/:id/archiveer`). De eigenaar corrigeerde:
+   de oorspronkelijke use case was één leverancier binnen een ronde
+   intrekken, niet de hele ronde. Tweede functie toegevoegd
+   (`trekDeelnemerIn()`, route
+   `POST /admin/survey/runs/:id/participants/:responseId/intrekken`) op
+   `survey_response.status = 'revoked'` — bestond als kolomwaarde sinds
+   migratie 0005, kreeg nu voor het eerst een schrijfroute vanaf de
+   beheerkant. Beide blijven bestaan: rondearchivering voor na afloop van
+   een periode, deelnemer-intrekken voor vergissingen.
+2. **Zichtbaarheidsfilters toegevoegd** in `contractmanager.service.ts`
+   (`haal()`) en `beoordelaar.service.ts` (`werkvoorraad()`): een
+   gearchiveerde/ingetrokken ronde of response verdwijnt nu daadwerkelijk
+   uit het statusoverzicht en de beoordelaars-werkvoorraad.
+3. **Eigen diagnosefout tijdens het incidentonderzoek, expliciet erkend.**
+   Eerste onderzoek naar de tenant-scheiding leek een RLS-lek te tonen
+   (dezelfde vendor_id's zichtbaar binnen elke tenant-context). Oorzaak
+   was een eigen scriptfout: verbonden als `clm_migrator` (tabel-eigenaar,
+   waarvoor PostgreSQL RLS negeert zonder `FORCE ROW LEVEL SECURITY`), niet
+   als de echte runtime-rol `clm_api_runtime`. Met de juiste rol gaf
+   dezelfde query correct resultaat. Geen kwetsbaarheid in de applicatie;
+   wel een legitiem verbeterpunt vastgelegd in issue #206 (FORCE RLS
+   toevoegen op 8 tabellen die het nu missen: vendor, sessie,
+   survey_response, survey_run, tenant_membership, tenant_register, user,
+   platform_admin).
+4. **Browserfout tijdens preview gefixt:** de intrekken-route gaf eerst
+   `204 No Content` terug; de frontend (`verstuur<T>()`) roept altijd
+   `res.json()` aan. Route retourneert nu `{ responseId, status }` met
+   `200 OK`, consistent met `archiveerRonde()`.
+5. **Volledige doorloop:** PR #207 (`feat/ronde-archiveren-filter`) gemerged
+   naar main, `productie-aws.yml` met akkoord, run `33539104737` volledig
+   groen. `/api/backend/health` bevestigt commit `6b888d47` op productie.
+6. **Verkennend, niet gebouwd:** technisch advies opgesteld over een
+   mogelijke toekomstige splitsing van MCM2 in twee producten — TD
+   (Bizaline/Transdev-maatwerk) en AA (AlingAdvies, generiek multitenant) —
+   zie `docs/advies-td-aa-splitsing.md`. Puur verkennend op verzoek van de
+   eigenaar, geen enkele code- of architectuurwijziging als gevolg hiervan.
+
+---
+
 **2026-08-30 — Schema-drift tussen `src/db/schema.ts` en de echte database
 gevonden en gedicht, twee opslagbugs in contract/vendor daarbij aan het licht
 gekomen en gefixt, volledige doorloop naar AWS-productie. Onderweg ook een
@@ -3396,8 +3503,23 @@ Praktische valkuilen die daadwerkelijk zijn tegengekomen, niet bedacht. Ze staan
 
 ## Huidige branch en Git-status
 
-**Stand op 2026-08-28, avond** (geverifieerd met `git status` en `git log -1`
-in beide repo's, bij sessieafsluiting):
+**Stand op 2026-09-02** (geverifieerd met `git status`, `git branch` en
+`git log -1` in beide repo's):
+
+| Repo | Branch | Werkboom | Gepusht |
+|---|---|---|---|
+| MCM2 | `main` | op `dea00cb`; gewijzigd maar niet gecommit: `docs/STATUS.md` (deze bewerking, wordt hierna via PR gecommit) plus pre-existing items die deze sessie bewust niet aanraakt (`docs/runbooks/backup-bewijs.json`, `docs/opmerkingen Vendor IT survey.txt`, en de untracked `docs/import_functie_prompt_1_0.txt`, `docs/technisch-overzicht.md`, het v2-opdrachtdocument, `docs/exports/`, `nis2-scaffold_1.zip`) | ja |
+| MCM2-frontend | `main` | schoon op `05d7763` | ja |
+
+**Geen open feature branch in beide repo's.** Vier PR's vandaag gemerged en
+opgeruimd (#208 vragenlijst-intro, #209 uitnodigingscontrole, #210
+Taakplanner-wrapper, #211 CLAUDE.md-herziening); zes stale
+remote-verwijzingen geprunet.
+
+---
+
+**Stand op 2026-08-28, avond** (voorgaande sessie, ter historie — geverifieerd
+met `git status` en `git log -1` in beide repo's, bij sessieafsluiting):
 
 | Repo | Branch | Werkboom | Gepusht |
 |---|---|---|---|
