@@ -9,86 +9,80 @@
 
 # 0. HET DOEL — lees dit vóór al het andere
 
-*Vastgelegd 2026-08-12, samen met de eigenaar. Dit staat bovenaan omdat het op
-die dag drie keer misging: er werd gebouwd zonder eerst vast te stellen wat het
-doel was en wat er al stond. De eigenaar moest steeds bijsturen.*
+*Vastgelegd 2026-08-12; herzien 2026-09-02. Het oorspronkelijke doel —
+aantonen dat de geautomatiseerde OTAP en DevOps werkt — is **behaald**:
+meerdere features zijn aantoonbaar van code tot AWS-productie doorlopen, met
+remmen die afgaan als er iets niet klopt en een bewezen weg terug. De
+oorspronkelijke tekst staat in de git-historie van dit bestand.*
 
-**Wat we aan het bouwen zijn:**
+**Wat we nu aan het doen zijn:**
 
-> Een omgeving die de **eindsituatie zo goed mogelijk repliceert**, om daarop
-> vast te stellen dat de **geautomatiseerde OTAP en DevOps werkt**.
+> Een **multitenant vendor-compliance-platform dat in productie draait, met
+> echte klanten erop, betrouwbaar doorontwikkelen** via de bewezen OTAP-keten.
 
-Dat is het eigenlijke product van dit werk. De features zijn het middel, niet
-het doel.
+**Vijf punten, actuele stand:**
 
-**Vijf punten, letterlijk zoals afgesproken:**
+1. **Productie draait op AWS** (`clm.alingadvies.nl`, ECS Express Mode) en
+   wordt echt gebruikt — voor klanten én demo. Staging en acceptatie draaien
+   op `saxombp`.
+2. **Transdev Nederland is de eerste echte klant-tenant**, met echte
+   gebruikers. Daarnaast bestaan op productie: AlingAdvies (de eigenaar),
+   demo, Bizaline en Platformbeheer.
+3. **Productiedata is klantdata**: backup, RLS, `beschermd`-markering, geen
+   e2e-suites ertegen. Dit gold eerst voor mock data; inmiddels is het echt.
+4. **Elke wijziging loopt door de keten**: eerst staging + rookproef, daarna
+   productie via `productie-aws.yml` achter de vier remmen (verse backup,
+   migratiestand, staging-pariteit, menselijk akkoord).
+5. **Toekomstrichting — verkennend, géén besluit:** mogelijke splitsing in
+   twee producten: TD (Transdev-maatwerk, via Bizaline) en AA (AlingAdvies,
+   100% multitenant, verkoopbaar). Zie `docs/advies-td-aa-splitsing.md` en
+   `docs/evaluatie-advies-td-aa-splitsing.md`; de kernvraag daaruit (één of
+   twee productdeployments) staat nog open. **Bouw hier niet op vooruit.**
 
-1. Een omgeving die de eindsituatie (AWS) zo goed mogelijk repliceert.
-2. Daarop aantonen dat de geautomatiseerde OTAP en DevOps werkt.
-3. **Eén echte tenant: AlingAdvies — dat is de eigenaar zelf.** Gevuld met
-   **mock data die behandeld wordt als klantdata**: backup, RLS, `beschermd`,
-   geen e2e-suites erop.
-4. Die tenant dient tegelijk voor **demo**, **test** én **bewijs** dat de
-   keten werkt.
-5. Alles wat gebouwd wordt moet **eenvoudig naar AWS te migreren** zijn.
+**Waar het werkelijk om gaat is onveranderd het gedrag, niet de techniek.**
+Dat de eigenaar een wijziging kan doen en die met vertrouwen tot in productie
+ziet lopen, met remmen die afgaan als er iets niet klopt, en dat hij kan
+terugvallen als het misgaat. Dat is wat een klant verwacht — en er stáát nu
+een klant op.
 
-**Wat dit betekent voor een voorstel:** bouw je iets dat op AWS niet zou
-bestaan (een sub-pad in plaats van een eigen hostnaam, een omgevingsspecifiek
-image), dan beproef je een constructie die straks weg is. Dat is dezelfde fout
-die het plan over staging benoemt: *"een generale repetitie op ander toneel
-bewijst weinig."*
+**Besluiten van de eigenaar, bijgewerkt naar de huidige stand:**
 
-**Waar het werkelijk om gaat is het gedrag, niet de techniek.** Dat de eigenaar
-een wijziging kan doen en die met vertrouwen tot in productie ziet lopen, met
-remmen die afgaan als er iets niet klopt, en dat hij kan terugvallen als het
-misgaat. Dat is wat een klant straks verwacht, en dat is wat nu op de eigen
-tenant beproefd wordt. Volgorde die daaruit volgt: **eerst de keten aantoonbaar
-rond mét data erin, daarna pas de kosmetiek.**
-
-**Twee besluiten van de eigenaar (12-08), zodat ze niet opnieuw gesteld worden:**
-
-| Vraag | Besluit |
+| Vraag | Stand |
 |---|---|
-| Moet het starten van de applicatie ook automatisch? | **Nee — handmatig starten is OK.** Het besluit uit §3.3c van het OTAP-plan blijft staan. |
-| Moet productie inlog krijgen, tegen §4.1 in? | **Ja.** Zonder inloggen valt niet vast te stellen dát de keten werkt, en demo is een expliciet doel. §4.1 is op dit punt achterhaald. |
-| Moet het sub-pad `/productie` opgelost worden? | **Ja.** Een eigen hostnaam per omgeving is de AWS-vorm. |
+| Moet het starten van de applicatie automatisch? | **AWS-productie start sinds 19-08 automatisch** na het akkoord op GitHub. Op `saxombp` (staging/acceptatie) blijft starten handwerk. |
+| Heeft productie inlog? | **Ja** — bestaat en wordt gebruikt door echte klanten en voor demo. |
+| Het sub-pad `/productie`? | **Opgelost door AWS**: productie heeft een eigen hostnaam. Het sub-pad-probleem op saxombp wordt bewust NIET meer opgelost (besloten 23-08 — zie de memory `mcm2-sub-pad-breekt-relatieve-api-aanroepen`). |
 
-De tenant komt via de **platformroute**, niet rechtstreeks in de database — het
-auditspoor ís de opbrengst (§5.1 van het plan blijft dus staan).
+Een tenant komt via de **platformroute**, niet rechtstreeks in de database —
+het auditspoor ís de opbrengst (dat blijft onverkort staan).
 
 ---
 
 # 0b. DE MIDDELEN — wat er werkelijk is
 
-*Gemeten op 2026-08-12, niet aangenomen. Klopt iets niet meer? Meet opnieuw en
-werk dit bij — een verouderde inventaris is erger dan geen.*
+*Opnieuw gemeten/geverifieerd op 2026-09-02 (eerste meting 2026-08-12). Klopt
+iets niet meer? Meet opnieuw en werk dit bij — een verouderde inventaris is
+erger dan geen.*
 
-## AWS: er is GEEN account
+## AWS — account en productie-omgeving
 
-**AWS is een richting, geen middel.** De kans is groot dat we er komen, maar we
-**staan er nog niet**. Stel nooit iets voor dat een AWS-account veronderstelt
-zonder dat expliciet te benoemen.
+- Account **AlingAdvies** (`727732213368`), regio **eu-west-1**.
+- Productie draait sinds **19-08** op **ECS Express Mode**: services
+  `mcm2-api` en `mcm2-frontend`, eigen hostnaam **`clm.alingadvies.nl`**.
+- Uitrol via workflow **`productie-aws.yml`** — na het menselijke akkoord op
+  GitHub Environment `productie` volautomatisch, reken op 30–40 minuten.
+  Authenticatie via OIDC; er staat geen langlevende AWS-sleutel in GitHub.
 
-## Rekenlaag — één machine
+## saxombp — alleen nog staging en acceptatie
 
-**`saxombp`** — een MacBook Pro uit 2009 (`MacBookPro5,5`) met Ubuntu 22.04.5.
+**`saxombp`** — MacBook Pro 2009 met Ubuntu 22.04.5 (hardware zoals gemeten
+12-08: Core2 Duo, 2 cores, 7,5 GB, ~87 GB vrij; bereikbaar **alleen via
+Tailscale**, `100.99.51.53`). Draait de staging- en acceptatie-containers en
+de acceptatiedatabase, plus de Saxo-app — **productie draait hier sinds 19-08
+niet meer**. Capaciteit is het probleem niet; het één-machine-zijn wel — geen
+tweede, geen redundantie.
 
-| | |
-|---|---|
-| Processor | Intel Core2 Duo P7550, 2 cores |
-| Geheugen | 7,5 GB (6,3 GB vrij) |
-| Schijf | 106 GB (87 GB vrij) |
-| Belasting | load 0,06 — de machine verveelt zich |
-| Bereikbaar | **alleen via Tailscale** (`100.99.51.53`), tailnet only |
-
-Zes MCM2-containers (~300 MB samen) plus de acceptatiedatabase. Daarnaast
-draait er **alleen de Saxo-app** (poort 8080/8081) — niets anders.
-
-Publiek IP `80.114.79.142` is de thuisrouter, gedeeld met de laptop en
-vermoedelijk niet vast. **Capaciteit is het probleem niet; het feit dat het
-één machine is wel** — geen tweede, geen redundantie.
-
-## Databases — bij Supabase
+## Databases — bij Supabase, plus één container
 
 | Omgeving | Waar | Markering |
 |---|---|---|
@@ -97,32 +91,37 @@ vermoedelijk niet vast. **Capaciteit is het probleem niet; het feit dat het
 | productie | Supabase `agojesdo…`, eu-west-1 | `beschermd` |
 
 Beide Supabase-projecten draaien op het **gratis plan** en **pauzeren na 7
-dagen stilte**. Dat is een reëel risico zodra productie voor demo gebruikt
-wordt.
+dagen stilte** (issue #30). Daarom bestaat de wekelijkse
+"houd staging en productie wakker"-vraag in de devops-handleiding.
 
 ## Bouwstraat en identiteit — in de cloud
 
 - **GitHub** `AlingAdvies/MCM2` — **publiek**, hoofdbranch `main`
-- Workflows `ci.yml` en `productie.yml`; Environment `productie` met een
+- Workflows: `ci.yml` (elke merge), `productie-aws.yml` (AWS-productie) en
+  het oudere `productie.yml` (saxombp); Environment `productie` met een
   verplichte akkoordgever
 - **GHCR** voor images (token verloopt rond **8 november 2026**)
 - **Microsoft Entra External ID** — CIAM-domein `mcm2ciam.ciamlogin.com`, één
   app-registratie. Elke omgeving vraagt een eigen redirect-adres.
 
-## Backup en bewaking — op de laptop van de eigenaar
+## Backup en bewaking — laptop én saxombp
 
-Drie geplande taken op de Windows-laptop: `MCM2 databasebackup`,
-`MCM2 backupcontrole`, `MCM2 backupcontrole volledig`. Dumps gaan naar
-**OneDrive** (`BACKUP_DIR`). Meldingen via **Telegram**.
-
-**Gevolg:** staat die laptop uit, dan draait er geen backup. CI kan er niet bij
-— zie [[mcm2-backupbewijs-omkering]] en het runbook.
+- Geplande taken op de Windows-laptop: `MCM2 databasebackup`,
+  `MCM2 backupcontrole`, `MCM2 backupcontrole volledig`, en sinds 02-09
+  `MCM2 tenant-uitnodigingscontrole` (elk uur; Telegram-melding bij een nieuw
+  actief lid van Transdev Nederland). Dumps naar **OneDrive**, meldingen via
+  **Telegram**.
+- **saxombp haalt daarnaast zelf een productiedump** (issue #58, 25-08) — de
+  backup hangt niet meer uitsluitend aan de laptop.
+- CI kan niet bij de laptop-backup — zie [[mcm2-backupbewijs-omkering]] en het
+  runbook.
 
 ## Wat er NIET is
 
-Geen AWS-account. Geen tweede server. Geen bewaking of alarmering. Geen
-incidentplan. Geen sleutelrotatie. Geen eigen hostnaam per omgeving — en dat
-laatste is precies wat de proefopstelling nog niet AWS-vormig maakt.
+Geen tweede server of regio-redundantie. Geen volwaardige
+monitoring/alerting-laag (issue #17). Geen incidentplan. Geen sleutelrotatie
+(issue #1). Supabase op het gratis plan — het pauzeer-risico (issue #30)
+blijft staan zolang dat zo is.
 
 ---
 
