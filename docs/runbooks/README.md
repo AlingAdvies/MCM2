@@ -36,6 +36,7 @@ faalt als er een runbook bijkomt dat hier niet genoemd wordt.
 | [otap-doorloop.md](otap-doorloop.md) | De volledige keten O→T bewijzen tegen de productie-images | bij elke release |
 | [uitrol-acceptatie-en-productie.md](uitrol-acceptatie-en-productie.md) | Een image promoveren naar acceptatie en productie op `saxombp`, en terugdraaien | bij elke release |
 | [zelf-testen.md](zelf-testen.md) | Zelf door de demo-omgeving klikken: echte frontend, echte backend, gevulde database | naar behoefte |
+| [uitnodigingscontrole.md](uitnodigingscontrole.md) | Telegram-melding bij een nieuw actief lid van Transdev Nederland op productie | elk uur, automatisch |
 
 ---
 
