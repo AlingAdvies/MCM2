@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
   "name": "transdev-annual-vendor-it-risk",
-  "version": 1,
+  "version": 2,
   "categories": [],
   "questions": [
     {
       "question_key": "intro",
       "position": 1,
       "title": "2026 Transdev ICT contract vendor compliance",
-      "body": "You have been invited to complete the following compliance survey: \"2026 Transdev ICT contract vendor compliance\". Your participation is requested to ensure vendor compliance and security standards.",
+      "body": "You have been invited to complete the following compliance survey: \"2026 Transdev ICT contract vendor compliance\". Your participation is requested to ensure vendor compliance and security standards.\n\nThis survey link is valid for 30 days. You can forward it to a colleague if someone else should complete or finish it. Once you click 'Submit' (Indienen), your answers can no longer be changed or added to.",
       "answer_type": "instruction",
       "is_required": false,
       "allows_upload": false,
