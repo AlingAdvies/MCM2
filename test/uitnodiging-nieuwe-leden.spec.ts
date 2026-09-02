@@ -7,11 +7,8 @@
 
 /* eslint-disable @typescript-eslint/no-require-imports,
                   @typescript-eslint/no-unsafe-assignment,
-                  @typescript-eslint/no-unsafe-call,
-                  @typescript-eslint/no-unsafe-member-access */
-const {
-  bepaalNieuweLeden,
-} = require('../scripts/uitnodiging-nieuwe-leden.js');
+                  @typescript-eslint/no-unsafe-call */
+const { bepaalNieuweLeden } = require('../scripts/uitnodiging-nieuwe-leden.js');
 
 describe('bepaalNieuweLeden', () => {
   it('herkent een lid dat er bij de vorige run nog niet bij stond', () => {
