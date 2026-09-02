@@ -100,9 +100,17 @@ dagen stilte** (issue #30). Daarom bestaat de wekelijkse
 ## Bouwstraat en identiteit — in de cloud
 
 - **GitHub** `AlingAdvies/MCM2` — **publiek**, hoofdbranch `main`
-- Workflows: `ci.yml` (elke merge), `productie-aws.yml` (AWS-productie) en
-  het oudere `productie.yml` (saxombp); Environment `productie` met een
-  verplichte akkoordgever
+- **Tweede repo, 1-op-1 gekoppeld: `AlingAdvies/MCM2-frontend`** (lokaal
+  `c:\DEV\Work\MCM2-frontend`) — de Next.js-frontend, met een **eigen
+  `ci.yml`** die het frontend-image naar GHCR publiceert en een **eigen
+  `CLAUDE.md`** (sinds 28-08). Een feature raakt vaak beide repo's: dan
+  horen beide gemerged te zijn vóór een uitrol, en meld je de
+  frontend-consequentie altijd expliciet. Het frontend-image kent bewust
+  geen backend-adres (dat komt bij het starten via `API_BASE_URL`) — zo
+  blijft één image promoveerbaar over alle omgevingen.
+- Workflows in deze repo: `ci.yml` (elke merge), `productie-aws.yml`
+  (AWS-productie — rolt api én frontend uit) en het oudere `productie.yml`
+  (saxombp); Environment `productie` met een verplichte akkoordgever
 - **GHCR** voor images (token verloopt rond **8 november 2026**)
 - **Microsoft Entra External ID** — CIAM-domein `mcm2ciam.ciamlogin.com`, één
   app-registratie. Elke omgeving vraagt een eigen redirect-adres.
