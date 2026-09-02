@@ -19,21 +19,34 @@ omgevingen worden bewust niet gemeld.
 
 Beproefd tegen productie op 2026-09-02: een geaccepteerde testuitnodiging
 leverde correct één Telegram-bericht op, een herhaalde run zonder wijziging
-gaf terecht niets.
+gaf terecht niets. De geplande taak zelf is diezelfde dag aangemaakt en
+handmatig getest (`Start-ScheduledTask`, resultaat 0, logregel bevestigd).
 
-## Taakplanner instellen (eenmalig)
+## Taakplanner
 
-1. Open Taakplanner → **Taak maken** (niet "Eenvoudige taak").
-2. **Algemeen:** naam `MCM2 tenant-uitnodigingscontrole`. "Uitvoeren of de
-   gebruiker nu is aangemeld of niet" — zelfde keuze als de bestaande
-   backup-taken.
-3. **Triggers:** nieuw → Elke dag herhalen, Herhaal taak elke: **1 uur**,
-   gedurende: **onbeperkt**.
-4. **Acties:** nieuw → Programma: `node`, Argumenten:
-   `scripts/uitnodiging-controle.js`, Starten in:
-   `C:\DEV\Work\MCM2` (of het actuele pad van deze repository).
-5. **Voorwaarden:** "Alleen starten indien op netvoeding" uitzetten (laptop
-   draait ook op batterij), zelfde als de backup-taken.
+De taak **"MCM2 tenant-uitnodigingscontrole"** staat al ingesteld — elk uur,
+via `scripts/uitnodiging-controle-taak.cmd` (zelfde wrapper-vorm als
+`backup-controle-taak.cmd`: vast node-pad, logt naar
+`%USERPROFILE%\.mcm2-uitnodigingscontrole\taak.log`, `cd` naar de projectmap
+vóór het script draait). `StartWhenAvailable` staat aan en er is geen
+batterij-restrictie — zelfde instellingen als de bestaande backup-taken, zodat
+een gemiste cyclus (laptop uit) later alsnog ingehaald wordt zodra de laptop
+weer aan staat, en de taak niet stopt zodra hij van netvoeding naar batterij
+gaat.
+
+Mocht de taak ooit opnieuw ingericht moeten worden:
+
+```powershell
+schtasks /Create /TN "MCM2 tenant-uitnodigingscontrole" /TR "C:\DEV\Work\MCM2\scripts\uitnodiging-controle-taak.cmd" /SC HOURLY /MO 1 /RL LIMITED /F
+```
+
+gevolgd door (`StartWhenAvailable`/batterij-instellingen zet `schtasks /Create`
+niet goed):
+
+```powershell
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 15)
+Set-ScheduledTask -TaskName "MCM2 tenant-uitnodigingscontrole" -Settings $settings
+```
 
 ## Wat je ziet
 
