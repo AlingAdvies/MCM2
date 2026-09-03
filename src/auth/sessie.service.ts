@@ -253,11 +253,7 @@ export class SessieService {
   async profiel(
     context: SessieContext,
   ): Promise<{ naam: string; tenantNaam: string } | null> {
-    const naamResultaat = await this.db.db.execute<{
-      gebruikersnaam: string | null;
-    }>(sql`SELECT clm.gebruikersnaam(${context.userId})`);
-
-    const naam = naamResultaat.rows[0]?.gebruikersnaam;
+    const naam = await this.gebruikersnaam(context.userId);
 
     if (!naam) {
       return null;
@@ -282,6 +278,20 @@ export class SessieService {
       },
       'medewerker',
     );
+  }
+
+  /**
+   * Alleen de naam, los van tenantcontext — zie de uitleg bij `profiel()`
+   * over `clm.gebruikersnaam()` (SECURITY DEFINER, 0033). Losgetrokken zodat
+   * `GET /auth/sessie` de tenantnaam, platformbeheerder-status en features
+   * in één `withTenant()`-transactie kan ophalen in plaats van in drie losse.
+   */
+  async gebruikersnaam(userId: string): Promise<string | null> {
+    const naamResultaat = await this.db.db.execute<{
+      gebruikersnaam: string | null;
+    }>(sql`SELECT clm.gebruikersnaam(${userId})`);
+
+    return naamResultaat.rows[0]?.gebruikersnaam ?? null;
   }
 
   /**

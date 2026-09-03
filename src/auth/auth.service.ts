@@ -190,6 +190,11 @@ export class AuthService {
     return this.sessies.profiel(context);
   }
 
+  /** Alleen de naam, los van tenantcontext — zie SessieService.gebruikersnaam(). */
+  async gebruikersnaam(userId: string): Promise<string | null> {
+    return this.sessies.gebruikersnaam(userId);
+  }
+
   naLoginBestemming(): string {
     return process.env.NA_LOGIN_URL?.trim() || STANDAARD_NA_LOGIN;
   }

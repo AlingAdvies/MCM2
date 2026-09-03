@@ -8,6 +8,7 @@ import {
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
+import { sql } from 'drizzle-orm';
 import type { Request, Response } from 'express';
 
 import { AuthService } from './auth.service';
@@ -27,8 +28,6 @@ import {
   type RequestMetSessie,
 } from './tenant-context.guard';
 import { DatabaseService } from '../db/database.service';
-import { TenantFeatureService } from '../features/tenant-feature.service';
-import { isPlatformbeheerder } from '../platform/is-platformbeheerder';
 
 /**
  * De drie routes van de inlogflow (Issue #7, spoor 1).
@@ -51,7 +50,6 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly db: DatabaseService,
-    private readonly tenantFeatures: TenantFeatureService,
   ) {}
 
   /**
@@ -215,29 +213,63 @@ export class AuthController {
     // Veilig: zonder sessie is de guard nooit voorbijgekomen.
     const sessie = request.sessie!;
 
-    const profiel = await this.auth.profiel(sessie);
+    const naam = await this.auth.gebruikersnaam(sessie.userId);
 
-    if (!profiel) {
+    if (!naam) {
       // Geldige sessie, maar de gebruiker bestaat niet meer of is verwijderd.
       // Zeldzaam — het membership zou dan ook weg moeten zijn — maar een lege
       // naam in de sidebar is een raadsel voor wie hem ziet.
       throw new UnauthorizedException('De gebruiker bestaat niet meer.');
     }
 
-    const isBeheerder = await isPlatformbeheerder(
-      this.db,
+    // Eén transactie voor de drie tenant-gebonden vragen (tenantnaam,
+    // platformbeheerder, features), in plaats van drie losse withTenant()-
+    // aanroepen. Elke aanroep was op zich correct, maar drie losse
+    // pool-checkouts voor één requesthandler drukten onnodig op de krappe
+    // pool (DatabaseService, max: 4 standaard) — gemeten na een 500 op deze
+    // route in productie op 2026-09-03 (issue: tenant-feature-entitlements-
+    // uitrol), teruggedraaid en hier gefixt.
+    const tenantGegevens = await this.db.withTenant(
       sessie.tenantId,
-      sessie.userId,
+      async (tx) => {
+        const tenantResultaat = await tx.execute<{ tenant_naam: string }>(
+          sql`SELECT name AS tenant_naam FROM clm.tenant WHERE tenant_id = ${sessie.tenantId}`,
+        );
+
+        const beheerderResultaat = await tx.execute<{ bestaat: boolean }>(
+          sql`SELECT true AS bestaat
+                FROM clm.platform_admin
+               WHERE user_id = ${sessie.userId}
+                 AND deleted_at IS NULL`,
+        );
+
+        const featuresResultaat = await tx.execute<{ feature_key: string }>(
+          sql`SELECT feature_key FROM clm.tenant_feature
+               WHERE tenant_id = ${sessie.tenantId} AND enabled = true`,
+        );
+
+        return {
+          tenantNaam: tenantResultaat.rows[0]?.tenant_naam ?? null,
+          isBeheerder: beheerderResultaat.rows.length > 0,
+          features: featuresResultaat.rows.map((r) => r.feature_key),
+        };
+      },
+      'medewerker',
     );
 
-    const features = await this.tenantFeatures.lijst(sessie.tenantId);
+    if (!tenantGegevens.tenantNaam) {
+      // Zelfde situatie als voorheen in profiel(): de tenant zelf bestaat
+      // niet (meer) voor deze sessie — komt hier nooit voor bij een normale
+      // sessie, want sessie_aanmaken() controleert het membership al.
+      throw new UnauthorizedException('De gebruiker bestaat niet meer.');
+    }
 
     return {
-      naam: profiel.naam,
-      tenantNaam: profiel.tenantNaam,
+      naam,
+      tenantNaam: tenantGegevens.tenantNaam,
       rol: sessie.role,
-      isPlatformbeheerder: isBeheerder,
-      features,
+      isPlatformbeheerder: tenantGegevens.isBeheerder,
+      features: tenantGegevens.features,
     };
   }
 
