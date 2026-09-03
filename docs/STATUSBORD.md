@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-09-03 09:41 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-09-03 09:44 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -17,9 +17,9 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 ## Op prioriteit, over alle thema's heen
 
 **P0 — voor elke volgende regel productiecode** — 0 open
-**Vóór de pilot** — 1 open
-**Vóór bredere productie** — 1 open
-**Later — bewust uitgesteld** — 11 open
+**Vóór de pilot** — 0 open
+**Vóór bredere productie** — 0 open
+**Later — bewust uitgesteld** — 13 open
 
 ---
 
@@ -27,9 +27,9 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ### Product — vragenlijst, leveranciers, contracten, meldingen (20)
 
-- [#190](https://github.com/AlingAdvies/MCM2/issues/190) `before-pilot` — Contractdata-uploadtool: Coupa-CSV importeren in MCM2
 - [#23](https://github.com/AlingAdvies/MCM2/issues/23) `later` — MVM_V2-frontend-inconsistenties oplossen (tenant demo vs. transdev, vendors-lijstpagina)
 - [#187](https://github.com/AlingAdvies/MCM2/issues/187) `later` — Contracttype-veld toevoegen (placeholder, richting volwaardig contractmanagement)
+- [#190](https://github.com/AlingAdvies/MCM2/issues/190) `later` — Contractdata-uploadtool: Coupa-CSV importeren in MCM2
 - [#52](https://github.com/AlingAdvies/MCM2/issues/52) — Restrisico virusscan vastleggen als bewuste beslissing, met opschalingsvoorwaarde
 - [#83](https://github.com/AlingAdvies/MCM2/issues/83) — Gearchiveerde testrondes stapelen op in de demo-database
 - [#148](https://github.com/AlingAdvies/MCM2/issues/148) — Notificaties per tenant: signaleren wat blijft liggen
@@ -107,7 +107,7 @@ bestaande thema's past.
 - [#212](https://github.com/AlingAdvies/MCM2/issues/212) — Tenant-lid intrekken toont foutmelding terwijl het intrekken wél slaagt (204 zonder body)
 - [#206](https://github.com/AlingAdvies/MCM2/issues/206) — FORCE ROW LEVEL SECURITY ontbreekt op 8 tabellen
 - [#205](https://github.com/AlingAdvies/MCM2/issues/205) — Archiveerfunctie voor vragenlijst-rondes (periode-afsluiting)
-- [#197](https://github.com/AlingAdvies/MCM2/issues/197) `before-production` — Vragenlijst aanmaken/importeren door tenant- of platformbeheerder ontbreekt
+- [#197](https://github.com/AlingAdvies/MCM2/issues/197) `later` — Vragenlijst aanmaken/importeren door tenant- of platformbeheerder ontbreekt
 - [#192](https://github.com/AlingAdvies/MCM2/issues/192) — Visuele markering voor gebruiker zonder actief tenant-membership bij historische koppelingen
 - [#173](https://github.com/AlingAdvies/MCM2/issues/173) — Contract 360: eigen toppagina /contracten/[id]
 
