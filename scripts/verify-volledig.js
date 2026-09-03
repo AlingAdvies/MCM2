@@ -477,6 +477,14 @@ function maakSessie() {
     `INSERT INTO clm.tenant (tenant_id, name) VALUES ('${TENANT_ID}', 'Doorloop') ON CONFLICT DO NOTHING;`,
     `INSERT INTO clm.\\"user\\" (user_id, tenant_id, full_name, external_subject) VALUES ('${USER_ID}', '${TENANT_ID}', 'Doorloop Beheerder', '${SUBJECT}') ON CONFLICT DO NOTHING;`,
     `INSERT INTO clm.tenant_membership (user_id, tenant_id, role) VALUES ('${USER_ID}', '${TENANT_ID}', 'admin') ON CONFLICT DO NOTHING;`,
+    // Per-tenant feature-entitlements (spec 2026-09-03): de contractmodule
+    // staat niet meer standaard aan. Zonder deze rij zou de Contracten-browsertest
+    // (contracten.spec.ts, contracten-overzicht.spec.ts) tegen een menu-item
+    // aanlopen dat de sidebar terecht verbergt — geen bug in de test, maar een
+    // doorloop-tenant die niet meer representatief is voor een tenant mét de
+    // module. Deze doorloop test de contractmodule expliciet, dus hij hoort hem
+    // te hebben.
+    `INSERT INTO clm.tenant_feature (tenant_id, feature_key, enabled) VALUES ('${TENANT_ID}', 'contractmodule', true) ON CONFLICT (tenant_id, feature_key) DO UPDATE SET enabled = true;`,
   ];
 
   for (const sql of opzet) {
