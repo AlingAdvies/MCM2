@@ -65,6 +65,7 @@ interface SessieBody {
   tenantNaam: string;
   rol: string;
   isPlatformbeheerder: boolean;
+  features: string[];
 }
 
 async function verwijderTestdata(client: Client): Promise<void> {
@@ -185,7 +186,7 @@ describe('GET /auth/sessie (e2e)', () => {
       .expect(401);
   });
 
-  it('geeft de naam, tenantnaam, rol en platformbeheerstatus bij een geldige sessie', async () => {
+  it('geeft de naam, tenantnaam, rol, platformbeheerstatus en features bij een geldige sessie', async () => {
     const antwoord = await request(server)
       .get('/auth/sessie')
       .set('Cookie', `${cookieNaam}=${token}`)
@@ -196,7 +197,41 @@ describe('GET /auth/sessie (e2e)', () => {
       tenantNaam: TENANT_NAAM,
       rol: 'admin',
       isPlatformbeheerder: false,
+      features: [],
     });
+  });
+
+  it('toont een aangezette feature in de sessie', async () => {
+    const migratie = new Client({ connectionString: migratieUrl() });
+    await migratie.connect();
+
+    try {
+      await migratie.query('BEGIN');
+      await migratie.query(`SET LOCAL app.current_tenant_id = '${TENANT}'`);
+      await migratie.query(
+        `INSERT INTO clm.tenant_feature (tenant_id, feature_key, enabled, updated_by)
+         VALUES ($1, 'contractmodule', true, $2)`,
+        [TENANT, USER],
+      );
+      await migratie.query('COMMIT');
+
+      const antwoord = await request(server)
+        .get('/auth/sessie')
+        .set('Cookie', `${cookieNaam}=${token}`)
+        .expect(200);
+
+      const body = antwoord.body as SessieBody;
+      expect(body.features).toEqual(['contractmodule']);
+    } finally {
+      await migratie.query('BEGIN');
+      await migratie.query(`SET LOCAL app.current_tenant_id = '${TENANT}'`);
+      await migratie.query(
+        'DELETE FROM clm.tenant_feature WHERE tenant_id = $1',
+        [TENANT],
+      );
+      await migratie.query('COMMIT');
+      await migratie.end();
+    }
   });
 
   it('meldt isPlatformbeheerder: true voor een echte platformbeheerder', async () => {
@@ -228,6 +263,7 @@ describe('GET /auth/sessie (e2e)', () => {
     expect(ruw).not.toContain(TENANT);
     expect(ruw).not.toContain(USER);
     expect(Object.keys(body).sort()).toEqual([
+      'features',
       'isPlatformbeheerder',
       'naam',
       'rol',

@@ -27,6 +27,7 @@ import {
   type RequestMetSessie,
 } from './tenant-context.guard';
 import { DatabaseService } from '../db/database.service';
+import { TenantFeatureService } from '../features/tenant-feature.service';
 import { isPlatformbeheerder } from '../platform/is-platformbeheerder';
 
 /**
@@ -50,6 +51,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly db: DatabaseService,
+    private readonly tenantFeatures: TenantFeatureService,
   ) {}
 
   /**
@@ -198,6 +200,14 @@ export class AuthController {
    * Dit veld bepaalt alleen of het platformbeheerscherm getoond wordt; de
    * echte grens blijft `PlatformAdminGuard` op elke platformroute. Verbergen
    * zonder een tweede check op de route zelf zou schijnveiligheid zijn.
+   *
+   * **`features` — actieve tenant-feature-entitlements (spec 2026-09-03).**
+   * Zelfde figuur als `isPlatformbeheerder`: dit veld bepaalt alleen wat de
+   * frontend toont (bijv. het contractmenu). Een backend-blokkade op de
+   * onderliggende routes zelf is bewust een vervolgstap — zie de spec §6.
+   * Route wordt bij elke pagina-laad opnieuw aangeroepen, dus een
+   * nieuw-geactiveerde feature is zichtbaar na een pagina-ververs, zonder
+   * opnieuw in te loggen.
    */
   @Get('sessie')
   @UseGuards(TenantContextGuard)
@@ -220,11 +230,14 @@ export class AuthController {
       sessie.userId,
     );
 
+    const features = await this.tenantFeatures.lijst(sessie.tenantId);
+
     return {
       naam: profiel.naam,
       tenantNaam: profiel.tenantNaam,
       rol: sessie.role,
       isPlatformbeheerder: isBeheerder,
+      features,
     };
   }
 
