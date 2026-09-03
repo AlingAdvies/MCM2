@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-09-03 09:37 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-09-03 09:38 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -16,7 +16,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ## Op prioriteit, over alle thema's heen
 
-**P0 — voor elke volgende regel productiecode** — 2 open
+**P0 — voor elke volgende regel productiecode** — 0 open
 **Vóór de pilot** — 1 open
 **Vóór bredere productie** — 10 open
 **Later — bewust uitgesteld** — 3 open
@@ -64,9 +64,9 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ### Backup en herstel (6)
 
-- [#30](https://github.com/AlingAdvies/MCM2/issues/30) `p0` — GEEN backups: clm-enterprise draait op Supabase Free Plan
 - [#78](https://github.com/AlingAdvies/MCM2/issues/78) `before-production` — pg_dump kan niet draaien als clm_migrator: FORCE RLS blokkeert de backup
 - [#19](https://github.com/AlingAdvies/MCM2/issues/19) — Backup/restore-test daadwerkelijk uitgevoerd
+- [#30](https://github.com/AlingAdvies/MCM2/issues/30) — GEEN backups: clm-enterprise draait op Supabase Free Plan
 - [#46](https://github.com/AlingAdvies/MCM2/issues/46) — Duurzame objectopslag voor uploads + ingeplande dump buiten de brondraaimachine
 - [#48](https://github.com/AlingAdvies/MCM2/issues/48) — Pilot-runbook en alerting: wie kijkt wanneer naar welk signaal
 - [#58](https://github.com/AlingAdvies/MCM2/issues/58) — Backup hangt af van de ontwikkellaptop: onafhankelijke uitvoering vóór de pilot
@@ -95,8 +95,8 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ### Overig (3)
 
-- [#1](https://github.com/AlingAdvies/MCM2/issues/1) `p0` — Wachtwoordrotatie van de postgres-beheerrol
 - [#24](https://github.com/AlingAdvies/MCM2/issues/24) `later` — Later-lijst: uitgestelde items zonder concrete trigger
+- [#1](https://github.com/AlingAdvies/MCM2/issues/1) — Wachtwoordrotatie van de postgres-beheerrol
 - [#54](https://github.com/AlingAdvies/MCM2/issues/54) — Unittestlaag voor pure functies (bestandsvalidatie, antwoordvalidatie, opslagsleutel)
 
 ### ⚠ Niet ingedeeld (6)
