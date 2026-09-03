@@ -2,10 +2,45 @@
 
 ## Laatst bijgewerkt
 
-**2026-09-02 — Drie sporen in één sessie: vragenlijst-intro naar productie,
-een uurlijkse Telegram-melding bij geaccepteerde Transdev-uitnodigingen, en
-een documentatie-herziening (CLAUDE.md §0/§0b + memory-index) tegen
-documentatie-drift.**
+**2026-09-03 — Incident en herstel: per-tenant feature-entitlements gaf een
+500 op `GET /auth/sessie` voor tenant-admins in productie, direct
+teruggedraaid, oorzaak bevestigd via CloudWatch, structureel gefixt.**
+
+0. **Kort incident op productie (2026-09-03, ±14:35–15:10 UTC).** De nieuwe
+   tenant-feature-entitlements-feature (contractmodule per tenant aan/
+   uitzetbaar, PR eerder vandaag gemerged en uitgerold via `productie-aws.yml`)
+   voegde een derde losse `withTenant()`-transactie toe aan
+   `GET /auth/sessie` (`AuthController.huidigeSessie`). Voor Transdev-
+   tenant-admins gaf die route intermitterend een 500 — de sidebar en
+   gebruikersnaam verdwenen, de rest van de app (leverancierslijst, data)
+   bleef zichtbaar, wat het lastig te herkennen maakte. Lokaal
+   (`verify:volledig`, verse wegwerpdatabase, geen gelijktijdigheid)
+   reproduceerde het niet.
+   - **Gemeld door de eigenaar** (browsercontrole na de uitrol, sidebar +
+     naam ontbraken bij een Transdev-tenant-admin-sessie).
+   - **Direct teruggedraaid** naar de vorige bekend-goede versie
+     (backend `sha-86c8bdd350e4`, frontend `sha-05d7763d5b2b`) via dezelfde
+     `productie-aws.yml`-workflow met de vier remmen — bevestigd hersteld
+     door de eigenaar.
+   - **Oorzaak bevestigd via CloudWatch** (log-groep
+     `/aws/ecs/default/mcm2-api-b178`): `Error: Failed query: SELECT
+     feature_key FROM clm.tenant_feature ...` in
+     `tenant-feature.service.js:23`, aangeroepen vanuit
+     `AuthController.huidigeSessie` — drie keer gefaald, verspreid over
+     ~5 minuten, dezelfde tenant, terwijl de rest van de app bleef werken.
+     Patroon wijst op verbindings-/pool-druk, niet op een datafout: de
+     route deed drie losse `withTenant()`-pool-checkouts (tenantnaam,
+     platformbeheerder-status, features) op de bewust krappe
+     connectiepool (`DatabaseService`, `max: 4`).
+   - **Structureel gefixt** (PR — `fix/sessie-route-connectiepool-druk`):
+     de drie losse databaseacties lopen nu in één `withTenant()`-transactie.
+     `verify:volledig` opnieuw groen. Zie de git-geschiedenis van
+     `src/auth/auth.controller.ts` voor de volledige toelichting.
+   - **Les:** een route die van 2 naar 3 losse `withTenant()`-aanroepen
+     groeit is zelf al een signaal om te bundelen, ook als elke aanroep op
+     zich correct is — de krappe pool (`max: 4`, bewust zo ingesteld sinds
+     2026-07-31 tegen een ander probleem) maakt dat een reëel risico dat
+     lokaal niet zichtbaar wordt.
 
 1. **Vragenlijst-intro aangevuld en volledig uitgerold (PR #208).** De
    intro van `transdev-annual-vendor-it-risk` (versie opgehoogd naar 2)
