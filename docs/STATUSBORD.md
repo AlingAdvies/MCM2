@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-09-03 09:33 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-09-03 09:37 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -17,9 +17,9 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 ## Op prioriteit, over alle thema's heen
 
 **P0 — voor elke volgende regel productiecode** — 2 open
-**Vóór de pilot** — 4 open
+**Vóór de pilot** — 1 open
 **Vóór bredere productie** — 10 open
-**Later — bewust uitgesteld** — 2 open
+**Later — bewust uitgesteld** — 3 open
 
 ---
 
@@ -86,17 +86,16 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ### Database, migraties, RLS (6)
 
-- [#14](https://github.com/AlingAdvies/MCM2/issues/14) `before-pilot` — REVOKE UPDATE, DELETE op audit.audit_event voor de runtime-rol
-- [#16](https://github.com/AlingAdvies/MCM2/issues/16) `before-pilot` — Export- en reminder-acties krijgen expliciet meegegeven tenantId
+- [#16](https://github.com/AlingAdvies/MCM2/issues/16) `later` — Export- en reminder-acties krijgen expliciet meegegeven tenantId
+- [#14](https://github.com/AlingAdvies/MCM2/issues/14) — REVOKE UPDATE, DELETE op audit.audit_event voor de runtime-rol
 - [#49](https://github.com/AlingAdvies/MCM2/issues/49) — max_files structureel afdwingen: quotarij met atomaire reservering (kale trigger volstaat niet)
 - [#50](https://github.com/AlingAdvies/MCM2/issues/50) — Vergrendeling bewijzen met twee fysiek gescheiden databaseverbindingen
 - [#65](https://github.com/AlingAdvies/MCM2/issues/65) — Aparte eigenaarsrol voor SECURITY DEFINER-functies, zodat FORCE RLS overal kan
 - [#96](https://github.com/AlingAdvies/MCM2/issues/96) — db:generate is onbruikbaar: snapshots lopen tot 0007 terwijl er 16 migraties zijn
 
-### Overig (4)
+### Overig (3)
 
 - [#1](https://github.com/AlingAdvies/MCM2/issues/1) `p0` — Wachtwoordrotatie van de postgres-beheerrol
-- [#15](https://github.com/AlingAdvies/MCM2/issues/15) `before-pilot` — Resterende open Transdev-klantvragen beantwoorden (OV-4, OV-6, OV-7, OV-8, OV-9)
 - [#24](https://github.com/AlingAdvies/MCM2/issues/24) `later` — Later-lijst: uitgestelde items zonder concrete trigger
 - [#54](https://github.com/AlingAdvies/MCM2/issues/54) — Unittestlaag voor pure functies (bestandsvalidatie, antwoordvalidatie, opslagsleutel)
 
@@ -115,4 +114,4 @@ bestaande thema's past.
 
 ---
 
-**Totaal open:** 57
+**Totaal open:** 56
