@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-09-03 09:31 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-09-03 09:33 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -17,8 +17,8 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 ## Op prioriteit, over alle thema's heen
 
 **P0 — voor elke volgende regel productiecode** — 2 open
-**Vóór de pilot** — 8 open
-**Vóór bredere productie** — 13 open
+**Vóór de pilot** — 4 open
+**Vóór bredere productie** — 10 open
 **Later — bewust uitgesteld** — 2 open
 
 ---
@@ -48,29 +48,28 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#188](https://github.com/AlingAdvies/MCM2/issues/188) — Business-risk-classificatie (Tier 1/2/3) als apart veld, los van vendor-categorie
 - [#189](https://github.com/AlingAdvies/MCM2/issues/189) — DPA-vlag (Ja/Nee) overnemen bij contract-import
 
-### Beheermenu (4)
+### Beheermenu (3)
 
-- [#75](https://github.com/AlingAdvies/MCM2/issues/75) `before-production` — Beheermenu: gebruikers en rechten per tenant
-- [#76](https://github.com/AlingAdvies/MCM2/issues/76) `before-production` — Beheermenu: e-mailinstellingen (SMTP) per tenant, wachtwoord versleuteld opgeslagen
-- [#77](https://github.com/AlingAdvies/MCM2/issues/77) `before-production` — Beheermenu: uitnodigingen versturen — handpicked en in bulk op leverancierscriteria
+- [#75](https://github.com/AlingAdvies/MCM2/issues/75) — Beheermenu: gebruikers en rechten per tenant
+- [#76](https://github.com/AlingAdvies/MCM2/issues/76) — Beheermenu: e-mailinstellingen (SMTP) per tenant, wachtwoord versleuteld opgeslagen
 - [#162](https://github.com/AlingAdvies/MCM2/issues/162) — Bug: tenantnaam ontbreekt in de tenantinstellingen-tekst (hardcoded 'AlingAdvies')
 
 ### AWS / productie-infrastructuur (5)
 
-- [#17](https://github.com/AlingAdvies/MCM2/issues/17) `before-pilot` — Logging/monitoring-basislaag vóór de pilot
 - [#21](https://github.com/AlingAdvies/MCM2/issues/21) `before-production` — Volledige AWS-beveiligingsdiensten groep 1 (WAF, GuardDuty, KMS, CloudTrail, SNS, malware-scan)
 - [#57](https://github.com/AlingAdvies/MCM2/issues/57) `before-production` — Platformbeheer-toegang tot klant-tenants: industry standards onderzoeken vóór definitieve keuze
 - [#86](https://github.com/AlingAdvies/MCM2/issues/86) `before-production` — Scripts benoemen hun doelwit niet: een lokale testrun kan ongemerkt met productie praten
+- [#17](https://github.com/AlingAdvies/MCM2/issues/17) — Logging/monitoring-basislaag vóór de pilot
 - [#61](https://github.com/AlingAdvies/MCM2/issues/61) — Leesbare rookproef voor een uitgerolde omgeving (acceptatie/productie)
 
 ### Backup en herstel (6)
 
 - [#30](https://github.com/AlingAdvies/MCM2/issues/30) `p0` — GEEN backups: clm-enterprise draait op Supabase Free Plan
-- [#19](https://github.com/AlingAdvies/MCM2/issues/19) `before-pilot` — Backup/restore-test daadwerkelijk uitgevoerd
-- [#58](https://github.com/AlingAdvies/MCM2/issues/58) `before-pilot` — Backup hangt af van de ontwikkellaptop: onafhankelijke uitvoering vóór de pilot
 - [#78](https://github.com/AlingAdvies/MCM2/issues/78) `before-production` — pg_dump kan niet draaien als clm_migrator: FORCE RLS blokkeert de backup
+- [#19](https://github.com/AlingAdvies/MCM2/issues/19) — Backup/restore-test daadwerkelijk uitgevoerd
 - [#46](https://github.com/AlingAdvies/MCM2/issues/46) — Duurzame objectopslag voor uploads + ingeplande dump buiten de brondraaimachine
 - [#48](https://github.com/AlingAdvies/MCM2/issues/48) — Pilot-runbook en alerting: wie kijkt wanneer naar welk signaal
+- [#58](https://github.com/AlingAdvies/MCM2/issues/58) — Backup hangt af van de ontwikkellaptop: onafhankelijke uitvoering vóór de pilot
 
 ### OTAP en CI/CD (6)
 
@@ -101,7 +100,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#24](https://github.com/AlingAdvies/MCM2/issues/24) `later` — Later-lijst: uitgestelde items zonder concrete trigger
 - [#54](https://github.com/AlingAdvies/MCM2/issues/54) — Unittestlaag voor pure functies (bestandsvalidatie, antwoordvalidatie, opslagsleutel)
 
-### ⚠ Niet ingedeeld (7)
+### ⚠ Niet ingedeeld (6)
 
 Deze issues missen een `thema:*`-label. Voeg er een toe op GitHub, of
 maak een nieuw thema aan in `scripts/statusbord.js` als geen van de
@@ -112,9 +111,8 @@ bestaande thema's past.
 - [#205](https://github.com/AlingAdvies/MCM2/issues/205) — Archiveerfunctie voor vragenlijst-rondes (periode-afsluiting)
 - [#197](https://github.com/AlingAdvies/MCM2/issues/197) `before-production` — Vragenlijst aanmaken/importeren door tenant- of platformbeheerder ontbreekt
 - [#192](https://github.com/AlingAdvies/MCM2/issues/192) — Visuele markering voor gebruiker zonder actief tenant-membership bij historische koppelingen
-- [#180](https://github.com/AlingAdvies/MCM2/issues/180) `before-pilot` — Pilot-scope vaststellen: wat moet kloppen vóór de Transdev-vendor-IT-pilot
 - [#173](https://github.com/AlingAdvies/MCM2/issues/173) — Contract 360: eigen toppagina /contracten/[id]
 
 ---
 
-**Totaal open:** 59
+**Totaal open:** 57
