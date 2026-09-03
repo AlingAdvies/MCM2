@@ -61,6 +61,48 @@ het auditspoor ís de opbrengst (dat blijft onverkort staan).
 
 ---
 
+## 0a. FEATURE- EN ROADMAPBEHEER
+
+*Vastgelegd 2026-09-03. Eén issue-lijst in deze repo, geen aparte tracker —
+de reden staat in `docs/advies-td-aa-splitsing.md`: een tweede lijst
+reproduceert precies het overzetprobleem dat "één repo, gedeelde kern"
+vermijdt.*
+
+**Drie productlabels** op elk issue: `product:kern` (raakt TD én AA),
+`product:td` (alleen Transdev/Bizaline-maatwerk), `product:aa` (alleen het
+verkoopbare AlingAdvies-multitenant-product).
+
+**Prioriteitslabels** (vervangen sinds 03-09 de oude before-pilot/
+before-production-as, die met de pilot inmiddels achterhaald was):
+`priority:toegezegd` (aan Transdev beloofd of nodig voor hun lopend
+gebruik), `priority:nu` (actief werkpakket, max. een handvol tegelijk),
+`priority:later` (bestond al: geen actie tenzij een concrete trigger
+optreedt). `priority:p0` blijft een eigen, zwaardere categorie ernaast.
+
+**Twee pinned roadmap-issues**: #214 (Roadmap TD) en #215 (Roadmap AA),
+elk met een checklist die naar onderliggende issues linkt. Kern-werk krijgt
+geen eigen roadmap-issue — dat is de gedeelde onderstroom.
+
+**Triage bij elk nieuw Transdev-verzoek** — ook als de eigenaar zelf de
+gebruiker is: eerst twee vragen beantwoorden, kort vastleggen in het issue.
+1. Is dit werkelijk TD-specifiek, of een vermomde kern-feature die elke
+   klant zou willen? (De reflex "klant vraagt het, dus TD-maatwerk" is de
+   sluiproute waarlangs het AA-product uitgehold raakt.)
+2. Zo ja TD-specifiek: welke laag uit de bestaande ladder
+   (`c:\dev\CLAUDE.md`) — configuratie → feature flag → maatwerkmodule?
+   Altijd de minst vergaande laag.
+
+**Het topologie-besluit** (één of twee productdeployments, zie
+`docs/evaluatie-advies-td-aa-splitsing.md`) hoeft nog niet — de natuurlijke
+deadline is de eerste écht divergerende feature (bijv. de mail-splitsing
+TD-afzender vs. generiek). Zodra zoiets naar `priority:nu` gaat: eerst dat
+besluit, dan pas bouwen.
+
+Bijwerken: maandelijks, of bij elke labelwijziging naar `priority:toegezegd`/
+`priority:nu` op een `product:td`/`product:aa`-issue.
+
+---
+
 # 0b. DE MIDDELEN — wat er werkelijk is
 
 *Opnieuw gemeten/geverifieerd op 2026-09-02 (eerste meting 2026-08-12). Klopt
