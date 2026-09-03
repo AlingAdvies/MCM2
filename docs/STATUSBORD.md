@@ -98,12 +98,14 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#1](https://github.com/AlingAdvies/MCM2/issues/1) — Wachtwoordrotatie van de postgres-beheerrol
 - [#54](https://github.com/AlingAdvies/MCM2/issues/54) — Unittestlaag voor pure functies (bestandsvalidatie, antwoordvalidatie, opslagsleutel)
 
-### ⚠ Niet ingedeeld (6)
+### ⚠ Niet ingedeeld (8)
 
 Deze issues missen een `thema:*`-label. Voeg er een toe op GitHub, of
 maak een nieuw thema aan in `scripts/statusbord.js` als geen van de
 bestaande thema's past.
 
+- [#215](https://github.com/AlingAdvies/MCM2/issues/215) — Roadmap AA (AlingAdvies multitenant)
+- [#214](https://github.com/AlingAdvies/MCM2/issues/214) — Roadmap TD (Transdev/Bizaline)
 - [#212](https://github.com/AlingAdvies/MCM2/issues/212) — Tenant-lid intrekken toont foutmelding terwijl het intrekken wél slaagt (204 zonder body)
 - [#206](https://github.com/AlingAdvies/MCM2/issues/206) — FORCE ROW LEVEL SECURITY ontbreekt op 8 tabellen
 - [#205](https://github.com/AlingAdvies/MCM2/issues/205) — Archiveerfunctie voor vragenlijst-rondes (periode-afsluiting)
@@ -113,4 +115,4 @@ bestaande thema's past.
 
 ---
 
-**Totaal open:** 55
+**Totaal open:** 57
