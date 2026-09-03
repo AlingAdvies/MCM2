@@ -19,6 +19,8 @@ import {
   TenantContextGuard,
   type RequestMetSessie,
 } from '../auth/tenant-context.guard';
+import { FEATURE_KEYS, isFeatureKey } from '../features/feature-registry';
+import { TenantFeatureService } from '../features/tenant-feature.service';
 import { UitnodigingVerzender } from '../mail/uitnodiging-verzender.service';
 import { InvoerFout } from '../vendor/vendor-invoer';
 import { PlatformAdminGuard } from './platform-admin.guard';
@@ -55,6 +57,7 @@ export class PlatformController {
     private readonly platform: PlatformService,
     private readonly uitnodigingen: UitnodigingVerzender,
     private readonly sessies: SessieService,
+    private readonly features: TenantFeatureService,
   ) {}
 
   @Post('tenants')
@@ -267,6 +270,62 @@ export class PlatformController {
     // altijd res.json() aan, en dat gooit een parse-fout op een leeg
     // antwoord. Zie platformService.ts, deactiveerTenant().
     return {};
+  }
+
+  /**
+   * Welke features een tenant heeft (per-tenant feature-entitlements,
+   * spec 2026-09-03).
+   */
+  @Get('tenants/:id/features')
+  async tenantFeatures(@Param('id') id: string) {
+    const bestaat = await this.platform.tenantLezen(id);
+
+    if (!bestaat) {
+      throw new NotFoundException('Onbekende tenant.');
+    }
+
+    const features = await this.features.lijst(id);
+
+    return { features };
+  }
+
+  /**
+   * Eén feature aan- of uitzetten voor een tenant (per-tenant
+   * feature-entitlements, spec 2026-09-03).
+   */
+  @Put('tenants/:id/features/:featureKey')
+  async tenantFeatureZetten(
+    @Param('id') id: string,
+    @Param('featureKey') featureKey: string,
+    @Body() body: unknown,
+    @Req() request: RequestMetSessie,
+  ) {
+    if (!isFeatureKey(featureKey)) {
+      throw new BadRequestException({
+        veld: 'featureKey',
+        melding: `Onbekende feature. Geldige waarden: ${FEATURE_KEYS.join(', ')}.`,
+      });
+    }
+
+    const enabled = (body as { enabled?: unknown })?.enabled;
+
+    if (typeof enabled !== 'boolean') {
+      throw new BadRequestException({
+        veld: 'enabled',
+        melding: 'enabled is verplicht en moet een boolean zijn.',
+      });
+    }
+
+    const bestaat = await this.platform.tenantLezen(id);
+
+    if (!bestaat) {
+      throw new NotFoundException('Onbekende tenant.');
+    }
+
+    const sessie = request.sessie!;
+    await this.features.zetten(id, featureKey, enabled, sessie.userId);
+
+    return { featureKey, enabled };
   }
 
   /**

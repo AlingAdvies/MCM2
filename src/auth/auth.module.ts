@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 
+import { FeatureModule } from '../features/feature.module';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { RolGuard } from './rol.guard';
@@ -16,8 +17,12 @@ import { TenantContextGuard } from './tenant-context.guard';
  *
  * De twee guards zijn bewust gescheiden: TenantContextGuard stelt vast wie er
  * is, RolGuard wat die persoon mag. Zie de kop van rol.guard.ts.
+ *
+ * `FeatureModule` levert TenantFeatureService voor het features-veld op
+ * GET /auth/sessie (spec 2026-09-03).
  */
 @Module({
+  imports: [FeatureModule],
   controllers: [AuthController],
   providers: [AuthService, SessieService, TenantContextGuard, RolGuard],
   exports: [SessieService, TenantContextGuard, RolGuard],

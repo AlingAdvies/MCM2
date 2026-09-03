@@ -481,6 +481,29 @@ export const contract = clm.table(
   ],
 );
 
+// ─── clm schema: per-tenant feature-entitlements ───────────────────────────
+// Zie docs/superpowers/specs/2026-09-03-tenant-feature-entitlements-design.md,
+// migratie 0038. Geen rij voor een tenant/feature-combinatie betekent: uit.
+
+export const tenantFeature = clm.table(
+  'tenant_feature',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'cascade' }),
+    featureKey: text('feature_key').notNull(),
+    enabled: boolean('enabled').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedBy: uuid('updated_by').references(() => user.userId),
+  },
+  (t) => [
+    primaryKey({ columns: [t.tenantId, t.featureKey] }),
+    index('tenant_feature_tenant_id_idx').on(t.tenantId),
+  ],
+);
+
 // ─── clm schema: admin-only contract-import (#198) ─────────────────────────
 // Zie docs/superpowers/specs/2026-08-31-contract-import-design.md, migratie 0035.
 

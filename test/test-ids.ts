@@ -406,6 +406,11 @@ export const TEST_IDS = {
     tenant: id('4c'),
     andereTenant: id('4d'),
   },
+  'tenant-feature-routes': {
+    tenant: id('4e'),
+    beheerder: id('4f'),
+    klantAdmin: id('50'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */
