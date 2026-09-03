@@ -73,16 +73,21 @@ ALTER TABLE clm.tenant_feature ENABLE ROW LEVEL SECURITY;--> statement-breakpoin
 ALTER TABLE clm.tenant_feature FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 
 -- Lezen: elke tenant ziet alleen zijn eigen rijen (voor GET /auth/sessie).
+-- clm.current_tenant_id() leest de sessievariabele app.current_tenant_id,
+-- gezet door DatabaseService.withTenant() — zelfde functie als elke andere
+-- RLS-policy in dit schema gebruikt (zie migratie 0000).
 CREATE POLICY tenant_feature_isolation ON clm.tenant_feature
-    USING (tenant_id = current_setting('app.tenant_id')::uuid);--> statement-breakpoint
+    USING (tenant_id = clm.current_tenant_id());--> statement-breakpoint
 
--- Schrijven: uitsluitend via de platformbeheer-servicelaag (clm_migrator),
--- nooit via de gewone tenant-runtime. Zelfde figuur als clm.platform_admin
--- (migratie 0020): de databaselaag is de onderste bewakingslaag, de guard
--- op de route erboven.
-REVOKE INSERT, UPDATE, DELETE ON clm.tenant_feature FROM clm_api_runtime;--> statement-breakpoint
-GRANT SELECT ON clm.tenant_feature TO clm_api_runtime;--> statement-breakpoint
-GRANT SELECT, INSERT, UPDATE, DELETE ON clm.tenant_feature TO clm_migrator;--> statement-breakpoint
+-- Schrijven: via de gewone tenant-runtime (clm_api/clm_admin), net als
+-- clm.contract — anders dan clm.platform_admin (migratie 0020), dat de
+-- runtime-rol nooit schrijft: hier moet de platformbeheerder juist via de
+-- webapplicatie kunnen schakelen (spec §5, PlatformController-routes). De
+-- echte grens is PlatformAdminGuard op de route, niet de databaserol; RLS
+-- houdt bovendien elke tenant bij zijn eigen rijen, ook al kan clm_api er
+-- technisch bij. Geen DELETE: schakelen is altijd een update van `enabled`,
+-- een rij verdwijnt nooit.
+REVOKE DELETE ON clm.tenant_feature FROM clm_api, clm_admin;--> statement-breakpoint
 
 -- Bestaande tenants behouden de contractmodule (spec §4): zonder deze stap
 -- verdwijnt de module bij uitrol voor Transdev, AlingAdvies, demo, Bizaline
@@ -667,10 +672,20 @@ describe('Platformroutes: tenant-features (e2e)', () => {
   afterAll(async () => {
     await app.close();
 
+    // clm.tenant_feature heeft FORCE ROW LEVEL SECURITY (migratie 0038) —
+    // ook clm_migrator (owner) moet de tenantcontext zetten, anders ziet
+    // deze DELETE geen rijen en faalt de user-verwijdering hieronder op de
+    // achterblijvende foreign key (updated_by).
+    await migratieClient.query('BEGIN');
+    await migratieClient.query(
+      `SET LOCAL app.current_tenant_id = '${TENANT}'`,
+    );
     await migratieClient.query(
       'DELETE FROM clm.tenant_feature WHERE tenant_id = $1',
       [TENANT],
     );
+    await migratieClient.query('COMMIT');
+
     await migratieClient.query(
       'DELETE FROM audit.audit_event WHERE tenant_id = $1',
       [TENANT],

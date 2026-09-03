@@ -58,22 +58,30 @@ expliciete handeling (de migratie in §4, of een platformbeheerder die
 schakelt) — nooit stilzwijgend "aan" via een default die iemand later
 makkelijk over het hoofd ziet.
 
-**RLS: wél tenant-isolatie voor lezen, geen tenant-context voor schrijven.**
-Dit tabel wijkt daarmee af van `clm.platform_admin` (geen RLS, GRANT-only) —
-de reden is dat de gewone tenant-runtime een tenant zijn éígen featurelijst
-moet kunnen lezen (voor het sessie-endpoint, §5), maar nooit die van een
-andere tenant, en nooit mag schrijven:
+**RLS voor tenant-isolatie op lezen én schrijven — via de gewone
+tenant-runtime, niet via een aparte databaserol.** Anders dan
+`clm.platform_admin` (geen RLS, GRANT-only, nooit door de webapplicatie
+geschreven — die tabel wordt buiten de app om beheerd): hier moet de
+platformbeheerder juist via de webapplicatie kunnen schakelen, dus
+`clm_api`/`clm_admin` (de groepsrollen achter de runtime-login `clm_api_runtime`)
+behouden de SELECT/INSERT/UPDATE die `ALTER DEFAULT PRIVILEGES` (migratie
+0001) al standaard geeft aan elke nieuwe clm-tabel. Alleen DELETE wordt
+teruggedraaid — schakelen is altijd een update van `enabled`, een rij
+verdwijnt nooit. De echte grens zit in `PlatformAdminGuard` op de route
+(§5), net zoals bij `clm.contract`: de databaserol is niet de beveiliging,
+RLS + de guard samen zijn dat.
 
 ```sql
 ALTER TABLE clm.tenant_feature ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clm.tenant_feature FORCE ROW LEVEL SECURITY;
 
+-- clm.current_tenant_id() leest de sessievariabele app.current_tenant_id,
+-- gezet door DatabaseService.withTenant() — dezelfde functie als elke
+-- andere RLS-policy in dit schema gebruikt (migratie 0000).
 CREATE POLICY tenant_feature_isolation ON clm.tenant_feature
-    USING (tenant_id = current_setting('app.tenant_id')::uuid);
+    USING (tenant_id = clm.current_tenant_id());
 
-REVOKE INSERT, UPDATE, DELETE ON clm.tenant_feature FROM clm_api_runtime;
-GRANT SELECT ON clm.tenant_feature TO clm_api_runtime;
-GRANT SELECT, INSERT, UPDATE, DELETE ON clm.tenant_feature TO clm_migrator;
+REVOKE DELETE ON clm.tenant_feature FROM clm_api, clm_admin;
 ```
 
 De platformbeheer-servicelaag (§5) schrijft via `withTenant()` net als
@@ -82,6 +90,10 @@ De platformbeheer-servicelaag (§5) schrijft via `withTenant()` net als
 sessie-tenant van de platformbeheerder. Dit is dezelfde figuur als
 `PlatformController` al toepast: de tenant in de invoer is "waar je iets aan
 doet", niet "wie je bent" (zie `platform.controller.ts`, klassecomment).
+`withTenant()` zet daarbij automatisch de tenantcontext die de RLS-policy
+hierboven leest — ook bij het opruimen in tests moet die context expliciet
+gezet worden, óók voor de migratierol: FORCE ROW LEVEL SECURITY geldt ook
+voor de tabel-eigenaar.
 
 **Feature-registry in code** — nieuw bestand `src/features/feature-registry.ts`:
 
