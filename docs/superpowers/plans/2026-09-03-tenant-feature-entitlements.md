@@ -77,7 +77,8 @@ ALTER TABLE clm.tenant_feature FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 -- gezet door DatabaseService.withTenant() — zelfde functie als elke andere
 -- RLS-policy in dit schema gebruikt (zie migratie 0000).
 CREATE POLICY tenant_feature_isolation ON clm.tenant_feature
-    USING (tenant_id = clm.current_tenant_id());--> statement-breakpoint
+    USING (tenant_id = clm.current_tenant_id())
+    WITH CHECK (tenant_id = clm.current_tenant_id());--> statement-breakpoint
 
 -- Schrijven: via de gewone tenant-runtime (clm_api/clm_admin), net als
 -- clm.contract — anders dan clm.platform_admin (migratie 0020), dat de
@@ -141,10 +142,33 @@ Expected: gelijk aan het aantal niet-verwijderde rijen in `clm.tenant` op
 dat moment (op een verse wegwerpdatabase meestal 0, tenzij er al
 testtenants zijn aangemaakt — dat is verwacht, geen fout).
 
-- [ ] **Stap 5: Commit**
+- [ ] **Stap 5: Voeg `clm.tenant_feature` toe aan `src/db/rechten-contract.ts`**
+
+Twee bestaande architectuurbewakingstests draaien in de e2e-suite en falen
+zonder deze stap: `test/schema-conformiteit.e2e-spec.ts` (verwacht `WITH
+CHECK` naast `USING` op elke RLS-policy — zorg dat de migratie in Stap 1
+beide heeft) en `test/rechten-contract.e2e-spec.ts` (verwacht dat élke
+tabel in het schema een regel heeft in `TABELRECHTEN`). Voeg toe, in de
+stijl van de buurregels (na `clm.import_extra_contact`):
+
+```ts
+  // clm.tenant_feature (0038, per-tenant feature-entitlements): een rij
+  // verdwijnt nooit — schakelen is altijd een UPDATE van enabled, geen
+  // DELETE. Anders dan clm.platform_admin schrijft de gewone tenant-runtime
+  // hier wél: de platformbeheerder schakelt via de webapplicatie zelf, niet
+  // via een apart script. Zie docs/superpowers/specs/2026-09-03-tenant-feature-entitlements-design.md.
+  'clm.tenant_feature': NIET_VERWIJDEREN,
+```
+
+- [ ] **Stap 6: Run de twee architectuurbewakingstests**
+
+Run: `npx jest --config ./test/jest-e2e.json test/schema-conformiteit.e2e-spec.ts test/rechten-contract.e2e-spec.ts -i`
+Expected: PASS, beide suites.
+
+- [ ] **Stap 7: Commit**
 
 ```bash
-git add drizzle/0038_tenant_feature.sql drizzle/meta/_journal.json
+git add drizzle/0038_tenant_feature.sql drizzle/meta/_journal.json src/db/rechten-contract.ts
 git commit -m "feat(features): migratie clm.tenant_feature + bestaande tenants behouden contractmodule"
 ```
 

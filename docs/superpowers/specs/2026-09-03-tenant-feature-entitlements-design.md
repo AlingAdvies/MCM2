@@ -79,7 +79,8 @@ ALTER TABLE clm.tenant_feature FORCE ROW LEVEL SECURITY;
 -- gezet door DatabaseService.withTenant() — dezelfde functie als elke
 -- andere RLS-policy in dit schema gebruikt (migratie 0000).
 CREATE POLICY tenant_feature_isolation ON clm.tenant_feature
-    USING (tenant_id = clm.current_tenant_id());
+    USING (tenant_id = clm.current_tenant_id())
+    WITH CHECK (tenant_id = clm.current_tenant_id());
 
 REVOKE DELETE ON clm.tenant_feature FROM clm_api, clm_admin;
 ```

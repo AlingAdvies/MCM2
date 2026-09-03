@@ -121,6 +121,13 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   // nooit bijgewerkt of verwijderd door de applicatie.
   'clm.import_extra_contact': ['SELECT', 'INSERT'],
 
+  // clm.tenant_feature (0038, per-tenant feature-entitlements): een rij
+  // verdwijnt nooit — schakelen is altijd een UPDATE van enabled, geen
+  // DELETE. Anders dan clm.platform_admin schrijft de gewone tenant-runtime
+  // hier wél: de platformbeheerder schakelt via de webapplicatie zelf, niet
+  // via een apart script. Zie docs/superpowers/specs/2026-09-03-tenant-feature-entitlements-design.md.
+  'clm.tenant_feature': NIET_VERWIJDEREN,
+
   // ── Van nature append-only ─────────────────────────────────────────────────
   //
   // Een oordeel, een notitie of een koppeling verdwijnt niet: hij wordt zacht

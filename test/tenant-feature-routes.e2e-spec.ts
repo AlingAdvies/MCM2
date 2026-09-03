@@ -139,9 +139,7 @@ describe('Platformroutes: tenant-features (e2e)', () => {
     // deze DELETE geen rijen en faalt de user-verwijdering hieronder op de
     // achterblijvende foreign key (updated_by).
     await migratieClient.query('BEGIN');
-    await migratieClient.query(
-      `SET LOCAL app.current_tenant_id = '${TENANT}'`,
-    );
+    await migratieClient.query(`SET LOCAL app.current_tenant_id = '${TENANT}'`);
     await migratieClient.query(
       'DELETE FROM clm.tenant_feature WHERE tenant_id = $1',
       [TENANT],
@@ -163,12 +161,8 @@ describe('Platformroutes: tenant-features (e2e)', () => {
       'DELETE FROM clm.tenant_membership WHERE tenant_id = $1',
       [TENANT],
     );
-    await client.query('DELETE FROM clm."user" WHERE tenant_id = $1', [
-      TENANT,
-    ]);
-    await client.query('DELETE FROM clm.tenant WHERE tenant_id = $1', [
-      TENANT,
-    ]);
+    await client.query('DELETE FROM clm."user" WHERE tenant_id = $1', [TENANT]);
+    await client.query('DELETE FROM clm.tenant WHERE tenant_id = $1', [TENANT]);
     await client.query('COMMIT');
 
     await migratieClient.end();

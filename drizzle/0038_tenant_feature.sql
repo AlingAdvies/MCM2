@@ -27,7 +27,8 @@ ALTER TABLE clm.tenant_feature FORCE ROW LEVEL SECURITY;--> statement-breakpoint
 -- gezet door DatabaseService.withTenant() — zelfde functie als elke andere
 -- RLS-policy in dit schema gebruikt (zie migratie 0000).
 CREATE POLICY tenant_feature_isolation ON clm.tenant_feature
-    USING (tenant_id = clm.current_tenant_id());--> statement-breakpoint
+    USING (tenant_id = clm.current_tenant_id())
+    WITH CHECK (tenant_id = clm.current_tenant_id());--> statement-breakpoint
 
 -- Schrijven: via de gewone tenant-runtime (clm_api/clm_admin), net als
 -- clm.contract — anders dan clm.platform_admin (migratie 0020), dat de

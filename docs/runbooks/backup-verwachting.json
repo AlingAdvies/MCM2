@@ -79,10 +79,17 @@
     "tabel toe — alleen uploaded_by_user_id en uploaded_by_admin op de",
     "bestaande clm.survey_attachment, plus een herziene RLS-policy op die",
     "tabel. Migratiestand bijgewerkt, tabellenlijst niet — zelfde soort",
-    "wijziging als migratie 0032/0033 hierboven."
+    "wijziging als migratie 0032/0033 hierboven.",
+    "",
+    "Migratie 0038 (03-09, per-tenant feature-entitlements) voegt",
+    "clm.tenant_feature toe. Migratiestand bijgewerkt; clm.tenant_feature",
+    "BEWUST NOG NIET in de tabellenlijst — zelfde kip-ei-reden als bij",
+    "migratie 0034/0035 hierboven: deze migratie staat alleen lokaal/op de",
+    "wegwerpdatabase, nog niet uitgerold naar productie. Toevoegen aan de",
+    "tabellenlijst zodra de productie-uitrol bevestigd is."
   ],
-  "bijgewerkt": "2026-09-01",
-  "migratiestand": "0037_bijlage_namens_leverancier",
+  "bijgewerkt": "2026-09-03",
+  "migratiestand": "0038_tenant_feature",
   "tabellen": [
     "audit.audit_event",
     "clm.contract",
