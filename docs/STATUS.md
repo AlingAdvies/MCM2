@@ -2,6 +2,26 @@
 
 ## Laatst bijgewerkt
 
+**2026-09-06 — Verkennend gesprek: uitgangspunten concessiemanagement
+vastgelegd, geen ontwerp.** Naar aanleiding van
+`docs/Combinatie_MCM2_Concessiemngt.md` (een uitgebreide opdracht-prompt
+voor een AI-solution-design) is een hoog-over gesprek gevoerd over hoe
+concessiemanagement (Transdev tegenover provincies/gemeenten) zich verhoudt
+tot de bestaande vendor-/contractmodule. Vastgelegd in
+`docs/uitgangspunten-concessiemanagement.md`: twee bounded contexts
+verbonden via verwijzing (niet gedeeld datamodel), één doorlopende
+dossier-tijdlijn van aanbieding tot lopende uitvoering (geen harde knip bij
+gunning), dossier-lidmaatschap los van tenant-lidmaatschap, twee
+interactiestijlen (Rijnlands richting opdrachtgever, strikt richting
+vendor — dus overleg/notulen/besluit vóór een compliance-statusmodel), en
+een overzicht van welke infrastructuur al gedeeld kan worden (mail: ja
+direct; token-toegang: patroon herbruikbaar, nieuwe guard; Entra-login:
+alleen intern; notificaties: bestaat nog niet, goede eerste gedeelde
+kern-uitbreiding). `docs/advies-td-aa-splitsing.md` kreeg een §7: dit is
+een derde categorie naast kern/AA-only — **TD-only, blijvend** (nooit
+generiek zoals NIS2 dat ooit kan worden). Geen datamodel, geen
+architectuurbesluit — vervolg gepland.
+
 **2026-09-03 — Incident en herstel: per-tenant feature-entitlements gaf een
 500 op `GET /auth/sessie` voor tenant-admins in productie, direct
 teruggedraaid, oorzaak bevestigd via CloudWatch, structureel gefixt.**
