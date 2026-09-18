@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-09-17 11:43 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-09-18 07:28 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -19,7 +19,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 **P0 — voor elke volgende regel productiecode** — 0 open
 **Vóór de pilot** — 0 open
 **Vóór bredere productie** — 0 open
-**Later — bewust uitgesteld** — 13 open
+**Later — bewust uitgesteld** — 14 open
 
 ---
 
@@ -98,12 +98,13 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#1](https://github.com/AlingAdvies/MCM2/issues/1) — Wachtwoordrotatie van de postgres-beheerrol
 - [#54](https://github.com/AlingAdvies/MCM2/issues/54) — Unittestlaag voor pure functies (bestandsvalidatie, antwoordvalidatie, opslagsleutel)
 
-### ⚠ Niet ingedeeld (8)
+### ⚠ Niet ingedeeld (9)
 
 Deze issues missen een `thema:*`-label. Voeg er een toe op GitHub, of
 maak een nieuw thema aan in `scripts/statusbord.js` als geen van de
 bestaande thema's past.
 
+- [#216](https://github.com/AlingAdvies/MCM2/issues/216) `later` — MCM2 starten vanuit legacy Bizaline-app zonder Entra (handoff-token)
 - [#215](https://github.com/AlingAdvies/MCM2/issues/215) — Roadmap AA (AlingAdvies multitenant)
 - [#214](https://github.com/AlingAdvies/MCM2/issues/214) — Roadmap TD (Transdev/Bizaline)
 - [#212](https://github.com/AlingAdvies/MCM2/issues/212) — Tenant-lid intrekken toont foutmelding terwijl het intrekken wél slaagt (204 zonder body)
@@ -115,4 +116,4 @@ bestaande thema's past.
 
 ---
 
-**Totaal open:** 57
+**Totaal open:** 58
