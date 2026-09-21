@@ -1,3 +1,15 @@
+> **VEROUDERD — beschrijft een niet-uitgevoerd oorspronkelijk plan.**
+> Geverifieerd op 21-09-2026: dit document gaat uit van **AWS App Runner**
+> ("niet ECS Fargate... geen ALB/NAT Gateway nodig", regel 19-20, 36). De
+> daadwerkelijke productie draait op **ECS Express Mode**, dat wél
+> automatisch een Application Load Balancer aanmaakt
+> (`ecs-express-gateway-alb`, bevestigd in de AWS-console, actief sinds
+> 19-08-2026). Aanleiding: een architectuurplan gebaseerd op dit document
+> concludeerde ten onrechte "geen ALB in deze opzet" — dat klopt dus niet
+> (meer). Vertrouw dit document niet op infrastructuurdetails zonder
+> verificatie tegen de actuele AWS-console; zie `docs/STATUS.md` en
+> `CLAUDE.md` §0b voor de actuele stand.
+
 # Implementatiebrief — MCM2/MVM naar AWS, scenario Minimaal
 
 **Doel van dit document:** een uitvoerbare opdracht voor Claude Code om het MCM2-platform

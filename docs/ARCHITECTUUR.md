@@ -219,6 +219,51 @@ als gegenereerd bewijsbestand, en het meetregister in
 
 ---
 
+## Bekend gat: geen tweede cachebeschermingslaag
+
+**Aanleiding.** Op 21-09-2026 bleek in productie dat elke niet-parametrische
+`/beheer/*`-route en `/demo-aanmelden` statisch geprerenderd en 1 jaar lang
+gecachet werden door Next.js' eigen Full Route Cache
+(`x-nextjs-cache: HIT`, `s-maxage=31536000`), ongeacht sessiestatus van de
+bezoeker. Geverifieerd: geen acuut datalek — de gecachete HTML-shell bevat
+zelf geen tenant-data, die komt altijd via een aparte, niet-gecachete
+client-side fetch. Gefixt via `export const dynamic = 'force-dynamic'` op
+`layout.tsx`-niveau van beide routes, bewaakt door
+`e2e/geen-statische-cache.spec.ts` (MCM2-frontend-repo).
+
+**Wat hier ontbreekt.** De industriestandaard (OWASP's testrichtlijn voor
+browser-cache-zwaktes; vergelijkbare incidenten bij Railway en Angular,
+CVE-2026-50170) schrijft twee onafhankelijke lagen voor: applicatie én
+infrastructuur. Dit project heeft nu alleen de applicatielaag.
+
+Er bestaat wél een Application Load Balancer
+(`ecs-express-gateway-alb`, automatisch aangemaakt door ECS Express Mode,
+geverifieerd in de AWS-console) — maar een ALB routeert laag-7-verkeer en
+cachet zelf niets; AWS biedt geen `Cache-Control`-override-attribuut voor
+ALB-listener-rules (wel voor CORS/security-headers). Het instrument dat dit
+zou kunnen, CloudFront, ontbreekt in de huidige opzet (zie
+`docs/MCM2 AWS Minimaal — implementatiebrief voor Claude Code.md`, dat zelf
+overigens een verouderd App Runner-scenario beschrijft in plaats van het
+uiteindelijk gekozen ECS Express Mode).
+
+**Risico van één laag.** Als een toekomstige Next.js-versie of
+configuratiewijziging de werking van `force-dynamic` op layout-niveau
+verandert (vergelijkbaar met CVE's die Next.js zelf al had), is er geen
+vangnet dat het alsnog tegenhoudt.
+
+**Nog te beslissen, geen actie nu.** Of dit risico groot genoeg is om een
+CloudFront/WAF-laag toe te voegen (kosten, zie
+`docs/architectuur/aws-kostenraming-briefing.md` §167), of dat de
+bewakingstest als voldoende mitigatie geldt gezien de huidige schaal.
+Trigger om dit te heroverwegen: meer publiek verkeer, een nieuwe Server
+Component die daadwerkelijk sessie-data server-side rendert, of een
+volgende Next.js-major-upgrade.
+
+**Mag gewijzigd worden via** een nieuw architectuurbesluit zodra de
+CloudFront-vraag concreet wordt.
+
+---
+
 ## Extra — huidige productieopstelling (AWS)
 
 *Feitelijke stand, geen garantie — dit verandert vaker dan de
