@@ -76,6 +76,8 @@ interface UitnodigingAntwoord {
   mislukt: number;
   /** Waar wanneer er geen mailkanaal is: de links moeten met de hand door. */
   geenMailkanaal: boolean;
+  /** Waar wanneer de beheerder vooraf koos om geen mail te laten versturen. */
+  overgeslagen: boolean;
 }
 
 interface RondeAntwoord {
@@ -497,6 +499,54 @@ describe('Ronde-beheerroutes (e2e)', () => {
     // Dit is het enige moment waarop het bestaat; voor die leverancier is dit
     // de enige manier om de link alsnog door te geven.
     expect(tweede?.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    // Er is hier wél degelijk een verzendpoging gedaan (alleen zonder
+    // kanaal) — dat is iets anders dan bewust overslaan.
+    expect(body.overgeslagen).toBe(false);
+  });
+
+  it('slaat de mailpoging over wanneer verstuurMail false is', async () => {
+    // Anders dan het "geen mailkanaal"-scenario hierboven: hier wordt de
+    // mailverzending helemaal niet aangeroepen, omdat de beheerder dat
+    // vooraf heeft uitgezet.
+    const runId = await nieuweRonde();
+
+    const antwoord = await request(server)
+      .post(`/admin/survey/runs/${runId}/participants`)
+      .set('Cookie', cookieAdminA)
+      .send({ vendorIds: [VENDOR_1], verstuurMail: false })
+      .expect(201);
+
+    const body = antwoord.body as UitnodigingAntwoord;
+
+    expect(body.overgeslagen).toBe(true);
+    expect(body.verzonden).toBe(0);
+    expect(body.mislukt).toBe(0);
+    // Er is geen kanaal geraadpleegd, dus dit mag niet op true staan — dat
+    // zou suggereren dat er wél een poging is gedaan die faalde op het
+    // ontbreken van een kanaal.
+    expect(body.geenMailkanaal).toBe(false);
+
+    const eerste = body.uitnodigingen[0];
+    expect(eerste.verstuurd).toBe(false);
+    expect(eerste.verzendFout).toBeUndefined();
+    // Het token blijft gewoon bruikbaar — bewust overslaan van de mail
+    // betekent niet dat de link ook maar even ongeldig is.
+    expect(eerste.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  });
+
+  it('verstuurt gewoon mail wanneer verstuurMail ontbreekt (bestaand gedrag)', async () => {
+    const runId = await nieuweRonde();
+
+    const antwoord = await request(server)
+      .post(`/admin/survey/runs/${runId}/participants`)
+      .set('Cookie', cookieAdminA)
+      .send({ vendorIds: [VENDOR_1] })
+      .expect(201);
+
+    const body = antwoord.body as UitnodigingAntwoord;
+
+    expect(body.overgeslagen).toBe(false);
   });
 
   it('maakt de tokens ook aan als de mail niet verstuurd kan worden', async () => {
