@@ -78,6 +78,14 @@ export interface NieuweRonde {
 export interface Uitnodigingen {
   vendorIds: string[];
   geldigheidDagen: number;
+  /**
+   * Of de backend automatisch mail moet proberen te versturen via het
+   * platformkanaal. `false`: de beheerder kiest bewust om zelf de
+   * tokenlinks door te geven, ongeacht of er een mailkanaal actief is.
+   * Standaard `true` — bestaand gedrag blijft ongewijzigd wanneer dit veld
+   * ontbreekt.
+   */
+  verstuurMail: boolean;
 }
 
 /** UUID's zoals Postgres ze uitgeeft. Niet-hoofdlettergevoelig. */
@@ -216,7 +224,28 @@ export function leesUitnodigingen(body: unknown): Uitnodigingen {
   return {
     vendorIds,
     geldigheidDagen: leesGeldigheid(invoer.geldigheidDagen),
+    verstuurMail: leesVerstuurMail(invoer.verstuurMail),
   };
+}
+
+/**
+ * Leest `verstuurMail`. Standaard `true` wanneer het ontbreekt — bestaand
+ * gedrag (altijd een mailpoging) blijft zo het gedrag voor elke aanroeper
+ * die dit veld nog niet meestuurt.
+ */
+function leesVerstuurMail(waarde: unknown): boolean {
+  if (waarde === undefined || waarde === null) {
+    return true;
+  }
+
+  if (typeof waarde !== 'boolean') {
+    throw new InvoerFout(
+      'verstuurMail',
+      'verstuurMail moet true of false zijn.',
+    );
+  }
+
+  return waarde;
 }
 
 function leesGeldigheid(waarde: unknown): number {
