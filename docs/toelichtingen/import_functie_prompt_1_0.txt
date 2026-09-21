@@ -1,0 +1,134 @@
+ Ik wil een eerste versie bouwen van een admin-only CSV-importfunctie.
+
+## Context en doel
+
+Ik ben voorlopig de enige platformbeheerder, superuser en beheerder
+van de eerste live tenant. Alleen ik mag CSV-bestanden importeren.
+
+De eerste imports bevatten circa 70 rijen; later circa 700 rijen.
+Performance op zeer grote volumes is nu geen doel. Betrouwbaarheid,
+tenantisolatie, valide data, auditbaarheid en eenvoudig onderhoud
+bij toekomstige datamodelwijzigingen zijn wel belangrijk.
+
+Start uitsluitend met import van leveranciers/vendors. Ontwerp de
+basis zodat later imports voor bijvoorbeeld contracten, requirements
+of referentiedata kunnen worden toegevoegd, zonder de eerste versie
+onnodig generiek of complex te maken.
+
+## Huidige technische uitgangspunten
+
+- Backend: NestJS 11, TypeScript 5.7
+- Database: PostgreSQL 17 op Supabase
+- Driver en applicatiequeries: node-postgres (`pg`) met handgeschreven
+  SQL via sql-tagged templates
+- Drizzle ORM wordt alleen gebruikt voor handgeschreven migrations en
+  typegeneratie, niet voor applicatiequeries
+- Handgeschreven migrations staan in de bestaande drizzle-structuur en
+  moeten ook correct aan `drizzle/meta/journal.json` worden toegevoegd
+- De normale applicatierol heeft geen BYPASSRLS en is geen eigenaar van
+  schema's of tabellen
+- Tenantisolatie wordt afgedwongen met RLS, FORCE RLS en
+  `SET LOCAL app.current_tenant_id`
+- Iedere domeinquery moet via de bestaande `db.withTenant(...)`-grens
+  lopen; onderzoek eerst de bestaande implementatie en gebruik die,
+  maak geen parallelle database-toegangspad
+- Actieve tenant komt normaal uitsluitend uit de server-side sessielookup,
+  nooit direct vanuit browser-header, query-parameter of request body
+- Platformbeheerder mag functioneel een doeltenant kiezen, maar alleen
+  na server-side autorisatie; ook dan moet verwerking plaatsvinden
+  binnen de bestaande tenanttransactie
+- Auditspoor is append-only
+- Huidige schemas: `clm`, `ref`, `audit`
+- De testketen omvat unit tests, backend e2e tegen wegwerp-Postgres,
+  Playwright en schema-conformiteitstests
+- `npm run verify:volledig` is de volledige kwaliteitsgate
+- E2e-tests mogen uitsluitend draaien tegen correct gemarkeerde
+  wegwerpdatabases, nooit tegen beschermde acceptatie-, demo- of
+  productiedata
+
+Lees vóór je voorstel vooral:
+- technisch-overzicht.md
+- docs/ARCHITECTUUR.md
+- relevante ADRs onder docs/adr
+- bestaande authenticatie-, autorisatie-, tenantcontext- en
+  auditimplementatie
+- bestaande database schema-definities, migrations en e2e-testpatronen
+- frontend-contract/API-patronen indien die in deze repo aanwezig zijn
+
+## Gewenste functionele flow
+
+1. Alleen bevoegde platformbeheerder opent een importactie
+2. CSV-bestand wordt geselecteerd
+3. Headers, encoding, structuur en inhoud worden gevalideerd
+4. De gebruiker ziet preview, aantallen, waarschuwingen en fouten
+5. Import is alleen mogelijk als er geen blokkerende fouten zijn
+6. De backend verwerkt de import gecontroleerd
+7. Er is een duidelijk resultaat: aangemaakt, afgewezen, eventueel
+   overgeslagen, import-ID en foutdetails
+8. De brongegevens, gekozen doeltenant, importeur, tijdstip,
+   bestands-hash, aantallen en resultaat zijn traceerbaar
+9. In versie 1: alleen veilige modus `create_only`; bestaande vendors
+   worden niet overschreven
+10. Er ontstaat geen gedeeltelijke import bij een fout in de definitieve
+    verwerking
+
+## Ontwerpvoorkeuren, geen harde implementatiedwang
+
+Mijn voorlopige voorkeur is:
+
+- Geen background queue, worker, Supabase Storage, PostgreSQL COPY of
+  aparte microservice voor deze eerste versie
+- Server-side CSV-verwerking, bij voorkeur in overzichtelijke batches
+  van bijvoorbeeld 100 tot 250 regels waar dat past bij de huidige code
+- Een beperkte generieke technische importbasis
+- Per importtype een expliciete, versieerbare importdefinitie, bijvoorbeeld
+  voor vendors: externe CSV-kolomnaam, intern veld, required/optional,
+  normalisatie, validatie en unieke sleutel
+- Geen directe één-op-één koppeling tussen CSV-kolomnamen en fysieke
+  databasekolommen
+- Bewaar per importjob en per bronregel minimaal de onbewerkte regel als
+  JSONB, genormaliseerde waarden en fouten/waarschuwingen; beoordeel
+  zelf of `clm.import_job` en `clm.import_row` de beste plaats en namen
+  zijn binnen het feitelijke schema
+- De definitieve creatie van businessrecords gebeurt via een smalle,
+  expliciete SQL-functie of transactie per importtype, bijvoorbeeld
+  vendors; de generieke importer mag geen willekeurige tabellen of
+  kolommen muteren
+- Hergebruik de bestaande auditvoorziening en bestaande autorisatie-
+  patronen, in plaats van eigen parallelle mechanisms te maken
+- Voeg geen service-role/BYPASSRLS-constructie toe zonder zeer concrete,
+  onderbouwde noodzaak
+
+Deze voorkeuren zijn bewust geen harde voorschriften. Als je na inspectie
+een aantoonbaar eenvoudiger, veiliger of beter aansluitend alternatief
+ziet in de bestaande stack, beschrijf dat dan eerst als expliciet
+alternatief met voor- en nadelen. Pas na mijn akkoord mag je afwijken.
+
+## Wat ik nu van je vraag
+
+Nog NIET coderen en geen migrations uitvoeren.
+
+Lever eerst een compact maar concreet ontwerpvoorstel met:
+
+1. Bevindingen uit de repository: bestaande componenten, patronen en
+   beperkingen die bepalend zijn
+2. Aanbevolen oplossing, inclusief welke bestaande code je hergebruikt
+3. Maximaal twee realistische alternatieven, alleen als zij werkelijk beter
+   bij de bestaande code passen
+4. Exacte lijst van bestanden die je verwacht toe te voegen of te wijzigen
+5. Voorgestelde datamodelwijzigingen, RLS/GRANT-impact en auditimpact
+6. Ontwerp voor platform-adminautorisatie en gecontroleerde tenantkeuze
+7. CSV-contract voor vendor import v1: kolommen, uniek sleutelbeleid,
+   validaties, fout- en waarschuwinggedrag
+8. Transactie-, idempotency- en rollbackstrategie
+9. Testplan, met vooral tenantisolatie, autorisatie, validatie,
+   rollback en schemawijzigingen
+10. Welke toekomstige datamodelwijzigingen automatisch geen impact hebben,
+    en bij welke wijzigingen bewust importcontract/procedure/test aangepast
+    moet worden
+11. Open vragen of risico's die eerst een productbesluit van mij vereisen
+
+Gebruik feitelijke namen en patronen uit de repository. Doe geen aannames
+over tabellen, rollen, bestaande functies of endpoints als je ze eerst kunt
+controleren. Houd het ontwerp bewust klein voor 70-700 rijen, maar voorkom
+dat het een doodlopend maatwerk wordt.

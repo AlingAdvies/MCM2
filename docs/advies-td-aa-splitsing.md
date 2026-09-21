@@ -170,3 +170,22 @@ aparte repo anders zou afdwingen.
 - Het exacte moment en de volgorde waarin bestaande AA-only functionaliteit
   (NIS2-scaffold, andere) daadwerkelijk als losse module wordt
   losgetrokken uit de huidige kern.
+
+## 7. Aanscherping 2026-09-06: een derde categorie naast kern en AA-only
+
+Concessiemanagement (zie `docs/uitgangspunten-concessiemanagement.md`) past
+niet in dit advies' tweedeling "kern" versus "AA-only". Het is **niet kern**
+(geen AA-klant heeft een provincie-concessierelatie) en **niet AA-only in de
+bestaande zin** (AA-only-modules zoals NIS2 of de vragenlijst-builder kunnen
+ooit voor een andere klant relevant worden; concessiemanagement nooit,
+functioneel zinloos zonder concessierelatie).
+
+**Derde categorie: TD-only, blijvend.** Even strikt gescheiden qua
+schema/routes/migraties als een AA-only module (§5 van dit advies geldt
+onverkort — eigen namespace, eigen migraties, volledig uitschakelbaar zonder
+de kern te raken), maar zonder de verwachting ooit generiek te worden.
+
+Dit maakt het topologie-besluit uit §6 hierboven niet dringender op zich,
+maar bevestigt wél dat concessiemanagement een reëel voorbeeld is van het
+soort divergerende feature waarvoor CLAUDE.md §0a dat besluit als trigger
+aanwijst.
