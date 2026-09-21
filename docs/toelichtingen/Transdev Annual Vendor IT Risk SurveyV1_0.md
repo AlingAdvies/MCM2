@@ -1,3 +1,9 @@
+> **LET OP — dit bestand is NIET de bron die de applicatie gebruikt.**
+> Dit is een leestekst/toelichting, bewaard voor naslag. De vragenlijst
+> die daadwerkelijk wordt geseed en getoond aan vendors staat in
+> `db/seeds/transdev-annual-vendor-it-risk-v1.json` — wijzig die, niet dit
+> bestand, als de vragenlijst zelf moet veranderen.
+
 Annual Vendor IT Risk Survey
 Survey + ISO27000-cert
 v1_0

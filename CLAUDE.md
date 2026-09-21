@@ -331,6 +331,18 @@ daar niets bij past, een nieuwe aanpak proberen — en die er dan bij zetten.
 Aanleiding: op 2026-08-27 werd dezelfde trace-analyse vier keer met de hand
 opnieuw uitgevonden in plaats van als vast stappenplan hergebruikt.
 
+**7. Vragenlijst-inhoud wijzigen of opzoeken? De bron is `db/seeds/*.json`,
+niet een `.md`/`.txt`-bestand.** `docs/toelichtingen/` bevat losse
+leesteksten en werknotities over vragenlijsten (bijv. de Transdev-survey-
+tekst) — die worden door geen enkel script of route ingelezen, alleen
+`scripts/seed-vragenlijsten.js` leest uit `db/seeds/`. Ga je iets doen of
+vragen beantwoorden over een vragenlijst, check dan altijd **beide**: de
+toelichting in `docs/toelichtingen/` voor de context/herkomst, en het
+bijbehorende bestand in `db/seeds/` voor wat er daadwerkelijk geseed wordt.
+Aanleiding: op 2026-09-21 bleek een losse `.md`-toelichting in de repo-root
+niet de bron te zijn die de applicatie gebruikt — die stond ongemarkeerd
+in een seed-JSON.
+
 ---
 
 ## Groen is alleen groen via verify
