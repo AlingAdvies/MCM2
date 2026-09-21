@@ -714,6 +714,25 @@ export class VragenlijstBeheerController {
       invoer,
     );
 
+    // Bewust géén mailpoging wanneer de beheerder dat vooraf heeft
+    // uitgezet — dit is een andere situatie dan "geen mailkanaal
+    // geconfigureerd": hier is er nooit een kanaal geraadpleegd, dus
+    // `geenMailkanaal` (dat afgeleid wordt uit een reeks pogingen) moet
+    // `false` blijven. Het scherm onderscheidt dit via `overgeslagen`.
+    if (!invoer.verstuurMail) {
+      return {
+        uitnodigingen: uitnodigingen.map((u) => ({
+          ...u,
+          verstuurd: false,
+          verzendFout: undefined,
+        })),
+        verzonden: 0,
+        mislukt: 0,
+        geenMailkanaal: false,
+        overgeslagen: true,
+      };
+    }
+
     // Versturen gebeurt ná de transactie, nooit erin.
     //
     // Een verstuurde mail is niet terug te draaien. Zat de verzending in de
@@ -761,6 +780,10 @@ export class VragenlijstBeheerController {
       // provider álles weigerde — en dan wijst het scherm naar een ontbrekend
       // mailkanaal terwijl er een heel ander probleem is.
       geenMailkanaal: verzending.some((v) => v.verstuurd && !v.echtVerstuurd),
+      // Onderscheidt "we hebben het niet eens geprobeerd" (beheerder koos
+      // dit vooraf) van elk ander scenario hierboven, waar wél een poging is
+      // gedaan.
+      overgeslagen: false,
     };
   }
 
