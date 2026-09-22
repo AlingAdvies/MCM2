@@ -110,7 +110,16 @@
     "of clm_api_runtime elke clm-tabel kan lezen (veld 'zonderLeesrecht').",
     "De bestaande e2e-test rechten-contract.e2e-spec.ts toetst hetzelfde",
     "contract, maar draait tegen een verse wegwerpdatabase waar dit",
-    "probleem per definitie niet kan optreden — daar zat het gat."
+    "probleem per definitie niet kan optreden — daar zat het gat.",
+    "",
+    "UITGEROLD EN BEVESTIGD (22-09, avond): PR #220 gemerged, staging",
+    "getest (deploy sha-2ca04471307a, rookproef groen), daarna",
+    "productie-aws.yml gedraaid (run 35710683283, beide jobs 'success',",
+    "36m40s). Migratiestand teruggelezen: 39 -> 40, gelijk aan het",
+    "journal. verify:omgevingen draait ná de uitrol geen 'zonderLeesrecht'",
+    "meer voor productie — het leesrecht op clm.tenant_feature is",
+    "hersteld. Resterende afwijkingen in die controle gaan alleen over",
+    "acceptatie die achterloopt met migraties, een apart, bestaand punt."
   ],
   "bijgewerkt": "2026-09-22",
   "migratiestand": "0039_tenant_feature_rechten_herstel",
