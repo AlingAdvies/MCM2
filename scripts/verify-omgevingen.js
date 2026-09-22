@@ -240,6 +240,14 @@ const VRAGEN = `
                         AND NOT a.attisdropped)
          AND has_table_privilege('clm_api_runtime', c.oid, 'SELECT')
     ),
+    'zonderLeesrecht', (
+      SELECT coalesce(json_agg(c.relname ORDER BY c.relname), '[]'::json)
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'clm'
+         AND c.relkind = 'r'
+         AND NOT has_table_privilege('clm_api_runtime', c.oid, 'SELECT')
+    ),
     'runtimeBypassrls', (
       SELECT rolbypassrls FROM pg_roles WHERE rolname = 'clm_api_runtime'
     ),
@@ -530,6 +538,43 @@ async function main() {
           `  ${zonder.join(', ')}\n` +
           'Deze tabellen hebben een tenant_id, geen RLS, én clm_api_runtime mag\n' +
           'ze lezen. Daarmee kan elke tenant bij de rijen van elke andere.',
+      );
+    }
+  }
+
+  // ── 3b. Leesrecht van de applicatierol ────────────────────────────────────
+  //
+  // Een tabel die de runtime-rol niet mag lezen, laat élke route die hem
+  // aanraakt omvallen met een 500 — en alleen op de omgeving waar het recht
+  // ontbreekt. Gemeten op 2026-09-22: clm.tenant_feature had op productie
+  // uitsluitend rechten voor clm_migrator (de eigenaar), waardoor
+  // GET /auth/sessie een 500 gaf en de sidebar leeg bleef, terwijl elke
+  // andere route in dezelfde paginalading gewoon 200 gaf.
+  //
+  // De e2e-suite `rechten-contract.e2e-spec.ts` toetst ditzelfde contract,
+  // maar draait tegen een verse wegwerpdatabase. Daar bouwt de bootstrap de
+  // rollen opnieuw op en gelden de ALTER DEFAULT PRIVILEGES uit migratie 0001
+  // wél — het probleem kán daar dus niet optreden. Alleen een meting tegen de
+  // echte, meegegroeide omgevingen vangt het.
+  //
+  // clm.sessie staat bewust op GEEN (rechten-contract.ts): de applicatie leest
+  // sessies uitsluitend via SECURITY DEFINER-functies.
+  const MAG_ONLEESBAAR_ZIJN = new Set(['sessie']);
+
+  for (const naam of leesbaar) {
+    const zonderRecht = (omgevingen[naam].zonderLeesrecht ?? []).filter(
+      (tabel) => !MAG_ONLEESBAAR_ZIJN.has(tabel),
+    );
+
+    if (zonderRecht.length > 0) {
+      bevindingen.push(
+        `${naam}: clm_api_runtime mag ${zonderRecht.length} tabel(len) niet lezen —\n` +
+          `  ${zonderRecht.join(', ')}\n` +
+          'Elke route die zo n tabel aanraakt geeft een 500 op deze omgeving,\n' +
+          'en nergens anders. Meestal een migratie die de tabel aanmaakt zonder\n' +
+          'expliciete GRANT en leunt op ALTER DEFAULT PRIVILEGES (migratie 0001),\n' +
+          'die hier niet geldt omdat migraties als clm_migrator draaien en de\n' +
+          'default-ACL onder postgres staat. Zie migratie 0022 en 0039.',
       );
     }
   }

@@ -1,8 +1,8 @@
 {
-  "gecontroleerdOp": "2026-09-21T07:00:10.821Z",
-  "dumpGemaaktOp": "2026-09-21T05:33:40.086Z",
-  "dumpNaam": "mcm2-2026-09-21_05-33-29.dump",
-  "dumpBytes": 200342,
+  "gecontroleerdOp": "2026-09-22T07:00:10.290Z",
+  "dumpGemaaktOp": "2026-09-22T05:32:36.018Z",
+  "dumpNaam": "mcm2-2026-09-22_05-32-30.dump",
+  "dumpBytes": 200553,
   "lagen": [
     "A",
     "B"
@@ -10,7 +10,7 @@
   "goed": true,
   "problemen": [],
   "bevindingen": [
-    "Laatste dump: mcm2-2026-09-21_05-33-29.dump (1 uur oud)",
+    "Laatste dump: mcm2-2026-09-22_05-32-30.dump (1 uur oud)",
     "saxombp: 2 uur oud, 15 dump(s) bewaard",
     "Compleet: 34 tabellen"
   ]
