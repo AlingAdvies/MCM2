@@ -172,6 +172,27 @@ volgen `REVOKE ALL ... FROM PUBLIC` + gerichte `GRANT EXECUTE`.
   wél gewone RLS met policies, elke `SECURITY DEFINER`-functie heeft een
   expliciete `search_path`, draait niet als tabel-eigenaar, elke
   tenantgebonden tabel heeft zowel `USING` als `WITH CHECK`.
+- `scripts/verify-omgevingen.js` — controleert sinds 22-09 (`zonderLeesrecht`)
+  of `clm_api_runtime` daadwerkelijk elke `clm`-tabel kan lezen, gemeten
+  tegen de echte omgevingen (zie de bekende valkuil hieronder voor waarom dit
+  niet door `rechten-contract.e2e-spec.ts` alleen gedekt wordt).
+
+**Bekende valkuil: `ALTER DEFAULT PRIVILEGES` werkt niet over rolgrenzen
+heen.** Migratie 0001 zet `ALTER DEFAULT PRIVILEGES IN SCHEMA clm` zodat
+nieuwe tabellen automatisch SELECT/INSERT/UPDATE/DELETE krijgen voor
+`clm_api`/`clm_admin`. Postgres past dat mechanisme alleen toe op tabellen
+die worden aangemaakt door dezélfde rol die de default-ACL heeft gezet. Op
+productie staat die ACL geregistreerd onder `postgres`, terwijl migraties
+sinds ADR-009 als `clm_migrator` draaien — een nieuwe tabel krijgt de
+rechten dus **niet** automatisch, ondanks dat het lokaal en op een verse
+wegwerpdatabase (waar migratie 0001 wél door dezelfde rol draait die de
+tabel later aanmaakt) wel werkt. Migratie 0022 documenteerde dit al; migratie
+0038 (`clm.tenant_feature`) liep er op 22-09 opnieuw in, met een 500 op
+`GET /auth/sessie` in productie tot gevolg. **Elke migratie die een tabel in
+schema `clm` aanmaakt, moet de GRANTs expliciet zetten** — nooit op
+`ALTER DEFAULT PRIVILEGES` vertrouwen. `scripts/verify-omgevingen.js` vangt
+een gemiste GRANT nu, maar pas ná het aanmaken van de tabel; de eis blijft om
+het bij het schrijven van de migratie al goed te doen.
 
 **Mag gewijzigd worden via** ADR-008, ADR-009, ADR-010, ADR-017.
 

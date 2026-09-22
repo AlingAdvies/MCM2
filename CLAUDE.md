@@ -343,6 +343,33 @@ Aanleiding: op 2026-09-21 bleek een losse `.md`-toelichting in de repo-root
 niet de bron te zijn die de applicatie gebruikt — die stond ongemarkeerd
 in een seed-JSON.
 
+**8. Een nieuwe tabel in schema `clm` heeft een expliciete `GRANT` nodig —
+`ALTER DEFAULT PRIVILEGES` (migratie 0001) werkt niet betrouwbaar op
+productie.** Dat mechanisme geldt alleen voor tabellen die worden aangemaakt
+door dezelfde rol die de default-ACL heeft gezet. Op productie staat die ACL
+onder `postgres`, terwijl migraties als `clm_migrator` draaien (ADR-009) — een
+nieuwe tabel krijgt de rechten voor `clm_api`/`clm_admin` dus niet vanzelf.
+Lokaal en op een verse wegwerpdatabase valt dit nooit op, want daar loopt
+migratie 0001 als dezelfde rol die later de tabel aanmaakt.
+
+Migratie 0038 (03-09, `clm.tenant_feature`) liep hier op 22-09 opnieuw in:
+alleen `clm_migrator` had rechten op de tabel, de applicatie (`clm_api_runtime`)
+niet. `GET /auth/sessie` — de enige route die de tabel bevraagt — gaf een 500
+op productie, zichtbaar als een lege sidebar (geen tenantnaam, geen menu, geen
+gebruikersnaam) terwijl de rest van de pagina gewoon werkte. Migratie 0022
+beschreef deze val al; migratie 0039 herstelde de GRANT.
+
+Opzoeken vóór het schrijven van een migratie die een tabel toevoegt, en bij
+twijfel na uitrol:
+```sql
+SELECT grantee, privilege_type FROM information_schema.role_table_grants
+ WHERE table_schema='clm' AND table_name='<tabel>';
+```
+`node scripts/verify-omgevingen.js` meldt sinds 22-09 elke `clm`-tabel die
+`clm_api_runtime` niet kan lezen (`zonderLeesrecht`) — maar dat vangt de fout
+pas ná uitrol. Zet de GRANT altijd al in de migratie zelf. Zie
+`docs/ARCHITECTUUR.md` Platformgarantie 3 voor de volledige uitleg.
+
 ---
 
 ## Groen is alleen groen via verify
