@@ -1,0 +1,71 @@
+-- Migratie 0039: expliciete GRANTs op clm.tenant_feature (correctie op 0038).
+--
+-- ── Wat er misging ──────────────────────────────────────────────────────────
+--
+-- Migratie 0038 maakt clm.tenant_feature aan en doet alleen een
+-- `REVOKE DELETE ... FROM clm_api, clm_admin`. Een GRANT staat er niet in: de
+-- migratie vertrouwt op `ALTER DEFAULT PRIVILEGES IN SCHEMA clm` uit migratie
+-- 0001, die nieuwe clm-tabellen automatisch van SELECT/INSERT/UPDATE/DELETE
+-- voor clm_api en clm_admin zou voorzien.
+--
+-- Dat mechanisme werkt in Postgres alleen voor tabellen die worden aangemaakt
+-- door dezélfde rol als die de default privileges heeft gezet. Op productie
+-- staat die default-ACL geregistreerd onder rol `postgres`, terwijl migraties
+-- sinds ADR-009 als `clm_migrator` draaien. Elke tabel van vóór die rolwissel
+-- kreeg de rechten wél automatisch; clm.tenant_feature — aangemaakt erna — dus
+-- niet.
+--
+-- Precies de klasse fouten die migratie 0022 ("Elk recht expliciet, ongeacht
+-- wat ALTER DEFAULT PRIVILEGES doet") beschrijft, en die daar op 2026-08-08 al
+-- een 500 kostte bij de eerste echte tenant.
+--
+-- ── Het gemeten bewijs (2026-09-22) ─────────────────────────────────────────
+--
+-- Gemeld door de eigenaar: ingelogd als tenant-admin bij Transdev toont de
+-- sidebar geen tenantnaam, geen menu-items en geen gebruikersnaam, terwijl de
+-- tenant-inhoud (leverancierslijst, statusoverzicht) gewoon werkt.
+--
+-- In het netwerktabblad van de browser: `GET /auth/sessie` geeft **500**,
+-- terwijl `mijn-vendors` en `mijn-beoordelingen` in dezelfde paginalading
+-- **200** geven. Alleen /auth/sessie bevraagt clm.tenant_feature.
+--
+-- Read-only gemeten tegen de productiedatabase:
+--
+--   SELECT grantee, privilege_type FROM information_schema.role_table_grants
+--    WHERE table_schema='clm' AND table_name='tenant_feature';
+--
+--   → uitsluitend clm_migrator (de eigenaar). clm_api en clm_admin ontbreken
+--     volledig.
+--
+-- De applicatie draait als clm_api_runtime, die zijn rechten erft via
+-- `GRANT clm_api TO clm_api_runtime` (db/roles/bootstrap-roles.sql). Zonder
+-- GRANT op clm_api weigert Postgres de SELECT, en valt de hele route om.
+--
+-- ── Waarom dit lokaal en in CI nooit opviel ─────────────────────────────────
+--
+-- Op een verse wegwerpdatabase (`npm run test:db`) draait de volledige
+-- rollenbootstrap opnieuw, met migratie 0001 als dezelfde rol die daarna de
+-- tabellen aanmaakt. Daar geldt de default-ACL dus wél en werkt alles.
+-- Het verschil bestaat alleen op een database die stapsgewijs is meegegroeid —
+-- en dat is precies productie.
+--
+-- ── Waarom deze migratie er eerder al was, en weer verdween ─────────────────
+--
+-- Dit bestand bestond al ongecommit op de ontwikkelmachine en is op
+-- 2026-09-21 weggegooid, op grond van de redenering dat het incident van
+-- 2026-09-03 een andere oorzaak had (drie losse withTenant()-aanroepen die de
+-- krappe connectiepool belastten). Die oorzaak klopte — maar het waren er
+-- twee: de pooldruk én deze ontbrekende GRANT. De poolfix loste de
+-- intermitterende 500 op, deze migratie de structurele.
+--
+-- Les: een tweede plausibele oorzaak sluit de eerste niet uit. De GRANT was in
+-- twee minuten te verifiëren geweest met de query hierboven.
+--
+-- ── Rechtenmodel ───────────────────────────────────────────────────────────
+--
+-- Zelfde als de bedoeling van 0038 en als `src/db/rechten-contract.ts`
+-- (NIET_VERWIJDEREN): clm_api/clm_admin mogen lezen, invoegen en bijwerken —
+-- de platformbeheerder schakelt features via de webapplicatie. Geen DELETE:
+-- schakelen is altijd een UPDATE van `enabled`, een rij verdwijnt nooit.
+
+GRANT SELECT, INSERT, UPDATE ON clm.tenant_feature TO clm_api, clm_admin;
