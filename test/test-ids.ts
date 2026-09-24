@@ -299,6 +299,14 @@ export const TEST_IDS = {
     /** Bestaat met opzet NIET — voor de 400 bij een link naar een niet-bestaand doel. */
     engagementBestaatNiet: '00000000-0000-0000-0000-00000000005a',
   },
+  // Bijlagen bij een vendor-dossier. Eigen tenant-paar t.o.v. hierboven:
+  // suites draaien in willekeurige volgorde. Staarten 5b t/m 5e.
+  vendorEngagementBijlagen: {
+    tenantA: '00000000-0000-0000-0000-00000000005b',
+    tenantB: '00000000-0000-0000-0000-00000000005c',
+    adminA: '00000000-0000-0000-0000-00000000005d',
+    vendorA: '00000000-0000-0000-0000-00000000005e',
+  },
   // Werkvoorraad contractmanager. Staarten 10 t/m 1b, aaneengesloten.
   //
   // Bewust laag in het bereik: de a0–bf-zone is grotendeels vergeven, en een
