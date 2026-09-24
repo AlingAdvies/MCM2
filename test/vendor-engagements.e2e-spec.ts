@@ -169,7 +169,10 @@ describe('Vendor-dossiers (e2e)', () => {
       const antwoord = await request(server)
         .post(`/vendors/${VENDOR_A}/engagements`)
         .set('Cookie', cookieAdminA)
-        .send({ titel: 'Los verzoek cyberveiligheid' })
+        .send({
+          titel: 'Los verzoek cyberveiligheid',
+          notitieTekst: 'Testnotitie bij aanmaken.',
+        })
         .expect(201);
 
       const { engagement } = antwoord.body as EngagementBody;
@@ -185,6 +188,7 @@ describe('Vendor-dossiers (e2e)', () => {
         .set('Cookie', cookieAdminA)
         .send({
           titel: 'Cyberveiligheidscontract heronderhandelen',
+          notitieTekst: 'Testnotitie bij aanmaken.',
           links: [{ linkType: 'contract', linkedId: CONTRACT_A }],
         })
         .expect(201);
@@ -203,6 +207,7 @@ describe('Vendor-dossiers (e2e)', () => {
         .set('Cookie', cookieAdminA)
         .send({
           titel: 'Vervolg op survey-antwoord',
+          notitieTekst: 'Testnotitie bij aanmaken.',
           links: [{ linkType: 'survey_response', linkedId: RESPONSE_A }],
         })
         .expect(201);
@@ -218,7 +223,7 @@ describe('Vendor-dossiers (e2e)', () => {
       await request(server)
         .post(`/vendors/${VENDOR_A}/engagements`)
         .set('Cookie', cookieAdminA)
-        .send({ titel: '   ' })
+        .send({ titel: '   ', notitieTekst: 'Testnotitie bij aanmaken.' })
         .expect(400);
     });
 
@@ -228,6 +233,7 @@ describe('Vendor-dossiers (e2e)', () => {
         .set('Cookie', cookieAdminA)
         .send({
           titel: 'Foute koppeling',
+          notitieTekst: 'Testnotitie bij aanmaken.',
           links: [{ linkType: 'contract', linkedId: ENGAGEMENT_BESTAAT_NIET }],
         })
         .expect(400);
@@ -237,7 +243,11 @@ describe('Vendor-dossiers (e2e)', () => {
       const antwoord = await request(server)
         .post(`/vendors/${VENDOR_A}/engagements`)
         .set('Cookie', cookieAdminA)
-        .send({ titel: 'Op naam van een ander?', createdByUserId: ADMIN_B })
+        .send({
+          titel: 'Op naam van een ander?',
+          notitieTekst: 'Testnotitie bij aanmaken.',
+          createdByUserId: ADMIN_B,
+        })
         .expect(201);
 
       expect((antwoord.body as EngagementBody).engagement.createdByUserId).toBe(
@@ -251,7 +261,10 @@ describe('Vendor-dossiers (e2e)', () => {
       const aanmaak = await request(server)
         .post(`/vendors/${VENDOR_A}/engagements`)
         .set('Cookie', cookieAdminA)
-        .send({ titel: 'Meerjarig dossier' })
+        .send({
+          titel: 'Meerjarig dossier',
+          notitieTekst: 'Testnotitie bij aanmaken.',
+        })
         .expect(201);
 
       const engagementId = (aanmaak.body as EngagementBody).engagement
@@ -280,6 +293,7 @@ describe('Vendor-dossiers (e2e)', () => {
         .set('Cookie', cookieAdminA)
         .send({
           titel: 'Dubbele koppeling',
+          notitieTekst: 'Testnotitie bij aanmaken.',
           links: [{ linkType: 'contract', linkedId: CONTRACT_A }],
         })
         .expect(201);
@@ -301,7 +315,10 @@ describe('Vendor-dossiers (e2e)', () => {
         await request(server)
           .post(`/vendors/${VENDOR_A}/engagements`)
           .set('Cookie', cookieAdminA)
-          .send({ titel: `Dossier nummer ${i}` })
+          .send({
+            titel: `Dossier nummer ${i}`,
+            notitieTekst: 'Testnotitie bij aanmaken.',
+          })
           .expect(201);
       }
 
@@ -321,7 +338,10 @@ describe('Vendor-dossiers (e2e)', () => {
       const aanmaak = await request(server)
         .post(`/vendors/${VENDOR_A}/engagements`)
         .set('Cookie', cookieAdminA)
-        .send({ titel: 'Deze gaat weg' })
+        .send({
+          titel: 'Deze gaat weg',
+          notitieTekst: 'Testnotitie bij aanmaken.',
+        })
         .expect(201);
 
       const engagementId = (aanmaak.body as EngagementBody).engagement
@@ -359,7 +379,7 @@ describe('Vendor-dossiers (e2e)', () => {
       const aanmaak = await request(server)
         .post(`/vendors/${VENDOR_A}/engagements`)
         .set('Cookie', cookieAdminA)
-        .send({ titel: 'Eenmalig' })
+        .send({ titel: 'Eenmalig', notitieTekst: 'Testnotitie bij aanmaken.' })
         .expect(201);
 
       const engagementId = (aanmaak.body as EngagementBody).engagement
@@ -376,7 +396,10 @@ describe('Vendor-dossiers (e2e)', () => {
       await request(server)
         .post(`/vendors/${VENDOR_A}/engagements`)
         .set('Cookie', cookieB)
-        .send({ titel: 'Meekijken?' })
+        .send({
+          titel: 'Meekijken?',
+          notitieTekst: 'Testnotitie bij aanmaken.',
+        })
         .expect(404);
     });
 
@@ -384,7 +407,10 @@ describe('Vendor-dossiers (e2e)', () => {
       await request(server)
         .post(`/vendors/${VENDOR_A}/engagements`)
         .set('Cookie', cookieAdminA)
-        .send({ titel: 'Vertrouwelijk voor A' })
+        .send({
+          titel: 'Vertrouwelijk voor A',
+          notitieTekst: 'Testnotitie bij aanmaken.',
+        })
         .expect(201);
 
       await request(server)
@@ -397,7 +423,10 @@ describe('Vendor-dossiers (e2e)', () => {
       const aanmaak = await request(server)
         .post(`/vendors/${VENDOR_A}/engagements`)
         .set('Cookie', cookieAdminA)
-        .send({ titel: 'Blijft staan' })
+        .send({
+          titel: 'Blijft staan',
+          notitieTekst: 'Testnotitie bij aanmaken.',
+        })
         .expect(201);
 
       const engagementId = (aanmaak.body as EngagementBody).engagement

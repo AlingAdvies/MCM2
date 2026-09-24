@@ -99,7 +99,10 @@ describe('Bijlagen bij een vendor-dossier (e2e)', () => {
     const aanmaak = await request(server)
       .post(`/vendors/${VENDOR_A}/engagements`)
       .set('Cookie', cookieAdminA)
-      .send({ titel: 'Dossier met bijlagen' })
+      .send({
+        titel: 'Dossier met bijlagen',
+        notitieTekst: 'Testnotitie bij aanmaken.',
+      })
       .expect(201);
 
     engagementId = (aanmaak.body as EngagementBody).engagement.engagementId;
@@ -141,7 +144,10 @@ describe('Bijlagen bij een vendor-dossier (e2e)', () => {
     const aanmaak = await request(server)
       .post(`/vendors/${VENDOR_A}/engagements`)
       .set('Cookie', cookieAdminA)
-      .send({ titel: 'Dossier tot aan het maximum' })
+      .send({
+        titel: 'Dossier tot aan het maximum',
+        notitieTekst: 'Testnotitie bij aanmaken.',
+      })
       .expect(201);
 
     const eigenEngagementId = (aanmaak.body as EngagementBody).engagement
