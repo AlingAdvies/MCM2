@@ -284,6 +284,35 @@ export const TEST_IDS = {
     /** Bestaat met opzet NIET — voor de 404 bij intrekken. */
     notitieBestaatNiet: '00000000-0000-0000-0000-000000000fee',
   },
+  // Vendor-dossiers (engagements, migratie 0040/0041/0042). Staarten 51 t/m
+  // 5a, aaneengesloten en vrij op het moment van schrijven.
+  vendorEngagements: {
+    tenantA: '00000000-0000-0000-0000-000000000051',
+    tenantB: '00000000-0000-0000-0000-000000000052',
+    adminA: '00000000-0000-0000-0000-000000000053',
+    adminB: '00000000-0000-0000-0000-000000000054',
+    vendorA: '00000000-0000-0000-0000-000000000055',
+    templateA: '00000000-0000-0000-0000-000000000056',
+    runA: '00000000-0000-0000-0000-000000000057',
+    responseA: '00000000-0000-0000-0000-000000000058',
+    contractA: '00000000-0000-0000-0000-000000000059',
+    /** Bestaat met opzet NIET — voor de 400 bij een link naar een niet-bestaand doel. */
+    engagementBestaatNiet: '00000000-0000-0000-0000-00000000005a',
+  },
+  // Bijlagen bij een vendor-dossier. Eigen tenant-paar t.o.v. hierboven:
+  // suites draaien in willekeurige volgorde. Staarten 5b t/m 5e.
+  vendorEngagementBijlagen: {
+    tenantA: '00000000-0000-0000-0000-00000000005b',
+    tenantB: '00000000-0000-0000-0000-00000000005c',
+    adminA: '00000000-0000-0000-0000-00000000005d',
+    vendorA: '00000000-0000-0000-0000-00000000005e',
+  },
+  // Notities bij een vendor-dossier. Staarten 5f t/m 61.
+  vendorEngagementNotities: {
+    tenantA: '00000000-0000-0000-0000-00000000005f',
+    adminA: '00000000-0000-0000-0000-000000000060',
+    vendorA: '00000000-0000-0000-0000-000000000061',
+  },
   // Werkvoorraad contractmanager. Staarten 10 t/m 1b, aaneengesloten.
   //
   // Bewust laag in het bereik: de a0–bf-zone is grotendeels vergeven, en een
