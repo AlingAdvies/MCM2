@@ -1,6 +1,7 @@
 import type { LinkType } from './vendor-engagement.service';
 
 const MAX_TITEL = 300;
+const MAX_NOTITIE = 500;
 
 export class InvoerFout extends Error {
   constructor(
@@ -14,6 +15,7 @@ export class InvoerFout extends Error {
 
 export interface NieuwEngagementInvoer {
   titel: string;
+  notitieTekst: string;
   links: ReadonlyArray<{ linkType: LinkType; linkedId: string }>;
 }
 
@@ -22,6 +24,20 @@ const UUID_REGEX =
 
 function isUuid(waarde: unknown): waarde is string {
   return typeof waarde === 'string' && UUID_REGEX.test(waarde);
+}
+
+function leesNotitieTekst(waarde: unknown): string {
+  if (
+    typeof waarde !== 'string' ||
+    waarde.trim() === '' ||
+    waarde.length > MAX_NOTITIE
+  ) {
+    throw new InvoerFout(
+      'notitieTekst',
+      `notitieTekst is verplicht en mag maximaal ${MAX_NOTITIE} tekens zijn.`,
+    );
+  }
+  return waarde.trim();
 }
 
 function leesLink(waarde: unknown): { linkType: LinkType; linkedId: string } {
@@ -63,6 +79,8 @@ export function leesNieuwEngagement(body: unknown): NieuwEngagementInvoer {
     );
   }
 
+  const notitieTekst = leesNotitieTekst(obj.notitieTekst);
+
   const linksRaw = obj.links;
   const links =
     linksRaw === undefined
@@ -73,7 +91,7 @@ export function leesNieuwEngagement(body: unknown): NieuwEngagementInvoer {
             throw new InvoerFout('links', 'links moet een lijst zijn.');
           })();
 
-  return { titel: obj.titel.trim(), links };
+  return { titel: obj.titel.trim(), notitieTekst, links };
 }
 
 export function leesNieuweLink(body: unknown): {
@@ -81,4 +99,13 @@ export function leesNieuweLink(body: unknown): {
   linkedId: string;
 } {
   return leesLink(body);
+}
+
+export function leesNieuweNotitie(body: unknown): { tekst: string } {
+  if (typeof body !== 'object' || body === null) {
+    throw new InvoerFout('body', 'Ongeldige invoer.');
+  }
+
+  const obj = body as Record<string, unknown>;
+  return { tekst: leesNotitieTekst(obj.tekst) };
 }
