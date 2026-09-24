@@ -159,9 +159,7 @@ describe('Vendor-dossier-notities (e2e)', () => {
       lijstResponse.body as { engagements: EngagementBody['engagement'][] }
     ).engagements.find((e) => e.engagementId === engagementId);
 
-    expect(gevonden?.laatsteNotitie?.tekst).toBe(
-      'Tweede, bijgewerkte status.',
-    );
+    expect(gevonden?.laatsteNotitie?.tekst).toBe('Tweede, bijgewerkte status.');
   });
 
   test('valt na intrekken van de laatste notitie terug op de voorlaatste', async () => {
