@@ -125,14 +125,14 @@ export class VendorEngagementService {
         const links = await tx.execute<LinkRij>(
           sql`SELECT link_id, engagement_id, link_type, linked_id
                 FROM clm.vendor_engagement_link
-               WHERE engagement_id = ANY(${ids})`,
+               WHERE engagement_id = ANY(${sql.param(ids)}::uuid[])`,
         );
 
         const attachments = await tx.execute<AttachmentRij>(
           sql`SELECT attachment_id, engagement_id, original_filename,
                      content_type, size_bytes, uploaded_by_user_id, created_at
                 FROM clm.vendor_engagement_attachment
-               WHERE engagement_id = ANY(${ids})
+               WHERE engagement_id = ANY(${sql.param(ids)}::uuid[])
                  AND deleted_at IS NULL`,
         );
 

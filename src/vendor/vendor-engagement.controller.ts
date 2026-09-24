@@ -35,9 +35,15 @@ import { VendorEngagementService } from './vendor-engagement.service';
  * Vendor-dossiers (engagements): zie
  * docs/superpowers/specs/2026-09-24-vendor-dossiers-design.md.
  *
- * Rol 'medewerker' nu — elke gebruiker in de tenant mag aanmaken/inzien.
- * @VereistRol('medewerker') hier is bewust zo gekozen dat een latere
- * beperking tot alleen contractbeheerder/admin één parameter-wijziging is.
+ * Rollen 'admin' en 'user' nu — elke gebruiker in de tenant mag aanmaken/
+ * inzien, consistent met VendorController. @VereistRol hier is bewust zo
+ * gekozen dat een latere beperking tot alleen 'admin' (contractbeheerder)
+ * één parameter-wijziging is.
+ *
+ * Let op: 'medewerker' in RLS-policies (clm.current_actor()) is een ander
+ * begrip dan de sessierol hier — dat is de databaserol die de e2e-fixtures
+ * met SET LOCAL app.current_actor zetten, niet de tenant-membership-rol
+ * ('admin'/'user'/'support'/'reviewer') die deze guard controleert.
  */
 @Controller()
 @UseGuards(TenantContextGuard, RolGuard)
@@ -48,7 +54,7 @@ export class VendorEngagementController {
   ) {}
 
   @Get('vendors/:vendorId/engagements')
-  @VereistRol('medewerker')
+  @VereistRol('admin', 'user')
   async lijst(
     @Req() request: RequestMetSessie,
     @Param('vendorId') vendorId: string,
@@ -62,7 +68,7 @@ export class VendorEngagementController {
   }
 
   @Post('vendors/:vendorId/engagements')
-  @VereistRol('medewerker')
+  @VereistRol('admin', 'user')
   @HttpCode(201)
   async aanmaken(
     @Req() request: RequestMetSessie,
@@ -90,7 +96,7 @@ export class VendorEngagementController {
   }
 
   @Post('engagements/:id/links')
-  @VereistRol('medewerker')
+  @VereistRol('admin', 'user')
   @HttpCode(201)
   async linkToevoegen(
     @Req() request: RequestMetSessie,
@@ -121,7 +127,7 @@ export class VendorEngagementController {
    * (VragenlijstBeheerController.bijlageToevoegen).
    */
   @Post('engagements/:id/attachments')
-  @VereistRol('medewerker')
+  @VereistRol('admin', 'user')
   @HttpCode(201)
   @UseInterceptors(
     FileInterceptor('file', {
@@ -163,7 +169,7 @@ export class VendorEngagementController {
   }
 
   @Get('engagements/attachments/:attachmentId')
-  @VereistRol('medewerker')
+  @VereistRol('admin', 'user')
   async downloaden(
     @Req() request: RequestMetSessie,
     @Param('attachmentId') attachmentId: string,
@@ -190,7 +196,7 @@ export class VendorEngagementController {
   }
 
   @Delete('engagements/:id')
-  @VereistRol('medewerker')
+  @VereistRol('admin', 'user')
   @HttpCode(204)
   async intrekken(@Req() request: RequestMetSessie, @Param('id') id: string) {
     const sessie = request.sessie!;
@@ -198,7 +204,7 @@ export class VendorEngagementController {
   }
 
   @Delete('engagements/:id/attachments/:attachmentId')
-  @VereistRol('medewerker')
+  @VereistRol('admin', 'user')
   @HttpCode(204)
   async bijlageIntrekken(
     @Req() request: RequestMetSessie,
