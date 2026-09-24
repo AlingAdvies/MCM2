@@ -725,6 +725,35 @@ export const vendorEngagementAttachment = clm.table(
   ],
 );
 
+// clm.vendor_engagement_note (0043): append-only notities bij een dossier —
+// nooit een UPDATE van bestaande tekst, alleen nieuwe rijen + deleted_at.
+export const vendorEngagementNote = clm.table(
+  'vendor_engagement_note',
+  {
+    noteId: uuid('note_id').primaryKey().defaultRandom(),
+    engagementId: uuid('engagement_id')
+      .notNull()
+      .references(() => vendorEngagement.engagementId, {
+        onDelete: 'cascade',
+      }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    tekst: text('tekst').notNull(),
+    createdByUserId: uuid('created_by_user_id')
+      .notNull()
+      .references(() => user.userId, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('vendor_engagement_note_tenant_id_idx').on(t.tenantId),
+    index('vendor_engagement_note_engagement_id_idx').on(t.engagementId),
+  ],
+);
+
 export const surveyRun = clm.table(
   'survey_run',
   {
@@ -1486,6 +1515,16 @@ export const vendorEngagementAttachmentRelations = relations(
   ({ one }) => ({
     engagement: one(vendorEngagement, {
       fields: [vendorEngagementAttachment.engagementId],
+      references: [vendorEngagement.engagementId],
+    }),
+  }),
+);
+
+export const vendorEngagementNoteRelations = relations(
+  vendorEngagementNote,
+  ({ one }) => ({
+    engagement: one(vendorEngagement, {
+      fields: [vendorEngagementNote.engagementId],
       references: [vendorEngagement.engagementId],
     }),
   }),

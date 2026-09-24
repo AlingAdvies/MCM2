@@ -307,6 +307,12 @@ export const TEST_IDS = {
     adminA: '00000000-0000-0000-0000-00000000005d',
     vendorA: '00000000-0000-0000-0000-00000000005e',
   },
+  // Notities bij een vendor-dossier. Staarten 5f t/m 61.
+  vendorEngagementNotities: {
+    tenantA: '00000000-0000-0000-0000-00000000005f',
+    adminA: '00000000-0000-0000-0000-000000000060',
+    vendorA: '00000000-0000-0000-0000-000000000061',
+  },
   // Werkvoorraad contractmanager. Staarten 10 t/m 1b, aaneengesloten.
   //
   // Bewust laag in het bereik: de a0–bf-zone is grotendeels vergeven, en een

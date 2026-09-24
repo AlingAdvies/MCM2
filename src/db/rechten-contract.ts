@@ -142,6 +142,9 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   'clm.vendor_engagement': NIET_VERWIJDEREN,
   // clm.vendor_engagement_attachment (0042): zelfde patroon.
   'clm.vendor_engagement_attachment': NIET_VERWIJDEREN,
+  // clm.vendor_engagement_note (0043): append-only, zelfde patroon als
+  // vendor_engagement_attachment.
+  'clm.vendor_engagement_note': NIET_VERWIJDEREN,
   // clm.vendor_engagement_link (0041): many-to-many-koppeling zonder eigen
   // levenscyclus, zelfde redenering als contract_survey_template.
   'clm.vendor_engagement_link': ['SELECT', 'INSERT', 'DELETE'],
