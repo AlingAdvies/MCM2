@@ -466,7 +466,8 @@ export class VendorEngagementService {
     linkType: LinkType,
     linkedId: string,
   ): Promise<void> {
-    const tabel = linkType === 'contract' ? 'clm.contract' : 'clm.survey_response';
+    const tabel =
+      linkType === 'contract' ? 'clm.contract' : 'clm.survey_response';
     const kolom = linkType === 'contract' ? 'contract_id' : 'response_id';
 
     const gevonden = await tx.execute(

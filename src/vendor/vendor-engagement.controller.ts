@@ -139,8 +139,7 @@ export class VendorEngagementController {
     @Param('id') id: string,
     @UploadedFile()
     bestand:
-      | { originalname: string; mimetype?: string; buffer: Buffer }
-      | undefined,
+      { originalname: string; mimetype?: string; buffer: Buffer } | undefined,
   ) {
     const sessie = request.sessie!;
 

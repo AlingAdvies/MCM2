@@ -20,8 +20,12 @@ import { verwijderTestdata } from './opruimen';
  * willekeurige volgorde draaien en delen één database (CLAUDE.md §15).
  */
 
-const { tenantA, tenantB, adminA: ADMIN_A, vendorA: VENDOR_A } =
-  TEST_IDS.vendorEngagementBijlagen;
+const {
+  tenantA,
+  tenantB,
+  adminA: ADMIN_A,
+  vendorA: VENDOR_A,
+} = TEST_IDS.vendorEngagementBijlagen;
 
 const SUBJECT_ADMIN = `oid-veb-a-${Date.now()}`;
 const PDF_INHOUD = Buffer.concat([

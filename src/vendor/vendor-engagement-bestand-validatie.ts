@@ -43,14 +43,10 @@ const OOXML_TYPES = [
 ] as const;
 
 export type ToegestaanEngagementContentType =
-  | (typeof HANDTEKENINGEN)[number]['contentType']
-  | (typeof OOXML_TYPES)[number];
+  (typeof HANDTEKENINGEN)[number]['contentType'] | (typeof OOXML_TYPES)[number];
 
 export type BestandAfkeurReden =
-  | 'leeg'
-  | 'te-groot'
-  | 'onbekend-type'
-  | 'type-komt-niet-overeen';
+  'leeg' | 'te-groot' | 'onbekend-type' | 'type-komt-niet-overeen';
 
 export type EngagementBestandUitkomst =
   | {

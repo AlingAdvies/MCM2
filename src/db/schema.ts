@@ -721,9 +721,7 @@ export const vendorEngagementAttachment = clm.table(
       t.storageKey,
     ),
     index('vendor_engagement_attachment_tenant_id_idx').on(t.tenantId),
-    index('vendor_engagement_attachment_engagement_id_idx').on(
-      t.engagementId,
-    ),
+    index('vendor_engagement_attachment_engagement_id_idx').on(t.engagementId),
   ],
 );
 
