@@ -28,6 +28,7 @@ import {
   InvoerFout,
   leesNieuwEngagement,
   leesNieuweLink,
+  leesNieuweNotitie,
 } from './vendor-engagement-invoer';
 import { VendorEngagementService } from './vendor-engagement.service';
 
@@ -89,10 +90,50 @@ export class VendorEngagementController {
       vendorId,
       sessie.userId,
       invoer.titel,
+      invoer.notitieTekst,
       invoer.links,
     );
 
     return { engagement };
+  }
+
+  @Post('engagements/:id/notes')
+  @VereistRol('admin', 'user')
+  @HttpCode(201)
+  async notitieToevoegen(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const sessie = request.sessie!;
+
+    let invoer: ReturnType<typeof leesNieuweNotitie>;
+    try {
+      invoer = leesNieuweNotitie(body);
+    } catch (err) {
+      throw this.naarHttpFout(err);
+    }
+
+    const note = await this.engagements.notitieToevoegen(
+      sessie.tenantId,
+      id,
+      sessie.userId,
+      invoer.tekst,
+    );
+
+    return { note };
+  }
+
+  @Delete('engagements/:id/notes/:noteId')
+  @VereistRol('admin', 'user')
+  @HttpCode(204)
+  async notitieIntrekken(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Param('noteId') noteId: string,
+  ) {
+    const sessie = request.sessie!;
+    await this.engagements.notitieIntrekken(sessie.tenantId, id, noteId);
   }
 
   @Post('engagements/:id/links')
