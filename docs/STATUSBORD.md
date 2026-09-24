@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-09-23 11:39 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-09-24 11:26 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -19,7 +19,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 **P0 — voor elke volgende regel productiecode** — 0 open
 **Vóór de pilot** — 0 open
 **Vóór bredere productie** — 0 open
-**Later — bewust uitgesteld** — 14 open
+**Later — bewust uitgesteld** — 16 open
 
 ---
 
@@ -48,17 +48,19 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#188](https://github.com/AlingAdvies/MCM2/issues/188) — Business-risk-classificatie (Tier 1/2/3) als apart veld, los van vendor-categorie
 - [#189](https://github.com/AlingAdvies/MCM2/issues/189) — DPA-vlag (Ja/Nee) overnemen bij contract-import
 
-### Beheermenu (3)
+### Beheermenu (4)
 
+- [#222](https://github.com/AlingAdvies/MCM2/issues/222) `later` — Excel-export leveranciersuitnodigingen t.b.v. handmatig mailen via Outlook/Power Automate
 - [#75](https://github.com/AlingAdvies/MCM2/issues/75) — Beheermenu: gebruikers en rechten per tenant
 - [#76](https://github.com/AlingAdvies/MCM2/issues/76) — Beheermenu: e-mailinstellingen (SMTP) per tenant, wachtwoord versleuteld opgeslagen
 - [#162](https://github.com/AlingAdvies/MCM2/issues/162) — Bug: tenantnaam ontbreekt in de tenantinstellingen-tekst (hardcoded 'AlingAdvies')
 
-### AWS / productie-infrastructuur (5)
+### AWS / productie-infrastructuur (6)
 
 - [#21](https://github.com/AlingAdvies/MCM2/issues/21) `later` — Volledige AWS-beveiligingsdiensten groep 1 (WAF, GuardDuty, KMS, CloudTrail, SNS, malware-scan)
 - [#57](https://github.com/AlingAdvies/MCM2/issues/57) `later` — Platformbeheer-toegang tot klant-tenants: industry standards onderzoeken vóór definitieve keuze
 - [#86](https://github.com/AlingAdvies/MCM2/issues/86) `later` — Scripts benoemen hun doelwit niet: een lokale testrun kan ongemerkt met productie praten
+- [#221](https://github.com/AlingAdvies/MCM2/issues/221) `later` — Domeinmigratie naar myvendormanager.nl (naast clm.alingadvies.nl)
 - [#17](https://github.com/AlingAdvies/MCM2/issues/17) — Logging/monitoring-basislaag vóór de pilot
 - [#61](https://github.com/AlingAdvies/MCM2/issues/61) — Leesbare rookproef voor een uitgerolde omgeving (acceptatie/productie)
 
@@ -116,4 +118,4 @@ bestaande thema's past.
 
 ---
 
-**Totaal open:** 58
+**Totaal open:** 60
