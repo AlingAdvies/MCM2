@@ -281,6 +281,13 @@
       "when": 1787068800013,
       "tag": "0039_tenant_feature_rechten_herstel",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1787068800014,
+      "tag": "0040_vendor_engagement",
+      "breakpoints": true
     }
   ]
 }
