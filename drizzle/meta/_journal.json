@@ -288,6 +288,13 @@
       "when": 1787068800014,
       "tag": "0040_vendor_engagement",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1787068800015,
+      "tag": "0041_vendor_engagement_link",
+      "breakpoints": true
     }
   ]
 }
