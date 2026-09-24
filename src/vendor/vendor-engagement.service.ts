@@ -41,6 +41,14 @@ export interface EngagementAttachment {
   createdAt: string;
 }
 
+export interface EngagementNote {
+  noteId: string;
+  tekst: string;
+  createdByUserId: string;
+  createdByNaam: string | null;
+  createdAt: string;
+}
+
 export interface Engagement {
   engagementId: string;
   vendorId: string;
@@ -48,6 +56,7 @@ export interface Engagement {
   createdByUserId: string;
   createdByNaam: string | null;
   createdAt: string;
+  laatsteNotitie: EngagementNote | null;
   links: EngagementLink[];
   attachments: EngagementAttachment[];
 }
@@ -75,6 +84,15 @@ interface AttachmentRij extends Record<string, unknown> {
   content_type: string;
   size_bytes: number;
   uploaded_by_user_id: string;
+  created_at: Date | string;
+}
+
+interface NoteRij extends Record<string, unknown> {
+  note_id: string;
+  engagement_id: string;
+  tekst: string;
+  created_by_user_id: string;
+  created_by_naam: string | null;
   created_at: Date | string;
 }
 
@@ -136,8 +154,22 @@ export class VendorEngagementService {
                  AND deleted_at IS NULL`,
         );
 
+        const notes = await tx.execute<NoteRij>(
+          sql`SELECT n.note_id,
+                     n.engagement_id,
+                     n.tekst,
+                     n.created_by_user_id,
+                     u.full_name AS created_by_naam,
+                     n.created_at
+                FROM clm.vendor_engagement_note n
+                LEFT JOIN clm."user" u ON u.user_id = n.created_by_user_id
+               WHERE n.engagement_id = ANY(${sql.param(ids)}::uuid[])
+                 AND n.deleted_at IS NULL
+               ORDER BY n.created_at DESC`,
+        );
+
         return engagements.rows.map((r) =>
-          this.naarEngagement(r, links.rows, attachments.rows),
+          this.naarEngagement(r, links.rows, attachments.rows, notes.rows),
         );
       },
       'medewerker',
@@ -155,6 +187,7 @@ export class VendorEngagementService {
     vendorId: string,
     createdByUserId: string,
     titel: string,
+    notitieTekst: string,
     initieleLinks: ReadonlyArray<{ linkType: LinkType; linkedId: string }>,
   ): Promise<Engagement> {
     return this.db.withTenant(
@@ -190,6 +223,23 @@ export class VendorEngagementService {
           );
         }
 
+        const noteResultaat = await tx.execute<NoteRij>(
+          sql`WITH nieuw AS (
+                INSERT INTO clm.vendor_engagement_note
+                       (engagement_id, tenant_id, tekst, created_by_user_id)
+                VALUES (${rij.engagement_id}, ${tenantId}, ${notitieTekst}, ${createdByUserId})
+                RETURNING note_id, engagement_id, tekst, created_by_user_id, created_at
+              )
+              SELECT n.note_id,
+                     n.engagement_id,
+                     n.tekst,
+                     n.created_by_user_id,
+                     u.full_name AS created_by_naam,
+                     n.created_at
+                FROM nieuw n
+                LEFT JOIN clm."user" u ON u.user_id = n.created_by_user_id`,
+        );
+
         for (const link of initieleLinks) {
           await tx.execute(
             sql`INSERT INTO clm.vendor_engagement_link
@@ -204,7 +254,7 @@ export class VendorEngagementService {
                WHERE engagement_id = ${rij.engagement_id}`,
         );
 
-        return this.naarEngagement(rij, links.rows, []);
+        return this.naarEngagement(rij, links.rows, [], noteResultaat.rows);
       },
       'medewerker',
     );
@@ -243,6 +293,80 @@ export class VendorEngagementService {
           linkType: rij.link_type as LinkType,
           linkedId: rij.linked_id,
         };
+      },
+      'medewerker',
+    );
+  }
+
+  /** Voegt een nieuwe notitie toe aan een bestaand engagement — nooit een UPDATE van een bestaande. */
+  async notitieToevoegen(
+    tenantId: string,
+    engagementId: string,
+    createdByUserId: string,
+    tekst: string,
+  ): Promise<EngagementNote> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        await this.eisBestaandEngagement(tx, engagementId);
+
+        const resultaat = await tx.execute<NoteRij>(
+          sql`WITH nieuw AS (
+                INSERT INTO clm.vendor_engagement_note
+                       (engagement_id, tenant_id, tekst, created_by_user_id)
+                VALUES (${engagementId}, ${tenantId}, ${tekst}, ${createdByUserId})
+                RETURNING note_id, engagement_id, tekst, created_by_user_id, created_at
+              )
+              SELECT n.note_id,
+                     n.engagement_id,
+                     n.tekst,
+                     n.created_by_user_id,
+                     u.full_name AS created_by_naam,
+                     n.created_at
+                FROM nieuw n
+                LEFT JOIN clm."user" u ON u.user_id = n.created_by_user_id`,
+        );
+
+        const rij = resultaat.rows[0];
+        if (!rij) {
+          throw new BadRequestException(
+            'De notitie kon niet worden opgeslagen.',
+          );
+        }
+
+        return {
+          noteId: rij.note_id,
+          tekst: rij.tekst,
+          createdByUserId: rij.created_by_user_id,
+          createdByNaam: rij.created_by_naam,
+          createdAt: iso(rij.created_at),
+        };
+      },
+      'medewerker',
+    );
+  }
+
+  async notitieIntrekken(
+    tenantId: string,
+    engagementId: string,
+    noteId: string,
+  ): Promise<void> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const geraakt = await tx.execute(
+          sql`UPDATE clm.vendor_engagement_note
+                 SET deleted_at = now()
+               WHERE note_id = ${noteId}
+                 AND engagement_id = ${engagementId}
+                 AND deleted_at IS NULL`,
+        );
+
+        if (geraakt.rowCount === 0) {
+          throw new NotFoundException(
+            'Deze notitie bestaat niet, of is al ingetrokken.',
+          );
+        }
       },
       'medewerker',
     );
@@ -487,7 +611,13 @@ export class VendorEngagementService {
     r: EngagementRij,
     alleLinks: LinkRij[],
     alleAttachments: AttachmentRij[],
+    alleNotes: NoteRij[],
   ): Engagement {
+    const notesVanDitEngagement = alleNotes.filter(
+      (n) => n.engagement_id === r.engagement_id,
+    );
+    const laatste = notesVanDitEngagement[0] ?? null;
+
     return {
       engagementId: r.engagement_id,
       vendorId: r.vendor_id,
@@ -495,6 +625,15 @@ export class VendorEngagementService {
       createdByUserId: r.created_by_user_id,
       createdByNaam: r.created_by_naam,
       createdAt: iso(r.created_at),
+      laatsteNotitie: laatste
+        ? {
+            noteId: laatste.note_id,
+            tekst: laatste.tekst,
+            createdByUserId: laatste.created_by_user_id,
+            createdByNaam: laatste.created_by_naam,
+            createdAt: iso(laatste.created_at),
+          }
+        : null,
       links: alleLinks
         .filter((l) => l.engagement_id === r.engagement_id)
         .map((l) => ({
