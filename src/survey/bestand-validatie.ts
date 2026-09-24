@@ -44,17 +44,24 @@ export type BestandUitkomst =
   | { geldig: true; contentType: ToegestaanContentType; sha256: string }
   | { geldig: false; reden: BestandAfkeurReden };
 
+/** Eén herkenbaar bestandstype: het content-type en de bytes waarmee het begint. */
+export interface BestandHandtekening<T extends string> {
+  readonly contentType: T;
+  readonly bytes: readonly number[];
+}
+
 /**
- * Stelt het type vast uit de eerste bytes.
- *
- * Geeft `null` wanneer de inhoud met geen enkel toegestaan formaat begint. Dat
- * is geen "onbekend maar mogelijk goed" — het is een weigering: alleen PDF en
- * PNG zijn toegestaan.
+ * Stelt het content-type vast uit de eerste bytes, tegen een gegeven lijst
+ * handtekeningen. Gedeeld mechaniek — het beleid (welke typen zijn
+ * toegestaan) hoort bij de aanroeper, niet hier. Zie
+ * src/vendor/vendor-engagement-bestand-validatie.ts voor een tweede beleid
+ * dat dit mechaniek hergebruikt.
  */
-export function bepaalContentType(
+export function detecteerContentType<T extends string>(
   inhoud: Buffer,
-): ToegestaanContentType | null {
-  for (const handtekening of HANDTEKENINGEN) {
+  handtekeningen: readonly BestandHandtekening<T>[],
+): T | null {
+  for (const handtekening of handtekeningen) {
     if (inhoud.length < handtekening.bytes.length) continue;
 
     const komtOvereen = handtekening.bytes.every(
@@ -65,6 +72,19 @@ export function bepaalContentType(
   }
 
   return null;
+}
+
+/**
+ * Stelt het type vast uit de eerste bytes.
+ *
+ * Geeft `null` wanneer de inhoud met geen enkel toegestaan formaat begint. Dat
+ * is geen "onbekend maar mogelijk goed" — het is een weigering: alleen PDF en
+ * PNG zijn toegestaan.
+ */
+export function bepaalContentType(
+  inhoud: Buffer,
+): ToegestaanContentType | null {
+  return detecteerContentType(inhoud, HANDTEKENINGEN);
 }
 
 /**
