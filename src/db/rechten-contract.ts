@@ -137,6 +137,15 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   'clm.response_note': NIET_VERWIJDEREN,
   'clm.template_reviewer': ['SELECT', 'INSERT', 'DELETE'],
 
+  // clm.vendor_engagement (0040): een dossier verdwijnt niet, wordt zacht
+  // verwijderd via deleted_at -- zelfde patroon als response_note.
+  'clm.vendor_engagement': NIET_VERWIJDEREN,
+  // clm.vendor_engagement_attachment (0042): zelfde patroon.
+  'clm.vendor_engagement_attachment': NIET_VERWIJDEREN,
+  // clm.vendor_engagement_link (0041): many-to-many-koppeling zonder eigen
+  // levenscyclus, zelfde redenering als contract_survey_template.
+  'clm.vendor_engagement_link': ['SELECT', 'INSERT', 'DELETE'],
+
   // ── Alleen lezen ───────────────────────────────────────────────────────────
   //
   // clm.omgeving (0019): zegt of dit een wegwerpdatabase is. De applicatie

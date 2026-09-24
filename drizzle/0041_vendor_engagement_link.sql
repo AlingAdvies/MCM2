@@ -78,5 +78,9 @@ COMMENT ON TABLE clm.vendor_engagement_link IS
     'Koppelt een vendor_engagement aan 0..N contracten en/of survey-responses. Geen eigen levenscyclus: een koppeling die niet meer geldt wordt verwijderd.';--> statement-breakpoint
 
 -- Wél DELETE hier, anders dan vendor_engagement zelf: een koppeling heeft
--- geen levenscyclus om zacht te bewaren (zie toelichting hierboven).
+-- geen levenscyclus om zacht te bewaren (zie toelichting hierboven). Ook hier
+-- eerst REVOKE ALL: de default-ACL (migratie 0001) geeft op een verse
+-- database al UPDATE mee, wat dit contract niet voorschrijft (een koppeling
+-- wordt vervangen door verwijderen + opnieuw aanmaken, niet bijgewerkt).
+REVOKE ALL ON clm.vendor_engagement_link FROM clm_api, clm_admin, clm_readonly;--> statement-breakpoint
 GRANT SELECT, INSERT, DELETE ON clm.vendor_engagement_link TO clm_api, clm_admin;

@@ -94,7 +94,12 @@ CREATE POLICY vendor_engagement_isolation ON clm.vendor_engagement
 COMMENT ON TABLE clm.vendor_engagement IS
     'Een dossier bij een leverancier voor intensiever, meervoudig mailcontact (bijv. een contractonderhandeling). Geen status/workflow in de MVP. Append-only, intrekken via deleted_at.';--> statement-breakpoint
 
--- Geen DELETE: intrekken gaat via een UPDATE op deleted_at. GRANT hier
--- expliciet, in dezelfde migratie als de CREATE TABLE -- niet vertrouwen op
--- ALTER DEFAULT PRIVILEGES (zie migratie 0039, CLAUDE.md punt 8).
+-- Geen DELETE: intrekken gaat via een UPDATE op deleted_at. REVOKE ALL vóór
+-- de GRANT: ALTER DEFAULT PRIVILEGES (migratie 0001) kent clm_api/clm_admin
+-- op een verse database al rechten toe zodra de tabel bestaat -- inclusief
+-- DELETE. Een GRANT erna voegt alleen toe, hij trekt niets in. Zonder deze
+-- REVOKE zou clm_api hier alsnog kunnen verwijderen, in weerspraak met de
+-- bedoeling hierboven. Zelfde patroon als migratie 0022 voor
+-- clm.response_note/clm.survey_review.
+REVOKE ALL ON clm.vendor_engagement FROM clm_api, clm_admin, clm_readonly;--> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE ON clm.vendor_engagement TO clm_api, clm_admin;

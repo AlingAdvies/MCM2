@@ -84,4 +84,9 @@ CREATE POLICY vendor_engagement_attachment_isolation ON clm.vendor_engagement_at
 COMMENT ON TABLE clm.vendor_engagement_attachment IS
     'Bijlagen bij een vendor-dossier (max. 3 per engagement, PDF/PNG/DOCX/XLSX, max. 10MB). Append-only, intrekken via deleted_at.';--> statement-breakpoint
 
+-- REVOKE ALL vóór de GRANT: zelfde reden als migratie 0040/0041 — de
+-- default-ACL (migratie 0001) geeft anders ook DELETE mee op een verse
+-- database, in weerspraak met "een bijlage verdwijnt niet, wordt zacht
+-- verwijderd".
+REVOKE ALL ON clm.vendor_engagement_attachment FROM clm_api, clm_admin, clm_readonly;--> statement-breakpoint
 GRANT SELECT, INSERT, UPDATE ON clm.vendor_engagement_attachment TO clm_api, clm_admin;
