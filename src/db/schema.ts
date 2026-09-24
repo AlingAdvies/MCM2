@@ -629,6 +629,104 @@ export const contractSurveyTemplate = clm.table(
   ],
 );
 
+// clm.vendor_engagement (0040): een dossier bij een leverancier voor
+// intensiever, meervoudig mailcontact (bijv. een contractonderhandeling).
+// Zie docs/superpowers/specs/2026-09-24-vendor-dossiers-design.md.
+export const vendorEngagement = clm.table(
+  'vendor_engagement',
+  {
+    engagementId: uuid('engagement_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    vendorId: uuid('vendor_id')
+      .notNull()
+      .references(() => vendor.vendorId, { onDelete: 'restrict' }),
+    titel: text('titel').notNull(),
+    createdByUserId: uuid('created_by_user_id')
+      .notNull()
+      .references(() => user.userId, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('vendor_engagement_tenant_id_idx').on(t.tenantId),
+    index('vendor_engagement_vendor_id_idx').on(t.vendorId),
+  ],
+);
+
+// clm.vendor_engagement_link (0041): koppeltabel, 0..N contracten en/of
+// survey-responses per engagement. Geen FK op linked_id: die wijst naar een
+// van twee mogelijke doeltabellen, afhankelijk van link_type.
+export const vendorEngagementLink = clm.table(
+  'vendor_engagement_link',
+  {
+    linkId: uuid('link_id').primaryKey().defaultRandom(),
+    engagementId: uuid('engagement_id')
+      .notNull()
+      .references(() => vendorEngagement.engagementId, {
+        onDelete: 'cascade',
+      }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    // 'contract' of 'survey_response'. linked_id wijst naar een van beide,
+    // geen FK mogelijk over twee doeltabellen — zie migratie 0041.
+    linkType: text('link_type').notNull(),
+    linkedId: uuid('linked_id').notNull(),
+  },
+  (t) => [
+    uniqueIndex('vendor_engagement_link_uniek').on(
+      t.engagementId,
+      t.linkType,
+      t.linkedId,
+    ),
+    index('vendor_engagement_link_tenant_id_idx').on(t.tenantId),
+    index('vendor_engagement_link_engagement_id_idx').on(t.engagementId),
+    index('vendor_engagement_link_linked_id_idx').on(t.linkType, t.linkedId),
+  ],
+);
+
+// clm.vendor_engagement_attachment (0042): bijlagen bij een dossier, max. 3
+// per engagement (afgedwongen server-side, niet in het schema), PDF/PNG/
+// DOCX/XLSX, max. 10MB.
+export const vendorEngagementAttachment = clm.table(
+  'vendor_engagement_attachment',
+  {
+    attachmentId: uuid('attachment_id').primaryKey().defaultRandom(),
+    engagementId: uuid('engagement_id')
+      .notNull()
+      .references(() => vendorEngagement.engagementId, {
+        onDelete: 'restrict',
+      }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    storageKey: text('storage_key').notNull(),
+    originalFilename: text('original_filename').notNull(),
+    contentType: text('content_type').notNull(),
+    sizeBytes: integer('size_bytes').notNull(),
+    uploadedByUserId: uuid('uploaded_by_user_id')
+      .notNull()
+      .references(() => user.userId, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex('vendor_engagement_attachment_storage_key_key').on(
+      t.storageKey,
+    ),
+    index('vendor_engagement_attachment_tenant_id_idx').on(t.tenantId),
+    index('vendor_engagement_attachment_engagement_id_idx').on(
+      t.engagementId,
+    ),
+  ],
+);
+
 export const surveyRun = clm.table(
   'survey_run',
   {
@@ -1355,6 +1453,42 @@ export const surveyAttachmentRelations = relations(
     question: one(surveyQuestion, {
       fields: [surveyAttachment.questionId],
       references: [surveyQuestion.questionId],
+    }),
+  }),
+);
+
+export const vendorEngagementRelations = relations(
+  vendorEngagement,
+  ({ one, many }) => ({
+    tenant: one(tenant, {
+      fields: [vendorEngagement.tenantId],
+      references: [tenant.tenantId],
+    }),
+    vendor: one(vendor, {
+      fields: [vendorEngagement.vendorId],
+      references: [vendor.vendorId],
+    }),
+    links: many(vendorEngagementLink),
+    attachments: many(vendorEngagementAttachment),
+  }),
+);
+
+export const vendorEngagementLinkRelations = relations(
+  vendorEngagementLink,
+  ({ one }) => ({
+    engagement: one(vendorEngagement, {
+      fields: [vendorEngagementLink.engagementId],
+      references: [vendorEngagement.engagementId],
+    }),
+  }),
+);
+
+export const vendorEngagementAttachmentRelations = relations(
+  vendorEngagementAttachment,
+  ({ one }) => ({
+    engagement: one(vendorEngagement, {
+      fields: [vendorEngagementAttachment.engagementId],
+      references: [vendorEngagement.engagementId],
     }),
   }),
 );
