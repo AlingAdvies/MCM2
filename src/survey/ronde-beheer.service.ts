@@ -71,6 +71,13 @@ export interface Uitnodiging {
    * leverancier stilzwijgend overgeslagen.
    */
   contactEmail?: string;
+  /**
+   * De naam van de primaire contactpersoon, als die er is. Zelfde
+   * optionaliteit als `contactEmail` — niet elke leverancier heeft een
+   * contactpersoon. Toegevoegd voor de Excel-export (issue #222): een
+   * leverancier zonder naam is in Outlook lastig te herkennen.
+   */
+  contactNaam?: string;
 }
 
 /**
@@ -124,6 +131,8 @@ interface VendorRij extends Record<string, unknown> {
   name: string;
   /** `null` als de leverancier geen contactpersoon met e-mailadres heeft. */
   contact_email: string | null;
+  /** `null` als de leverancier geen contactpersoon met e-mailadres heeft. */
+  contact_naam: string | null;
 }
 
 function iso(waarde: Date | string | null): string | null {
@@ -545,10 +554,11 @@ export class RondeBeheerService {
         // gewoon in de lijst te staan. Het token wordt aangemaakt en de link
         // werkt; alleen het versturen lukt niet, en dat meldt de verzender.
         const gevonden = await tx.execute<VendorRij>(
-          sql`SELECT v.vendor_id, v.name, c.email AS contact_email
+          sql`SELECT v.vendor_id, v.name, c.email AS contact_email,
+                     c.full_name AS contact_naam
                 FROM clm.vendor v
                 LEFT JOIN LATERAL (
-                       SELECT email
+                       SELECT email, full_name
                          FROM clm.vendor_contact
                         WHERE vendor_id = v.vendor_id
                           AND deleted_at IS NULL
@@ -635,6 +645,7 @@ export class RondeBeheerService {
             token,
             expiresAt: verloopt.toISOString(),
             contactEmail: vendor.contact_email ?? undefined,
+            contactNaam: vendor.contact_naam ?? undefined,
           });
         }
 
