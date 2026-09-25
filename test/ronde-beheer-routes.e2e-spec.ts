@@ -67,6 +67,8 @@ interface Uitnodiging {
   expiresAt: string;
   verstuurd: boolean;
   verzendFout?: string;
+  contactEmail?: string;
+  contactNaam?: string;
 }
 
 interface UitnodigingAntwoord {
@@ -490,6 +492,10 @@ describe('Ronde-beheerroutes (e2e)', () => {
     // Er ging niets uit, dus geen vinkje — ook al ging er niets fout.
     expect(eerste?.verstuurd).toBe(false);
     expect(eerste?.verzendFout).toBeUndefined();
+
+    // Issue #222: de contactpersoon-naam moet meekomen voor de Excel-export.
+    expect(eerste?.contactNaam).toBe('Contact Eerste');
+    expect(tweede?.contactNaam).toBeUndefined();
 
     // Zonder e-mailadres geen uitnodiging — en dat staat er met reden bij.
     expect(tweede?.verstuurd).toBe(false);
