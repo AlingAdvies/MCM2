@@ -2,6 +2,82 @@
 
 ## Laatst bijgewerkt
 
+**2026-09-25 — Excel-export uitgerold; Transdev-tenant leeggemaakt en
+development-tenant ernaast gezet; opschoonprocedure vastgelegd als
+runbook + script.**
+
+Vier stukken werk in één sessie, van feature tot infrastructuur:
+
+1. **Excel-export voor survey-uitnodigingen (issue #222) uitgerold naar
+   productie.** Backend + frontend gemerged, staging bevestigd, productie
+   bevestigd via curl tegen `/health` (commit `5cc60e492c74`). Contactpersoon-
+   naam wordt nu meegegeven bij het uitnodigen. **Let op voor een volgende
+   sessie:** tijdens deze uitrol werd per ongeluk een TWEEDE, overbodige
+   productie-workflow gestart voor code die al live stond — de eigenaar ving
+   dit op, workflow is geannuleerd, productie bleef ongewijzigd. Bij een
+   volgende deploy-vraag: eerst checken wat er al draait (`curl .../health`)
+   vóórdat een nieuwe workflow gestart wordt, ook als de sessie een eerdere
+   succesvolle uitrol "herinnert" — die herinnering kan door contextsamen-
+   vatting verloren zijn gegaan.
+
+2. **Transdev Nederland (productietenant) leeggemaakt.** Bevatte een mix van
+   live en testdata uit de gap-analyse/CSV-import-periode. 19 tabellen over
+   drie schema's (`clm`, `audit`, `ref`) opgeschoond; de tenant zelf, de 2
+   vragenlijst-sjablonen (38 vragen) en de 2 actieve lidmaatschappen blijven
+   staan. Onafhankelijk geverifieerd: alle andere tenants (AlingAdvies,
+   Bizaline, demo, Platformbeheer) exact ongewijzigd. Zie
+   `docs/superpowers/plans/2026-09-25-transdev-schone-lei-plus-dev-tenant.md`
+   voor het volledige verslag, inclusief vier bevindingen die de aanpak
+   onderweg fundamenteel bijstelden (FORCE RLS ontbreekt op vier tabellen,
+   `clm_api_runtime` mist bewust DELETE op vijf tabellen, twee rollen kunnen
+   niet in één transactie, drie tabellen bleken buiten schema `clm` te staan).
+   - **Openstaand:** drie geüploade bestanden (waaronder een ISO27001-
+     certificaat) staan nog als weesbestand op de ECS-container
+     (`/app/var/uploads`, service `mcm2-api`). Niet te verwijderen vanaf deze
+     machine: geen AWS-credentials (bewust, uitrol loopt via OIDC) en ECS
+     Exec is nergens ingeschakeld. AWS CLI 2.37.2 staat inmiddels wel lokaal
+     geïnstalleerd. Vraagt een servicedefinitie-wijziging + nieuwe
+     productie-uitrol om op te lossen.
+2. **Nieuwe tenant "Transdev DEV" aangemaakt** (`c0fe1d30-e785-4dcd-bdf2-
+   0740e95bdd61`), via de echte platformroute (`scripts/tenant-aanmaken.js`,
+   dus met auditspoor). Admin: `cmaling+tddev@gmail.com` (apart adres nodig —
+   `cmaling@hotmail.com`/Cor is al blijvend admin van Transdev Nederland, en
+   de unieke index staat maar één blijvend lidmaatschap per identiteit toe).
+   - **Openstaand:** de uitnodigingslink is gegenereerd maar nog niet
+     verzilverd (`external_subject` nog leeg voor dat adres). Productie heeft
+     geen mailkanaal, dus de link is handmatig doorgegeven — als hij verlopen
+     is, moet de tenant-admin opnieuw ingericht worden
+     (`npm run tenant:admin-inrichten`).
+3. **De opschoonprocedure vastgelegd als runbook + herbruikbaar script**,
+   naar aanleiding van expliciete feedback van de eigenaar dat drie keer zelf
+   om een controlemechanisme vragen (en telkens iets missen) geen robuust
+   proces is. `docs/runbooks/tenant-opschonen.md` (acht stappen, drie
+   database-zoekopdrachten in plaats van grep-werk) en
+   `scripts/tenant-opschonen.js` (`npm run tenant:opschonen`) — bewust GEEN
+   automatische FK-graaf-afleiding (een eerste poging daarmee introduceerde
+   een nieuwe volgordefout), maar de hardgecodeerde, bewezen volgorde uit
+   deze uitvoering. Getest tegen een wegwerpcontainer met twee tenants: droge
+   run + commit beide groen, onafhankelijk geverifieerd.
+4. **Contract-import-koppeltabel opgesteld** voor de Transdev-Coupa-CSV:
+   `transdev-koppeltabel-2026-09-25-v2.csv` (buiten de repo, in Downloads) —
+   welke van de ~55 Coupa-kolommen de bestaande importfunctie
+   (`contract-import-schema.ts`) herkent, welke hernoemd moeten worden, en
+   welke velden bestaan in MCM2 maar (nog) geen kopnaam-alias hebben
+   (`owner_user_id`, `status_code`, `value_eur`, `auto_renews`,
+   `dpa_aanwezig` — eigenaar kiest bewust: deze vult hij later handmatig aan
+   in de UI, niet via de import).
+
+**Volgende sessie, in volgorde van waarschijnlijke prioriteit:**
+- De definitieve Coupa-CSV importeren in zowel Transdev Nederland als
+  Transdev DEV (zelfde bestand, twee tenants — dat is wat "development lijkt
+  op productie" hier concreet betekent, plan §6).
+- De uitnodigingslink van Transdev DEV verzilveren (of opnieuw genereren als
+  verlopen).
+- Eventueel: AWS-toegang/ECS Exec inrichten om de drie weesbestanden alsnog
+  op te ruimen — geen haast, ze zijn onbereikbaar en kosten ~0,5 MB.
+
+---
+
 **2026-09-06 — Verkennend gesprek: uitgangspunten concessiemanagement
 vastgelegd, geen ontwerp.** Naar aanleiding van
 `docs/Combinatie_MCM2_Concessiemngt.md` (een uitgebreide opdracht-prompt
