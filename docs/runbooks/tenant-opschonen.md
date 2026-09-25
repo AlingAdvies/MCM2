@@ -10,6 +10,24 @@
 > Alles hieronder is gemeten op productie, niet beredeneerd. Zie
 > `docs/superpowers/plans/2026-09-25-transdev-schone-lei-plus-dev-tenant.md`
 > voor het volledige verslag van die uitvoering.
+>
+> **Sinds 2026-09-25 bestaat `scripts/tenant-opschonen.js`**, dat de stappen
+> hieronder uitvoert. Het is bewust GEEN generiek script dat de tabellenlijst
+> automatisch afleidt uit de foreign-key-graaf — een eerste poging daartoe
+> introduceerde een nieuwe volgordefout in plaats van het bewezen proces te
+> herhalen. Het script bevat daarom de vaste, hardgecodeerde tabellenlijst en
+> -volgorde uit deze uitvoering. Komt er een nieuwe tabel bij die tenant-data
+> bevat, werk dan eerst stap 2 hieronder handmatig bij en pas daarna het
+> script, met de hand — niet door het algoritme te verbeteren.
+>
+> ```
+> node scripts/tenant-opschonen.js --tenant-id <uuid> --extern         # droge run
+> node scripts/tenant-opschonen.js --tenant-id <uuid> --extern --commit # echt
+> ```
+>
+> Getest tegen een wegwerpcontainer met twee gevulde tenants (2026-09-25):
+> droge run en commit allebei groen, doeltenant volledig leeg, andere tenant
+> exact ongewijzigd — onafhankelijk geverifieerd met een verse verbinding.
 
 ---
 
@@ -364,14 +382,13 @@ opnieuw tonen.
 
 ## Checklist
 
-- [ ] Stap 1 — geteld via `clm_api_runtime`, met tenant- én actor-context
-- [ ] Stap 2a — elke `clm`-tabel met `tenant_id` opgehaald uit `pg_class`
-- [ ] Stap 2b — elke foreign key naar de lijst opgehaald, delete_rules bekeken
-- [ ] Stap 2c — elk schema buiten `clm` doorzocht
+- [ ] Stap 2 — komt er een nieuwe tabel bij? Eerst de drie zoekopdrachten
+      handmatig herhalen, dan pas `scripts/tenant-opschonen.js` bijwerken
 - [ ] Stap 3 — voorgelegd wat blijft staan, inclusief lopende uitnodigingen
-- [ ] Stap 4 — backup van vandaag, lagen A+B
-- [ ] Stap 5 — functie met search_path, filter in de body, EXECUTE beperkt
-- [ ] Stap 6 — droge run volledig groen vóór `COMMIT_ECHT=1`
+      en geüploade bestanden (het script toont dit automatisch)
+- [ ] Stap 4 — backup van vandaag, lagen A+B (`docs/runbooks/backup-bewijs.json`)
+- [ ] `node scripts/tenant-opschonen.js --tenant-id <uuid> --extern` —
+      droge run volledig groen, geen afwijking bij andere tenants
 - [ ] Stap 7 — bestanden benoemd, en gemeld dat ze buiten de backup vallen
-- [ ] Stap 8 — geverifieerd met een verse verbinding
-- [ ] Tijdelijke functies gedropt, scripts opgeruimd
+- [ ] `node scripts/tenant-opschonen.js --tenant-id <uuid> --extern --commit`
+- [ ] Stap 8 — geverifieerd met een verse verbinding (los van het script)
