@@ -30,6 +30,7 @@
     "seed:vendor-categorieen": "node scripts/seed-vendor-categorieen.js",
     "platform:inrichten": "node scripts/platformbeheerder-inrichten.js",
     "tenant:admin-inrichten": "node scripts/tenant-admin-inrichten.js",
+    "tenant:opschonen": "node scripts/tenant-opschonen.js",
     "demo": "node scripts/demo-stack.js start",
     "demo:af": "node scripts/demo-stack.js af",
     "demo:status": "node scripts/demo-stack.js status",
