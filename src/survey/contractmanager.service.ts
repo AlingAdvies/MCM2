@@ -64,6 +64,12 @@ export interface StatusItem {
    * weken oud is (besluit eigenaar 2026-08-07).
    */
   uitgestuurdOp: string | null;
+  /**
+   * Wanneer een beheerder handmatig heeft geregistreerd dat deze uitnodiging
+   * apart is verzonden. Null wanneer dat nooit is gebeurd. Zie
+   * respons-status.ts voor hoe dit de berekende status beïnvloedt.
+   */
+  handmatigVerzondenOp: string | null;
   /** Wanneer de leverancier heeft ingediend. Daarna staat zijn antwoord vast. */
   submittedAt: string | null;
   closesAt: string | null;
@@ -93,6 +99,7 @@ interface StatusRij extends Record<string, unknown> {
   eigenaar_user_id: string | null;
   eigenaar_naam: string | null;
   uitgestuurd_op: Date | string | null;
+  handmatig_verzonden_op: Date | string | null;
   submitted_at: Date | string | null;
   closes_at: Date | string | null;
   ronde_status: string;
@@ -181,6 +188,7 @@ export class ContractmanagerService {
                      -- Het moment waarop het token is uitgegeven; dat is wat
                      -- de leverancier als uitnodiging in zijn mailbox kreeg.
                      s.created_at    AS uitgestuurd_op,
+                     s.handmatig_verzonden_op,
                      s.submitted_at,
                      r.closes_at,
                      r.status        AS ronde_status,
@@ -230,6 +238,7 @@ export class ContractmanagerService {
           eigenaarUserId: r.eigenaar_user_id,
           eigenaarNaam: r.eigenaar_naam,
           uitgestuurdOp: iso(r.uitgestuurd_op),
+          handmatigVerzondenOp: iso(r.handmatig_verzonden_op),
           submittedAt: iso(r.submitted_at),
           closesAt: iso(r.closes_at),
           // Eén plek waar de status wordt bepaald: dezelfde functie die de
@@ -240,6 +249,7 @@ export class ContractmanagerService {
             closesAt: r.closes_at,
             rondeStatus: r.ronde_status,
             laatsteOordeel: r.laatste_oordeel,
+            handmatigVerzondenOp: r.handmatig_verzonden_op,
           }),
           laatsteOordeel: r.laatste_oordeel,
           aantalOordelen: Number(r.aantal_oordelen),
@@ -314,6 +324,7 @@ export class ContractmanagerService {
           eigenaarUserId: r.eigenaar_user_id,
           eigenaarNaam: r.eigenaar_naam,
           uitgestuurdOp: null,
+          handmatigVerzondenOp: null,
           submittedAt: null,
           closesAt: null,
           status: 'gepland' as const,
