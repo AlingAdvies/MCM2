@@ -1200,13 +1200,14 @@ describe('Ronde-beheerroutes (e2e)', () => {
 
   it('geeft 404 bij handmatige verzendregistratie op een niet-bestaande deelnemer', async () => {
     const runId = await nieuweRonde();
+    const verzondenOp = new Date(Date.now() - 60 * 1000).toISOString();
 
     await request(server)
       .post(
         `/admin/survey/runs/${runId}/participants/00000000-0000-0000-0000-00000000dead/handmatig-verzonden`,
       )
       .set('Cookie', cookieAdminA)
-      .send({ verzondenOp: '2026-09-26T09:00:00.000Z' })
+      .send({ verzondenOp })
       .expect(404);
   });
 
