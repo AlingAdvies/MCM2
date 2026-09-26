@@ -2,6 +2,7 @@ import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { sql, type SQL } from 'drizzle-orm';
 
 import { DatabaseService } from '../db/database.service';
+import { isGeldigMailadres } from '../mail/mail-adres';
 
 /**
  * Leveranciers lezen en aanmaken, altijd binnen één tenant.
@@ -42,6 +43,13 @@ export interface VendorSamenvatting {
   businessCriticalityCode: string | null;
   /** Compliance-thema's waarvoor deze leverancier relevant is (multi-value). */
   complianceThemaCodes: string[];
+  /**
+   * Of minstens één actieve contactpersoon een e-mailadres heeft dat
+   * `isGeldigMailadres()` doorstaat. Bedoeld om leveranciers te signaleren die
+   * niet in een mailinglijst terecht kunnen komen — een ingevuld maar
+   * ongeldig veld (bijv. een URL) telt dus niet mee als "heeft e-mail".
+   */
+  heeftGeldigMailadres: boolean;
   createdAt: string;
 }
 
@@ -157,6 +165,7 @@ interface VendorRij extends Record<string, unknown> {
   category_code: string | null;
   business_criticality_code: string | null;
   thema_codes: string[] | null;
+  contact_emails: string[] | null;
   created_at: Date | string;
 }
 
@@ -258,7 +267,16 @@ export class VendorService {
                    ) AS contactpersoon_naam,
                    (SELECT array_agg(vct.thema_code ORDER BY vct.thema_code)
                       FROM clm.vendor_compliance_thema vct
-                     WHERE vct.vendor_id = v.vendor_id) AS thema_codes
+                     WHERE vct.vendor_id = v.vendor_id) AS thema_codes,
+                   -- Formaatcontrole gebeurt in TypeScript via
+                   -- isGeldigMailadres(), niet hier in SQL — anders ontstaat
+                   -- een tweede, uit de pas lopende regel voor wat een geldig
+                   -- e-mailadres is.
+                   (SELECT array_agg(c.email)
+                      FROM clm.vendor_contact c
+                     WHERE c.vendor_id = v.vendor_id
+                       AND c.deleted_at IS NULL
+                       AND c.email IS NOT NULL) AS contact_emails
               FROM clm.vendor v
              WHERE v.deleted_at IS NULL
              ORDER BY v.created_at DESC`,
@@ -276,6 +294,9 @@ export class VendorService {
           categoryCode: r.category_code,
           businessCriticalityCode: r.business_criticality_code,
           complianceThemaCodes: r.thema_codes ?? [],
+          heeftGeldigMailadres: (r.contact_emails ?? []).some((e) =>
+            isGeldigMailadres(e),
+          ),
           createdAt: alsTekst(r.created_at),
         }));
       },
