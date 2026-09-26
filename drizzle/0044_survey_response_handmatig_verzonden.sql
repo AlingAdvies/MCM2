@@ -16,4 +16,7 @@
 -- =============================================================================
 
 ALTER TABLE "clm"."survey_response"
-    ADD COLUMN "handmatig_verzonden_op" timestamp with time zone;
+    ADD COLUMN "handmatig_verzonden_op" timestamp with time zone;--> statement-breakpoint
+
+COMMENT ON COLUMN clm.survey_response.handmatig_verzonden_op IS
+    'Wanneer een beheerder handmatig heeft geregistreerd dat deze uitnodiging apart is verzonden, buiten het ingebouwde mailkanaal om.';
