@@ -137,7 +137,18 @@ interface VendorRij extends Record<string, unknown> {
 
 function iso(waarde: Date | string | null): string | null {
   if (waarde === null || waarde === undefined) return null;
-  return waarde instanceof Date ? waarde.toISOString() : String(waarde);
+
+  // tx.execute() (ruwe SQL) geeft een timestamptz-kolom terug als
+  // Postgres-tekst (bijv. "2026-09-26 09:00:00+00"), niet als Date — anders
+  // dan de Drizzle-querybuilder, die dat al normaliseert. String(waarde)
+  // gaf die ruwe tekst dus ongewijzigd door in plaats van een ISO 8601-
+  // string te produceren. Ontdekt via een e2e-test op
+  // registreerHandmatigeVerzending() (2026-09-26): elke andere aanroeper in
+  // dit bestand kreeg tot nu toe toevallig al een Date-instantie terug.
+  if (waarde instanceof Date) return waarde.toISOString();
+
+  const d = new Date(waarde);
+  return Number.isNaN(d.getTime()) ? String(waarde) : d.toISOString();
 }
 
 @Injectable()
