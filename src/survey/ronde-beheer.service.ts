@@ -539,6 +539,89 @@ export class RondeBeheerService {
   }
 
   /**
+   * Geeft een ingetrokken deelnemer een nieuw token binnen dezelfde ronde.
+   *
+   * ── Waarom UPDATE en geen nieuwe rij ─────────────────────────────────────────
+   *
+   * De unieke index `survey_response_run_vendor_key` staat maar één actieve
+   * rij per (run_id, vendor_id) toe. Een 'revoked' rij telt daar ook in mee
+   * — een tweede INSERT voor dezelfde combinatie zou op die index stuklopen.
+   * In plaats daarvan hergebruikt dit de bestaande rij: nieuw token, status
+   * terug naar 'pending', submitted_at blijft zoals het was (null, want een
+   * ingetrokken respons was per definitie nog niet ingediend —
+   * trekDeelnemerIn() staat dat niet toe op een 'submitted' respons).
+   *
+   * ── Waarom alleen vanuit 'revoked' ────────────────────────────────────────
+   *
+   * Een 'pending' respons heeft al een geldig token — heruitnodigen zou dat
+   * zonder reden ongeldig maken terwijl de leverancier de oorspronkelijke
+   * link misschien al heeft. Een 'submitted' respons opnieuw uitnodigen zou
+   * een ingediend antwoord laten overschrijven; dat hoort net zo min hier als
+   * bij trekDeelnemerIn().
+   */
+  async heruitnodigen(
+    tenantId: string,
+    runId: string,
+    responseId: string,
+    geldigheidDagen: number,
+  ): Promise<{ responseId: string; vendorId: string; token: string; expiresAt: string }> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const huidige = await tx.execute<{
+          response_id: string;
+          vendor_id: string | null;
+          status: string;
+        }>(
+          sql`SELECT response_id, vendor_id, status FROM clm.survey_response
+               WHERE response_id = ${responseId} AND run_id = ${runId}`,
+        );
+
+        const r = huidige.rows[0];
+
+        if (!r) {
+          throw new NotFoundException(
+            'Deze deelnemer bestaat niet binnen deze ronde.',
+          );
+        }
+
+        if (r.status !== 'revoked') {
+          throw new ConflictException(
+            `Deze deelnemer heeft status '${r.status}' en kan alleen opnieuw uitgenodigd worden vanuit 'revoked'.`,
+          );
+        }
+
+        const token = genereerToken();
+        const verloopt = new Date(
+          Date.now() + geldigheidDagen * 24 * 60 * 60 * 1000,
+        );
+
+        const bijgewerkt = await tx.execute<{
+          response_id: string;
+          vendor_id: string;
+          expires_at: Date | string;
+        }>(
+          sql`UPDATE clm.survey_response
+                 SET status = 'pending',
+                     token_hash = ${hashToken(token)},
+                     expires_at = ${verloopt.toISOString()},
+                     handmatig_verzonden_op = NULL
+               WHERE response_id = ${responseId}
+              RETURNING response_id, vendor_id, expires_at`,
+        );
+
+        return {
+          responseId: bijgewerkt.rows[0].response_id,
+          vendorId: bijgewerkt.rows[0].vendor_id,
+          token,
+          expiresAt: iso(bijgewerkt.rows[0].expires_at)!,
+        };
+      },
+      'medewerker',
+    );
+  }
+
+  /**
    * Nodigt leveranciers uit voor een ronde en geeft hun tokens terug.
    *
    * ── Alles in één transactie, en waarom dat hier telt ────────────────────────
