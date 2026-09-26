@@ -1121,6 +1121,174 @@ describe('Ronde-beheerroutes (e2e)', () => {
       .expect(404);
   });
 
+  // ── Handmatige verzendregistratie ────────────────────────────────────────
+
+  it('registreert een handmatige verzending', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    const antwoord = await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${responseId}/handmatig-verzonden`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({ verzondenOp: '2026-09-26T09:00:00.000Z' })
+      .expect(200);
+
+    expect(antwoord.body.handmatigVerzondenOp).toBe(
+      '2026-09-26T09:00:00.000Z',
+    );
+
+    const ronde = await request(server)
+      .get(`/admin/survey/runs/${runId}`)
+      .set('Cookie', cookieAdminA)
+      .expect(200);
+
+    const deelnemer = (
+      ronde.body as {
+        deelnemers: Array<{ responseId: string; status: string }>;
+      }
+    ).deelnemers.find((d) => d.responseId === responseId);
+
+    // De onderliggende status verandert niet — alleen het feit is vastgelegd.
+    expect(deelnemer?.status).toBe('pending');
+  });
+
+  it('weigert een toekomstige datum bij handmatige verzendregistratie', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    const morgen = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${responseId}/handmatig-verzonden`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({ verzondenOp: morgen })
+      .expect(400);
+  });
+
+  it('overschrijft een eerdere handmatige verzendregistratie', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${responseId}/handmatig-verzonden`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({ verzondenOp: '2026-09-26T09:00:00.000Z' })
+      .expect(200);
+
+    const tweedeVerzendmoment = new Date(Date.now() - 60 * 1000).toISOString();
+
+    const tweede = await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${responseId}/handmatig-verzonden`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({ verzondenOp: tweedeVerzendmoment })
+      .expect(200);
+
+    expect(tweede.body.handmatigVerzondenOp).toBe(tweedeVerzendmoment);
+  });
+
+  it('geeft 404 bij handmatige verzendregistratie op een niet-bestaande deelnemer', async () => {
+    const runId = await nieuweRonde();
+
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/00000000-0000-0000-0000-00000000dead/handmatig-verzonden`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({ verzondenOp: '2026-09-26T09:00:00.000Z' })
+      .expect(404);
+  });
+
+  // ── Heruitnodigen na intrekken ───────────────────────────────────────────
+
+  it('geeft een nieuw token bij heruitnodigen van een ingetrokken deelnemer', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    await request(server)
+      .post(`/admin/survey/runs/${runId}/participants/${responseId}/intrekken`)
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(200);
+
+    const antwoord = await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${responseId}/heruitnodigen`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(200);
+
+    expect(antwoord.body.responseId).toBe(responseId);
+    expect(typeof antwoord.body.token).toBe('string');
+    expect(antwoord.body.token.length).toBeGreaterThan(0);
+    expect(typeof antwoord.body.link).toBe('string');
+
+    const ronde = await request(server)
+      .get(`/admin/survey/runs/${runId}`)
+      .set('Cookie', cookieAdminA)
+      .expect(200);
+
+    const deelnemer = (
+      ronde.body as {
+        deelnemers: Array<{ responseId: string; status: string }>;
+      }
+    ).deelnemers.find((d) => d.responseId === responseId);
+
+    expect(deelnemer?.status).toBe('pending');
+  });
+
+  it('weigert heruitnodigen van een deelnemer die nog pending is', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${responseId}/heruitnodigen`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(409);
+  });
+
+  it('geeft 404 bij heruitnodigen van een niet-bestaande deelnemer', async () => {
+    const runId = await nieuweRonde();
+
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/00000000-0000-0000-0000-00000000dead/heruitnodigen`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(404);
+  });
+
+  it('laat tenant B niet heruitnodigen bij een deelnemer van tenant A', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    await request(server)
+      .post(`/admin/survey/runs/${runId}/participants/${responseId}/intrekken`)
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(200);
+
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${responseId}/heruitnodigen`,
+      )
+      .set('Cookie', cookieAdminB)
+      .send({})
+      .expect(404);
+  });
+
   it('laat geen deelnemers meer toe zodra de ronde is afgerond', async () => {
     const runId = await nieuweRonde();
 
