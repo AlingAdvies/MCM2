@@ -1148,12 +1148,43 @@ describe('Ronde-beheerroutes (e2e)', () => {
 
     const deelnemer = (
       ronde.body as {
-        deelnemers: Array<{ responseId: string; status: string }>;
+        deelnemers: Array<{
+          responseId: string;
+          status: string;
+          handmatigVerzondenOp: string | null;
+        }>;
       }
     ).deelnemers.find((d) => d.responseId === responseId);
 
     // De onderliggende status verandert niet — alleen het feit is vastgelegd.
     expect(deelnemer?.status).toBe('pending');
+    // Regressietest: GET /admin/survey/runs/:id (het rondedetailscherm) had
+    // dit veld niet in zijn SQL-selectie, dus elke deelnemer kwam als
+    // handmatigVerzondenOp: undefined terug in plaats van de echte waarde —
+    // de frontend crashte op new Date(undefined) zodra hij dit veld ging
+    // gebruiken (gevonden 2026-09-26 bij het bouwen van de UI).
+    expect(deelnemer?.handmatigVerzondenOp).toBe(verzondenOp);
+  });
+
+  it('toont handmatigVerzondenOp als null wanneer nooit geregistreerd', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    const ronde = await request(server)
+      .get(`/admin/survey/runs/${runId}`)
+      .set('Cookie', cookieAdminA)
+      .expect(200);
+
+    const deelnemer = (
+      ronde.body as {
+        deelnemers: Array<{
+          responseId: string;
+          handmatigVerzondenOp: string | null;
+        }>;
+      }
+    ).deelnemers.find((d) => d.responseId === responseId);
+
+    expect(deelnemer?.handmatigVerzondenOp).toBeNull();
   });
 
   it('weigert een toekomstige datum bij handmatige verzendregistratie', async () => {

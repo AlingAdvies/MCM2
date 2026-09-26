@@ -56,7 +56,16 @@ interface NotitieRij extends Record<string, unknown> {
 
 function iso(waarde: Date | string | null): string | null {
   if (waarde === null) return null;
-  return waarde instanceof Date ? waarde.toISOString() : String(waarde);
+
+  // tx.execute() (ruwe SQL) geeft een timestamptz-kolom terug als
+  // Postgres-tekst (bijv. "2026-09-26 18:41:27.076+00"), niet als Date.
+  // String(waarde) gaf die ruwe tekst voorheen ongewijzigd door in plaats
+  // van ISO 8601 te produceren — dezelfde bug als gevonden en gefixed in
+  // ronde-beheer.service.ts en vragenlijst-beheer.service.ts (2026-09-26).
+  if (waarde instanceof Date) return waarde.toISOString();
+
+  const d = new Date(waarde);
+  return Number.isNaN(d.getTime()) ? String(waarde) : d.toISOString();
 }
 
 @Injectable()
