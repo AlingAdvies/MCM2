@@ -35,8 +35,10 @@ import { ContractmanagerService } from './contractmanager.service';
 import { NotitieService } from './notitie.service';
 import { RondeBeheerService } from './ronde-beheer.service';
 import {
+  GELDIGHEID_STANDAARD_DAGEN,
   InvoerFout,
   leesBeoordelaar,
+  leesHandmatigeVerzending,
   leesNieuweBeoordeling,
   leesNotitie,
   type NieuweBeoordelingInvoer,
@@ -676,6 +678,71 @@ export class VragenlijstBeheerController {
     const sessie = request.sessie!;
 
     return this.rondes.trekDeelnemerIn(sessie.tenantId, id, responseId);
+  }
+
+  /**
+   * Registreert dat een beheerder deze uitnodiging apart heeft verzonden,
+   * buiten het ingebouwde mailkanaal om. Zie
+   * `RondeBeheerService.registreerHandmatigeVerzending()` voor de reden dat
+   * dit geen statusovergang is maar een los feit.
+   *
+   * @VereistRol('admin'): zelfde grens als de andere schrijfroutes hier.
+   */
+  @Post('runs/:id/participants/:responseId/handmatig-verzonden')
+  @VereistRol('admin')
+  @HttpCode(200)
+  async registreerHandmatigeVerzending(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Param('responseId') responseId: string,
+    @Body() body: unknown,
+  ) {
+    const sessie = request.sessie!;
+
+    let invoer: ReturnType<typeof leesHandmatigeVerzending>;
+
+    try {
+      invoer = leesHandmatigeVerzending(body);
+    } catch (err) {
+      throw this.naarHttpFout(err);
+    }
+
+    return this.rondes.registreerHandmatigeVerzending(
+      sessie.tenantId,
+      id,
+      responseId,
+      invoer.verzondenOp,
+    );
+  }
+
+  /**
+   * Geeft een ingetrokken deelnemer een nieuw token binnen dezelfde ronde.
+   * Zie `RondeBeheerService.heruitnodigen()` voor waarom dit een UPDATE is
+   * en geen nieuwe rij.
+   *
+   * @VereistRol('admin'): zelfde grens als de andere schrijfroutes hier.
+   */
+  @Post('runs/:id/participants/:responseId/heruitnodigen')
+  @VereistRol('admin')
+  @HttpCode(200)
+  async heruitnodigen(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Param('responseId') responseId: string,
+  ) {
+    const sessie = request.sessie!;
+
+    const uitkomst = await this.rondes.heruitnodigen(
+      sessie.tenantId,
+      id,
+      responseId,
+      GELDIGHEID_STANDAARD_DAGEN,
+    );
+
+    return {
+      ...uitkomst,
+      link: this.portaalLink(uitkomst.token),
+    };
   }
 
   /**

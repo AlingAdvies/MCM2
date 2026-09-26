@@ -228,6 +228,37 @@ export function leesUitnodigingen(body: unknown): Uitnodigingen {
   };
 }
 
+/** Invoer voor het registreren van een handmatige verzending. */
+export interface HandmatigeVerzending {
+  verzondenOp: Date;
+}
+
+export function leesHandmatigeVerzending(body: unknown): HandmatigeVerzending {
+  const invoer = leesObject(body);
+
+  if (typeof invoer.verzondenOp !== 'string') {
+    throw new InvoerFout(
+      'verzondenOp',
+      'verzondenOp is verplicht (ISO-datum).',
+    );
+  }
+
+  const datum = new Date(invoer.verzondenOp);
+
+  if (Number.isNaN(datum.getTime())) {
+    throw new InvoerFout('verzondenOp', 'verzondenOp is geen geldige datum.');
+  }
+
+  if (datum.getTime() > Date.now()) {
+    throw new InvoerFout(
+      'verzondenOp',
+      'verzondenOp mag niet in de toekomst liggen.',
+    );
+  }
+
+  return { verzondenOp: datum };
+}
+
 /**
  * Leest `verstuurMail`. Standaard `true` wanneer het ontbreekt — bestaand
  * gedrag (altijd een mailpoging) blijft zo het gedrag voor elke aanroeper

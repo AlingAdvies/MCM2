@@ -21,6 +21,7 @@ function feiten(overschrijf: Partial<StatusFeiten> = {}): StatusFeiten {
     closesAt: null,
     rondeStatus: 'active',
     laatsteOordeel: null,
+    handmatigVerzondenOp: null,
     ...overschrijf,
   };
 }
@@ -59,6 +60,41 @@ describe('bepaalStatus', () => {
       const verleden = new Date(Date.now() - 1 * DAG).toISOString();
 
       expect(bepaalStatus(feiten({ closesAt: verleden }))).toBe('te_laat');
+    });
+  });
+
+  describe('handmatige verzendregistratie (besluit eigenaar 2026-09-26)', () => {
+    it('geeft opgestuurd zonder handmatige verzending en zonder inzending', () => {
+      expect(bepaalStatus(feiten())).toBe('opgestuurd');
+    });
+
+    it('geeft apart_verzonden wanneer handmatig geregistreerd, nog niet ingediend', () => {
+      expect(
+        bepaalStatus(feiten({ handmatigVerzondenOp: '2026-09-26T10:00:00Z' })),
+      ).toBe('apart_verzonden');
+    });
+
+    it('geeft terug zodra ingediend, ook als er ooit handmatig verzonden is', () => {
+      expect(
+        bepaalStatus(
+          feiten({
+            handmatigVerzondenOp: '2026-09-26T10:00:00Z',
+            submittedAt: '2026-09-27T10:00:00Z',
+          }),
+        ),
+      ).toBe('terug');
+    });
+
+    // 'te_laat' gaat vóór 'apart_verzonden': zie de toelichting bij
+    // bepaalStatus() in respons-status.ts.
+    it('geeft te_laat ook met een handmatige verzending, bij overschreden deadline', () => {
+      const gisteren = new Date(Date.now() - 1 * DAG).toISOString();
+
+      expect(
+        bepaalStatus(
+          feiten({ handmatigVerzondenOp: gisteren, closesAt: gisteren }),
+        ),
+      ).toBe('te_laat');
     });
   });
 

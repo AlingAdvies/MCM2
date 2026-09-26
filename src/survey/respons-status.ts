@@ -37,6 +37,7 @@
  */
 export const RESPONS_STATUSSEN = [
   'opgestuurd',
+  'apart_verzonden',
   'te_laat',
   'terug',
   'beoordeeld',
@@ -50,6 +51,7 @@ export type ResponsStatus = (typeof RESPONS_STATUSSEN)[number];
 /** Wat het scherm toont. Nederlands, want dit is wat de gebruiker leest. */
 export const STATUS_LABEL: Record<ResponsStatus, string> = {
   opgestuurd: 'Opgestuurd, nog niet terug',
+  apart_verzonden: 'Apart verzonden, nog niet terug',
   te_laat: 'Te laat',
   terug: 'Terug, nog niet beoordeeld',
   beoordeeld: 'Beoordeeld, nog niet goedgekeurd',
@@ -68,6 +70,12 @@ export interface StatusFeiten {
   rondeStatus: string;
   /** Het laatste niet-ingetrokken oordeel, of null wanneer er geen is. */
   laatsteOordeel: string | null;
+  /**
+   * Wanneer een beheerder handmatig heeft geregistreerd dat deze uitnodiging
+   * apart is verzonden (buiten het ingebouwde mailkanaal om). Null wanneer
+   * dat nooit is gebeurd.
+   */
+  handmatigVerzondenOp: Date | string | null;
 }
 
 function tijd(waarde: Date | string | null): number | null {
@@ -116,6 +124,13 @@ export function bepaalStatus(feiten: StatusFeiten): ResponsStatus {
       sluit < Date.now()
     ) {
       return 'te_laat';
+    }
+
+    // 'te_laat' gaat vóór 'apart_verzonden': een handmatige verzending
+    // verandert niets aan de deadline. Een leverancier die apart is benaderd
+    // maar de deadline al miste, moet nog steeds als te laat opvallen.
+    if (feiten.handmatigVerzondenOp !== null) {
+      return 'apart_verzonden';
     }
 
     return 'opgestuurd';

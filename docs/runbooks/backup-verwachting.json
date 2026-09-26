@@ -132,10 +132,16 @@
     "stond alleen lokaal, niet gecommit. Na committen: door. Migratiestand",
     "teruggelezen met productie:poort: 40 naar 44, gelijk aan het journal",
     "en staging. Onafhankelijk bevestigd met curl tegen",
-    "https://clm.alingadvies.nl/api/backend/health: commit fe2c5356dc27."
+    "https://clm.alingadvies.nl/api/backend/health: commit fe2c5356dc27.",
+    "",
+    "Migratie 0044 (26-09, handmatige verzendregistratie bij vragenlijst-",
+    "uitnodigingen) voegt GEEN tabel toe — alleen handmatig_verzonden_op op",
+    "de bestaande clm.survey_response. Migratiestand bijgewerkt,",
+    "tabellenlijst niet — zelfde soort wijziging als migratie 0032/0033/0037",
+    "hierboven."
   ],
-  "bijgewerkt": "2026-09-24",
-  "migratiestand": "0043_vendor_engagement_note",
+  "bijgewerkt": "2026-09-26",
+  "migratiestand": "0044_survey_response_handmatig_verzonden",
   "tabellen": [
     "audit.audit_event",
     "clm.contract",

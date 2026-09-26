@@ -137,7 +137,18 @@ interface VendorRij extends Record<string, unknown> {
 
 function iso(waarde: Date | string | null): string | null {
   if (waarde === null || waarde === undefined) return null;
-  return waarde instanceof Date ? waarde.toISOString() : String(waarde);
+
+  // tx.execute() (ruwe SQL) geeft een timestamptz-kolom terug als
+  // Postgres-tekst (bijv. "2026-09-26 09:00:00+00"), niet als Date — anders
+  // dan de Drizzle-querybuilder, die dat al normaliseert. String(waarde)
+  // gaf die ruwe tekst dus ongewijzigd door in plaats van een ISO 8601-
+  // string te produceren. Ontdekt via een e2e-test op
+  // registreerHandmatigeVerzending() (2026-09-26): elke andere aanroeper in
+  // dit bestand kreeg tot nu toe toevallig al een Date-instantie terug.
+  if (waarde instanceof Date) return waarde.toISOString();
+
+  const d = new Date(waarde);
+  return Number.isNaN(d.getTime()) ? String(waarde) : d.toISOString();
 }
 
 @Injectable()
@@ -467,6 +478,183 @@ export class RondeBeheerService {
         return {
           responseId: bijgewerkt.rows[0].response_id,
           status: bijgewerkt.rows[0].status,
+        };
+      },
+      'medewerker',
+    );
+  }
+
+  /**
+   * Registreert dat een beheerder deze uitnodiging apart heeft verzonden,
+   * buiten het ingebouwde mailkanaal om (bijv. via een extern mailproces
+   * zoals Power Automate, na een Excel-export).
+   *
+   * ── Waarom dit een apart feit is, geen statusovergang ───────────────────────
+   *
+   * `survey_response.status` blijft 'pending' — er verandert niets aan de
+   * tokengeldigheid of aan wat de leverancier kan doen. Dit legt alleen vast
+   * wanneer een handeling BUITEN MCM2 heeft plaatsgevonden, zodat het
+   * dashboard niet langer "opgestuurd" toont voor iets waarvan de eigenaar
+   * weet dat de mail nog moet vertrekken (of juist al is vertrokken zonder
+   * dat het ingebouwde mailkanaal het weet).
+   *
+   * ── Waarom geen validatie op de huidige status ──────────────────────────────
+   *
+   * In tegenstelling tot intrekken mag dit op elke respons die nog bestaat,
+   * ook een 'submitted' of 'revoked' respons — de registratie beschrijft een
+   * moment in het verleden ("ik heb dit toen verzonden"), niet een huidige
+   * toestand. Een leverancier kan intussen al hebben ingediend terwijl de
+   * beheerder deze registratie pas nu bijwerkt.
+   *
+   * ── Waarom eenmalig zetten volstaat (besluit eigenaar 2026-09-26) ───────────
+   *
+   * Geen aparte intrek-route: een tweede aanroep overschrijft de eerdere
+   * datum. Dat is bewust minder streng dan `trekDeelnemerIn()` — een verkeerd
+   * gezette datum is een correctie, geen bewijs dat ongedaan gemaakt wordt.
+   */
+  async registreerHandmatigeVerzending(
+    tenantId: string,
+    runId: string,
+    responseId: string,
+    verzondenOp: Date,
+  ): Promise<{ responseId: string; handmatigVerzondenOp: string }> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const bijgewerkt = await tx.execute<{
+          response_id: string;
+          handmatig_verzonden_op: Date | string;
+        }>(
+          sql`UPDATE clm.survey_response
+                 SET handmatig_verzonden_op = ${verzondenOp.toISOString()}
+               WHERE response_id = ${responseId} AND run_id = ${runId}
+              RETURNING response_id, handmatig_verzonden_op`,
+        );
+
+        if (bijgewerkt.rows.length === 0) {
+          throw new NotFoundException(
+            'Deze deelnemer bestaat niet binnen deze ronde.',
+          );
+        }
+
+        return {
+          responseId: bijgewerkt.rows[0].response_id,
+          // iso(): zelfde normalisatie als elders in dit bestand (maakRonde,
+          // wijzigStatus, archiveer) — de pg-driver geeft een timestamptz-
+          // kolom terug als Date, niet als string.
+          handmatigVerzondenOp: iso(bijgewerkt.rows[0].handmatig_verzonden_op)!,
+        };
+      },
+      'medewerker',
+    );
+  }
+
+  /**
+   * Geeft een ingetrokken deelnemer een nieuw token binnen dezelfde ronde.
+   *
+   * ── Waarom UPDATE en geen nieuwe rij ─────────────────────────────────────────
+   *
+   * De unieke index `survey_response_run_vendor_key` staat maar één actieve
+   * rij per (run_id, vendor_id) toe. Een 'revoked' rij telt daar ook in mee
+   * — een tweede INSERT voor dezelfde combinatie zou op die index stuklopen.
+   * In plaats daarvan hergebruikt dit de bestaande rij: nieuw token, status
+   * terug naar 'pending', submitted_at blijft zoals het was (null, want een
+   * ingetrokken respons was per definitie nog niet ingediend —
+   * trekDeelnemerIn() staat dat niet toe op een 'submitted' respons).
+   *
+   * ── Waarom alleen vanuit 'revoked' ────────────────────────────────────────
+   *
+   * Een 'pending' respons heeft al een geldig token — heruitnodigen zou dat
+   * zonder reden ongeldig maken terwijl de leverancier de oorspronkelijke
+   * link misschien al heeft. Een 'submitted' respons opnieuw uitnodigen zou
+   * een ingediend antwoord laten overschrijven; dat hoort net zo min hier als
+   * bij trekDeelnemerIn().
+   */
+  async heruitnodigen(
+    tenantId: string,
+    runId: string,
+    responseId: string,
+    geldigheidDagen: number,
+  ): Promise<{
+    responseId: string;
+    vendorId: string;
+    token: string;
+    expiresAt: string;
+  }> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const huidige = await tx.execute<{
+          response_id: string;
+          vendor_id: string | null;
+          status: string;
+        }>(
+          sql`SELECT response_id, vendor_id, status FROM clm.survey_response
+               WHERE response_id = ${responseId} AND run_id = ${runId}`,
+        );
+
+        const r = huidige.rows[0];
+
+        if (!r) {
+          throw new NotFoundException(
+            'Deze deelnemer bestaat niet binnen deze ronde.',
+          );
+        }
+
+        if (r.status !== 'revoked') {
+          throw new ConflictException(
+            `Deze deelnemer heeft status '${r.status}' en kan alleen opnieuw uitgenodigd worden vanuit 'revoked'.`,
+          );
+        }
+
+        // UC2 (colleague-filled, zie survey_response_run_vendor_key) kent
+        // responses zonder vendor_id. trekDeelnemerIn() staat intrekken toe
+        // op elke 'pending' respons, ongeacht vendor_id — een ingetrokken
+        // UC2-respons zou hier dus een niet-bestaand vendorId opleveren.
+        // Heruitnodigen is een UC1-concept (opnieuw een leveranciers-token
+        // uitgeven); een UC2-respons hoort hier niet in terecht te komen.
+        if (r.vendor_id === null) {
+          throw new ConflictException(
+            'Deze deelnemer heeft geen gekoppelde leverancier en kan niet via heruitnodigen opnieuw uitgenodigd worden.',
+          );
+        }
+
+        const token = genereerToken();
+        const verloopt = new Date(
+          Date.now() + geldigheidDagen * 24 * 60 * 60 * 1000,
+        );
+
+        // AND status = 'revoked' sluit de race met een gelijktijdige tweede
+        // aanroep: zonder deze voorwaarde zouden twee verzoeken de
+        // statuscontrole hierboven allebei kunnen passeren (READ COMMITTED)
+        // en allebei een eigen token minten, waarbij alleen het laatst
+        // gecommitte token geldig blijft — stilzwijgend, zonder foutmelding
+        // aan de tweede aanroeper.
+        const bijgewerkt = await tx.execute<{
+          response_id: string;
+          vendor_id: string;
+          expires_at: Date | string;
+        }>(
+          sql`UPDATE clm.survey_response
+                 SET status = 'pending',
+                     token_hash = ${hashToken(token)},
+                     expires_at = ${verloopt.toISOString()},
+                     handmatig_verzonden_op = NULL
+               WHERE response_id = ${responseId} AND status = 'revoked'
+              RETURNING response_id, vendor_id, expires_at`,
+        );
+
+        if (bijgewerkt.rows.length === 0) {
+          throw new ConflictException(
+            'Deze deelnemer is niet meer opnieuw uit te nodigen — status is intussen gewijzigd.',
+          );
+        }
+
+        return {
+          responseId: bijgewerkt.rows[0].response_id,
+          vendorId: bijgewerkt.rows[0].vendor_id,
+          token,
+          expiresAt: iso(bijgewerkt.rows[0].expires_at)!,
         };
       },
       'medewerker',
