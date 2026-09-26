@@ -575,7 +575,12 @@ export class RondeBeheerService {
     runId: string,
     responseId: string,
     geldigheidDagen: number,
-  ): Promise<{ responseId: string; vendorId: string; token: string; expiresAt: string }> {
+  ): Promise<{
+    responseId: string;
+    vendorId: string;
+    token: string;
+    expiresAt: string;
+  }> {
     return this.db.withTenant(
       tenantId,
       async (tx) => {
