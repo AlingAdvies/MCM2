@@ -474,6 +474,68 @@ export class RondeBeheerService {
   }
 
   /**
+   * Registreert dat een beheerder deze uitnodiging apart heeft verzonden,
+   * buiten het ingebouwde mailkanaal om (bijv. via een extern mailproces
+   * zoals Power Automate, na een Excel-export).
+   *
+   * ── Waarom dit een apart feit is, geen statusovergang ───────────────────────
+   *
+   * `survey_response.status` blijft 'pending' — er verandert niets aan de
+   * tokengeldigheid of aan wat de leverancier kan doen. Dit legt alleen vast
+   * wanneer een handeling BUITEN MCM2 heeft plaatsgevonden, zodat het
+   * dashboard niet langer "opgestuurd" toont voor iets waarvan de eigenaar
+   * weet dat de mail nog moet vertrekken (of juist al is vertrokken zonder
+   * dat het ingebouwde mailkanaal het weet).
+   *
+   * ── Waarom geen validatie op de huidige status ──────────────────────────────
+   *
+   * In tegenstelling tot intrekken mag dit op elke respons die nog bestaat,
+   * ook een 'submitted' of 'revoked' respons — de registratie beschrijft een
+   * moment in het verleden ("ik heb dit toen verzonden"), niet een huidige
+   * toestand. Een leverancier kan intussen al hebben ingediend terwijl de
+   * beheerder deze registratie pas nu bijwerkt.
+   *
+   * ── Waarom eenmalig zetten volstaat (besluit eigenaar 2026-09-26) ───────────
+   *
+   * Geen aparte intrek-route: een tweede aanroep overschrijft de eerdere
+   * datum. Dat is bewust minder streng dan `trekDeelnemerIn()` — een verkeerd
+   * gezette datum is een correctie, geen bewijs dat ongedaan gemaakt wordt.
+   */
+  async registreerHandmatigeVerzending(
+    tenantId: string,
+    runId: string,
+    responseId: string,
+    verzondenOp: Date,
+  ): Promise<{ responseId: string; handmatigVerzondenOp: string }> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const bijgewerkt = await tx.execute<{
+          response_id: string;
+          handmatig_verzonden_op: string;
+        }>(
+          sql`UPDATE clm.survey_response
+                 SET handmatig_verzonden_op = ${verzondenOp.toISOString()}
+               WHERE response_id = ${responseId} AND run_id = ${runId}
+              RETURNING response_id, handmatig_verzonden_op`,
+        );
+
+        if (bijgewerkt.rows.length === 0) {
+          throw new NotFoundException(
+            'Deze deelnemer bestaat niet binnen deze ronde.',
+          );
+        }
+
+        return {
+          responseId: bijgewerkt.rows[0].response_id,
+          handmatigVerzondenOp: bijgewerkt.rows[0].handmatig_verzonden_op,
+        };
+      },
+      'medewerker',
+    );
+  }
+
+  /**
    * Nodigt leveranciers uit voor een ronde en geeft hun tokens terug.
    *
    * ── Alles in één transactie, en waarom dat hier telt ────────────────────────
