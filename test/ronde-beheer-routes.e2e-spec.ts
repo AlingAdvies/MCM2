@@ -1137,7 +1137,9 @@ describe('Ronde-beheerroutes (e2e)', () => {
       .send({ verzondenOp })
       .expect(200);
 
-    expect(antwoord.body.handmatigVerzondenOp).toBe(verzondenOp);
+    expect(
+      (antwoord.body as { handmatigVerzondenOp: string }).handmatigVerzondenOp,
+    ).toBe(verzondenOp);
 
     const ronde = await request(server)
       .get(`/admin/survey/runs/${runId}`)
@@ -1195,7 +1197,9 @@ describe('Ronde-beheerroutes (e2e)', () => {
       .send({ verzondenOp: tweedeVerzendmoment })
       .expect(200);
 
-    expect(tweede.body.handmatigVerzondenOp).toBe(tweedeVerzendmoment);
+    expect(
+      (tweede.body as { handmatigVerzondenOp: string }).handmatigVerzondenOp,
+    ).toBe(tweedeVerzendmoment);
   });
 
   it('geeft 404 bij handmatige verzendregistratie op een niet-bestaande deelnemer', async () => {
@@ -1231,10 +1235,16 @@ describe('Ronde-beheerroutes (e2e)', () => {
       .send({})
       .expect(200);
 
-    expect(antwoord.body.responseId).toBe(responseId);
-    expect(typeof antwoord.body.token).toBe('string');
-    expect(antwoord.body.token.length).toBeGreaterThan(0);
-    expect(typeof antwoord.body.link).toBe('string');
+    const heruitgenodigd = antwoord.body as {
+      responseId: string;
+      token: string;
+      link: string;
+    };
+
+    expect(heruitgenodigd.responseId).toBe(responseId);
+    expect(typeof heruitgenodigd.token).toBe('string');
+    expect(heruitgenodigd.token.length).toBeGreaterThan(0);
+    expect(typeof heruitgenodigd.link).toBe('string');
 
     const ronde = await request(server)
       .get(`/admin/survey/runs/${runId}`)
