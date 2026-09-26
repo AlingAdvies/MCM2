@@ -512,7 +512,7 @@ export class RondeBeheerService {
       async (tx) => {
         const bijgewerkt = await tx.execute<{
           response_id: string;
-          handmatig_verzonden_op: string;
+          handmatig_verzonden_op: Date | string;
         }>(
           sql`UPDATE clm.survey_response
                  SET handmatig_verzonden_op = ${verzondenOp.toISOString()}
@@ -528,7 +528,10 @@ export class RondeBeheerService {
 
         return {
           responseId: bijgewerkt.rows[0].response_id,
-          handmatigVerzondenOp: bijgewerkt.rows[0].handmatig_verzonden_op,
+          // iso(): zelfde normalisatie als elders in dit bestand (maakRonde,
+          // wijzigStatus, archiveer) — de pg-driver geeft een timestamptz-
+          // kolom terug als Date, niet als string.
+          handmatigVerzondenOp: iso(bijgewerkt.rows[0].handmatig_verzonden_op)!,
         };
       },
       'medewerker',
