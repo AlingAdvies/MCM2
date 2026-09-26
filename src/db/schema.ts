@@ -851,6 +851,16 @@ export const surveyResponse = clm.table(
     status: text('status').notNull().default('pending'),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     submittedAt: timestamp('submitted_at', { withTimezone: true }),
+    /**
+     * Wanneer een beheerder handmatig heeft geregistreerd dat deze
+     * uitnodiging apart is verzonden (bijv. via een extern mailproces).
+     * Nullable: de meeste responses gaan via het ingebouwde mailkanaal en
+     * hebben dit nooit nodig. Zie respons-status.ts voor hoe dit meetelt in
+     * de berekende status.
+     */
+    handmatigVerzondenOp: timestamp('handmatig_verzonden_op', {
+      withTimezone: true,
+    }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
