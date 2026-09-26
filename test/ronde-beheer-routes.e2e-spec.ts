@@ -1127,17 +1127,17 @@ describe('Ronde-beheerroutes (e2e)', () => {
     const runId = await nieuweRonde();
     const responseId = await nodigUit(runId, VENDOR_1);
 
+    const verzondenOp = new Date(Date.now() - 60 * 1000).toISOString();
+
     const antwoord = await request(server)
       .post(
         `/admin/survey/runs/${runId}/participants/${responseId}/handmatig-verzonden`,
       )
       .set('Cookie', cookieAdminA)
-      .send({ verzondenOp: '2026-09-26T09:00:00.000Z' })
+      .send({ verzondenOp })
       .expect(200);
 
-    expect(antwoord.body.handmatigVerzondenOp).toBe(
-      '2026-09-26T09:00:00.000Z',
-    );
+    expect(antwoord.body.handmatigVerzondenOp).toBe(verzondenOp);
 
     const ronde = await request(server)
       .get(`/admin/survey/runs/${runId}`)
@@ -1173,12 +1173,16 @@ describe('Ronde-beheerroutes (e2e)', () => {
     const runId = await nieuweRonde();
     const responseId = await nodigUit(runId, VENDOR_1);
 
+    const eersteVerzendmoment = new Date(
+      Date.now() - 2 * 60 * 1000,
+    ).toISOString();
+
     await request(server)
       .post(
         `/admin/survey/runs/${runId}/participants/${responseId}/handmatig-verzonden`,
       )
       .set('Cookie', cookieAdminA)
-      .send({ verzondenOp: '2026-09-26T09:00:00.000Z' })
+      .send({ verzondenOp: eersteVerzendmoment })
       .expect(200);
 
     const tweedeVerzendmoment = new Date(Date.now() - 60 * 1000).toISOString();
