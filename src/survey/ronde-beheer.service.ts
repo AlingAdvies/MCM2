@@ -591,11 +591,29 @@ export class RondeBeheerService {
           );
         }
 
+        // UC2 (colleague-filled, zie survey_response_run_vendor_key) kent
+        // responses zonder vendor_id. trekDeelnemerIn() staat intrekken toe
+        // op elke 'pending' respons, ongeacht vendor_id — een ingetrokken
+        // UC2-respons zou hier dus een niet-bestaand vendorId opleveren.
+        // Heruitnodigen is een UC1-concept (opnieuw een leveranciers-token
+        // uitgeven); een UC2-respons hoort hier niet in terecht te komen.
+        if (r.vendor_id === null) {
+          throw new ConflictException(
+            'Deze deelnemer heeft geen gekoppelde leverancier en kan niet via heruitnodigen opnieuw uitgenodigd worden.',
+          );
+        }
+
         const token = genereerToken();
         const verloopt = new Date(
           Date.now() + geldigheidDagen * 24 * 60 * 60 * 1000,
         );
 
+        // AND status = 'revoked' sluit de race met een gelijktijdige tweede
+        // aanroep: zonder deze voorwaarde zouden twee verzoeken de
+        // statuscontrole hierboven allebei kunnen passeren (READ COMMITTED)
+        // en allebei een eigen token minten, waarbij alleen het laatst
+        // gecommitte token geldig blijft — stilzwijgend, zonder foutmelding
+        // aan de tweede aanroeper.
         const bijgewerkt = await tx.execute<{
           response_id: string;
           vendor_id: string;
@@ -606,9 +624,15 @@ export class RondeBeheerService {
                      token_hash = ${hashToken(token)},
                      expires_at = ${verloopt.toISOString()},
                      handmatig_verzonden_op = NULL
-               WHERE response_id = ${responseId}
+               WHERE response_id = ${responseId} AND status = 'revoked'
               RETURNING response_id, vendor_id, expires_at`,
         );
+
+        if (bijgewerkt.rows.length === 0) {
+          throw new ConflictException(
+            'Deze deelnemer is niet meer opnieuw uit te nodigen — status is intussen gewijzigd.',
+          );
+        }
 
         return {
           responseId: bijgewerkt.rows[0].response_id,
