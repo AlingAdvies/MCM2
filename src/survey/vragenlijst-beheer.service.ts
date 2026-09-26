@@ -124,6 +124,12 @@ export interface DeelnemerSamenvatting {
   status: string;
   expiresAt: string | null;
   submittedAt: string | null;
+  /**
+   * Wanneer een beheerder handmatig heeft geregistreerd dat deze uitnodiging
+   * apart is verzonden, buiten het ingebouwde mailkanaal om. Null wanneer
+   * dat nooit is gebeurd.
+   */
+  handmatigVerzondenOp: string | null;
 }
 
 export interface RondeDetail extends RondeSamenvatting {
@@ -300,12 +306,24 @@ interface DeelnemerRij extends Record<string, unknown> {
   status: string;
   expires_at: Date | string | null;
   submitted_at: Date | string | null;
+  handmatig_verzonden_op: Date | string | null;
 }
 
 /** Datums als ISO-tekst, of null. Voorkomt dat elke aanroeper dat zelf doet. */
 function iso(waarde: Date | string | null): string | null {
   if (waarde === null || waarde === undefined) return null;
-  return waarde instanceof Date ? waarde.toISOString() : String(waarde);
+
+  // tx.execute() (ruwe SQL) geeft een timestamptz-kolom terug als
+  // Postgres-tekst (bijv. "2026-09-26 18:41:27.076+00"), niet als Date —
+  // anders dan de Drizzle-querybuilder. String(waarde) gaf die ruwe tekst
+  // voorheen ongewijzigd door in plaats van ISO 8601 te produceren. Zelfde
+  // bug als eerder gevonden en gefixed in ronde-beheer.service.ts
+  // (2026-09-26) — dit bestand heeft een eigen kopie van dezelfde helper die
+  // toen niet is meegefixed.
+  if (waarde instanceof Date) return waarde.toISOString();
+
+  const d = new Date(waarde);
+  return Number.isNaN(d.getTime()) ? String(waarde) : d.toISOString();
 }
 
 function getal(waarde: string | number): number {
@@ -620,7 +638,8 @@ export class VragenlijstBeheerService {
                      v.name AS vendor_naam,
                      s.status,
                      s.expires_at,
-                     s.submitted_at
+                     s.submitted_at,
+                     s.handmatig_verzonden_op
                 FROM clm.survey_response s
                 LEFT JOIN clm.vendor v ON v.vendor_id = s.vendor_id
                WHERE s.run_id = ${runId}
@@ -636,6 +655,7 @@ export class VragenlijstBeheerService {
             status: d.status,
             expiresAt: iso(d.expires_at),
             submittedAt: iso(d.submitted_at),
+            handmatigVerzondenOp: iso(d.handmatig_verzonden_op),
           })),
         };
       },
