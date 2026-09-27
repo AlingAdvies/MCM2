@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-09-26 11:26 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-09-27 07:31 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -19,7 +19,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 **P0 — voor elke volgende regel productiecode** — 0 open
 **Vóór de pilot** — 0 open
 **Vóór bredere productie** — 0 open
-**Later — bewust uitgesteld** — 16 open
+**Later — bewust uitgesteld** — 17 open
 
 ---
 
@@ -100,12 +100,13 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#1](https://github.com/AlingAdvies/MCM2/issues/1) — Wachtwoordrotatie van de postgres-beheerrol
 - [#54](https://github.com/AlingAdvies/MCM2/issues/54) — Unittestlaag voor pure functies (bestandsvalidatie, antwoordvalidatie, opslagsleutel)
 
-### ⚠ Niet ingedeeld (9)
+### ⚠ Niet ingedeeld (10)
 
 Deze issues missen een `thema:*`-label. Voeg er een toe op GitHub, of
 maak een nieuw thema aan in `scripts/statusbord.js` als geen van de
 bestaande thema's past.
 
+- [#228](https://github.com/AlingAdvies/MCM2/issues/228) `later` — Bulk-intrekken van deelnemers in een uitgestuurde vragenlijst-ronde
 - [#216](https://github.com/AlingAdvies/MCM2/issues/216) `later` — MCM2 starten vanuit legacy Bizaline-app zonder Entra (handoff-token)
 - [#215](https://github.com/AlingAdvies/MCM2/issues/215) — Roadmap AA (AlingAdvies multitenant)
 - [#214](https://github.com/AlingAdvies/MCM2/issues/214) — Roadmap TD (Transdev/Bizaline)
@@ -118,4 +119,4 @@ bestaande thema's past.
 
 ---
 
-**Totaal open:** 60
+**Totaal open:** 61
