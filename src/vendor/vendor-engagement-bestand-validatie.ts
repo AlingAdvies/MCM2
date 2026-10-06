@@ -35,6 +35,12 @@ const HANDTEKENINGEN = [
     contentType: 'image/png',
     bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
   },
+  {
+    // .msg (Outlook-bericht): OLE/CFBF-compound-document, vaste header
+    // ongeacht inhoud — zelfde soort byte-exacte herkenning als PDF/PNG.
+    contentType: 'application/vnd.ms-outlook',
+    bytes: [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1],
+  },
 ] as const satisfies readonly BestandHandtekening<string>[];
 
 const OOXML_TYPES = [
@@ -42,8 +48,46 @@ const OOXML_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ] as const;
 
+/**
+ * .eml heeft geen vaste byte-signature (platte RFC822-tekst), dus geen
+ * entry in HANDTEKENINGEN — dat mechanisme werkt alleen met vaste bytes op
+ * offset 0. In plaats daarvan: de eerste regel moet een herkenbare
+ * RFC822-headernaam zijn. Bewust een kleine, vaste lijst — een losse
+ * "staat er een dubbele punt in de eerste regel"-check zou te veel gewone
+ * tekstbestanden ten onrechte doorlaten.
+ */
+const EML_HEADER_PREFIXEN = [
+  'Return-Path:',
+  'Received:',
+  'From:',
+  'Date:',
+  'Message-ID:',
+  'Message-Id:',
+] as const;
+
+function lijktOpEml(inhoud: Buffer): boolean {
+  // Alleen de eerste regel bekijken (tot de eerste \n, of de eerste 200
+  // bytes als er geen regeleinde is) — een mailbestand begint met een
+  // header, niet ergens middenin.
+  const eersteRegelEind = inhoud.indexOf(0x0a);
+  const grens =
+    eersteRegelEind === -1 ? Math.min(inhoud.length, 200) : eersteRegelEind;
+  const eersteRegel = inhoud.subarray(0, grens).toString('utf-8');
+
+  return EML_HEADER_PREFIXEN.some((prefix) => eersteRegel.startsWith(prefix));
+}
+
 export type ToegestaanEngagementContentType =
-  (typeof HANDTEKENINGEN)[number]['contentType'] | (typeof OOXML_TYPES)[number];
+  | (typeof HANDTEKENINGEN)[number]['contentType']
+  | (typeof OOXML_TYPES)[number]
+  | 'message/rfc822';
+
+/** Alle content-types die deze module kent — gebruikt om een onbetrouwbaar/onbekend beweerd type te onderscheiden van een echte mismatch. */
+const ALLE_BEKENDE_TYPES = new Set<string>([
+  ...HANDTEKENINGEN.map((h) => h.contentType),
+  ...OOXML_TYPES,
+  'message/rfc822',
+]);
 
 export type BestandAfkeurReden =
   'leeg' | 'te-groot' | 'onbekend-type' | 'type-komt-niet-overeen';
@@ -80,6 +124,18 @@ export function valideerEngagementBestand(
     return { geldig: false, reden: 'te-groot' };
   }
 
+  if (lijktOpEml(inhoud)) {
+    if (beweerdType !== undefined && beweerdType !== 'message/rfc822') {
+      return { geldig: false, reden: 'type-komt-niet-overeen' };
+    }
+
+    return {
+      geldig: true,
+      contentType: 'message/rfc822',
+      sha256: createHash('sha256').update(inhoud).digest('hex'),
+    };
+  }
+
   const isZip =
     inhoud.length >= 4 &&
     inhoud[0] === 0x50 &&
@@ -108,7 +164,23 @@ export function valideerEngagementBestand(
     return { geldig: false, reden: 'onbekend-type' };
   }
 
-  if (beweerdType !== undefined && beweerdType !== vastgesteld) {
+  // .msg (OLE/CFBF) krijgt vaak een generiek of ontbrekend beweerd type mee
+  // van de browser (bijv. application/octet-stream) — anders dan PDF/PNG,
+  // waarvoor browsers doorgaans wél een betrouwbaar, specifiek MIME-type
+  // meegeven. Voor .msg daarom alleen weigeren bij een expliciet ANDER,
+  // eveneens bekend content-type (een echte mismatch, bijv. een bestand met
+  // .msg-signature maar beweerd als 'application/pdf') — een generiek of
+  // onbekend beweerd type blokkeert niet. PDF/PNG blijven de bestaande,
+  // strikte mismatch-check gebruiken: daarvoor is een afwijkend beweerd
+  // type altijd een reden tot weigeren, ongeacht of dat type zelf bekend is.
+  const beweerdTypeBlokkeert =
+    vastgesteld === 'application/vnd.ms-outlook'
+      ? beweerdType !== undefined &&
+        beweerdType !== vastgesteld &&
+        ALLE_BEKENDE_TYPES.has(beweerdType)
+      : beweerdType !== undefined && beweerdType !== vastgesteld;
+
+  if (beweerdTypeBlokkeert) {
     return { geldig: false, reden: 'type-komt-niet-overeen' };
   }
 
