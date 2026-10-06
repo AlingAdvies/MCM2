@@ -64,11 +64,11 @@ describe('valideerEngagementBestand', () => {
       Buffer.concat([MSG_HEADER, Buffer.from('rest')]),
       'application/octet-stream',
     );
-    expect(resultaat).toEqual({
-      geldig: true,
-      contentType: 'application/vnd.ms-outlook',
-      sha256: expect.any(String),
-    });
+    expect(resultaat.geldig).toBe(true);
+    if (resultaat.geldig) {
+      expect(resultaat.contentType).toBe('application/vnd.ms-outlook');
+      expect(typeof resultaat.sha256).toBe('string');
+    }
   });
 
   it('accepteert een .msg-bestand zonder enig beweerd type', () => {
@@ -94,11 +94,11 @@ describe('valideerEngagementBestand', () => {
       EML_VOORBEELD,
       'message/rfc822',
     );
-    expect(resultaat).toEqual({
-      geldig: true,
-      contentType: 'message/rfc822',
-      sha256: expect.any(String),
-    });
+    expect(resultaat.geldig).toBe(true);
+    if (resultaat.geldig) {
+      expect(resultaat.contentType).toBe('message/rfc822');
+      expect(typeof resultaat.sha256).toBe('string');
+    }
   });
 
   it('accepteert een .eml-bestand zonder beweerd type', () => {
