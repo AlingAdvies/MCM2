@@ -10,6 +10,21 @@ const PNG_HEADER = Buffer.from([
 ]);
 // DOCX/XLSX zijn beide ZIP-containers: 'PK\x03\x04'.
 const ZIP_HEADER = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+// .msg is een OLE/CFBF-compound-document; vaste header, ongeacht inhoud.
+const MSG_HEADER = Buffer.from([
+  0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1,
+]);
+// .eml heeft geen vaste byte-signature — herkenning via een RFC822-
+// headerregel aan het begin van het bestand.
+const EML_VOORBEELD = Buffer.from(
+  'From: afzender@voorbeeld.nl\r\n' +
+    'To: ontvanger@voorbeeld.nl\r\n' +
+    'Subject: Testmail\r\n' +
+    'Date: Tue, 6 Oct 2026 10:00:00 +0200\r\n' +
+    '\r\n' +
+    'Inhoud van de mail.',
+  'utf-8',
+);
 
 describe('valideerEngagementBestand', () => {
   it('accepteert een PDF', () => {
@@ -42,6 +57,71 @@ describe('valideerEngagementBestand', () => {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     expect(resultaat.geldig).toBe(true);
+  });
+
+  it('accepteert een .msg-bestand op basis van de signature, ongeacht beweerd type', () => {
+    const resultaat = valideerEngagementBestand(
+      Buffer.concat([MSG_HEADER, Buffer.from('rest')]),
+      'application/octet-stream',
+    );
+    expect(resultaat.geldig).toBe(true);
+    if (resultaat.geldig) {
+      expect(resultaat.contentType).toBe('application/vnd.ms-outlook');
+      expect(typeof resultaat.sha256).toBe('string');
+    }
+  });
+
+  it('accepteert een .msg-bestand zonder enig beweerd type', () => {
+    const resultaat = valideerEngagementBestand(
+      Buffer.concat([MSG_HEADER, Buffer.from('rest')]),
+    );
+    expect(resultaat.geldig).toBe(true);
+  });
+
+  it('weigert een .msg-signature met een expliciet verkeerd beweerd type', () => {
+    const resultaat = valideerEngagementBestand(
+      Buffer.concat([MSG_HEADER, Buffer.from('rest')]),
+      'application/pdf',
+    );
+    expect(resultaat).toEqual({
+      geldig: false,
+      reden: 'type-komt-niet-overeen',
+    });
+  });
+
+  it('accepteert een .eml-bestand op basis van het RFC822-headerpatroon', () => {
+    const resultaat = valideerEngagementBestand(
+      EML_VOORBEELD,
+      'message/rfc822',
+    );
+    expect(resultaat.geldig).toBe(true);
+    if (resultaat.geldig) {
+      expect(resultaat.contentType).toBe('message/rfc822');
+      expect(typeof resultaat.sha256).toBe('string');
+    }
+  });
+
+  it('accepteert een .eml-bestand zonder beweerd type', () => {
+    const resultaat = valideerEngagementBestand(EML_VOORBEELD);
+    expect(resultaat.geldig).toBe(true);
+  });
+
+  it('accepteert een .eml-bestand dat begint met Return-Path', () => {
+    const metReturnPath = Buffer.from(
+      'Return-Path: <afzender@voorbeeld.nl>\r\n' +
+        'From: afzender@voorbeeld.nl\r\n' +
+        'Subject: Testmail\r\n\r\nInhoud.',
+      'utf-8',
+    );
+    const resultaat = valideerEngagementBestand(metReturnPath);
+    expect(resultaat.geldig).toBe(true);
+  });
+
+  it('weigert platte tekst die niet op een RFC822-header lijkt', () => {
+    const resultaat = valideerEngagementBestand(
+      Buffer.from('Dit is gewoon een tekstbestand, geen mail.'),
+    );
+    expect(resultaat).toEqual({ geldig: false, reden: 'onbekend-type' });
   });
 
   it('weigert een ZIP-signature zonder geldig beweerd OOXML-type', () => {

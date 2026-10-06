@@ -138,10 +138,16 @@
     "uitnodigingen) voegt GEEN tabel toe — alleen handmatig_verzonden_op op",
     "de bestaande clm.survey_response. Migratiestand bijgewerkt,",
     "tabellenlijst niet — zelfde soort wijziging als migratie 0032/0033/0037",
-    "hierboven."
+    "hierboven.",
+    "",
+    "Migratie 0045 (06-10, .msg/.eml als vendor-dossier-bijlage) voegt GEEN",
+    "tabel toe — alleen een uitgebreide CHECK-constraint op",
+    "content_type op de bestaande clm.vendor_engagement_attachment.",
+    "Migratiestand bijgewerkt, tabellenlijst niet — zelfde soort wijziging",
+    "als migratie 0032/0033/0037/0044 hierboven."
   ],
-  "bijgewerkt": "2026-09-26",
-  "migratiestand": "0044_survey_response_handmatig_verzonden",
+  "bijgewerkt": "2026-10-06",
+  "migratiestand": "0045_vendor_engagement_attachment_msg_eml",
   "tabellen": [
     "audit.audit_event",
     "clm.contract",
