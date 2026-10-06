@@ -3,6 +3,7 @@ import { sql, type SQL } from 'drizzle-orm';
 
 import { DatabaseService } from '../db/database.service';
 import { isGeldigMailadres } from '../mail/mail-adres';
+import { bepaalStatus, type ResponsStatus } from '../survey/respons-status';
 
 /**
  * Leveranciers lezen en aanmaken, altijd binnen één tenant.
@@ -51,6 +52,14 @@ export interface VendorSamenvatting {
    */
   heeftGeldigMailadres: boolean;
   createdAt: string;
+  /**
+   * Status van de meest recente, nog niet ingediende vragenlijstronde voor
+   * deze leverancier — of null wanneer er geen openstaande ronde is.
+   * Besluit eigenaar 2026-10-06: deze kolom moet alleen iets tonen als er
+   * echt iets openstaat, geen lege "status"-kolom erbij voor leveranciers
+   * zonder lopende ronde.
+   */
+  openstaandeRondeStatus: ResponsStatus | null;
 }
 
 /** Wat er nodig is om een leverancier aan te maken. */
@@ -167,6 +176,10 @@ interface VendorRij extends Record<string, unknown> {
   thema_codes: string[] | null;
   contact_emails: string[] | null;
   created_at: Date | string;
+  openstaande_submitted_at: Date | string | null;
+  openstaande_closes_at: Date | string | null;
+  openstaande_ronde_status: string | null;
+  openstaande_handmatig_verzonden_op: Date | string | null;
 }
 
 interface VendorDetailRij extends Record<string, unknown> {
@@ -276,7 +289,53 @@ export class VendorService {
                       FROM clm.vendor_contact c
                      WHERE c.vendor_id = v.vendor_id
                        AND c.deleted_at IS NULL
-                       AND c.email IS NOT NULL) AS contact_emails
+                       AND c.email IS NOT NULL) AS contact_emails,
+                   -- De meest recente, nog niet ingediende respons van deze
+                   -- vendor — alleen uit rondes die nog meetellen (zelfde
+                   -- filter als ContractmanagerService.haal()). Status wordt
+                   -- in TypeScript berekend via bepaalStatus(), niet hier:
+                   -- anders ontstaat een tweede, uit de pas lopende regel
+                   -- voor wat een status is.
+                   (SELECT s.submitted_at
+                      FROM clm.survey_response s
+                      JOIN clm.survey_run r ON r.run_id = s.run_id
+                     WHERE s.vendor_id = v.vendor_id
+                       AND s.submitted_at IS NULL
+                       AND s.status <> 'revoked'
+                       AND r.status <> 'archived'
+                       AND r.revoked_at IS NULL
+                     ORDER BY s.created_at DESC
+                     LIMIT 1) AS openstaande_submitted_at,
+                   (SELECT r.closes_at
+                      FROM clm.survey_response s
+                      JOIN clm.survey_run r ON r.run_id = s.run_id
+                     WHERE s.vendor_id = v.vendor_id
+                       AND s.submitted_at IS NULL
+                       AND s.status <> 'revoked'
+                       AND r.status <> 'archived'
+                       AND r.revoked_at IS NULL
+                     ORDER BY s.created_at DESC
+                     LIMIT 1) AS openstaande_closes_at,
+                   (SELECT r.status
+                      FROM clm.survey_response s
+                      JOIN clm.survey_run r ON r.run_id = s.run_id
+                     WHERE s.vendor_id = v.vendor_id
+                       AND s.submitted_at IS NULL
+                       AND s.status <> 'revoked'
+                       AND r.status <> 'archived'
+                       AND r.revoked_at IS NULL
+                     ORDER BY s.created_at DESC
+                     LIMIT 1) AS openstaande_ronde_status,
+                   (SELECT s.handmatig_verzonden_op
+                      FROM clm.survey_response s
+                      JOIN clm.survey_run r ON r.run_id = s.run_id
+                     WHERE s.vendor_id = v.vendor_id
+                       AND s.submitted_at IS NULL
+                       AND s.status <> 'revoked'
+                       AND r.status <> 'archived'
+                       AND r.revoked_at IS NULL
+                     ORDER BY s.created_at DESC
+                     LIMIT 1) AS openstaande_handmatig_verzonden_op
               FROM clm.vendor v
              WHERE v.deleted_at IS NULL
              ORDER BY v.created_at DESC`,
@@ -298,6 +357,16 @@ export class VendorService {
             isGeldigMailadres(e),
           ),
           createdAt: alsTekst(r.created_at),
+          openstaandeRondeStatus:
+            r.openstaande_ronde_status === null
+              ? null
+              : bepaalStatus({
+                  submittedAt: r.openstaande_submitted_at,
+                  closesAt: r.openstaande_closes_at,
+                  rondeStatus: r.openstaande_ronde_status,
+                  laatsteOordeel: null,
+                  handmatigVerzondenOp: r.openstaande_handmatig_verzonden_op,
+                }),
         }));
       },
       'medewerker',

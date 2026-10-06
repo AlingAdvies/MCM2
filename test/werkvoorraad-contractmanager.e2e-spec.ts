@@ -445,4 +445,39 @@ describe('Werkvoorraad contractmanager (e2e)', () => {
       expect(ids).not.toContain(RESPONSE_VAN_COLLEGA);
     });
   });
+
+  describe('GET /vendors toont de openstaande rondestatus', () => {
+    interface VendorLijstAntwoord {
+      vendors: Array<{
+        vendorId: string;
+        openstaandeRondeStatus: string | null;
+      }>;
+    }
+
+    it('toont null voor een vendor zonder openstaande ronde', async () => {
+      const antwoord = await request(server)
+        .get('/vendors')
+        .set('Cookie', cookieManager)
+        .expect(200);
+
+      const { vendors } = antwoord.body as VendorLijstAntwoord;
+      // VENDOR_VAN_MIJ heeft alleen een al-ingediende respons (RESPONSE_VAN_MIJ)
+      // plus een archived/revoked ronde die niet meetelt — dus geen openstaande.
+      const vendor = vendors.find((v) => v.vendorId === VENDOR_VAN_MIJ);
+
+      expect(vendor?.openstaandeRondeStatus).toBeNull();
+    });
+
+    it("toont 'opgestuurd' voor een vendor met een nog niet ingediende respons", async () => {
+      const antwoord = await request(server)
+        .get('/vendors')
+        .set('Cookie', cookieManager)
+        .expect(200);
+
+      const { vendors } = antwoord.body as VendorLijstAntwoord;
+      const vendor = vendors.find((v) => v.vendorId === VENDOR_VAN_COLLEGA);
+
+      expect(vendor?.openstaandeRondeStatus).toBe('opgestuurd');
+    });
+  });
 });
