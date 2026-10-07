@@ -47,6 +47,7 @@ faalt als er een runbook bijkomt dat hier niet genoemd wordt.
 | [mailkanaal-inrichten.md](mailkanaal-inrichten.md) | Resend en het verzenddomein opzetten | C — toegang en credentials |
 | [baseline-migratiestand.md](baseline-migratiestand.md) | Een bestaande database in de migratieketen halen, met rollback | A — eenmalige databasehandeling |
 | [tenant-opschonen.md](tenant-opschonen.md) | Eén tenant leegmaken zonder de andere te raken, en een nieuwe ernaast zetten. Drie zoekopdrachten tegen de database in plaats van grep-werk — de eerste uitvoering miste zonder die drie de helft. | A — eenmalige databasehandeling, onomkeerbaar |
+| [tenant-kopieren.md](tenant-kopieren.md) | Alle klantdata van Transdev Nederland naar Transdev DEV kopiëren, met nieuwe PK's en een vaste gebruikersmapping. Geen generiek hulpmiddel — drie hardgecodeerde ID's. | A — eenmalige databasehandeling, onomkeerbaar |
 
 ---
 
