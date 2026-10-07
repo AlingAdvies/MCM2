@@ -84,21 +84,39 @@ const UUID_REGEX =
 // Stap 1: bladeren van survey_response die clm_api_runtime WEL mag
 // verwijderen, plus een koppeltabel zonder echte foreign key (linked_id kan
 // niet naar twee mogelijke doeltabellen tegelijk verwijzen — migratie 0041).
-const VIA_API_VOOR_FUNCTIE = ['survey_answer', 'survey_attachment', 'vendor_engagement_link'];
+const VIA_API_VOOR_FUNCTIE = [
+  'survey_answer',
+  'survey_attachment',
+  'vendor_engagement_link',
+];
 
 // Stap 2: clm_api_runtime mist hier bewust DELETE (audit-bewijs, dossiers).
 // Moet vóór survey_response/vendor, want deze verwijzen ernaar.
-const VIA_FUNCTIE = ['survey_review', 'response_note', 'vendor_engagement', 'import_job', 'contract'];
+const VIA_FUNCTIE = [
+  'survey_review',
+  'response_note',
+  'vendor_engagement',
+  'import_job',
+  'contract',
+];
 
 // Stap 3: de rest, weer via clm_api_runtime. contract_survey_template staat
 // hier NIET in — die verdwijnt vanzelf via CASCADE zodra contract weg is.
 const VIA_API_NA_FUNCTIE = [
-  'survey_response', 'survey_run',
-  'vendor_contact', 'vendor_tag', 'vendor_compliance_thema', 'vendor',
+  'survey_response',
+  'survey_run',
+  'vendor_contact',
+  'vendor_tag',
+  'vendor_compliance_thema',
+  'vendor',
 ];
 
 // Alleen ter controle: geen eigen DELETE, moeten na de operatie op 0 staan.
-const ALLEEN_CONTROLEREN = ['contract_survey_template', 'import_row', 'import_extra_contact'];
+const ALLEEN_CONTROLEREN = [
+  'contract_survey_template',
+  'import_row',
+  'import_extra_contact',
+];
 
 // Stap 4: buiten schema clm. ref.vendor_category moet ná vendor (verwijzing
 // vendor.category_code) — vandaar een tweede functie, ná de vendor-delete.
@@ -132,10 +150,19 @@ async function alleTenants(migratorClient) {
 /** Stap 1 van het runbook: alleen SELECT, altijd met tenant- én actor-context. */
 async function tellenViaApi(apiClient, tenantId) {
   await apiClient.query('BEGIN');
-  await apiClient.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
-  await apiClient.query(`SELECT set_config('app.current_actor', 'medewerker', true)`);
+  await apiClient.query(
+    `SELECT set_config('app.current_tenant_id', $1, true)`,
+    [tenantId],
+  );
+  await apiClient.query(
+    `SELECT set_config('app.current_actor', 'medewerker', true)`,
+  );
   const tellingen = {};
-  for (const tabel of [...VIA_API_VOOR_FUNCTIE, ...VIA_API_NA_FUNCTIE, ...ALLEEN_CONTROLEREN]) {
+  for (const tabel of [
+    ...VIA_API_VOOR_FUNCTIE,
+    ...VIA_API_NA_FUNCTIE,
+    ...ALLEEN_CONTROLEREN,
+  ]) {
     const { rows } = await apiClient.query(`SELECT count(*) FROM clm.${tabel}`);
     tellingen[tabel] = Number(rows[0].count);
   }
@@ -146,18 +173,37 @@ async function tellenViaApi(apiClient, tenantId) {
 /** VIA_FUNCTIE-tabellen hebben FORCE RLS aan — clm_migrator mag hier ook tellen. */
 async function tellenViaMigrator(migratorClient, tenantId) {
   await migratorClient.query('BEGIN');
-  await migratorClient.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
-  await migratorClient.query(`SELECT set_config('app.current_actor', 'medewerker', true)`);
+  await migratorClient.query(
+    `SELECT set_config('app.current_tenant_id', $1, true)`,
+    [tenantId],
+  );
+  await migratorClient.query(
+    `SELECT set_config('app.current_actor', 'medewerker', true)`,
+  );
   const tellingen = {};
   for (const tabel of VIA_FUNCTIE) {
-    const { rows } = await migratorClient.query(`SELECT count(*) FROM clm.${tabel}`);
+    const { rows } = await migratorClient.query(
+      `SELECT count(*) FROM clm.${tabel}`,
+    );
     tellingen[tabel] = Number(rows[0].count);
   }
   await migratorClient.query('ROLLBACK');
   return tellingen;
 }
 
+// Tenantcontext is hier verplicht, ook met de expliciete WHERE: beide tabellen
+// hebben FORCE RLS, dus zonder context ziet ook clm_migrator 0 rijen. Zonder
+// deze context gaf de nulmeting altijd 0 en blokkeerde de controle elke run
+// met een vals alarm (gemeten 2026-10-07).
 async function tellenBuitenClm(migratorClient, tenantId) {
+  await migratorClient.query('BEGIN');
+  await migratorClient.query(
+    `SELECT set_config('app.current_tenant_id', $1, true)`,
+    [tenantId],
+  );
+  await migratorClient.query(
+    `SELECT set_config('app.current_actor', 'medewerker', true)`,
+  );
   const tellingen = {};
   for (const [schema, tabel] of BUITEN_CLM) {
     const { rows } = await migratorClient.query(
@@ -166,6 +212,7 @@ async function tellenBuitenClm(migratorClient, tenantId) {
     );
     tellingen[`${schema}.${tabel}`] = Number(rows[0].count);
   }
+  await migratorClient.query('ROLLBACK');
   return tellingen;
 }
 
@@ -182,7 +229,9 @@ async function main() {
   const commit = process.argv.includes('--commit');
 
   if (!tenantId || !UUID_REGEX.test(tenantId)) {
-    console.error('\nGebruik: node scripts/tenant-opschonen.js --tenant-id <uuid> [--extern] [--commit]\n');
+    console.error(
+      '\nGebruik: node scripts/tenant-opschonen.js --tenant-id <uuid> [--extern] [--commit]\n',
+    );
     process.exitCode = 1;
     return;
   }
@@ -191,7 +240,9 @@ async function main() {
   const apiUrl = process.env.PRODUCTIE_RUNTIME_URL;
 
   if (!migratorUrl || !apiUrl) {
-    console.error('\nNOOD_PRODUCTIE_URL en PRODUCTIE_RUNTIME_URL moeten beide in .env staan.\n');
+    console.error(
+      '\nNOOD_PRODUCTIE_URL en PRODUCTIE_RUNTIME_URL moeten beide in .env staan.\n',
+    );
     process.exitCode = 1;
     return;
   }
@@ -207,18 +258,26 @@ async function main() {
   await apiClient.connect();
 
   try {
-    const { rows: rolMigrator } = await migratorClient.query('SELECT current_user');
+    const { rows: rolMigrator } = await migratorClient.query(
+      'SELECT current_user',
+    );
     if (rolMigrator[0].current_user !== 'clm_migrator') {
-      throw new Error(`NOOD_PRODUCTIE_URL verbindt als '${rolMigrator[0].current_user}', verwacht clm_migrator.`);
+      throw new Error(
+        `NOOD_PRODUCTIE_URL verbindt als '${rolMigrator[0].current_user}', verwacht clm_migrator.`,
+      );
     }
     const { rows: rolApi } = await apiClient.query('SELECT current_user');
     if (rolApi[0].current_user !== 'clm_api_runtime') {
-      throw new Error(`PRODUCTIE_RUNTIME_URL verbindt als '${rolApi[0].current_user}', verwacht clm_api_runtime.`);
+      throw new Error(
+        `PRODUCTIE_RUNTIME_URL verbindt als '${rolApi[0].current_user}', verwacht clm_api_runtime.`,
+      );
     }
 
     const doelNaam = await tenantNaamOpzoeken(migratorClient, tenantId);
     if (!doelNaam) {
-      throw new Error(`Tenant-id ${tenantId} niet gevonden in clm.tenant_register.`);
+      throw new Error(
+        `Tenant-id ${tenantId} niet gevonden in clm.tenant_register.`,
+      );
     }
     const tenants = await alleTenants(migratorClient);
     const andereTenants = tenants.filter((t) => t.register_id !== tenantId);
@@ -231,11 +290,22 @@ async function main() {
     // ── Stap 3 van het runbook: benoemen wat aandacht vraagt ────────────────
     console.log('=== Wat blijft staan, en wat expliciet aandacht vraagt ===');
     await apiClient.query('BEGIN');
-    await apiClient.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
-    await apiClient.query(`SELECT set_config('app.current_actor', 'medewerker', true)`);
+    await apiClient.query(
+      `SELECT set_config('app.current_tenant_id', $1, true)`,
+      [tenantId],
+    );
+    await apiClient.query(
+      `SELECT set_config('app.current_actor', 'medewerker', true)`,
+    );
 
-    for (const tabel of ['survey_template', 'survey_category', 'survey_question']) {
-      const { rows } = await apiClient.query(`SELECT count(*) FROM clm.${tabel}`);
+    for (const tabel of [
+      'survey_template',
+      'survey_category',
+      'survey_question',
+    ]) {
+      const { rows } = await apiClient.query(
+        `SELECT count(*) FROM clm.${tabel}`,
+      );
       console.log(`  ${tabel}: ${rows[0].count} rijen blijven staan.`);
     }
 
@@ -246,7 +316,9 @@ async function main() {
     if (nogGeldig.length > 0) {
       console.log(
         '  LET OP: nog niet-verlopen uitnodigingen — ' +
-          nogGeldig.map((r) => `${r.status}: ${r.nog_geldig} van ${r.totaal}`).join(', '),
+          nogGeldig
+            .map((r) => `${r.status}: ${r.nog_geldig} van ${r.totaal}`)
+            .join(', '),
       );
     }
 
@@ -269,8 +341,15 @@ async function main() {
     // ── Nulmeting: doeltenant + alle andere tenants ─────────────────────────
     console.log('=== Nulmeting: aantal rijen per tenant, VOOR de operatie ===');
     const nulmeting = {};
-    for (const tenant of [{ register_id: tenantId, name: doelNaam }, ...andereTenants]) {
-      nulmeting[tenant.register_id] = await volledigeTelling(apiClient, migratorClient, tenant.register_id);
+    for (const tenant of [
+      { register_id: tenantId, name: doelNaam },
+      ...andereTenants,
+    ]) {
+      nulmeting[tenant.register_id] = await volledigeTelling(
+        apiClient,
+        migratorClient,
+        tenant.register_id,
+      );
     }
     console.table(nulmeting);
 
@@ -343,13 +422,22 @@ async function main() {
     await migratorClient.query(
       `REVOKE EXECUTE ON FUNCTION clm.tijdelijk_leegmaken_buiten_clm(uuid) FROM PUBLIC`,
     );
-    console.log('Twee functies aangemaakt, EXECUTE alleen voor clm_api_runtime.\n');
+    console.log(
+      'Twee functies aangemaakt, EXECUTE alleen voor clm_api_runtime.\n',
+    );
 
     // ── De eigenlijke verwijdering, in de vaste, bewezen volgorde ───────────
-    console.log(`=== ${commit ? 'ECHTE UITVOERING' : 'DROGE RUN'}: verwijderen, uitsluitend ${doelNaam} ===`);
+    console.log(
+      `=== ${commit ? 'ECHTE UITVOERING' : 'DROGE RUN'}: verwijderen, uitsluitend ${doelNaam} ===`,
+    );
     await apiClient.query('BEGIN');
-    await apiClient.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantId]);
-    await apiClient.query(`SELECT set_config('app.current_actor', 'medewerker', true)`);
+    await apiClient.query(
+      `SELECT set_config('app.current_tenant_id', $1, true)`,
+      [tenantId],
+    );
+    await apiClient.query(
+      `SELECT set_config('app.current_actor', 'medewerker', true)`,
+    );
 
     const verwijderd = {};
     for (const tabel of VIA_API_VOOR_FUNCTIE) {
@@ -361,7 +449,8 @@ async function main() {
       `SELECT * FROM clm.tijdelijk_leegmaken_beperkte_tabellen($1)`,
       [tenantId],
     );
-    for (const rij of functieResultaat) verwijderd[rij.tabel] = Number(rij.aantal);
+    for (const rij of functieResultaat)
+      verwijderd[rij.tabel] = Number(rij.aantal);
 
     for (const tabel of VIA_API_NA_FUNCTIE) {
       const { rowCount } = await apiClient.query(`DELETE FROM clm.${tabel}`);
@@ -372,7 +461,8 @@ async function main() {
       `SELECT * FROM clm.tijdelijk_leegmaken_buiten_clm($1)`,
       [tenantId],
     );
-    for (const rij of buitenResultaat) verwijderd[rij.tabel] = Number(rij.aantal);
+    for (const rij of buitenResultaat)
+      verwijderd[rij.tabel] = Number(rij.aantal);
 
     const { rowCount: ledenWeg } = await apiClient.query(
       `DELETE FROM clm.tenant_membership WHERE tenant_id = $1 AND deleted_at IS NOT NULL`,
@@ -386,10 +476,15 @@ async function main() {
     // ── Controle: echte tellingen na de deletes, binnen dezelfde transactie ──
     console.log('=== Controle: ECHTE tellingen NA de deletes ===');
     async function tellenNaBinnenApiTransactie(tenantIdControle) {
-      await apiClient.query(`SELECT set_config('app.current_tenant_id', $1, true)`, [tenantIdControle]);
+      await apiClient.query(
+        `SELECT set_config('app.current_tenant_id', $1, true)`,
+        [tenantIdControle],
+      );
       const tellingen = {};
       for (const tabel of ALLE_TABELLEN) {
-        const { rows } = await apiClient.query(`SELECT count(*) FROM clm.${tabel}`);
+        const { rows } = await apiClient.query(
+          `SELECT count(*) FROM clm.${tabel}`,
+        );
         tellingen[tabel] = Number(rows[0].count);
       }
       for (const [schema, tabel] of BUITEN_CLM) {
@@ -403,16 +498,27 @@ async function main() {
     }
 
     const controle = {};
-    for (const tenant of [{ register_id: tenantId, name: doelNaam }, ...andereTenants]) {
-      controle[tenant.register_id] = await tellenNaBinnenApiTransactie(tenant.register_id);
+    for (const tenant of [
+      { register_id: tenantId, name: doelNaam },
+      ...andereTenants,
+    ]) {
+      controle[tenant.register_id] = await tellenNaBinnenApiTransactie(
+        tenant.register_id,
+      );
     }
     console.table(controle);
 
-    const teControleren = [...ALLE_TABELLEN, ...BUITEN_CLM.map(([s, t]) => `${s}.${t}`)];
+    const teControleren = [
+      ...ALLE_TABELLEN,
+      ...BUITEN_CLM.map(([s, t]) => `${s}.${t}`),
+    ];
     let afwijking = false;
     for (const tenant of andereTenants) {
       for (const sleutel of teControleren) {
-        if (controle[tenant.register_id][sleutel] !== nulmeting[tenant.register_id][sleutel]) {
+        if (
+          controle[tenant.register_id][sleutel] !==
+          nulmeting[tenant.register_id][sleutel]
+        ) {
           console.error(
             `AFWIJKING: ${tenant.name}.${sleutel} was ${nulmeting[tenant.register_id][sleutel]}, is nu ${controle[tenant.register_id][sleutel]}`,
           );
@@ -422,7 +528,9 @@ async function main() {
     }
     for (const sleutel of teControleren) {
       if (controle[tenantId][sleutel] !== 0) {
-        console.error(`${doelNaam}.${sleutel} is niet leeg: ${controle[tenantId][sleutel]}`);
+        console.error(
+          `${doelNaam}.${sleutel} is niet leeg: ${controle[tenantId][sleutel]}`,
+        );
         afwijking = true;
       }
     }
@@ -436,12 +544,18 @@ async function main() {
       console.log('\nGeen afwijking. COMMIT uitgevoerd.');
     } else {
       await apiClient.query('ROLLBACK');
-      console.log('\nGeen afwijking. Droge run: ROLLBACK uitgevoerd, niets gewijzigd.');
+      console.log(
+        '\nGeen afwijking. Droge run: ROLLBACK uitgevoerd, niets gewijzigd.',
+      );
       console.log('Draai opnieuw met --commit om dit echt uit te voeren.');
     }
 
-    await migratorClient.query(`DROP FUNCTION IF EXISTS clm.tijdelijk_leegmaken_beperkte_tabellen(uuid)`);
-    await migratorClient.query(`DROP FUNCTION IF EXISTS clm.tijdelijk_leegmaken_buiten_clm(uuid)`);
+    await migratorClient.query(
+      `DROP FUNCTION IF EXISTS clm.tijdelijk_leegmaken_beperkte_tabellen(uuid)`,
+    );
+    await migratorClient.query(
+      `DROP FUNCTION IF EXISTS clm.tijdelijk_leegmaken_buiten_clm(uuid)`,
+    );
     console.log('Beide tijdelijke functies opgeruimd (DROP FUNCTION).');
   } finally {
     await apiClient.end();
