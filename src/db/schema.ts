@@ -469,6 +469,10 @@ export const contract = clm.table(
     // aanmaken. CHECK in de database, bewust geen ref-tabel (drie vaste,
     // niet-tenant-configureerbare waarden).
     autoRenews: text('auto_renews'),
+    // Migratie 0046 (#234). 'centraal' | 'operationeel' | NULL (niet
+    // vastgelegd) — CHECK in de database, per contract en niet afgeleid uit
+    // het werkingsgebied.
+    beheer: text('beheer'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -478,6 +482,60 @@ export const contract = clm.table(
   (t) => [
     index('contract_tenant_id_idx').on(t.tenantId),
     index('contract_vendor_id_idx').on(t.vendorId),
+  ],
+);
+
+// Migratie 0046 (#234): tenant-eigen waardenlijst van werkingsgebieden
+// (concessies/organisatie-onderdelen, bijv. ANF), zelfde opzet als
+// ref.vendor_category.
+export const werkingsgebied = clm.table(
+  'werkingsgebied',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'cascade' }),
+    code: text('code').notNull(),
+    label: text('label').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: 'werkingsgebied_pkey', columns: [t.tenantId, t.code] }),
+  ],
+);
+
+// Migratie 0046 (#234): koppeling contract <-> werkingsgebied, meerdere per
+// contract. Verwijderen van een contract of gebied ruimt de koppeling op.
+export const contractWerkingsgebied = clm.table(
+  'contract_werkingsgebied',
+  {
+    contractId: uuid('contract_id')
+      .notNull()
+      .references(() => contract.contractId, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'cascade' }),
+    werkingsgebiedCode: text('werkingsgebied_code').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      name: 'contract_werkingsgebied_pkey',
+      columns: [t.contractId, t.werkingsgebiedCode],
+    }),
+    foreignKey({
+      name: 'contract_werkingsgebied_gebied_fk',
+      columns: [t.tenantId, t.werkingsgebiedCode],
+      foreignColumns: [werkingsgebied.tenantId, werkingsgebied.code],
+    }).onDelete('cascade'),
+    index('contract_werkingsgebied_tenant_idx').on(t.tenantId),
+    index('contract_werkingsgebied_gebied_idx').on(
+      t.tenantId,
+      t.werkingsgebiedCode,
+    ),
   ],
 );
 
