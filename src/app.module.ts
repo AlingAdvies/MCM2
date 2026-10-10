@@ -13,6 +13,7 @@ import { SurveyModule } from './survey/survey.module';
 import { TenantModule } from './tenant/tenant.module';
 import { VendorCategoryModule } from './vendor-category/vendor-category.module';
 import { VendorModule } from './vendor/vendor.module';
+import { WerkingsgebiedModule } from './werkingsgebied/werkingsgebied.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { VendorModule } from './vendor/vendor.module';
     AuthModule,
     VendorModule,
     VendorCategoryModule,
+    WerkingsgebiedModule,
     ContractModule,
     ContractImportModule,
     MailModule,
