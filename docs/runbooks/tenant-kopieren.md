@@ -28,8 +28,10 @@ nieuwe RLS-policies met een extra voorwaarde in `WITH CHECK`.
 
 **Wel:** `ref.vendor_category`, `survey_template`/`category`/`question`,
 `vendor` met `vendor_contact`/`vendor_tag`/`vendor_compliance_thema`,
-`contract`, `vendor_engagement` met `vendor_engagement_note`, en
-dossierkoppelingen (`vendor_engagement_link`) van het type `contract`.
+`contract` (inclusief `beheer`), `clm.werkingsgebied` met
+`clm.contract_werkingsgebied` (sinds migratie 0046, #234), `vendor_engagement`
+met `vendor_engagement_note`, en dossierkoppelingen
+(`vendor_engagement_link`) van het type `contract`.
 
 **Niet:**
 
