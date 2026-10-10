@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-10-10 12:34 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-10-10 14:25 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -25,7 +25,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ## Per thema
 
-### Product — vragenlijst, leveranciers, contracten, meldingen (20)
+### Product — vragenlijst, leveranciers, contracten, meldingen (21)
 
 - [#23](https://github.com/AlingAdvies/MCM2/issues/23) `later` — MVM_V2-frontend-inconsistenties oplossen (tenant demo vs. transdev, vendors-lijstpagina)
 - [#187](https://github.com/AlingAdvies/MCM2/issues/187) `later` — Contracttype-veld toevoegen (placeholder, richting volwaardig contractmanagement)
@@ -47,6 +47,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#186](https://github.com/AlingAdvies/MCM2/issues/186) — Vendor-categorielijst: Coupa 'Commodity' overnemen + categorieën tenant-uitbreidbaar maken
 - [#188](https://github.com/AlingAdvies/MCM2/issues/188) — Business-risk-classificatie (Tier 1/2/3) als apart veld, los van vendor-categorie
 - [#189](https://github.com/AlingAdvies/MCM2/issues/189) — DPA-vlag (Ja/Nee) overnemen bij contract-import
+- [#234](https://github.com/AlingAdvies/MCM2/issues/234) — Werkingsgebied (concessie/organisatie-onderdeel) op contracten, met filter
 
 ### Beheermenu (4)
 
@@ -120,4 +121,4 @@ bestaande thema's past.
 
 ---
 
-**Totaal open:** 62
+**Totaal open:** 63
