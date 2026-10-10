@@ -150,8 +150,9 @@
     "tabellen toe: clm.werkingsgebied en clm.contract_werkingsgebied. Die staan",
     "BEWUST NOG NIET in de tabellenlijst hieronder: productie heeft ze pas na de",
     "uitrol, en de dagelijkse backupcontrole zou ze tot dan als ontbrekend melden",
-    "(zelfde kip-ei als bij 0034/0035 hierboven). Toevoegen zodra de",
-    "productie-uitrol is bevestigd en teruggelezen."
+    "(zelfde kip-ei als bij 0034/0035 hierboven). Bevestigd op productie",
+    "(10-10, run 38068509094, health e9c2e63, verify:omgevingen: 47 migraties,",
+    "33 tabellen, geen zonderLeesrecht) — nu in de tabellenlijst."
   ],
   "bijgewerkt": "2026-10-10",
   "migratiestand": "0046_werkingsgebied",
@@ -159,6 +160,7 @@
     "audit.audit_event",
     "clm.contract",
     "clm.contract_survey_template",
+    "clm.contract_werkingsgebied",
     "clm.import_extra_contact",
     "clm.import_job",
     "clm.import_row",
@@ -188,6 +190,7 @@
     "clm.vendor_engagement_link",
     "clm.vendor_engagement_note",
     "clm.vendor_tag",
+    "clm.werkingsgebied",
     "ref.business_criticality",
     "ref.business_risk_tier",
     "ref.compliance_status",
