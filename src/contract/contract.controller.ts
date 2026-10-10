@@ -31,6 +31,10 @@ import {
   type ContractWijziging,
   type NieuwContract,
 } from './contract.service';
+import {
+  InvoerFout as WerkingsgebiedInvoerFout,
+  leesWerkingsgebiedCodes,
+} from '../werkingsgebied/werkingsgebied-invoer';
 
 /**
  * Contractroutes, altijd in de context van een leverancier.
@@ -213,6 +217,58 @@ export class ContractController {
 
     return koppeling;
   }
+
+  /** Vervangt de werkingsgebieden van een contract (#234). Body: `{ codes: string[] }`. */
+  @Put(':id/werkingsgebieden')
+  @VereistRol('admin', 'user')
+  async zetWerkingsgebieden(
+    @Req() request: RequestMetSessie,
+    @Param('vendorId') vendorId: string,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const sessie = request.sessie!;
+
+    let codes: string[];
+    try {
+      codes = leesWerkingsgebiedCodes(body);
+    } catch (err) {
+      if (err instanceof WerkingsgebiedInvoerFout) {
+        throw new BadRequestException({ message: err.message, veld: err.veld });
+      }
+      throw err;
+    }
+
+    const werkingsgebiedCodes = await this.contracts
+      .zetWerkingsgebieden(
+        sessie.tenantId,
+        leesUuid(vendorId),
+        leesUuid(id),
+        codes,
+      )
+      .catch(alsOnbekendWerkingsgebied);
+
+    if (!werkingsgebiedCodes) {
+      throw new NotFoundException('Contract niet gevonden.');
+    }
+
+    return { werkingsgebiedCodes };
+  }
+}
+
+/** Een code die niet in clm.werkingsgebied staat, faalt op de foreign key (23503). */
+function alsOnbekendWerkingsgebied(err: unknown): never {
+  const code = (err as { cause?: { code?: string }; code?: string })?.cause
+    ?.code;
+
+  if (code === '23503') {
+    throw new BadRequestException({
+      message: 'Onbekend werkingsgebied.',
+      veld: 'codes',
+    });
+  }
+
+  throw err;
 }
 
 const UUID_PATROON =

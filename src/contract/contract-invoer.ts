@@ -175,6 +175,27 @@ function optioneelBoolean(waarde: unknown, veld: string): boolean | null {
   return waarde;
 }
 
+const BEHEER_WAARDEN = ['centraal', 'operationeel'] as const;
+
+/** Migratie 0046 (#234). Leeg of null = niet vastgelegd. */
+function optioneelBeheer(
+  waarde: unknown,
+  veld: string,
+): 'centraal' | 'operationeel' | null {
+  if (waarde === undefined || waarde === null || waarde === '') {
+    return null;
+  }
+
+  if (
+    typeof waarde !== 'string' ||
+    !BEHEER_WAARDEN.includes(waarde as (typeof BEHEER_WAARDEN)[number])
+  ) {
+    throw new InvoerFout(veld, `${veld} moet centraal of operationeel zijn.`);
+  }
+
+  return waarde as 'centraal' | 'operationeel';
+}
+
 function controleerDatumVolgorde(
   startDate: string | null,
   endDate: string | null,
@@ -233,6 +254,7 @@ export function leesNieuwContract(body: unknown): NieuwContract {
       'Business-risk-tier',
       MAX_KORT,
     ),
+    beheer: optioneelBeheer(ruw.beheer, 'Beheer'),
   };
 }
 
@@ -316,6 +338,9 @@ export function leesContractWijziging(body: unknown): ContractWijziging {
       'Business-risk-tier',
       MAX_KORT,
     );
+  }
+  if ('beheer' in ruw) {
+    wijziging.beheer = optioneelBeheer(ruw.beheer, 'Beheer');
   }
 
   controleerDatumVolgorde(

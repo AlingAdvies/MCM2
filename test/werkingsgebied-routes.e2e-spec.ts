@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
@@ -200,6 +202,165 @@ describe('/werkingsgebieden (e2e)', () => {
 
     it('weigert zonder geldige sessie met 401', async () => {
       await request(server).get('/werkingsgebieden').expect(401);
+    });
+  });
+
+  describe('koppeling aan contracten en beheer', () => {
+    const vendorId = randomUUID();
+    let contractId: string;
+
+    interface ContractBody {
+      contractId: string;
+      beheer: string | null;
+      werkingsgebiedCodes: string[];
+    }
+
+    beforeAll(async () => {
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL app.current_tenant_id = '${tenantA}'`);
+      await client.query(
+        'INSERT INTO clm.vendor (vendor_id, tenant_id, name) VALUES ($1, $2, $3)',
+        [vendorId, tenantA, 'Leverancier (werkingsgebied-routes)'],
+      );
+      await client.query('COMMIT');
+
+      for (const [code, label] of [
+        ['hwgo', 'HWGO'],
+        ['utrecht_binnen', 'Utrecht Binnen'],
+      ]) {
+        await request(server)
+          .post('/werkingsgebieden')
+          .set('Cookie', cookieAdminA)
+          .send({ code, label })
+          .expect(201);
+      }
+
+      const res = await request(server)
+        .post(`/vendors/${vendorId}/contracts`)
+        .set('Cookie', cookieAdminA)
+        .send({ name: 'Contract (werkingsgebied-routes)', beheer: 'centraal' })
+        .expect(201);
+      const body = res.body as ContractBody;
+      contractId = body.contractId;
+
+      expect(body.beheer).toBe('centraal');
+      expect(body.werkingsgebiedCodes).toEqual([]);
+    });
+
+    it('PUT koppelt gebieden; het detail geeft ze gesorteerd terug', async () => {
+      const res = await request(server)
+        .put(`/vendors/${vendorId}/contracts/${contractId}/werkingsgebieden`)
+        .set('Cookie', cookieUserA)
+        .send({ codes: ['utrecht_binnen', 'anf'] })
+        .expect(200);
+
+      expect(
+        (res.body as { werkingsgebiedCodes: string[] }).werkingsgebiedCodes,
+      ).toEqual(['anf', 'utrecht_binnen']);
+
+      const detail = await request(server)
+        .get(`/vendors/${vendorId}/contracts/${contractId}`)
+        .set('Cookie', cookieUserA)
+        .expect(200);
+      expect((detail.body as ContractBody).werkingsgebiedCodes).toEqual([
+        'anf',
+        'utrecht_binnen',
+      ]);
+    });
+
+    it('PUT met een onbekende code geeft 400 met veld codes en wijzigt niets', async () => {
+      const res = await request(server)
+        .put(`/vendors/${vendorId}/contracts/${contractId}/werkingsgebieden`)
+        .set('Cookie', cookieAdminA)
+        .send({ codes: ['anf', 'bestaat_niet'] })
+        .expect(400);
+      expect((res.body as VeldFoutBody).veld).toBe('codes');
+
+      const detail = await request(server)
+        .get(`/vendors/${vendorId}/contracts/${contractId}`)
+        .set('Cookie', cookieAdminA)
+        .expect(200);
+      expect((detail.body as ContractBody).werkingsgebiedCodes).toEqual([
+        'anf',
+        'utrecht_binnen',
+      ]);
+    });
+
+    it('PATCH bewaart beheer; een onbekende waarde geeft 400', async () => {
+      const res = await request(server)
+        .patch(`/vendors/${vendorId}/contracts/${contractId}`)
+        .set('Cookie', cookieAdminA)
+        .send({ beheer: 'operationeel' })
+        .expect(200);
+      expect((res.body as ContractBody).beheer).toBe('operationeel');
+
+      await request(server)
+        .patch(`/vendors/${vendorId}/contracts/${contractId}`)
+        .set('Cookie', cookieAdminA)
+        .send({ beheer: 'regionaal' })
+        .expect(400);
+    });
+
+    it('het tenant-brede overzicht bevat werkingsgebieden en beheer', async () => {
+      const res = await request(server)
+        .get('/contracts')
+        .set('Cookie', cookieUserA)
+        .expect(200);
+
+      const contract = (
+        res.body as { contracten: ContractBody[] }
+      ).contracten.find((c) => c.contractId === contractId);
+      expect(contract?.werkingsgebiedCodes).toEqual(['anf', 'utrecht_binnen']);
+      expect(contract?.beheer).toBe('operationeel');
+    });
+
+    it('de leverancierslijst kent de gebieden via de actieve contracten', async () => {
+      const res = await request(server)
+        .get('/vendors')
+        .set('Cookie', cookieUserA)
+        .expect(200);
+
+      const vendor = (
+        res.body as {
+          vendors: { vendorId: string; werkingsgebiedCodes: string[] }[];
+        }
+      ).vendors.find((v) => v.vendorId === vendorId);
+      expect(vendor?.werkingsgebiedCodes).toEqual(['anf', 'utrecht_binnen']);
+    });
+
+    it('een gebied verwijderen ontkoppelt het, het contract blijft bestaan', async () => {
+      await request(server)
+        .delete('/werkingsgebieden/utrecht_binnen')
+        .set('Cookie', cookieAdminA)
+        .expect(204);
+
+      const detail = await request(server)
+        .get(`/vendors/${vendorId}/contracts/${contractId}`)
+        .set('Cookie', cookieAdminA)
+        .expect(200);
+      expect((detail.body as ContractBody).werkingsgebiedCodes).toEqual([
+        'anf',
+      ]);
+    });
+
+    it('een soft-deleted contract telt niet mee in de leverancierslijst', async () => {
+      await request(server)
+        .delete(`/vendors/${vendorId}/contracts/${contractId}`)
+        .set('Cookie', cookieAdminA)
+        .expect((res) => {
+          expect([200, 204]).toContain(res.status);
+        });
+
+      const res = await request(server)
+        .get('/vendors')
+        .set('Cookie', cookieUserA)
+        .expect(200);
+      const vendor = (
+        res.body as {
+          vendors: { vendorId: string; werkingsgebiedCodes: string[] }[];
+        }
+      ).vendors.find((v) => v.vendorId === vendorId);
+      expect(vendor?.werkingsgebiedCodes).toEqual([]);
     });
   });
 });

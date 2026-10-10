@@ -60,6 +60,12 @@ export interface VendorSamenvatting {
    * zonder lopende ronde.
    */
   openstaandeRondeStatus: ResponsStatus | null;
+  /**
+   * Werkingsgebieden van deze leverancier, afgeleid uit zijn actieve
+   * contracten (#234): een leverancier valt in een gebied als minstens één
+   * contract daarin valt. Leeg wanneer geen enkel contract gekoppeld is.
+   */
+  werkingsgebiedCodes: string[];
 }
 
 /** Wat er nodig is om een leverancier aan te maken. */
@@ -180,6 +186,7 @@ interface VendorRij extends Record<string, unknown> {
   openstaande_closes_at: Date | string | null;
   openstaande_ronde_status: string | null;
   openstaande_handmatig_verzonden_op: Date | string | null;
+  werkingsgebied_codes: string[] | null;
 }
 
 interface VendorDetailRij extends Record<string, unknown> {
@@ -335,7 +342,12 @@ export class VendorService {
                        AND r.status <> 'archived'
                        AND r.revoked_at IS NULL
                      ORDER BY s.created_at DESC
-                     LIMIT 1) AS openstaande_handmatig_verzonden_op
+                     LIMIT 1) AS openstaande_handmatig_verzonden_op,
+                   (SELECT array_agg(DISTINCT cw.werkingsgebied_code ORDER BY cw.werkingsgebied_code)
+                      FROM clm.contract co
+                      JOIN clm.contract_werkingsgebied cw ON cw.contract_id = co.contract_id
+                     WHERE co.vendor_id = v.vendor_id
+                       AND co.deleted_at IS NULL) AS werkingsgebied_codes
               FROM clm.vendor v
              WHERE v.deleted_at IS NULL
              ORDER BY v.created_at DESC`,
@@ -367,6 +379,7 @@ export class VendorService {
                   laatsteOordeel: null,
                   handmatigVerzondenOp: r.openstaande_handmatig_verzonden_op,
                 }),
+          werkingsgebiedCodes: r.werkingsgebied_codes ?? [],
         }));
       },
       'medewerker',
