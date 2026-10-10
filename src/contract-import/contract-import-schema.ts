@@ -52,8 +52,6 @@ export interface ContractImportInvoer {
   extraContacten: ExtraContactInvoer[];
   /** Teksten uit de kolom Werkingsgebied, gesplitst op , ; | (#234). Leeg = []. */
   werkingsgebieden: string[];
-  /** Geduid tegen centraal/operationeel (#234); null bij leeg of onbekend. */
-  beheer: 'centraal' | 'operationeel' | null;
   /** Elke kolom uit het bestand, ongewijzigd, op de originele kopnaam. */
   rawAttributes: Record<string, string>;
 }
@@ -70,7 +68,6 @@ export type ContractBevindingCode =
   | 'categorie_wordt_aangemaakt'
   | 'business_criticality_onbekend'
   | 'business_risk_tier_onbekend'
-  | 'beheer_onbekend'
   | 'extra_contactgegevens_gevonden';
 
 /** Blokkerend = deze rij kan niet geïmporteerd worden. */
@@ -118,7 +115,7 @@ export interface ContractImportBeoordeling {
  */
 type TekstVeld = keyof Omit<
   ContractImportInvoer,
-  'rawAttributes' | 'extraContacten' | 'werkingsgebieden' | 'beheer'
+  'rawAttributes' | 'extraContacten' | 'werkingsgebieden'
 >;
 
 const KOLOM_ALIASSEN: Record<string, TekstVeld> = {
@@ -280,13 +277,6 @@ function isWerkingsgebiedKolom(kopKleineLetters: string): boolean {
   );
 }
 
-/** Kolom met centraal/operationeel beheer (#234). */
-function isBeheerKolom(kopKleineLetters: string): boolean {
-  return (
-    kopKleineLetters === 'beheer' || kopKleineLetters === 'contract.beheer'
-  );
-}
-
 /** Splitst 'ANF; HWGO,ANF' in unieke, bijgeknipte teksten: ['ANF', 'HWGO']. */
 export function splitsWerkingsgebieden(ruw: string): string[] {
   return [
@@ -297,21 +287,6 @@ export function splitsWerkingsgebieden(ruw: string): string[] {
         .filter((deel) => deel !== ''),
     ),
   ];
-}
-
-/**
- * Duidt een beheer-tekst. 'Regio' telt als operationeel: in de ANF-lijst van
- * Transdev staat de operationele contractmanager onder "Regio". `null` bij
- * leeg of niet herkend — de rij blokkeert daar niet op.
- */
-export function duidBeheer(
-  ruw: string | null,
-): 'centraal' | 'operationeel' | null {
-  if (ruw === null) return null;
-  const t = ruw.trim().toLowerCase();
-  if (t.startsWith('centr')) return 'centraal';
-  if (t.startsWith('oper') || t.startsWith('regio')) return 'operationeel';
-  return null;
 }
 
 /** Alleen voor tests en foutmeldingen: welke bevindingcodes blokkeren. */
@@ -390,10 +365,9 @@ export function beoordeelContractImportbestand(
   // rij bekend is, zie maakInvoer().
   let vendorContactIdKolomIndex: number | null = null;
 
-  // Werkingsgebied- en beheer-kolom (#234): geen tekstvelden, dus apart.
+  // Werkingsgebied-kolom (#234): een lijst, geen tekstveld, dus apart.
   const bijzondereKolommen: BijzondereKolommen = {
     werkingsgebied: null,
-    beheer: null,
   };
 
   // Meerdere kolommen met dezelfde kopnaam voor het PRIMAIRE contactpaar
@@ -434,14 +408,6 @@ export function beoordeelContractImportbestand(
     if (isWerkingsgebiedKolom(kopKleineLetters)) {
       herkendeKolommen[kop] = 'werkingsgebieden';
       bijzondereKolommen.werkingsgebied = index;
-      extraContactPerIndex.push(null);
-      veldPerIndex.push(null);
-      return;
-    }
-
-    if (isBeheerKolom(kopKleineLetters)) {
-      herkendeKolommen[kop] = 'beheer';
-      bijzondereKolommen.beheer = index;
       extraContactPerIndex.push(null);
       veldPerIndex.push(null);
       return;
@@ -506,18 +472,6 @@ export function beoordeelContractImportbestand(
       bijzondereKolommen,
     );
     const bevindingen: ContractBevinding[] = [];
-
-    const ruwBeheer =
-      bijzondereKolommen.beheer === null
-        ? ''
-        : (cellen[bijzondereKolommen.beheer] ?? '').trim();
-    if (ruwBeheer !== '' && invoer.beheer === null) {
-      bevindingen.push({
-        code: 'beheer_onbekend',
-        melding: `'${ruwBeheer}' is geen herkende beheervorm (verwacht centraal of operationeel).`,
-        blokkerend: false,
-      });
-    }
 
     if (invoer.contractName.trim() === '') {
       bevindingen.push({
@@ -670,7 +624,6 @@ export function beoordeelContractImportbestand(
 
 interface BijzondereKolommen {
   werkingsgebied: number | null;
-  beheer: number | null;
 }
 
 function maakInvoer(
@@ -697,7 +650,6 @@ function maakInvoer(
     contactFullName: null,
     extraContacten: [],
     werkingsgebieden: [],
-    beheer: null,
     rawAttributes: {},
   };
 
@@ -705,9 +657,6 @@ function maakInvoer(
     invoer.werkingsgebieden = splitsWerkingsgebieden(
       cellen[bijzondereKolommen.werkingsgebied] ?? '',
     );
-  }
-  if (bijzondereKolommen.beheer !== null) {
-    invoer.beheer = duidBeheer(cellen[bijzondereKolommen.beheer] ?? null);
   }
 
   // volgnummer -> plek in extraContacten, zodat email_2 en full_name_2 in

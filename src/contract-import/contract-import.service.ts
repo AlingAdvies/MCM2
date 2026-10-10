@@ -285,7 +285,7 @@ export class ContractImportService {
           sql`INSERT INTO clm.contract
                 (tenant_id, vendor_id, name, contract_number, contract_type,
                  start_date, end_date, note, vendor_contact_id,
-                 business_risk_tier_code, beheer)
+                 business_risk_tier_code)
               VALUES (${tenantId}, ${vendorUitkomst.vendorId},
                       ${invoer.contractName.trim()},
                       ${leegIsNull(invoer.contractNumber)},
@@ -294,8 +294,7 @@ export class ContractImportService {
                       ${leegIsNull(invoer.endDate)},
                       ${leegIsNull(invoer.note)},
                       ${contactId},
-                      ${leegIsNull(invoer.contractBusinessRiskTierCode)},
-                      ${invoer.beheer ?? null})
+                      ${leegIsNull(invoer.contractBusinessRiskTierCode)})
               RETURNING contract_id`,
         );
 

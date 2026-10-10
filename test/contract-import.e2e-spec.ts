@@ -898,15 +898,16 @@ describe('Contract-import (e2e, #198)', () => {
       expect(vanuitAndereTenant.rows).toHaveLength(0);
     });
   });
-  describe('Werkingsgebied en beheer (#234)', () => {
-    it('maakt het gebied één keer aan, koppelt beide contracten en bewaart beheer', async () => {
+  describe('Werkingsgebied (#234)', () => {
+    it('maakt elk gebied één keer aan en koppelt beide contracten (ook "Centraal")', async () => {
+      // 'Centraal' is sinds 10-10 gewoon een werkingsgebied, geen apart veld.
       const koppen =
-        'contract.name;vendor.name;vendor.coupa_supplier_number;Werkingsgebied;Beheer';
+        'contract.name;vendor.name;vendor.coupa_supplier_number;Werkingsgebied';
       const bestand = Buffer.from(
         [
           koppen,
-          `WG-contract-1;WG-vendor-${STEMPEL};SUP-WG1-${STEMPEL};ANF;operationeel`,
-          `WG-contract-2;WG-vendor-${STEMPEL};SUP-WG1-${STEMPEL};ANF, HWGO;Centraal`,
+          `WG-contract-1;WG-vendor-${STEMPEL};SUP-WG1-${STEMPEL};ANF`,
+          `WG-contract-2;WG-vendor-${STEMPEL};SUP-WG1-${STEMPEL};ANF, Centraal`,
         ].join('\n'),
         'utf8',
       );
@@ -942,28 +943,27 @@ describe('Contract-import (e2e, #198)', () => {
       );
       expect(gebieden).toEqual([
         { code: 'anf', label: 'ANF' },
-        { code: 'hwgo', label: 'HWGO' },
+        { code: 'centraal', label: 'Centraal' },
       ]);
 
       const contracten = await selecteerBinnenTenant<{
         name: string;
-        beheer: string | null;
         codes: string[];
       }>(
         client,
         tenant,
-        `SELECT c.name, c.beheer,
+        `SELECT c.name,
                 array_agg(cw.werkingsgebied_code ORDER BY cw.werkingsgebied_code) AS codes
            FROM clm.contract c
            JOIN clm.contract_werkingsgebied cw ON cw.contract_id = c.contract_id
           WHERE c.name LIKE 'WG-contract-%'
-          GROUP BY c.name, c.beheer
+          GROUP BY c.name
           ORDER BY c.name`,
         [],
       );
       expect(contracten).toEqual([
-        { name: 'WG-contract-1', beheer: 'operationeel', codes: ['anf'] },
-        { name: 'WG-contract-2', beheer: 'centraal', codes: ['anf', 'hwgo'] },
+        { name: 'WG-contract-1', codes: ['anf'] },
+        { name: 'WG-contract-2', codes: ['anf', 'centraal'] },
       ]);
     });
   });

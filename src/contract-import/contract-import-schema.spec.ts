@@ -1,6 +1,5 @@
 import {
   beoordeelContractImportbestand,
-  duidBeheer,
   duidBusinessCriticality,
   duidBusinessRiskTier,
   emailGeldig,
@@ -359,7 +358,7 @@ describe('beoordeelContractImportbestand', () => {
   });
 });
 
-describe('werkingsgebied en beheer (#234)', () => {
+describe('werkingsgebied (#234)', () => {
   it('splitsWerkingsgebieden splitst op , ; | en haalt dubbele en lege delen weg', () => {
     expect(splitsWerkingsgebieden('ANF; HWGO,ANF')).toEqual(['ANF', 'HWGO']);
     expect(splitsWerkingsgebieden(' ANF | Utrecht Binnen ;; ')).toEqual([
@@ -369,52 +368,37 @@ describe('werkingsgebied en beheer (#234)', () => {
     expect(splitsWerkingsgebieden('')).toEqual([]);
   });
 
-  it('duidBeheer herkent centraal, operationeel en regio', () => {
-    expect(duidBeheer('Centraal')).toBe('centraal');
-    expect(duidBeheer('operationeel')).toBe('operationeel');
-    expect(duidBeheer('Regio')).toBe('operationeel');
-    expect(duidBeheer('x')).toBeNull();
-    expect(duidBeheer('')).toBeNull();
-    expect(duidBeheer(null)).toBeNull();
-  });
-
   it('leest de kolom Werkingsgebied (met hoofdletter) en meldt hem niet als onbekend', () => {
     const b = beoordeelContractImportbestand(
-      'contract.name;vendor.name;Werkingsgebied;Beheer\n' +
-        'Contract 1;Leverancier 1;ANF;Centraal\n' +
-        'Contract 2;Leverancier 2;;\n',
+      [
+        'contract.name;vendor.name;Werkingsgebied',
+        'Contract 1;Leverancier 1;ANF',
+        'Contract 2;Leverancier 2;',
+      ].join('\n'),
     );
 
     expect(b.onbekendeKolommen).toEqual([]);
     expect(b.herkendeKolommen.Werkingsgebied).toBe('werkingsgebieden');
-    expect(b.herkendeKolommen.Beheer).toBe('beheer');
     expect(b.rijen[0].invoer.werkingsgebieden).toEqual(['ANF']);
-    expect(b.rijen[0].invoer.beheer).toBe('centraal');
     expect(b.rijen[1].invoer.werkingsgebieden).toEqual([]);
-    expect(b.rijen[1].invoer.beheer).toBeNull();
-    expect(b.rijen[1].bevindingen.map((x) => x.code)).not.toContain(
-      'beheer_onbekend',
-    );
   });
 
-  it('een onbekende beheer-tekst geeft een niet-blokkerende bevinding', () => {
+  it('centraal beheer is gewoon een werkingsgebied: "ANF, Centraal" geeft twee gebieden', () => {
+    // Besluit eigenaar 10-10: geen apart beheer-veld; 'Centraal' is een
+    // werkingsgebied dat de tenant zelf aanmaakt.
     const b = beoordeelContractImportbestand(
-      'contract.name;vendor.name;Beheer\nContract 1;Leverancier 1;soms\n',
+      [
+        'contract.name;vendor.name;Werkingsgebied',
+        'Contract 1;Leverancier 1;"ANF, Centraal"',
+      ].join('\n'),
     );
-
-    const bevinding = b.rijen[0].bevindingen.find(
-      (x) => x.code === 'beheer_onbekend',
-    );
-    expect(bevinding?.blokkerend).toBe(false);
-    expect(b.rijen[0].importeerbaar).toBe(true);
-    expect(b.rijen[0].invoer.beheer).toBeNull();
+    expect(b.rijen[0].invoer.werkingsgebieden).toEqual(['ANF', 'Centraal']);
   });
 
-  it('zonder de kolommen blijven de velden leeg', () => {
+  it('zonder de kolom blijft de lijst leeg', () => {
     const b = beoordeelContractImportbestand(
-      'contract.name;vendor.name\nContract 1;Leverancier 1\n',
+      ['contract.name;vendor.name', 'Contract 1;Leverancier 1'].join('\n'),
     );
     expect(b.rijen[0].invoer.werkingsgebieden).toEqual([]);
-    expect(b.rijen[0].invoer.beheer).toBeNull();
   });
 });

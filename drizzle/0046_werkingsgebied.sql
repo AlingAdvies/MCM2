@@ -5,7 +5,10 @@
 -- zelfde opzet als ref.vendor_category sinds 0034 (PK (tenant_id, code)).
 -- clm.contract_werkingsgebied: koppeling contract <-> werkingsgebied, meerdere
 -- per contract (zelfde opzet als clm.vendor_compliance_thema, 0031).
--- clm.contract.beheer: centraal of operationeel beheerd, per contract.
+--
+-- 'Centraal beheerd' is bewust GEEN apart veld: een tenant maakt daarvoor een
+-- werkingsgebied (bijv. 'Centraal') aan en vinkt het aan (besluit eigenaar
+-- 10-10, na het bekijken van het formulier — een apart veld was dubbel).
 --
 -- Expliciete GRANTs: default privileges werken op productie niet betrouwbaar
 -- voor nieuwe clm-tabellen (CLAUDE.md punt 8, migratie 0039).
@@ -56,13 +59,7 @@ CREATE POLICY contract_werkingsgebied_isolation ON clm.contract_werkingsgebied
 REVOKE ALL ON clm.contract_werkingsgebied FROM clm_api, clm_admin, clm_readonly;--> statement-breakpoint
 GRANT SELECT, INSERT, DELETE ON clm.contract_werkingsgebied TO clm_api, clm_admin;--> statement-breakpoint
 
-ALTER TABLE clm.contract
-    ADD COLUMN beheer text
-    CONSTRAINT contract_beheer_check CHECK (beheer IN ('centraal', 'operationeel'));--> statement-breakpoint
-
 COMMENT ON TABLE clm.werkingsgebied IS
     'Tenant-eigen werkingsgebieden (concessies/organisatie-onderdelen), bijv. ANF, HWGO. #234.';--> statement-breakpoint
 COMMENT ON TABLE clm.contract_werkingsgebied IS
-    'Koppeling contract <-> werkingsgebied, meerdere per contract. #234.';--> statement-breakpoint
-COMMENT ON COLUMN clm.contract.beheer IS
-    'Centraal of operationeel beheerd; NULL = niet vastgelegd. #234.';
+    'Koppeling contract <-> werkingsgebied, meerdere per contract. #234.';

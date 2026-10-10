@@ -11,9 +11,6 @@ import { DatabaseService } from '../db/database.service';
  * docs/superpowers/specs/2026-08-22-contractmanagement-design.md.
  */
 
-/** Migratie 0046 (#234): centraal of operationeel beheerd; null = niet vastgelegd. */
-export type ContractBeheer = 'centraal' | 'operationeel' | null;
-
 /**
  * De werkingsgebieden van contract `c`, gesorteerd. Eén fragment voor alle
  * leesqueries, zodat lijst, tenant-breed overzicht en detail niet uit elkaar
@@ -47,7 +44,6 @@ export interface ContractSamenvatting {
   contractType: string | null;
   dpaAanwezig: boolean | null;
   businessRiskTierCode: string | null;
-  beheer: ContractBeheer;
   werkingsgebiedCodes: string[];
 }
 
@@ -75,7 +71,6 @@ export interface NieuwContract {
   contractType?: string | null;
   dpaAanwezig?: boolean | null;
   businessRiskTierCode?: string | null;
-  beheer?: ContractBeheer;
 }
 
 export interface ContractDetail {
@@ -100,7 +95,6 @@ export interface ContractDetail {
   contractType: string | null;
   dpaAanwezig: boolean | null;
   businessRiskTierCode: string | null;
-  beheer: ContractBeheer;
   werkingsgebiedCodes: string[];
 }
 
@@ -125,7 +119,6 @@ export interface ContractWijziging {
   contractType?: string | null;
   dpaAanwezig?: boolean | null;
   businessRiskTierCode?: string | null;
-  beheer?: ContractBeheer;
 }
 
 interface ContractRij extends Record<string, unknown> {
@@ -146,7 +139,6 @@ interface ContractRij extends Record<string, unknown> {
   contract_type: string | null;
   dpa_aanwezig: boolean | null;
   business_risk_tier_code: string | null;
-  beheer: string | null;
   werkingsgebied_codes: string[] | null;
 }
 
@@ -172,7 +164,6 @@ interface ContractDetailRij extends Record<string, unknown> {
   contract_type: string | null;
   dpa_aanwezig: boolean | null;
   business_risk_tier_code: string | null;
-  beheer: string | null;
   werkingsgebied_codes: string[] | null;
 }
 
@@ -209,7 +200,7 @@ export class ContractService {
                      c.start_date, c.end_date, c.created_at,
                      c.notice_period_days, c.warning_days_before, c.auto_renews,
                      c.contract_type, c.dpa_aanwezig, c.business_risk_tier_code,
-                     c.beheer, ${WERKINGSGEBIED_CODES_SQL},
+                     ${WERKINGSGEBIED_CODES_SQL},
                      vc.full_name AS vendor_contact_naam,
                      u.full_name AS owner_naam
                 FROM clm.contract c
@@ -237,7 +228,6 @@ export class ContractService {
           contractType: r.contract_type,
           dpaAanwezig: r.dpa_aanwezig,
           businessRiskTierCode: r.business_risk_tier_code,
-          beheer: r.beheer as ContractBeheer,
           werkingsgebiedCodes: r.werkingsgebied_codes ?? [],
         }));
       },
@@ -269,7 +259,7 @@ export class ContractService {
                      c.value_eur, c.start_date, c.end_date, c.created_at,
                      c.notice_period_days, c.warning_days_before, c.auto_renews,
                      c.contract_type, c.dpa_aanwezig, c.business_risk_tier_code,
-                     c.beheer, ${WERKINGSGEBIED_CODES_SQL},
+                     ${WERKINGSGEBIED_CODES_SQL},
                      vc.full_name AS vendor_contact_naam,
                      u.full_name AS owner_naam,
                      v.name AS vendor_naam,
@@ -304,7 +294,6 @@ export class ContractService {
           contractType: r.contract_type,
           dpaAanwezig: r.dpa_aanwezig,
           businessRiskTierCode: r.business_risk_tier_code,
-          beheer: r.beheer as ContractBeheer,
           werkingsgebiedCodes: r.werkingsgebied_codes ?? [],
           vendorCategoryCode: r.vendor_category_code,
           vendorBusinessCriticalityCode: r.vendor_business_criticality_code,
@@ -343,7 +332,7 @@ export class ContractService {
                  vendor_contact_id, owner_user_id, status_code, value_eur,
                  start_date, end_date, note,
                  notice_period_days, warning_days_before, auto_renews,
-                 contract_type, dpa_aanwezig, business_risk_tier_code, beheer)
+                 contract_type, dpa_aanwezig, business_risk_tier_code)
               VALUES (${tenantId}, ${vendorId}, ${invoer.name.trim()},
                       ${leegIsNull(invoer.contractNumber)},
                       ${invoer.vendorContactId ?? null},
@@ -358,8 +347,7 @@ export class ContractService {
                       ${invoer.autoRenews ?? null},
                       ${leegIsNull(invoer.contractType)},
                       ${invoer.dpaAanwezig ?? null},
-                      ${leegIsNull(invoer.businessRiskTierCode)},
-                      ${invoer.beheer ?? null})
+                      ${leegIsNull(invoer.businessRiskTierCode)})
               RETURNING contract_id`,
         );
 
@@ -461,9 +449,6 @@ export class ContractService {
           zetten.push(
             sql`business_risk_tier_code = ${leegIsNull(wijziging.businessRiskTierCode)}`,
           );
-        }
-        if (wijziging.beheer !== undefined) {
-          zetten.push(sql`beheer = ${wijziging.beheer}`);
         }
 
         if (zetten.length > 0) {
@@ -704,7 +689,7 @@ export class ContractService {
                  c.value_eur, c.start_date, c.end_date, c.note,
                  c.notice_period_days, c.warning_days_before, c.auto_renews,
                  c.contract_type, c.dpa_aanwezig, c.business_risk_tier_code,
-                 c.beheer, ${WERKINGSGEBIED_CODES_SQL},
+                 ${WERKINGSGEBIED_CODES_SQL},
                  c.created_at, c.updated_at,
                  vc.full_name AS vendor_contact_naam,
                  u.full_name AS owner_naam
@@ -744,7 +729,6 @@ export class ContractService {
       contractType: rij.contract_type,
       dpaAanwezig: rij.dpa_aanwezig,
       businessRiskTierCode: rij.business_risk_tier_code,
-      beheer: rij.beheer as ContractBeheer,
       werkingsgebiedCodes: rij.werkingsgebied_codes ?? [],
     };
   }

@@ -469,10 +469,6 @@ export const contract = clm.table(
     // aanmaken. CHECK in de database, bewust geen ref-tabel (drie vaste,
     // niet-tenant-configureerbare waarden).
     autoRenews: text('auto_renews'),
-    // Migratie 0046 (#234). 'centraal' | 'operationeel' | NULL (niet
-    // vastgelegd) — CHECK in de database, per contract en niet afgeleid uit
-    // het werkingsgebied.
-    beheer: text('beheer'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

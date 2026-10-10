@@ -16,7 +16,7 @@
  * ── Wat wel en niet meegaat ──────────────────────────────────────────────────
  *
  * Wel: vendor-categorieën, vragenlijsten (template/categorie/vraag), vendors
- * met contacten/tags/compliance-thema's, contracten (met beheer), werkingsgebieden
+ * met contacten/tags/compliance-thema's, contracten, werkingsgebieden
  * met hun contractkoppelingen (0046, #234), dossiers met notities, en
  * dossierkoppelingen naar contracten.
  *
@@ -199,7 +199,7 @@ async function leesAlles(apiClient) {
       `SELECT contract_id, vendor_id, name, contract_number, vendor_contact_id, owner_user_id,
               status_code, value_eur, start_date, end_date, note, contract_type, dpa_aanwezig,
               business_risk_tier_code, notice_period_days, warning_days_before, auto_renews,
-              beheer, created_at, updated_at, deleted_at
+              created_at, updated_at, deleted_at
          FROM clm.contract WHERE tenant_id = $1 ORDER BY created_at`,
     ),
     werkingsgebieden: await lees(
@@ -381,8 +381,8 @@ async function schrijfContracten(apiClient, contracten) {
          (contract_id, tenant_id, vendor_id, name, contract_number, vendor_contact_id,
           owner_user_id, status_code, value_eur, start_date, end_date, note, contract_type,
           dpa_aanwezig, business_risk_tier_code, notice_period_days, warning_days_before,
-          auto_renews, beheer, created_at, updated_at, deleted_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
+          auto_renews, created_at, updated_at, deleted_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
       [
         nieuwId(c.contract_id),
         DOEL_TENANT_ID,
@@ -402,7 +402,6 @@ async function schrijfContracten(apiClient, contracten) {
         c.notice_period_days,
         c.warning_days_before,
         c.auto_renews,
-        c.beheer,
         c.created_at,
         c.updated_at,
         c.deleted_at,

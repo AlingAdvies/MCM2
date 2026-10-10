@@ -205,13 +205,12 @@ describe('/werkingsgebieden (e2e)', () => {
     });
   });
 
-  describe('koppeling aan contracten en beheer', () => {
+  describe('koppeling aan contracten', () => {
     const vendorId = randomUUID();
     let contractId: string;
 
     interface ContractBody {
       contractId: string;
-      beheer: string | null;
       werkingsgebiedCodes: string[];
     }
 
@@ -238,12 +237,11 @@ describe('/werkingsgebieden (e2e)', () => {
       const res = await request(server)
         .post(`/vendors/${vendorId}/contracts`)
         .set('Cookie', cookieAdminA)
-        .send({ name: 'Contract (werkingsgebied-routes)', beheer: 'centraal' })
+        .send({ name: 'Contract (werkingsgebied-routes)' })
         .expect(201);
       const body = res.body as ContractBody;
       contractId = body.contractId;
 
-      expect(body.beheer).toBe('centraal');
       expect(body.werkingsgebiedCodes).toEqual([]);
     });
 
@@ -286,22 +284,7 @@ describe('/werkingsgebieden (e2e)', () => {
       ]);
     });
 
-    it('PATCH bewaart beheer; een onbekende waarde geeft 400', async () => {
-      const res = await request(server)
-        .patch(`/vendors/${vendorId}/contracts/${contractId}`)
-        .set('Cookie', cookieAdminA)
-        .send({ beheer: 'operationeel' })
-        .expect(200);
-      expect((res.body as ContractBody).beheer).toBe('operationeel');
-
-      await request(server)
-        .patch(`/vendors/${vendorId}/contracts/${contractId}`)
-        .set('Cookie', cookieAdminA)
-        .send({ beheer: 'regionaal' })
-        .expect(400);
-    });
-
-    it('het tenant-brede overzicht bevat werkingsgebieden en beheer', async () => {
+    it('het tenant-brede overzicht bevat de werkingsgebieden', async () => {
       const res = await request(server)
         .get('/contracts')
         .set('Cookie', cookieUserA)
@@ -311,7 +294,6 @@ describe('/werkingsgebieden (e2e)', () => {
         res.body as { contracten: ContractBody[] }
       ).contracten.find((c) => c.contractId === contractId);
       expect(contract?.werkingsgebiedCodes).toEqual(['anf', 'utrecht_binnen']);
-      expect(contract?.beheer).toBe('operationeel');
     });
 
     it('de leverancierslijst kent de gebieden via de actieve contracten', async () => {
