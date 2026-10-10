@@ -79,6 +79,8 @@ export interface BevestigResultaat {
   aangemaakteContacten: number;
   hergebruikteContacten: number;
   aangemaakteCategorieen: number;
+  /** Werkingsgebieden die de import nieuw aanmaakte (#234). */
+  aangemaakteWerkingsgebieden: number;
   extraContactenGevonden: number;
   overgeslagen: number;
   rijen: {
@@ -222,6 +224,7 @@ export class ContractImportService {
       let aangemaakteContacten = 0;
       let hergebruikteContacten = 0;
       let aangemaakteCategorieen = 0;
+      let aangemaakteWerkingsgebieden = 0;
       let extraContactenGevonden = 0;
       let overgeslagen = 0;
 
@@ -282,7 +285,7 @@ export class ContractImportService {
           sql`INSERT INTO clm.contract
                 (tenant_id, vendor_id, name, contract_number, contract_type,
                  start_date, end_date, note, vendor_contact_id,
-                 business_risk_tier_code)
+                 business_risk_tier_code, beheer)
               VALUES (${tenantId}, ${vendorUitkomst.vendorId},
                       ${invoer.contractName.trim()},
                       ${leegIsNull(invoer.contractNumber)},
@@ -291,12 +294,32 @@ export class ContractImportService {
                       ${leegIsNull(invoer.endDate)},
                       ${leegIsNull(invoer.note)},
                       ${contactId},
-                      ${leegIsNull(invoer.contractBusinessRiskTierCode)})
+                      ${leegIsNull(invoer.contractBusinessRiskTierCode)},
+                      ${invoer.beheer ?? null})
               RETURNING contract_id`,
         );
 
         const contractId = contractResultaat.rows[0].contract_id;
         aangemaakteContracten++;
+
+        // `?? []`: een preview van vóór #234 heeft dit veld niet in
+        // normalized_data, en wordt dan gewoon zonder gebied bevestigd.
+        for (const gebiedTekst of invoer.werkingsgebieden ?? []) {
+          const gebied = await this.vindOfMaakWerkingsgebied(
+            tx,
+            tenantId,
+            gebiedTekst,
+          );
+          if (!gebied) continue;
+          if (gebied.aangemaakt) aangemaakteWerkingsgebieden++;
+
+          await tx.execute(
+            sql`INSERT INTO clm.contract_werkingsgebied
+                  (contract_id, tenant_id, werkingsgebied_code)
+                VALUES (${contractId}, ${tenantId}, ${gebied.code})
+                ON CONFLICT DO NOTHING`,
+          );
+        }
 
         await tx.execute(
           sql`UPDATE clm.import_row
@@ -339,13 +362,14 @@ export class ContractImportService {
           aangemaakteContacten,
           hergebruikteContacten,
           aangemaakteCategorieen,
+          aangemaakteWerkingsgebieden,
           extraContactenGevonden,
           overgeslagen,
         },
       });
 
       this.logger.log(
-        `Contract-import bevestigd (${jobId}): ${aangemaakteContracten} contracten, ${aangemaakteVendors} nieuwe/${hergebruikteVendors} bestaande leveranciers, ${aangemaakteCategorieen} nieuwe categorieën, ${extraContactenGevonden} extra contactgegevens gevonden.`,
+        `Contract-import bevestigd (${jobId}): ${aangemaakteContracten} contracten, ${aangemaakteVendors} nieuwe/${hergebruikteVendors} bestaande leveranciers, ${aangemaakteCategorieen} nieuwe categorieën, ${aangemaakteWerkingsgebieden} nieuwe werkingsgebieden, ${extraContactenGevonden} extra contactgegevens gevonden.`,
       );
 
       return {
@@ -356,6 +380,7 @@ export class ContractImportService {
         aangemaakteContacten,
         hergebruikteContacten,
         aangemaakteCategorieen,
+        aangemaakteWerkingsgebieden,
         extraContactenGevonden,
         overgeslagen,
         rijen: rijResultaten,
@@ -468,6 +493,39 @@ export class ContractImportService {
     await tx.execute(
       sql`INSERT INTO ref.vendor_category (tenant_id, code, label)
           VALUES (${tenantId}, ${code}, ${categorieTekst})`,
+    );
+
+    return { code, aangemaakt: true };
+  }
+
+  /**
+   * Vindt een werkingsgebied op de genormaliseerde code, of maakt het aan
+   * (#234). Zelfde aanpak als vindOfMaakCategorie: 'ANF' wordt code 'anf'
+   * met label 'ANF'. Null als de tekst na normaliseren leeg is (bijv. '---').
+   */
+  private async vindOfMaakWerkingsgebied(
+    tx: TenantTransaction,
+    tenantId: string,
+    tekst: string,
+  ): Promise<{ code: string; aangemaakt: boolean } | null> {
+    const schoon = leegIsNull(tekst);
+    if (!schoon) return null;
+
+    const code = naarCategorieCode(schoon);
+    if (code === '') return null;
+
+    const bestaand = await tx.execute<{ code: string }>(
+      sql`SELECT code FROM clm.werkingsgebied
+           WHERE tenant_id = ${tenantId} AND code = ${code}`,
+    );
+
+    if (bestaand.rows.length > 0) {
+      return { code, aangemaakt: false };
+    }
+
+    await tx.execute(
+      sql`INSERT INTO clm.werkingsgebied (tenant_id, code, label)
+          VALUES (${tenantId}, ${code}, ${schoon})`,
     );
 
     return { code, aangemaakt: true };
