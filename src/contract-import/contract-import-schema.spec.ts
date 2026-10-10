@@ -5,6 +5,7 @@ import {
   emailGeldig,
   isBlokkerend,
   leesContractDatum,
+  splitsWerkingsgebieden,
 } from './contract-import-schema';
 
 /**
@@ -354,5 +355,50 @@ describe('beoordeelContractImportbestand', () => {
         ]),
       );
     });
+  });
+});
+
+describe('werkingsgebied (#234)', () => {
+  it('splitsWerkingsgebieden splitst op , ; | en haalt dubbele en lege delen weg', () => {
+    expect(splitsWerkingsgebieden('ANF; HWGO,ANF')).toEqual(['ANF', 'HWGO']);
+    expect(splitsWerkingsgebieden(' ANF | Utrecht Binnen ;; ')).toEqual([
+      'ANF',
+      'Utrecht Binnen',
+    ]);
+    expect(splitsWerkingsgebieden('')).toEqual([]);
+  });
+
+  it('leest de kolom Werkingsgebied (met hoofdletter) en meldt hem niet als onbekend', () => {
+    const b = beoordeelContractImportbestand(
+      [
+        'contract.name;vendor.name;Werkingsgebied',
+        'Contract 1;Leverancier 1;ANF',
+        'Contract 2;Leverancier 2;',
+      ].join('\n'),
+    );
+
+    expect(b.onbekendeKolommen).toEqual([]);
+    expect(b.herkendeKolommen.Werkingsgebied).toBe('werkingsgebieden');
+    expect(b.rijen[0].invoer.werkingsgebieden).toEqual(['ANF']);
+    expect(b.rijen[1].invoer.werkingsgebieden).toEqual([]);
+  });
+
+  it('centraal beheer is gewoon een werkingsgebied: "ANF, Centraal" geeft twee gebieden', () => {
+    // Besluit eigenaar 10-10: geen apart beheer-veld; 'Centraal' is een
+    // werkingsgebied dat de tenant zelf aanmaakt.
+    const b = beoordeelContractImportbestand(
+      [
+        'contract.name;vendor.name;Werkingsgebied',
+        'Contract 1;Leverancier 1;"ANF, Centraal"',
+      ].join('\n'),
+    );
+    expect(b.rijen[0].invoer.werkingsgebieden).toEqual(['ANF', 'Centraal']);
+  });
+
+  it('zonder de kolom blijft de lijst leeg', () => {
+    const b = beoordeelContractImportbestand(
+      ['contract.name;vendor.name', 'Contract 1;Leverancier 1'].join('\n'),
+    );
+    expect(b.rijen[0].invoer.werkingsgebieden).toEqual([]);
   });
 });

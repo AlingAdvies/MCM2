@@ -109,6 +109,14 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   // redenering als contract_survey_template hierboven.
   'clm.vendor_compliance_thema': ['SELECT', 'INSERT', 'DELETE'],
 
+  // clm.werkingsgebied (0046, #234): tenant-eigen lijst; een beheerder mag
+  // toevoegen, hernoemen en verwijderen.
+  'clm.werkingsgebied': LEZEN_EN_SCHRIJVEN,
+
+  // clm.contract_werkingsgebied (0046, #234): koppeling zonder eigen
+  // levenscyclus, zelfde redenering als contract_survey_template.
+  'clm.contract_werkingsgebied': ['SELECT', 'INSERT', 'DELETE'],
+
   // clm.import_job / clm.import_row (0035, #198): admin-only contract-import.
   // Een job/rij die eenmaal bevestigd is, wordt niet meer gewijzigd of
   // verwijderd door de applicatie — het is het traceerbaarheidsspoor van de

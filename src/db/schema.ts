@@ -481,6 +481,60 @@ export const contract = clm.table(
   ],
 );
 
+// Migratie 0046 (#234): tenant-eigen waardenlijst van werkingsgebieden
+// (concessies/organisatie-onderdelen, bijv. ANF), zelfde opzet als
+// ref.vendor_category.
+export const werkingsgebied = clm.table(
+  'werkingsgebied',
+  {
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'cascade' }),
+    code: text('code').notNull(),
+    label: text('label').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ name: 'werkingsgebied_pkey', columns: [t.tenantId, t.code] }),
+  ],
+);
+
+// Migratie 0046 (#234): koppeling contract <-> werkingsgebied, meerdere per
+// contract. Verwijderen van een contract of gebied ruimt de koppeling op.
+export const contractWerkingsgebied = clm.table(
+  'contract_werkingsgebied',
+  {
+    contractId: uuid('contract_id')
+      .notNull()
+      .references(() => contract.contractId, { onDelete: 'cascade' }),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'cascade' }),
+    werkingsgebiedCode: text('werkingsgebied_code').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({
+      name: 'contract_werkingsgebied_pkey',
+      columns: [t.contractId, t.werkingsgebiedCode],
+    }),
+    foreignKey({
+      name: 'contract_werkingsgebied_gebied_fk',
+      columns: [t.tenantId, t.werkingsgebiedCode],
+      foreignColumns: [werkingsgebied.tenantId, werkingsgebied.code],
+    }).onDelete('cascade'),
+    index('contract_werkingsgebied_tenant_idx').on(t.tenantId),
+    index('contract_werkingsgebied_gebied_idx').on(
+      t.tenantId,
+      t.werkingsgebiedCode,
+    ),
+  ],
+);
+
 // ─── clm schema: per-tenant feature-entitlements ───────────────────────────
 // Zie docs/superpowers/specs/2026-09-03-tenant-feature-entitlements-design.md,
 // migratie 0038. Geen rij voor een tenant/feature-combinatie betekent: uit.

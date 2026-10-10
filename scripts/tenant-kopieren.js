@@ -16,8 +16,9 @@
  * ── Wat wel en niet meegaat ──────────────────────────────────────────────────
  *
  * Wel: vendor-categorieën, vragenlijsten (template/categorie/vraag), vendors
- * met contacten/tags/compliance-thema's, contracten, dossiers met notities,
- * en dossierkoppelingen naar contracten.
+ * met contacten/tags/compliance-thema's, contracten, werkingsgebieden
+ * met hun contractkoppelingen (0046, #234), dossiers met notities, en
+ * dossierkoppelingen naar contracten.
  *
  * Niet (besluit eigenaar 2026-10-07): vragenlijstrondes, uitnodigingen en
  * alles wat daaraan hangt (antwoorden, oordelen, notities bij inzendingen),
@@ -91,6 +92,9 @@ const GEKOPIEERD = [
   'contract',
   'vendor_engagement',
   'vendor_engagement_note',
+  // 0046 (#234)
+  'werkingsgebied',
+  'contract_werkingsgebied',
 ];
 
 // Tabellen die bewust NIET meegaan: in de doeltenant moeten ze 0 blijven.
@@ -197,6 +201,15 @@ async function leesAlles(apiClient) {
               business_risk_tier_code, notice_period_days, warning_days_before, auto_renews,
               created_at, updated_at, deleted_at
          FROM clm.contract WHERE tenant_id = $1 ORDER BY created_at`,
+    ),
+    werkingsgebieden: await lees(
+      apiClient,
+      `SELECT code, label, created_at FROM clm.werkingsgebied WHERE tenant_id = $1`,
+    ),
+    contractWerkingsgebieden: await lees(
+      apiClient,
+      `SELECT contract_id, werkingsgebied_code, created_at
+         FROM clm.contract_werkingsgebied WHERE tenant_id = $1`,
     ),
     engagements: await lees(
       apiClient,
@@ -397,6 +410,30 @@ async function schrijfContracten(apiClient, contracten) {
   }
 }
 
+// 0046 (#234). De lijst vóór de contracten (geen afhankelijkheid), de
+// koppelingen ná de contracten (contract_id via vertaalId). De code is tekst
+// met de tenant in de PK, dus geen vertaling nodig.
+async function schrijfWerkingsgebieden(apiClient, gebieden) {
+  for (const g of gebieden) {
+    await apiClient.query(
+      `INSERT INTO clm.werkingsgebied (tenant_id, code, label, created_at)
+       VALUES ($1, $2, $3, $4)`,
+      [DOEL_TENANT_ID, g.code, g.label, g.created_at],
+    );
+  }
+}
+
+async function schrijfContractWerkingsgebieden(apiClient, koppelingen) {
+  for (const k of koppelingen) {
+    await apiClient.query(
+      `INSERT INTO clm.contract_werkingsgebied
+         (contract_id, tenant_id, werkingsgebied_code, created_at)
+       VALUES ($1, $2, $3, $4)`,
+      [vertaalId(k.contract_id), DOEL_TENANT_ID, k.werkingsgebied_code, k.created_at],
+    );
+  }
+}
+
 async function schrijfDossiers(apiClient, engagements, notes, links) {
   for (const e of engagements) {
     await apiClient.query(
@@ -545,7 +582,12 @@ async function main() {
       bron.vendorTags,
       bron.vendorThemas,
     );
+    await schrijfWerkingsgebieden(apiClient, bron.werkingsgebieden);
     await schrijfContracten(apiClient, bron.contracten);
+    await schrijfContractWerkingsgebieden(
+      apiClient,
+      bron.contractWerkingsgebieden,
+    );
     await schrijfDossiers(
       apiClient,
       bron.engagements,

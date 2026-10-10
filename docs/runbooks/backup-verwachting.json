@@ -144,10 +144,17 @@
     "tabel toe — alleen een uitgebreide CHECK-constraint op",
     "content_type op de bestaande clm.vendor_engagement_attachment.",
     "Migratiestand bijgewerkt, tabellenlijst niet — zelfde soort wijziging",
-    "als migratie 0032/0033/0037/0044 hierboven."
+    "als migratie 0032/0033/0037/0044 hierboven.",
+    "",
+    "Migratie 0046 (10-10, werkingsgebied op contracten, #234) voegt WEL twee",
+    "tabellen toe: clm.werkingsgebied en clm.contract_werkingsgebied. Die staan",
+    "BEWUST NOG NIET in de tabellenlijst hieronder: productie heeft ze pas na de",
+    "uitrol, en de dagelijkse backupcontrole zou ze tot dan als ontbrekend melden",
+    "(zelfde kip-ei als bij 0034/0035 hierboven). Toevoegen zodra de",
+    "productie-uitrol is bevestigd en teruggelezen."
   ],
-  "bijgewerkt": "2026-10-06",
-  "migratiestand": "0045_vendor_engagement_attachment_msg_eml",
+  "bijgewerkt": "2026-10-10",
+  "migratiestand": "0046_werkingsgebied",
   "tabellen": [
     "audit.audit_event",
     "clm.contract",

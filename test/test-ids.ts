@@ -440,6 +440,14 @@ export const TEST_IDS = {
     beheerder: id('4f'),
     klantAdmin: id('50'),
   },
+  // 51 t/m 54 zijn al vergeven aan vendor-dossiers (letterlijk uitgeschreven,
+  // regel ~290); 01 komt elders hardcoded voor. Vandaar 02 t/m 05.
+  'werkingsgebied-routes': {
+    tenantA: id('02'),
+    tenantB: id('03'),
+    adminA: id('04'),
+    userA: id('05'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */

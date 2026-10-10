@@ -11,6 +11,15 @@ import { DatabaseService } from '../db/database.service';
  * docs/superpowers/specs/2026-08-22-contractmanagement-design.md.
  */
 
+/**
+ * De werkingsgebieden van contract `c`, gesorteerd. Eén fragment voor alle
+ * leesqueries, zodat lijst, tenant-breed overzicht en detail niet uit elkaar
+ * kunnen lopen.
+ */
+const WERKINGSGEBIED_CODES_SQL = sql`(SELECT array_agg(cw.werkingsgebied_code ORDER BY cw.werkingsgebied_code)
+     FROM clm.contract_werkingsgebied cw
+    WHERE cw.contract_id = c.contract_id) AS werkingsgebied_codes`;
+
 export interface SurveyTemplateKoppeling {
   templateIds: string[];
   /** Welke van de gekoppelde templates ook op de wachtlijst staan. */
@@ -35,6 +44,7 @@ export interface ContractSamenvatting {
   contractType: string | null;
   dpaAanwezig: boolean | null;
   businessRiskTierCode: string | null;
+  werkingsgebiedCodes: string[];
 }
 
 export interface ContractTenantBreed extends ContractSamenvatting {
@@ -85,6 +95,7 @@ export interface ContractDetail {
   contractType: string | null;
   dpaAanwezig: boolean | null;
   businessRiskTierCode: string | null;
+  werkingsgebiedCodes: string[];
 }
 
 /**
@@ -128,6 +139,7 @@ interface ContractRij extends Record<string, unknown> {
   contract_type: string | null;
   dpa_aanwezig: boolean | null;
   business_risk_tier_code: string | null;
+  werkingsgebied_codes: string[] | null;
 }
 
 interface ContractDetailRij extends Record<string, unknown> {
@@ -152,6 +164,7 @@ interface ContractDetailRij extends Record<string, unknown> {
   contract_type: string | null;
   dpa_aanwezig: boolean | null;
   business_risk_tier_code: string | null;
+  werkingsgebied_codes: string[] | null;
 }
 
 function alsTekst(waarde: Date | string): string {
@@ -187,6 +200,7 @@ export class ContractService {
                      c.start_date, c.end_date, c.created_at,
                      c.notice_period_days, c.warning_days_before, c.auto_renews,
                      c.contract_type, c.dpa_aanwezig, c.business_risk_tier_code,
+                     ${WERKINGSGEBIED_CODES_SQL},
                      vc.full_name AS vendor_contact_naam,
                      u.full_name AS owner_naam
                 FROM clm.contract c
@@ -214,6 +228,7 @@ export class ContractService {
           contractType: r.contract_type,
           dpaAanwezig: r.dpa_aanwezig,
           businessRiskTierCode: r.business_risk_tier_code,
+          werkingsgebiedCodes: r.werkingsgebied_codes ?? [],
         }));
       },
       'medewerker',
@@ -244,6 +259,7 @@ export class ContractService {
                      c.value_eur, c.start_date, c.end_date, c.created_at,
                      c.notice_period_days, c.warning_days_before, c.auto_renews,
                      c.contract_type, c.dpa_aanwezig, c.business_risk_tier_code,
+                     ${WERKINGSGEBIED_CODES_SQL},
                      vc.full_name AS vendor_contact_naam,
                      u.full_name AS owner_naam,
                      v.name AS vendor_naam,
@@ -278,6 +294,7 @@ export class ContractService {
           contractType: r.contract_type,
           dpaAanwezig: r.dpa_aanwezig,
           businessRiskTierCode: r.business_risk_tier_code,
+          werkingsgebiedCodes: r.werkingsgebied_codes ?? [],
           vendorCategoryCode: r.vendor_category_code,
           vendorBusinessCriticalityCode: r.vendor_business_criticality_code,
         }));
@@ -575,6 +592,55 @@ export class ContractService {
   }
 
   /**
+   * Vervangt de volledige set werkingsgebieden van een contract (#234), zelfde
+   * "alles weg, alles opnieuw" als zetSurveyTemplates. Null als het contract
+   * niet bestaat. Een onbekende code laat de INSERT falen op de foreign key
+   * (23503); de controller vertaalt dat naar een 400.
+   */
+  async zetWerkingsgebieden(
+    tenantId: string,
+    vendorId: string,
+    contractId: string,
+    codes: string[],
+  ): Promise<string[] | null> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const bestaat = await tx.execute<{ contract_id: string }>(
+          sql`SELECT contract_id FROM clm.contract
+             WHERE contract_id = ${contractId}
+               AND vendor_id = ${vendorId}
+               AND deleted_at IS NULL`,
+        );
+
+        if (bestaat.rows.length === 0) {
+          return null;
+        }
+
+        await tx.execute(
+          sql`DELETE FROM clm.contract_werkingsgebied
+             WHERE contract_id = ${contractId}`,
+        );
+
+        for (const code of codes) {
+          await tx.execute(
+            sql`INSERT INTO clm.contract_werkingsgebied
+                  (contract_id, tenant_id, werkingsgebied_code)
+                VALUES (${contractId}, ${tenantId}, ${code})`,
+          );
+        }
+
+        this.logger.log(
+          `Werkingsgebieden gekoppeld aan contract ${contractId}: ${codes.length}.`,
+        );
+
+        return [...codes].sort();
+      },
+      'medewerker',
+    );
+  }
+
+  /**
    * Leveranciers die op de wachtlijst staan voor de volgende ronde van
    * deze vragenlijst-template, via een gekoppeld contract. Eén leverancier
    * met meerdere contracten op de wachtlijst voor dezelfde template komt
@@ -623,6 +689,7 @@ export class ContractService {
                  c.value_eur, c.start_date, c.end_date, c.note,
                  c.notice_period_days, c.warning_days_before, c.auto_renews,
                  c.contract_type, c.dpa_aanwezig, c.business_risk_tier_code,
+                 ${WERKINGSGEBIED_CODES_SQL},
                  c.created_at, c.updated_at,
                  vc.full_name AS vendor_contact_naam,
                  u.full_name AS owner_naam
@@ -662,6 +729,7 @@ export class ContractService {
       contractType: rij.contract_type,
       dpaAanwezig: rij.dpa_aanwezig,
       businessRiskTierCode: rij.business_risk_tier_code,
+      werkingsgebiedCodes: rij.werkingsgebied_codes ?? [],
     };
   }
 }

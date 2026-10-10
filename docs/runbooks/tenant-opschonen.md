@@ -28,6 +28,14 @@
 > Getest tegen een wegwerpcontainer met twee gevulde tenants (2026-09-25):
 > droge run en commit allebei groen, doeltenant volledig leeg, andere tenant
 > exact ongewijzigd — onafhankelijk geverifieerd met een verse verbinding.
+>
+> **Bijgewerkt 2026-10-07:** `tellenBuitenClm()` telde zonder tenantcontext
+> en gaf elke droge run een vals alarm; gerepareerd.
+>
+> **Bijgewerkt 2026-10-10 (migratie 0046, #234):** `clm.werkingsgebied`
+> staat als laatste in `VIA_API_NA_FUNCTIE`; `clm.contract_werkingsgebied`
+> verdwijnt via CASCADE met de contracten en staat in `ALLEEN_CONTROLEREN`.
+> Opnieuw bewezen op een wegwerpcontainer met drie tenants.
 
 ---
 

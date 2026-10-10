@@ -109,13 +109,18 @@ const VIA_API_NA_FUNCTIE = [
   'vendor_tag',
   'vendor_compliance_thema',
   'vendor',
+  // 0046 (#234) als laatste: contract_werkingsgebied is dan al via CASCADE met
+  // de contracten verdwenen, en clm_api_runtime heeft DELETE op deze lijst.
+  'werkingsgebied',
 ];
 
 // Alleen ter controle: geen eigen DELETE, moeten na de operatie op 0 staan.
+// contract_werkingsgebied (0046) verdwijnt via CASCADE zodra contract weg is.
 const ALLEEN_CONTROLEREN = [
   'contract_survey_template',
   'import_row',
   'import_extra_contact',
+  'contract_werkingsgebied',
 ];
 
 // Stap 4: buiten schema clm. ref.vendor_category moet ná vendor (verwijzing

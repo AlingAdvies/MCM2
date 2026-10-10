@@ -56,6 +56,8 @@ const TABELLEN_IN_VOLGORDE = [
   'clm.survey_question',
   'clm.survey_category',
   'clm.survey_template',
+  'clm.contract_werkingsgebied',
+  'clm.werkingsgebied',
   'clm.vendor_tag',
   'clm.vendor_contact',
   'clm.vendor',

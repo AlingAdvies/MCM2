@@ -898,4 +898,73 @@ describe('Contract-import (e2e, #198)', () => {
       expect(vanuitAndereTenant.rows).toHaveLength(0);
     });
   });
+  describe('Werkingsgebied (#234)', () => {
+    it('maakt elk gebied één keer aan en koppelt beide contracten (ook "Centraal")', async () => {
+      // 'Centraal' is sinds 10-10 gewoon een werkingsgebied, geen apart veld.
+      const koppen =
+        'contract.name;vendor.name;vendor.coupa_supplier_number;Werkingsgebied';
+      const bestand = Buffer.from(
+        [
+          koppen,
+          `WG-contract-1;WG-vendor-${STEMPEL};SUP-WG1-${STEMPEL};ANF`,
+          `WG-contract-2;WG-vendor-${STEMPEL};SUP-WG1-${STEMPEL};ANF, Centraal`,
+        ].join('\n'),
+        'utf8',
+      );
+
+      const preview = await request(server)
+        .post('/platform/contract-import/preview')
+        .set('Cookie', platformCookie)
+        .attach('file', bestand, {
+          filename: 'anf.csv',
+          contentType: 'text/csv',
+        });
+      expect(preview.status).toBe(201);
+      const jobId = (preview.body as { jobId: string }).jobId;
+
+      const bevestig = await request(server)
+        .post(`/platform/contract-import/${jobId}/bevestigen`)
+        .set('Cookie', platformCookie)
+        .send({});
+      expect(bevestig.status).toBe(201);
+      expect(
+        (bevestig.body as { aangemaakteWerkingsgebieden: number })
+          .aangemaakteWerkingsgebieden,
+      ).toBe(2);
+
+      const gebieden = await selecteerBinnenTenant<{
+        code: string;
+        label: string;
+      }>(
+        client,
+        tenant,
+        'SELECT code, label FROM clm.werkingsgebied ORDER BY code',
+        [],
+      );
+      expect(gebieden).toEqual([
+        { code: 'anf', label: 'ANF' },
+        { code: 'centraal', label: 'Centraal' },
+      ]);
+
+      const contracten = await selecteerBinnenTenant<{
+        name: string;
+        codes: string[];
+      }>(
+        client,
+        tenant,
+        `SELECT c.name,
+                array_agg(cw.werkingsgebied_code ORDER BY cw.werkingsgebied_code) AS codes
+           FROM clm.contract c
+           JOIN clm.contract_werkingsgebied cw ON cw.contract_id = c.contract_id
+          WHERE c.name LIKE 'WG-contract-%'
+          GROUP BY c.name
+          ORDER BY c.name`,
+        [],
+      );
+      expect(contracten).toEqual([
+        { name: 'WG-contract-1', codes: ['anf'] },
+        { name: 'WG-contract-2', codes: ['anf', 'centraal'] },
+      ]);
+    });
+  });
 });

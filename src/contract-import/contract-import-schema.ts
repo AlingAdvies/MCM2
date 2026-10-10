@@ -50,6 +50,8 @@ export interface ContractImportInvoer {
   contactEmail: string | null;
   contactFullName: string | null;
   extraContacten: ExtraContactInvoer[];
+  /** Teksten uit de kolom Werkingsgebied, gesplitst op , ; | (#234). Leeg = []. */
+  werkingsgebieden: string[];
   /** Elke kolom uit het bestand, ongewijzigd, op de originele kopnaam. */
   rawAttributes: Record<string, string>;
 }
@@ -111,10 +113,12 @@ export interface ContractImportBeoordeling {
  * gebruikt (punt-notatie zoals `contract.name`). Kleine letters, want
  * kopteksten variëren in schrijfwijze.
  */
-const KOLOM_ALIASSEN: Record<
-  string,
-  keyof Omit<ContractImportInvoer, 'rawAttributes' | 'extraContacten'>
-> = {
+type TekstVeld = keyof Omit<
+  ContractImportInvoer,
+  'rawAttributes' | 'extraContacten' | 'werkingsgebieden'
+>;
+
+const KOLOM_ALIASSEN: Record<string, TekstVeld> = {
   'contract.name': 'contractName',
   contractnaam: 'contractName',
   'naam contract': 'contractName',
@@ -262,6 +266,29 @@ export function leesContractDatum(ruw: string | null): {
     : { waarde: null, geldig: false };
 }
 
+/**
+ * Kolom met werkingsgebieden (#234). Apart herkend, niet via KOLOM_ALIASSEN:
+ * het is een lijst, geen tekstveld.
+ */
+function isWerkingsgebiedKolom(kopKleineLetters: string): boolean {
+  return (
+    kopKleineLetters === 'werkingsgebied' ||
+    kopKleineLetters === 'contract.werkingsgebied'
+  );
+}
+
+/** Splitst 'ANF; HWGO,ANF' in unieke, bijgeknipte teksten: ['ANF', 'HWGO']. */
+export function splitsWerkingsgebieden(ruw: string): string[] {
+  return [
+    ...new Set(
+      ruw
+        .split(/[,;|]/)
+        .map((deel) => deel.trim())
+        .filter((deel) => deel !== ''),
+    ),
+  ];
+}
+
 /** Alleen voor tests en foutmeldingen: welke bevindingcodes blokkeren. */
 export function isBlokkerend(code: ContractBevindingCode): boolean {
   return BLOKKEREND.has(code);
@@ -331,14 +358,17 @@ export function beoordeelContractImportbestand(
   // kolom hoort niet bij een vast ContractImportInvoer-veld maar bij een
   // dynamische lijst (extraContacten).
   const extraContactPerIndex: ReturnType<typeof herkenExtraContactKolom>[] = [];
-  const veldPerIndex: (
-    keyof Omit<ContractImportInvoer, 'rawAttributes' | 'extraContacten'> | null
-  )[] = [];
+  const veldPerIndex: (TekstVeld | null)[] = [];
 
   // Index van de 'contract.vendor_contact_id'-kolom, indien aanwezig — apart
   // van veldPerIndex omdat de conditie (leeg + geen UUID) pas ná de volledige
   // rij bekend is, zie maakInvoer().
   let vendorContactIdKolomIndex: number | null = null;
+
+  // Werkingsgebied-kolom (#234): een lijst, geen tekstveld, dus apart.
+  const bijzondereKolommen: BijzondereKolommen = {
+    werkingsgebied: null,
+  };
 
   // Meerdere kolommen met dezelfde kopnaam voor het PRIMAIRE contactpaar
   // (`vendor_contact.email` twee keer, zoals een echt Transdev-testbestand
@@ -370,6 +400,14 @@ export function beoordeelContractImportbestand(
     if (isVendorContactIdKolom(kopKleineLetters)) {
       herkendeKolommen[kop] = 'contactFullName (indien geen UUID)';
       vendorContactIdKolomIndex = index;
+      extraContactPerIndex.push(null);
+      veldPerIndex.push(null);
+      return;
+    }
+
+    if (isWerkingsgebiedKolom(kopKleineLetters)) {
+      herkendeKolommen[kop] = 'werkingsgebieden';
+      bijzondereKolommen.werkingsgebied = index;
       extraContactPerIndex.push(null);
       veldPerIndex.push(null);
       return;
@@ -431,6 +469,7 @@ export function beoordeelContractImportbestand(
       veldPerIndex,
       extraContactPerIndex,
       vendorContactIdKolomIndex,
+      bijzondereKolommen,
     );
     const bevindingen: ContractBevinding[] = [];
 
@@ -583,14 +622,17 @@ export function beoordeelContractImportbestand(
   };
 }
 
+interface BijzondereKolommen {
+  werkingsgebied: number | null;
+}
+
 function maakInvoer(
   cellen: string[],
   koppen: string[],
-  veldPerIndex: (
-    keyof Omit<ContractImportInvoer, 'rawAttributes' | 'extraContacten'> | null
-  )[],
+  veldPerIndex: (TekstVeld | null)[],
   extraContactPerIndex: ReturnType<typeof herkenExtraContactKolom>[],
   vendorContactIdKolomIndex: number | null,
+  bijzondereKolommen: BijzondereKolommen,
 ): ContractImportInvoer {
   const invoer: ContractImportInvoer = {
     contractName: '',
@@ -607,8 +649,15 @@ function maakInvoer(
     contactEmail: null,
     contactFullName: null,
     extraContacten: [],
+    werkingsgebieden: [],
     rawAttributes: {},
   };
+
+  if (bijzondereKolommen.werkingsgebied !== null) {
+    invoer.werkingsgebieden = splitsWerkingsgebieden(
+      cellen[bijzondereKolommen.werkingsgebied] ?? '',
+    );
+  }
 
   // volgnummer -> plek in extraContacten, zodat email_2 en full_name_2 in
   // hetzelfde ExtraContactInvoer-object landen, ook als ze niet naast
