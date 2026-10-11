@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-10-11 11:31 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-10-11 11:55 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -16,7 +16,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ## Op prioriteit, over alle thema's heen
 
-**P0 — voor elke volgende regel productiecode** — 0 open
+**P0 — voor elke volgende regel productiecode** — 1 open
 **Vóór de pilot** — 0 open
 **Vóór bredere productie** — 0 open
 **Later — bewust uitgesteld** — 17 open
@@ -67,10 +67,10 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ### Backup en herstel (6)
 
+- [#46](https://github.com/AlingAdvies/MCM2/issues/46) `p0` — Duurzame objectopslag voor uploads + ingeplande dump buiten de brondraaimachine
 - [#78](https://github.com/AlingAdvies/MCM2/issues/78) `later` — pg_dump kan niet draaien als clm_migrator: FORCE RLS blokkeert de backup
 - [#19](https://github.com/AlingAdvies/MCM2/issues/19) — Backup/restore-test daadwerkelijk uitgevoerd
 - [#30](https://github.com/AlingAdvies/MCM2/issues/30) — GEEN backups: clm-enterprise draait op Supabase Free Plan
-- [#46](https://github.com/AlingAdvies/MCM2/issues/46) — Duurzame objectopslag voor uploads + ingeplande dump buiten de brondraaimachine
 - [#48](https://github.com/AlingAdvies/MCM2/issues/48) — Pilot-runbook en alerting: wie kijkt wanneer naar welk signaal
 - [#58](https://github.com/AlingAdvies/MCM2/issues/58) — Backup hangt af van de ontwikkellaptop: onafhankelijke uitvoering vóór de pilot
 
