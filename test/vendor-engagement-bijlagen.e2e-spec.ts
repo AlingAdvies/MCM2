@@ -8,6 +8,10 @@ import type { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { cookieInstellingen } from '../src/auth/sessie';
 import { SessieService } from '../src/auth/sessie.service';
+import {
+  BESTAND_ONTBREEKT_MELDING,
+  BestandOpslagService,
+} from '../src/survey/bestand-opslag.service';
 import { TEST_IDS } from './test-ids';
 import { verwijderTestdata } from './opruimen';
 
@@ -194,6 +198,47 @@ describe('Bijlagen bij een vendor-dossier (e2e)', () => {
 
     expect(download.headers['content-type']).toContain('application/pdf');
     expect(Buffer.from(download.body as Buffer)).toEqual(PDF_INHOUD);
+  });
+
+  // #46: op AWS ECS verdwenen bijlagen bij elke uitrol, terwijl de rij bleef.
+  // De gebruiker zag een kale 500. Een ontbrekend bestand hoort een 404 met
+  // uitleg te geven.
+  it('geeft 404 met uitleg als het bestand uit de opslag verdwenen is', async () => {
+    const upload = await request(server)
+      .post(`/engagements/${engagementId}/attachments`)
+      .set('Cookie', cookieAdminA)
+      .attach('file', PDF_INHOUD, {
+        filename: 'verdwijnt.pdf',
+        contentType: 'application/pdf',
+      })
+      .expect(201);
+
+    const attachmentId = (upload.body as AttachmentBody).attachment
+      .attachmentId;
+
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL app.current_tenant_id = '${tenantA}'`);
+    await client.query(`SET LOCAL app.current_actor = 'medewerker'`);
+    const rij = await client.query<{ storage_key: string }>(
+      'SELECT storage_key FROM clm.vendor_engagement_attachment WHERE attachment_id = $1',
+      [attachmentId],
+    );
+    await client.query('COMMIT');
+    await app.get(BestandOpslagService).verwijder(rij.rows[0].storage_key);
+
+    const download = await request(server)
+      .get(`/engagements/attachments/${attachmentId}`)
+      .set('Cookie', cookieAdminA)
+      .expect(404);
+
+    expect(download.body).toEqual({ melding: BESTAND_ONTBREEKT_MELDING });
+
+    // Plek vrijmaken: een dossier houdt maximaal drie bijlagen, en de
+    // volgende test uploadt er nog een.
+    await request(server)
+      .delete(`/engagements/${engagementId}/attachments/${attachmentId}`)
+      .set('Cookie', cookieAdminA)
+      .expect(204);
   });
 
   it('trekt een bijlage in via deleted_at, rij blijft bestaan', async () => {

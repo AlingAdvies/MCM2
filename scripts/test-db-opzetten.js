@@ -20,6 +20,11 @@
  *   3. Migraties en de wegwerp-markering (`markeer-wegwerp.js`) waren losse,
  *      makkelijk vergeten stappen ná het aanmaken van de container.
  *
+ * Sinds 11-10 (#46) start het er ook een nagebootste S3 naast (Adobe S3Mock,
+ * container mcm2-tests3 op poort 55441), voor de e2e-suite die de S3-route van
+ * de bijlagen-opslag test. Geen sleutel, geen instelling: de suite verwacht hem
+ * op dat vaste adres, net als CI.
+ *
  * Dit script doet alle vier de stappen — container, rollen, migraties,
  * markering — in de vaste volgorde die CI ook gebruikt (zie
  * .github/workflows/ci.yml, "Rollen aanmaken en wachtwoorden zetten"), zodat
@@ -48,6 +53,9 @@ const { execFileSync, spawnSync } = require('node:child_process');
 const path = require('node:path');
 
 const CONTAINER = 'mcm2-testdb';
+const S3_CONTAINER = 'mcm2-tests3';
+const S3_POORT = '55441';
+const S3_IMAGE = 'adobe/s3mock:5.2.3';
 const WACHTWOORD_MIGRATOR = 'testpw_migrator';
 const WACHTWOORD_RUNTIME = 'testpw_runtime';
 const PROJECT_DIR = path.join(__dirname, '..');
@@ -82,13 +90,36 @@ function draai(commando, args, opties = {}) {
   return resultaat;
 }
 
-function containerBestaat() {
+function containerBestaat(naam = CONTAINER) {
   const r = spawnSync(
     'docker',
-    ['ps', '-a', '--filter', `name=^${CONTAINER}$`, '--format', '{{.Names}}'],
+    ['ps', '-a', '--filter', `name=^${naam}$`, '--format', '{{.Names}}'],
     { encoding: 'utf8' },
   );
-  return r.stdout.trim() === CONTAINER;
+  return r.stdout.trim() === naam;
+}
+
+/**
+ * Start de nagebootste S3. Altijd vers, ook bij --hergebruik: hij bewaart
+ * niets wat de moeite van hergebruiken waard is.
+ */
+function startNagebootsteS3() {
+  if (containerBestaat(S3_CONTAINER)) {
+    draai('docker', ['rm', '-f', S3_CONTAINER], { stil: true });
+  }
+  draai(
+    'docker',
+    [
+      'run',
+      '-d',
+      '--name',
+      S3_CONTAINER,
+      '-p',
+      `127.0.0.1:${S3_POORT}:9090`,
+      S3_IMAGE,
+    ],
+    { stil: true },
+  );
 }
 
 function containerDraait() {
@@ -120,11 +151,13 @@ async function wachtTotGezond(superuserUrl, pogingen = 30) {
 
 async function main() {
   if (afbreken) {
-    if (containerBestaat()) {
-      draai('docker', ['rm', '-f', CONTAINER]);
-      console.log(`Container ${CONTAINER} verwijderd.`);
-    } else {
-      console.log(`Container ${CONTAINER} bestond niet.`);
+    for (const naam of [CONTAINER, S3_CONTAINER]) {
+      if (containerBestaat(naam)) {
+        draai('docker', ['rm', '-f', naam]);
+        console.log(`Container ${naam} verwijderd.`);
+      } else {
+        console.log(`Container ${naam} bestond niet.`);
+      }
     }
     return;
   }
@@ -163,10 +196,15 @@ async function main() {
     ]);
   }
 
+  console.log(`     Nagebootste S3 (${S3_IMAGE}) op poort ${S3_POORT}…`);
+  startNagebootsteS3();
+
   console.log('     Wachten tot de database verbindingen accepteert…');
   const gezond = await wachtTotGezond(superuserUrl);
   if (!gezond) {
-    console.error('\nDe database accepteert na 30 pogingen nog geen verbinding.');
+    console.error(
+      '\nDe database accepteert na 30 pogingen nog geen verbinding.',
+    );
     process.exit(1);
   }
 
@@ -233,13 +271,18 @@ async function main() {
     },
   );
 
-  console.log('\n──────────────────────────────────────────────────────────────');
+  console.log(
+    '\n──────────────────────────────────────────────────────────────',
+  );
   console.log('Klaar. Zet deze twee variabelen voordat je tests draait:\n');
   console.log(`  MIGRATION_DATABASE_URL="${migratorUrl}"`);
   console.log(`  DATABASE_URL="${runtimeUrl}"\n`);
   console.log('PowerShell:');
   console.log(`  $env:MIGRATION_DATABASE_URL = "${migratorUrl}"`);
   console.log(`  $env:DATABASE_URL = "${runtimeUrl}"\n`);
+  console.log(
+    `De nagebootste S3 draait op http://127.0.0.1:${S3_POORT} — geen instelling nodig.`,
+  );
   console.log(`Afbreken: node scripts/test-db-opzetten.js --afbreken`);
   console.log('──────────────────────────────────────────────────────────────');
 }

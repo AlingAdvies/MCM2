@@ -32,3 +32,15 @@ import 'dotenv/config';
 // setupFilesAfterEnv. Hier is vroeg genoeg, daar zou het te laat kunnen zijn.
 delete process.env.RESEND_API_KEY;
 delete process.env.MAIL_AFZENDER_ADRES;
+
+// ── Bijlagen naar schijf, niet naar een bucket ──────────────────────────────
+//
+// `BestandOpslagService` kiest S3 zodra `S3_BUCKET` gezet is (#46). Een
+// `.env` met die regel zou elke suite ongemerkt naar een bucket laten
+// schrijven — in het slechtste geval de productiebucket. De suites die de
+// S3-route testen (bestand-opslag-s3.e2e-spec.ts) zetten hun eigen,
+// nagebootste bucket expliciet.
+delete process.env.S3_BUCKET;
+delete process.env.S3_ENDPOINT;
+delete process.env.S3_ACCESS_KEY;
+delete process.env.S3_SECRET_KEY;
