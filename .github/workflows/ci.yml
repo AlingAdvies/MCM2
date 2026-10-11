@@ -38,6 +38,11 @@ jobs:
       - name: Dependencies installeren
         run: npm ci
 
+      # Deze repo is publiek. Klantbestanden en echte e-mailadressen in
+      # voorbeelddata maken de PR rood (aanleiding 2026-10-11, PR #236).
+      - name: Geen klantdata in de repo
+        run: npm run check:klantdata
+
       - name: Format controleren
         run: npm run format:check
 

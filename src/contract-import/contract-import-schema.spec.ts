@@ -263,12 +263,12 @@ describe('beoordeelContractImportbestand', () => {
       const koppen =
         'contract.name;contract.contract_number;contract.contract_type;contract.start_date;contract.end_date;contract.note;vendor.name;vendor.category_code;vendor.coupa_supplier_number;vendor_contact.email;vendor_contact.email;contract.vendor_contact_id';
       const rij =
-        'Hosting;CN-1;;;;;Acme B.V.;;SUP-1;;bart@b4ict.nl;Bart Philips';
+        'Hosting;CN-1;;;;;Acme B.V.;;SUP-1;;piet@leverancier.voorbeeld.nl;Piet Pietersen';
       const resultaat = beoordeelContractImportbestand(
         [koppen, rij].join('\n'),
       );
 
-      expect(resultaat.rijen[0].invoer.contactFullName).toBe('Bart Philips');
+      expect(resultaat.rijen[0].invoer.contactFullName).toBe('Piet Pietersen');
     });
 
     it('negeert de waarde als vendor_contact.full_name al gevuld is', () => {

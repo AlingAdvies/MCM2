@@ -55,6 +55,7 @@
     "verify:schema": "node scripts/verify-schema.js",
     "verify:snel": "node scripts/verify.js --snel",
     "verify:volledig": "node scripts/verify-volledig.js",
+    "check:klantdata": "node scripts/klantdata-controle.js",
     "verify:omgevingen": "node scripts/verify-omgevingen.js",
     "statusbord": "node scripts/statusbord.js"
   },
