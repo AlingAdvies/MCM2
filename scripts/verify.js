@@ -37,6 +37,12 @@ const { spawnSync } = require('node:child_process');
  */
 const STAPPEN = [
   {
+    naam: 'klantdata',
+    omschrijving: 'Geen klantdata in de repo',
+    ci: 'quality → Geen klantdata in de repo',
+    commando: ['npm', 'run', 'check:klantdata'],
+  },
+  {
     naam: 'format',
     omschrijving: 'Opmaak controleren',
     ci: 'quality → Format controleren',
@@ -64,13 +70,24 @@ const STAPPEN = [
     naam: 'e2e',
     omschrijving: 'E2e-tests (vraagt een wegwerpdatabase)',
     ci: 'rls-isolation → Tenant- en token-isolatietests',
-    commando: ['npx', 'jest', '--config', './test/jest-e2e.json', '--forceExit'],
+    commando: [
+      'npx',
+      'jest',
+      '--config',
+      './test/jest-e2e.json',
+      '--forceExit',
+    ],
     vraagtDatabase: true,
   },
 ];
 
 /** Hosts die als wegwerpomgeving gelden. */
-const LOKALE_HOSTS = new Set(['localhost', '127.0.0.1', '::1', 'host.docker.internal']);
+const LOKALE_HOSTS = new Set([
+  'localhost',
+  '127.0.0.1',
+  '::1',
+  'host.docker.internal',
+]);
 
 /**
  * Controleert dat DATABASE_URL naar een wegwerpdatabase wijst.
@@ -127,7 +144,9 @@ function main() {
     : STAPPEN;
 
   console.log('');
-  console.log('Verificatie — dezelfde poorten als CI (.github/workflows/ci.yml)');
+  console.log(
+    'Verificatie — dezelfde poorten als CI (.github/workflows/ci.yml)',
+  );
   if (alleenSnel) {
     console.log('Modus: --snel, de e2e-stap wordt overgeslagen.');
   }

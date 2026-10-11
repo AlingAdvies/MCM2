@@ -308,7 +308,7 @@ const UUID_REGEX_LOKAAL =
 /**
  * Kopnaam van een kolom die `contract.vendor_contact_id` (of een schrijfvariant
  * daarvan) heet. Een echte Transdev-export vult deze kolom in de praktijk met
- * een NAAM ("Bart Philips") in plaats van een ID — de kolom is voor een
+ * een NAAM ("Piet Pietersen") in plaats van een ID — de kolom is voor een
  * toekomstige, correcte koppeling naar een bestaand contactpersoon-ID bedoeld,
  * maar wordt in de praktijk als naamveld gebruikt (gevonden 31-08, besluit
  * eigenaar: alleen gebruiken als `vendor_contact.full_name` zelf leeg is, en

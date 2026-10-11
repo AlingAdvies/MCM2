@@ -318,7 +318,7 @@ aanmaken in plaats van het bestaande te hergebruiken.
 ID — nieuwe alias toegevoegd.** De kolom is voor een echte ID-verwijzing
 bedoeld (en heet zo, correct, naar de databasekolom
 `clm.contract.vendor_contact_id`), maar Transdev's export vult hem met een
-naam ("Bart Philips"). Besluit eigenaar: **alleen gebruiken als
+naam ("Piet Pietersen"). Besluit eigenaar: **alleen gebruiken als
 `vendor_contact.full_name` zelf leeg is, en alleen als de waarde geen
 geldig UUID is** (anders zou het een echte, toekomstige ID-verwijzing
 kunnen zijn). Geïmplementeerd als naverwerking in `maakInvoer()`, ná de

@@ -370,6 +370,24 @@ SELECT grantee, privilege_type FROM information_schema.role_table_grants
 pas ná uitrol. Zet de GRANT altijd al in de migratie zelf. Zie
 `docs/ARCHITECTUUR.md` Platformgarantie 3 voor de volledige uitleg.
 
+**9. Klantdata komt nooit in de projectmap — deze repo is PUBLIEK.**
+Upload-CSV's, exports, Excel-lijsten, rapporten en mails van of voor een klant
+staan in **`C:\Users\cmali\OneDrive - Aling Advies\MCM2-klantdata\<tenant>\`**
+(submappen `uploads\`, `exports\`, `rapporten\`; tenant-overstijgend in
+`_platform\`). Maak je zelf zo'n bestand — bijvoorbeeld een upload-CSV voor de
+contractimport — schrijf het dáár, niet in `docs/` of de repo-root, en noem
+het volledige pad aan de eigenaar. Voorbeelddata in `db/seeds/` is verzonnen
+en gebruikt alleen e-mailadressen op `…voorbeeld.nl`.
+
+Aanleiding: op 2026-10-11 bleek `docs/Transdev_Sample_Upload.csv` (echte
+Transdev-leveranciers, 22 contact-e-mailadressen) sinds 28-08 publiek te staan;
+in dezelfde week maakte Claude de ANF-upload-CSV zelf in `docs/`. `.gitignore`
+weert csv/Excel/Word/pdf/zip/mail sinds PR #236, en `npm run check:klantdata`
+(CI-stap "Geen klantdata in de repo", ook in `verify`) maakt elke PR rood die
+er toch zo'n bestand of een echt ogend adres in de voorbeelddata in zet. De
+oude bestanden staan nog in de git-historie — bewust geaccepteerd door de
+eigenaar (11-10).
+
 ---
 
 ## Groen is alleen groen via verify

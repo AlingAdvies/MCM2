@@ -155,10 +155,10 @@ describe('kvkGeldig', () => {
 });
 
 describe('emailGeldig', () => {
-  it.each(['d.hoekstra@siemens.com', 'kenji.watanabe@hitachirail.com'])(
-    'accepteert %s',
-    (e) => expect(emailGeldig(e)).toBe(true),
-  );
+  it.each([
+    'd.hoekstra@siemens.voorbeeld.nl',
+    'kenji.watanabe@hitachirail.voorbeeld.nl',
+  ])('accepteert %s', (e) => expect(emailGeldig(e)).toBe(true));
 
   it.each([
     'geen-apenstaartje',
