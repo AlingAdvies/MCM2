@@ -38,8 +38,8 @@ oorspronkelijke tekst staat in de git-historie van dit bestand.*
    migratiestand, staging-pariteit, menselijk akkoord).
 5. **Toekomstrichting — verkennend, géén besluit:** mogelijke splitsing in
    twee producten: TD (Transdev-maatwerk, via Bizaline) en AA (AlingAdvies,
-   100% multitenant, verkoopbaar). Zie `docs/advies-td-aa-splitsing.md` en
-   `docs/evaluatie-advies-td-aa-splitsing.md`; de kernvraag daaruit (één of
+   100% multitenant, verkoopbaar). Zie `docs/advies/advies-td-aa-splitsing.md` en
+   `docs/advies/evaluatie-advies-td-aa-splitsing.md`; de kernvraag daaruit (één of
    twee productdeployments) staat nog open. **Bouw hier niet op vooruit.**
 
 **Waar het werkelijk om gaat is onveranderd het gedrag, niet de techniek.**
@@ -64,7 +64,7 @@ het auditspoor ís de opbrengst (dat blijft onverkort staan).
 ## 0a. FEATURE- EN ROADMAPBEHEER
 
 *Vastgelegd 2026-09-03. Eén issue-lijst in deze repo, geen aparte tracker —
-de reden staat in `docs/advies-td-aa-splitsing.md`: een tweede lijst
+de reden staat in `docs/advies/advies-td-aa-splitsing.md`: een tweede lijst
 reproduceert precies het overzetprobleem dat "één repo, gedeelde kern"
 vermijdt.*
 
@@ -93,7 +93,7 @@ gebruiker is: eerst twee vragen beantwoorden, kort vastleggen in het issue.
    Altijd de minst vergaande laag.
 
 **Het topologie-besluit** (één of twee productdeployments, zie
-`docs/evaluatie-advies-td-aa-splitsing.md`) hoeft nog niet — de natuurlijke
+`docs/advies/evaluatie-advies-td-aa-splitsing.md`) hoeft nog niet — de natuurlijke
 deadline is de eerste écht divergerende feature (bijv. de mail-splitsing
 TD-afzender vs. generiek). Zodra zoiets naar `priority:nu` gaat: eerst dat
 besluit, dan pas bouwen.
@@ -151,8 +151,9 @@ dagen stilte** (issue #30). Daarom bestaat de wekelijkse
   geen backend-adres (dat komt bij het starten via `API_BASE_URL`) — zo
   blijft één image promoveerbaar over alle omgevingen.
 - Workflows in deze repo: `ci.yml` (elke merge), `productie-aws.yml`
-  (AWS-productie — rolt api én frontend uit) en het oudere `productie.yml`
-  (saxombp); Environment `productie` met een verplichte akkoordgever
+  (AWS-productie — rolt api én frontend uit) en `statusbord.yml`; Environment
+  `productie` met een verplichte akkoordgever. Het oudere `productie.yml`
+  (migraties naar productie zonder applicatie-uitrol) is op 11-10 verwijderd
 - **GHCR** voor images (token verloopt rond **8 november 2026**)
 - **Microsoft Entra External ID** — CIAM-domein `mcm2ciam.ciamlogin.com`, één
   app-registratie. Elke omgeving vraagt een eigen redirect-adres.

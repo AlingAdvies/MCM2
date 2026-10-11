@@ -2,7 +2,7 @@
 
 **Type:** D — routineoperaties
 **Eigenaar:** de eigenaar (Chris)
-**Laatste update:** 2026-08-27
+**Laatste update:** 2026-10-11
 **Vereiste toegang:** GitHub (AlingAdvies/MCM2), AWS-console (account
 AlingAdvies, 727732213368), Telegram op je telefoon
 
@@ -66,9 +66,11 @@ allemaal hetzelfde:
 ### Moment 2 — GitHub vraagt je akkoord voor productie
 
 **Je krijgt een e-mail van GitHub** met "Deployment review requested", en de
-run staat stil tot jij drukt. Dit gebeurt zowel bij een uitrol naar
-AWS-productie (workflow `productie-aws.yml`) als, voor acceptatie/staging op
-`saxombp`, bij de oudere workflow `productie.yml`.
+run staat stil tot jij drukt. Dit gebeurt bij een uitrol naar AWS-productie
+(workflow `productie-aws.yml`, in GitHub "Uitrol naar AWS-productie"). Staging
+en acceptatie vragen geen akkoord op GitHub. De oudere workflow
+`productie.yml` is op 11-10 verwijderd: die migreerde de productiedatabase
+zonder de applicatie mee te nemen.
 
 **Wat jij doet:**
 

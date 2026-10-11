@@ -11,7 +11,7 @@
 > `docs/STATUS.md` en het projectgeheugen `mcm2-besluit-18-08-naar-aws`).
 > Alles hieronder over `mcm2-productie`, poort 3020/5021,
 > `ssh root@saxombp ... docker compose -p mcm2-productie`, en de
-> `productie.yml`-workflow beschrijft de OUDE route en werkt niet meer voor
+> `productie.yml`-workflow (verwijderd 11-10) beschrijft de OUDE route en werkt niet meer voor
 > productie-uitrol. **Acceptatie blijft ongewijzigd op saxombp** — die
 > onderdelen van dit runbook kloppen nog. Dit bestand wordt herschreven
 > zodra de AWS-migratie (frontend-service, custom domain, CI/CD-koppeling)
@@ -61,7 +61,7 @@ apparaten.
 >
 > **De migraties draaien vanuit een workflow**, niet vanaf een laptop:
 > staging via de job `staging` in `.github/workflows/ci.yml`, productie via
-> `.github/workflows/productie.yml`. Beide uitrolcommando's slaan die stap over
+> `.github/workflows/productie-aws.yml`. Beide uitrolcommando's slaan die stap over
 > en zeggen dat ook — je ziet `4/6 Migraties — overgeslagen` met de reden erbij.
 >
 > **Tot stap 6 (2026-08-12) had productie wél een eigen container**, op poort

@@ -122,7 +122,7 @@ wordt (bijvoorbeeld een sjabloon-set "veelgebruikte NIS2-vragen"). Nooit
 dezelfde tabel als de tenant-specifieke vragenlijsten met een nullable
 `tenant_id` — dat is precies het soort constructie waar RLS omheen gebouwd
 moet worden in plaats van ervoor, en dat is de klasse fout die
-`docs/architectuur-en-verificatie.md` §3 als kip-ei-probleem beschrijft.
+`docs/architectuur/architectuur-en-verificatie.md` §3 als kip-ei-probleem beschrijft.
 
 **Status:** nog niet uitgewerkt tot een spec. Dit hoort qua zwaarte bij stap 1
 van de grove volgorde (§1) — de kernvragenlijst-functie — niet bij de latere
@@ -131,7 +131,7 @@ stappen.
 ### 2.4 Open vraag: hoe werkt SSO met Entra ID precies?
 
 Dit is geen feature maar een begripsvraag van de eigenaar. Het antwoord staat
-al beschreven in `docs/architectuur-en-verificatie.md` §11 (de claims-analyse
+al beschreven in `docs/architectuur/architectuur-en-verificatie.md` §11 (de claims-analyse
 uit de echte login-proef) en in `MCM2-CLAUDE.md` (de identiteitslaag). Geen
 nieuw werk — wel de moeite waard om dat stuk samen door te nemen zodra er tijd
 is, zodat dit niet als losse vraag blijft rondzweven.
@@ -182,7 +182,7 @@ niet één voor één.
   definitief wegschrijven — dezelfde opzet als de bestaande
   vragenlijst-import, die blokkerende fouten vóór het wegschrijven valideert
   (zie de e2e-suite `vragenlijst-import`, 21 tests, in
-  `docs/architectuur-en-verificatie.md` §5).
+  `docs/architectuur/architectuur-en-verificatie.md` §5).
 - De actie hoort een `audit_event` te loggen (wie, wanneer, hoeveel rijen) —
   net als tenant-aanmaak dat al doet. Zonder dat is een verkeerde import
   achteraf niet te herleiden.
@@ -218,7 +218,7 @@ beoordeling), moet vastliggen wie dat mag triggeren en of het auditspoor dat
 vastlegt — zoals de rest van het platform dat al doet
 (`audit.audit_event`, append-only). Een status die vanzelf verandert zonder
 zichtbaar spoor is een stap terug ten opzichte van hoe `survey_review` nu al
-werkt (zie `docs/architectuur-en-verificatie.md` §2, de actorgrens).
+werkt (zie `docs/architectuur/architectuur-en-verificatie.md` §2, de actorgrens).
 
 **Status:** dit is nog een open vraag, geen besluit. Eerst bepalen: moet de
 koppeling een suggestie zijn (beheerder ziet een voorstel, bevestigt zelf) of
@@ -348,4 +348,4 @@ vragenlijst-bouwer verder gevorderd zijn — dit idee leunt op beide.
 - `docs/superpowers/specs/2026-08-04-beheermenu-tenantinstellingen.md` — het beheermenu waar §2.1, §4.1 en de #75/#76/#77-issues in landen
 - Issue #24 — de bewuste later-lijst voor bredere modules
 - Issue #77 — bulk/handpicked uitnodigingen, met de nog openstaande criteriavraag
-- `docs/architectuur-en-verificatie.md` §2–§3 — de tenantgrens-discipline die elk nieuw datamodel (contract, bulk-upload, vragenlijst-bouwer) moet volgen
+- `docs/architectuur/architectuur-en-verificatie.md` §2–§3 — de tenantgrens-discipline die elk nieuw datamodel (contract, bulk-upload, vragenlijst-bouwer) moet volgen

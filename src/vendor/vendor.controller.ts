@@ -44,7 +44,7 @@ import {
  * Dit is ook de plek waar de laag uit de vorige fase eindelijk gebruikt wordt.
  * Tot nu toe was TenantContextGuard gebouwd en bewezen maar nergens
  * aangesloten — dat stond als openstaand punt in
- * docs/architectuur-en-verificatie.md §8.
+ * docs/architectuur/architectuur-en-verificatie.md §8.
  */
 @Controller('vendors')
 @UseGuards(TenantContextGuard, RolGuard)

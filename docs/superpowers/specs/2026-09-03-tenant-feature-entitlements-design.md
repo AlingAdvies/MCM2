@@ -15,7 +15,7 @@ beschikbaar is.
 Dit is de eerste toepassing van een breder, generiek mechanisme: welke
 tenant welke optionele feature mag gebruiken. Toekomstige AA-only
 functionaliteit (NIS2, freemium, vragenlijst-builder — zie
-`docs/advies-td-aa-splitsing.md`) hergebruikt hetzelfde mechanisme zonder
+`docs/advies/advies-td-aa-splitsing.md`) hergebruikt hetzelfde mechanisme zonder
 nieuw databaseontwerp.
 
 ## 2. Scope en bewuste keuzes

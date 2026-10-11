@@ -173,7 +173,7 @@ aparte repo anders zou afdwingen.
 
 ## 7. Aanscherping 2026-09-06: een derde categorie naast kern en AA-only
 
-Concessiemanagement (zie `docs/uitgangspunten-concessiemanagement.md`) past
+Concessiemanagement (zie `docs/advies/uitgangspunten-concessiemanagement.md`) past
 niet in dit advies' tweedeling "kern" versus "AA-only". Het is **niet kern**
 (geen AA-klant heeft een provincie-concessierelatie) en **niet AA-only in de
 bestaande zin** (AA-only-modules zoals NIS2 of de vragenlijst-builder kunnen

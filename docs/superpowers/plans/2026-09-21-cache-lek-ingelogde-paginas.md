@@ -72,7 +72,7 @@ vertrouwen.
 **Wat hier bewust NIET gebeurt:** een tweede, infrastructuurlaag als vangnet
 toevoegen. Er bestaat wél een ALB (`ecs-express-gateway-alb`, geverifieerd in
 de AWS-console — de eerdere aanname in
-`docs/MCM2 AWS Minimaal — implementatiebrief voor Claude Code.md` dat er
+`docs/archive/2026-08-aws-minimaal-implementatiebrief.md` dat er
 "geen ALB" zou zijn, klopt dus niet (meer) voor de huidige Express
 Mode-uitrol). Maar een ALB routeert laag-7-verkeer en cachet zelf niets; AWS
 biedt voor ALB-listener-rules geen `Cache-Control`-override-attribuut (wel
