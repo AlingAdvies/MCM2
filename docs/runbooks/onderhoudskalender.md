@@ -2,7 +2,7 @@
 
 **Type:** D — routineoperaties
 **Eigenaar:** de eigenaar (Chris)
-**Laatste update:** 2026-08-28
+**Laatste update:** 2026-10-11
 **Vereiste toegang:** deze PC, Docker Desktop, Telegram, GitHub
 **Raakt:** ADR-011 (backup- en hersteleisen), Issue #19, #48, #58
 
@@ -33,7 +33,8 @@ Daarom staat naast dit document een controle die faalt als het veroudert:
 
 ## 1. Wat automatisch draait
 
-Deze drie taken staan in Windows Taakplanner en vragen geen handeling — behalve
+Deze taken staan in Windows Taakplanner (de eerste drie en de vierde) en op
+saxombp (de vijfde), en vragen geen handeling — behalve
 dat je de meldingen leest.
 
 | Wanneer | Taak | Wat het doet | Runbook |
@@ -41,6 +42,8 @@ dat je de meldingen leest.
 | Dagelijks 07:00 | `MCM2 databasebackup` | `pg_dump` van productie naar OneDrive, 14 dagen retentie | [backupcontrole.md](backupcontrole.md) |
 | Dagelijks 07:30 | `MCM2 backupcontrole` | Laag A (is er een dump?) en B (zit alles erin?), en schrijft `backup-bewijs.json` | [backupcontrole.md](backupcontrole.md) |
 | Maandag 07:45 | `MCM2 backupcontrole volledig` | Idem, plus laag C: echte restore in een wegwerpcontainer | [backupcontrole.md](backupcontrole.md) |
+| Elk uur | `MCM2 tenant-uitnodigingscontrole` | Telegram-melding bij een nieuw actief lid van Transdev Nederland (sinds 02-09) | [uitnodigingscontrole.md](uitnodigingscontrole.md) |
+| Dagelijks 06:00 | cron op saxombp: `saxombp-backup-productie.sh` | Tweede, van de laptop onafhankelijke productiedump, 14 dagen bewaard (sinds 25-08, issue #58) | [backupcontrole.md](backupcontrole.md), "De saxombp-laag" |
 
 Nagaan of ze nog bestaan en wanneer ze laatst draaiden:
 
@@ -83,7 +86,7 @@ npm run backup:controle
 | **Maandelijks** | Deze kalender nalopen: klopt hij nog met wat er werkelijk draait? | Een kalender die veroudert is erger dan geen kalender | dit document |
 | **Per kwartaal** | ADR's op geldigheid nalopen, met name ADR-011 en ADR-002 | Fase-overgangen veranderen de norm, niet het document | — (§5) |
 | **Bij elke release naar productie** | OTAP-doorloop draaien | Bewijst dat het uitrolbare artefact werkt, niet alleen de code | [otap-doorloop.md](otap-doorloop.md) |
-| **Bij elke release naar productie** | Uitrollen via acceptatie, nooit rechtstreeks | Een versie die niet op acceptatie stond, is niet beproefd | [uitrol-acceptatie-en-productie.md](uitrol-acceptatie-en-productie.md) |
+| **Bij elke release naar productie** | Eerst staging met rookproef (`npm run deploy:staging`), dan `productie-aws.yml` — nooit rechtstreeks | Een versie die niet op staging stond, is niet beproefd. Acceptatie wordt sinds de AWS-overstap (19-08) niet meer gebruikt in de keten | [devops-handleiding.md](devops-handleiding.md) |
 | **Per kwartaal** | Rollback beproeven op acceptatie (laatst: **11-08-2026**, heen en terug, alle rookproeven groen) | Terugdraaien is het onderdeel dat in de praktijk het vaakst nooit getest is — en dat je nodig hebt op het slechtste moment | [uitrol-acceptatie-en-productie.md](uitrol-acceptatie-en-productie.md) |
 | **Wekelijks** | Staging wakker houden: één query tegen `clm-staging3` | Een gratis Supabase-project pauzeert na 7 dagen zonder databaseactiviteit. Pauzeert staging, dan faalt de eerstvolgende uitrol met een verbindingsfout die naar de verkeerde oorzaak wijst. | — (§5) |
 | **Bij elke migratie** | Eerst op staging draaien, dan pas op productie | Staging draait dezelfde Postgres-versie, regio en pooler als productie. Een migratie die daar slaagt, slaagt in productie — dat is de hele reden dat staging niet op saxombp staat. | — (§5) |
@@ -172,11 +175,11 @@ document dat vertelt hóe.
 | **Dependabot** | `.github/dependabot.yml` bestaat niet. Het updatebeleid in de architectuurreview (patch automatisch, minor met review, major nooit blind) is nooit ingericht. De maandelijkse `npm audit` in §2 is de handmatige vervanging. | Middel |
 | **Logrotatie** | `backup-controle.log` en `backup-taak.log` groeien onbegrensd. Klein probleem, maar het staat nergens. | Laag |
 | **Certificaat- en domeinvervaldata** | Het verzenddomein van het mailkanaal en straks de productie-URL hebben vervaldata die niemand bewaakt. | Middel vanaf de pilotstart |
-| **Uploadopslag** | Certificaten staan op een containerschijf; bij image-vervanging zijn ze weg (Issue #46). Backup daarvan valt buiten ADR-011. | **Hoog** — harde datum, pilot start ~1 september |
-| **Uitrol naar staging en productie** | Staging bestaat sinds 2026-08-10, maar er loopt nog geen geautomatiseerde weg heen. Migraties gaan met de hand vanaf de laptop, met `.env` wijzend naar productie. Dat is de gemeenschappelijke oorzaak onder de incidenten van 04-08, 07-08 en 10-08. *Acceptatie is sinds 10-08 wél volledig uitgerold, frontend en al — maar met de hand gestart.* Plan: [plan-otap-straat-met-staging.md](../architectuur/plan-otap-straat-met-staging.md) | **Hoog** — elke handmatige uitrol is een kans op dataverlies |
+| **Uploadopslag** | *Grotendeels opgelost op 2026-10-11 (#46):* productie bewaart bijlagen in S3 met versiebeheer; tot dan wiste elke uitrol ze. Nog open: een kopie van de bucket buiten AWS. | Middel |
+| **Uitrol naar staging en productie** | *Opgelost:* staging via `npm run deploy:staging` met rookproef, migraties via CI; productie via `productie-aws.yml` achter vier remmen (sinds 19-08). | — |
 | **Staging wakker houden** | De wekelijkse taak staat in §2, maar er is nog geen geplande taak die hem uitvoert. Nu dus handwerk, en handwerk dat je vergeet. | Middel — pas pijnlijk bij de eerste uitrol na een stille week |
 | **Het TLS-certificaat van acceptatie** | Sinds 2026-08-10 draait acceptatie op `https://saxombp.tail4b29b.ts.net` via `tailscale serve`. Tailscale vernieuwt dat certificaat zelf, dus dit is géén taak — maar het staat hier omdat het een afhankelijkheid is die niemand in de gaten heeft. Valt Tailscale weg of verandert het beleid, dan werkt inloggen niet meer: Entra weigert een `http`-redirect. | Laag, maar het hoort geweten te zijn |
-| **`OIDC_*` per omgeving** | Toegevoegd op 10-08 na een storing (PR #130). `deploy-inrichten.js` zet ze nu leeg neer met een toelichting; het client-secret invullen is handwerk. Productie heeft ze nog niet, dus daar kan niemand inloggen. Bij een sleutelrotatie moet dit op élke omgeving apart bijgewerkt worden — zie de eerste regel van deze tabel. | Middel |
+| **`OIDC_*` per omgeving** | Toegevoegd op 10-08 na een storing (PR #130). `deploy-inrichten.js` zet ze nu leeg neer met een toelichting; het client-secret invullen is handwerk. Productie (AWS) heeft ze sinds 19-08 als secrets in de ECS-service. Bij een sleutelrotatie moet dit op élke omgeving apart bijgewerkt worden — zie de eerste regel van deze tabel. | Middel |
 
 **Deze lijst hoort korter te worden.** Groeit hij in plaats daarvan, dan is dat
 het signaal dat het onderhoud achterloopt op wat er gebouwd wordt.
