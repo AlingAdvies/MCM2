@@ -263,7 +263,7 @@ geverifieerd in de AWS-console) — maar een ALB routeert laag-7-verkeer en
 cachet zelf niets; AWS biedt geen `Cache-Control`-override-attribuut voor
 ALB-listener-rules (wel voor CORS/security-headers). Het instrument dat dit
 zou kunnen, CloudFront, ontbreekt in de huidige opzet (zie
-`docs/MCM2 AWS Minimaal — implementatiebrief voor Claude Code.md`, dat zelf
+`docs/archive/2026-08-aws-minimaal-implementatiebrief.md`, dat zelf
 overigens een verouderd App Runner-scenario beschrijft in plaats van het
 uiteindelijk gekozen ECS Express Mode).
 

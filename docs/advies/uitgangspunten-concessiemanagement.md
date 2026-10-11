@@ -1,7 +1,7 @@
 # Concessiemanagement — uitgangspunten (geen ontwerp)
 
 *Vastgelegd 2026-09-06, na een hoog-over gesprek naar aanleiding van
-`docs/Combinatie_MCM2_Concessiemngt.md`. Dit is een set uitgangspunten om een
+`docs/advies/combinatie-mcm2-concessiemanagement-prompt.md`. Dit is een set uitgangspunten om een
 later ontwerp op te baseren — nog geen architectuurbesluit, geen bounded
 contexts uitgewerkt, geen datamodel. Vervolg gepland.*
 
@@ -9,13 +9,13 @@ contexts uitgewerkt, geen datamodel. Vervolg gepland.*
 
 ## Herkomst
 
-`docs/Combinatie_MCM2_Concessiemngt.md` is een uitgebreide opdracht-prompt
+`docs/advies/combinatie-mcm2-concessiemanagement-prompt.md` is een uitgebreide opdracht-prompt
 (12 secties, 25+ user stories, 5 ADR's) voor een AI-solution-design over het
 combineren van MCM2 met concessiemanagement voor Transdev. Bij beoordeling
 bleek de opdracht twee dingen te vroeg te doen:
 
 1. **Geen rekening met het bestaande TD/AA-splitsingsvraagstuk**
-   (`docs/advies-td-aa-splitsing.md`) — concessiemanagement is exact het
+   (`docs/advies/advies-td-aa-splitsing.md`) — concessiemanagement is exact het
    soort "eerste écht divergerende feature" die CLAUDE.md §0a als trigger
    voor het topologie-besluit noemt.
 2. **Een formeel compliance-statusmodel als eerste bouwsteen**
@@ -123,7 +123,7 @@ probleem dat oplossing verdient.
 
 ### 6. Concessiemanagement is een derde categorie naast "kern" en "AA-only": blijvend TD-only
 
-`docs/advies-td-aa-splitsing.md` onderscheidt "kern" (gedeeld) en "AA-only"
+`docs/advies/advies-td-aa-splitsing.md` onderscheidt "kern" (gedeeld) en "AA-only"
 (uitschakelbare modules die *ooit* ook voor een andere klant relevant
 kunnen worden, zoals NIS2 of de vragenlijst-builder). Concessiemanagement
 past in geen van beide:
@@ -152,7 +152,7 @@ eigen maatwerkmodule.
 
 - Het exacte datamodel (entiteiten, tabellen, relaties) — dat is de
   volgende stap, ná deze uitgangspunten.
-- Het topologie-besluit uit `docs/advies-td-aa-splitsing.md` §niet-beslist
+- Het topologie-besluit uit `docs/advies/advies-td-aa-splitsing.md` §niet-beslist
   (één of twee productdeployments) — concessiemanagement bevestigt dát dit
   besluit ooit nodig is, maar beslist het niet.
 - Wie de notificatie-abstractie bouwt en wanneer — alleen dat het een
@@ -166,6 +166,6 @@ eigen maatwerkmodule.
 
 Gepland: verder op 2026-09-06 (of later). Volgende stap is waarschijnlijk
 een aangescherpte, project-specifieke versie van de opdracht uit
-`docs/Combinatie_MCM2_Concessiemngt.md` — met deze uitgangspunten als
+`docs/advies/combinatie-mcm2-concessiemanagement-prompt.md` — met deze uitgangspunten als
 kader, en pas ná het topologie-besluit uit `advies-td-aa-splitsing.md` als
 dat inmiddels actueel is.

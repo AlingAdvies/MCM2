@@ -287,6 +287,6 @@ Het belang hiervan: zelfs als er ooit een fout in de applicatiecode zou zitten d
 
 **De drie vetgedrukte rode regels horen bij elkaar** en vormen samen het beeld: er kan iets misgaan zonder dat iemand het merkt, en als het gemerkt wordt is er geen procedure. Dat is verdedigbaar zolang er geen klantdata in zit — maar sinds 2026-08-09 leeft er een echte tenant in productie.
 
-Voor de actuele, meest up-to-date versie van deze lijst: zie altijd `docs/STATUS.md` — dat document wordt bijgewerkt bij elke relevante wijziging, dit document (`docs/otap-en-security-voor-eigenaar.md`) is bedoeld als uitleg van de *concepten*, niet als dagelijkse statustracker.
+Voor de actuele, meest up-to-date versie van deze lijst: zie altijd `docs/STATUS.md` — dat document wordt bijgewerkt bij elke relevante wijziging, dit document (`docs/architectuur/otap-en-security-voor-eigenaar.md`) is bedoeld als uitleg van de *concepten*, niet als dagelijkse statustracker.
 
 Wat er terugkeert en wanneer, staat in `docs/runbooks/onderhoudskalender.md`.

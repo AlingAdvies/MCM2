@@ -80,11 +80,11 @@ Vier stukken werk in één sessie, van feature tot infrastructuur:
 
 **2026-09-06 — Verkennend gesprek: uitgangspunten concessiemanagement
 vastgelegd, geen ontwerp.** Naar aanleiding van
-`docs/Combinatie_MCM2_Concessiemngt.md` (een uitgebreide opdracht-prompt
+`docs/advies/combinatie-mcm2-concessiemanagement-prompt.md` (een uitgebreide opdracht-prompt
 voor een AI-solution-design) is een hoog-over gesprek gevoerd over hoe
 concessiemanagement (Transdev tegenover provincies/gemeenten) zich verhoudt
 tot de bestaande vendor-/contractmodule. Vastgelegd in
-`docs/uitgangspunten-concessiemanagement.md`: twee bounded contexts
+`docs/advies/uitgangspunten-concessiemanagement.md`: twee bounded contexts
 verbonden via verwijzing (niet gedeeld datamodel), één doorlopende
 dossier-tijdlijn van aanbieding tot lopende uitvoering (geen harde knip bij
 gunning), dossier-lidmaatschap los van tenant-lidmaatschap, twee
@@ -93,7 +93,7 @@ vendor — dus overleg/notulen/besluit vóór een compliance-statusmodel), en
 een overzicht van welke infrastructuur al gedeeld kan worden (mail: ja
 direct; token-toegang: patroon herbruikbaar, nieuwe guard; Entra-login:
 alleen intern; notificaties: bestaat nog niet, goede eerste gedeelde
-kern-uitbreiding). `docs/advies-td-aa-splitsing.md` kreeg een §7: dit is
+kern-uitbreiding). `docs/advies/advies-td-aa-splitsing.md` kreeg een §7: dit is
 een derde categorie naast kern/AA-only — **TD-only, blijvend** (nooit
 generiek zoals NIS2 dat ooit kan worden). Geen datamodel, geen
 architectuurbesluit — vervolg gepland.
@@ -180,7 +180,7 @@ teruggedraaid, oorzaak bevestigd via CloudWatch, structureel gefixt.**
    voor demo en handmatig testen**, de 1-op-1-relatie met de
    `MCM2-frontend`-repo staat er nu expliciet in, en de TD/AA-splitsing is
    opgenomen als verkennende richting, géén besluit; (b)
-   `docs/advies-td-aa-splitsing.md` + `docs/evaluatie-advies-td-aa-splitsing.md`
+   `docs/advies/advies-td-aa-splitsing.md` + `docs/advies/evaluatie-advies-td-aa-splitsing.md`
    (stonden ongetrackt) nu in git; (c) de memory-index (`MEMORY.md`)
    geherstructureerd onder vijf koppen zonder informatieverlies en de
    memory `mcm2-doel-en-middelen` gemarkeerd als deels achterhaald met
@@ -235,7 +235,7 @@ Transdev, die niet uit het statusoverzicht te krijgen was.**
 6. **Verkennend, niet gebouwd:** technisch advies opgesteld over een
    mogelijke toekomstige splitsing van MCM2 in twee producten — TD
    (Bizaline/Transdev-maatwerk) en AA (AlingAdvies, generiek multitenant) —
-   zie `docs/advies-td-aa-splitsing.md`. Puur verkennend op verzoek van de
+   zie `docs/advies/advies-td-aa-splitsing.md`. Puur verkennend op verzoek van de
    eigenaar, geen enkele code- of architectuurwijziging als gevolg hiervan.
 
 ---
@@ -1436,7 +1436,7 @@ oplost.
 dat het sub-pad-ontwerp zelf het probleem is, niet een van de plekken die het
 raakt. Op een opzet met een eigen hostnaam per omgeving (stap C, zie
 `architectuur/plan-robuuste-simulatie-zonder-aws.md` én het nieuwe
-`01-niet-aws-otap-opzet.md`) bestaat dit probleem niet: `_next/static/...`
+`archive/2026-08-niet-aws-otap-opzet-thuisserver.md`) bestaat dit probleem niet: `_next/static/...`
 wijst dan altijd naar de enige server op die hostnaam. Bug 1 en 2 blijven
 gefixt en gemerged — ze zijn juist en nuttig zodra stap C er is, en bug 2's
 fix helpt al gedeeltelijk (interne `<Link>`-navigatie binnen een eenmaal
@@ -1470,7 +1470,7 @@ stand van 14-08 die hieronder bleven liggen:
    Oorzaak: de laptop stond uit op het geplande tijdstip — geen fout in de
    taak zelf. Hersteld: zie het backupbewijs van vandaag.
 3. Er ligt een nieuw, extern aangeleverd ontwerpdocument
-   [`01-niet-aws-otap-opzet.md`](01-niet-aws-otap-opzet.md) — eigen hostnamen
+   [`archive/2026-08-niet-aws-otap-opzet-thuisserver.md`](archive/2026-08-niet-aws-otap-opzet-thuisserver.md) — eigen hostnamen
    per omgeving via Caddy + DNS, wat het bekende sub-pad-probleem (stap C)
    zou oplossen. Nog niet beoordeeld of ingepast in het vierstappenplan.
 
@@ -2782,7 +2782,7 @@ Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in
 1. Lees `MCM2-CLAUDE.md` volledig (sessiestartprotocol, §14).
 2. Lees dit document (`docs/STATUS.md`) volledig — het is de enige actuele waarheid over fase en blockers.
 
-   Wie wil begrijpen **waarom** de tenantgrens is zoals hij is, en hoe elke laag ervan bewezen wordt: `docs/architectuur-en-verificatie.md`. Dat document beschrijft de architectuur, het principe achter de testopzet (elke beveiligingstest krijgt een tegenproef) en — het belangrijkste hoofdstuk — wat er nog **niet** bewezen is. Het veroudert zodra de code verandert, dus werk het bij wanneer je de tenantgrens of de testopzet raakt.
+   Wie wil begrijpen **waarom** de tenantgrens is zoals hij is, en hoe elke laag ervan bewezen wordt: `docs/architectuur/architectuur-en-verificatie.md`. Dat document beschrijft de architectuur, het principe achter de testopzet (elke beveiligingstest krijgt een tegenproef) en — het belangrijkste hoofdstuk — wat er nog **niet** bewezen is. Het veroudert zodra de code verandert, dus werk het bij wanneer je de tenantgrens of de testopzet raakt.
 
    Verder, sinds 2026-08-10:
    - `docs/runbooks/README.md` — de index van alle runbooks
@@ -2830,7 +2830,7 @@ Eigen CI en eigen releasecyclus per repo — bewust, zodat een tekstwijziging in
 
    **Twee dingen om te onthouden bij lokaal werken:**
    - `SESSIE_COOKIE_INSECURE=true` moet in `.env` staan, anders weigert de browser het `__Host-`-cookie over http en lukt inloggen niet. In productie hoort die regel er níét te staan.
-   - De `oid` in `clm.user.external_subject` hoort bij **mcm2ciam**, niet bij AlingAdvies. Verhuist de CIAM-tenant ooit, dan is dat een **datamigratie** — zie `docs/architectuur-en-verificatie.md` §11.
+   - De `oid` in `clm.user.external_subject` hoort bij **mcm2ciam**, niet bij AlingAdvies. Verhuist de CIAM-tenant ooit, dan is dat een **datamigratie** — zie `docs/architectuur/architectuur-en-verificatie.md` §11.
 
 ### Twee scripts in `scripts/` die hun werk gedaan hebben
 

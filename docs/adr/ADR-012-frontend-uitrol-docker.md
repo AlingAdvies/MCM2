@@ -209,7 +209,7 @@ hoort niet de RLS-isolatietests te draaien.
 
 ### OTAP
 
-Het bestaande document `docs/otap-en-security-voor-eigenaar.md` beschrijft OTAP backend-only en is
+Het bestaande document `docs/architectuur/otap-en-security-voor-eigenaar.md` beschrijft OTAP backend-only en is
 op onderdelen verouderd (het noemt Prisma en twee CI-controles; er zijn er nu drie). Het moet
 bijgewerkt worden met de frontend erin.
 

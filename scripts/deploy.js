@@ -162,7 +162,7 @@ const OMGEVINGEN = {
     // 0 leveranciers. De container was leeg; er is niets verloren gegaan.
     lokaleDatabase: false,
     // Net als staging: de migraties draaien vanuit de workflow
-    // (.github/workflows/productie.yml), niet vanaf deze machine. Deze uitrol
+    // (.github/workflows/productie-aws.yml), niet vanaf deze machine. Deze uitrol
     // start alleen de applicatie.
     migratiesOverslaan: true,
   },
@@ -703,7 +703,7 @@ async function main() {
   // workflow, tegen Supabase, met het teruglezen erin:
   //
   //   staging    → job `staging` in .github/workflows/ci.yml
-  //   productie  → .github/workflows/productie.yml, achter vier remmen
+  //   productie  → .github/workflows/productie-aws.yml, achter vier remmen
   //
   // Ze hier nóg een keer draaien zou betekenen dat een laptop schrijft naar een
   // database die de pipeline beheert. Dat is precies de gewoonte die dit plan

@@ -32,6 +32,13 @@ permissions:
   contents: write
   issues: read
 
+# Meerdere issue-wijzigingen tegelijk startten parallelle runs die elkaars push
+# afketsten ("rejected, fetch first"; gemeten op 06-10 en 10-10). Eén tegelijk,
+# en de nieuwste wachtende run wint: die ziet toch de meest recente issue-stand.
+concurrency:
+  group: statusbord
+  cancel-in-progress: false
+
 jobs:
   bijwerken:
     name: Statusbord regenereren
@@ -67,4 +74,8 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/STATUSBORD.md
           git commit -m "chore(statusbord): automatisch bijgewerkt naar de huidige issue-stand"
+          # Een issue-event checkt de main-stand van het moment van het event
+          # uit; is main sindsdien verder (een merge, een eerdere statusbord-
+          # run), dan eerst bijwerken. Dit bestand schrijft alleen deze workflow.
+          git pull --rebase
           git push
