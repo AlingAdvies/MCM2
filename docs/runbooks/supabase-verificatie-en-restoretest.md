@@ -3,7 +3,7 @@
 **Type:** C/D (verificatie en routineoperatie)
 **Eigenaar:** Kees Maling (enige met Supabase-dashboardtoegang)
 **Aangemaakt:** 2026-07-28
-**Laatste update:** 2026-07-30
+**Laatste update:** 2026-10-11
 **Aanleiding:** ADR-002 laat drie van de vier controls open; Issue #19 (backup/restore nooit getest) en Issue #25 (Drizzle-migratiestand).
 **Vereiste toegang:** Supabase-dashboard voor project `agojesdovwsupidwlevh` (`clm-enterprise`, eu-west-1)
 
@@ -326,6 +326,7 @@ eisen uit ADR-011 gelijk blijven, dan is dat een signaal vóórdat het een incid
 |---|---|---|---|---|---|
 | 2026-07-28 | 21,7 kB dump, 9 tabellen, geen klantdata | dump 5s + restore 1s + rechten <1s ≈ **10s** | GOEDGEKEURD (na herstel grants én defaults) | Ja, ruim — norm is 1 werkdag | Claude, via `pg_dump`/`pg_restore` in container |
 | 2026-08-25 | 143 kB dump, 27 tabellen (incl. contractmanagement, migratie 0030), geen klantdata | dump op saxombp 9s + scp naar laptop + restore ≈ **onder 1 minuut** | niet `verify-schema.js` gedraaid, wel handmatig geverifieerd: 27 tabellen, RLS-policies aanwezig, echte rijdata terug | Ja, ruim | Claude, dump vanaf **saxombp** (niet OneDrive) — eerste keer dat de saxombp-cron-route zelf getest is, zie `backupcontrole.md` §"Wanneer de laptoptaak uit mag" |
+| 2026-10-11 | 252 kB dump (laptop-dump 07:09), 40 tabellen, 816 rijen, **met klantdata** (6 tenants, o.a. Transdev Nederland en Transdev DEV) | restore + rechten **1s**; `backup:controle:volledig` 7s | niet `verify-schema.js` gedraaid; wel **inhoud vergeleken**: rijen per tabel en per tenant één-op-één gelijk aan productie (productie alleen-lezen geteld, READ ONLY-transactie, via de dumprol) | Ja, ruim | Claude. **Bevinding:** bijlagen (bestanden) zaten in geen enkele backup en bleken op productie na elke uitrol verdwenen — #46, dezelfde dag opgelost met S3 |
 
 **Toelichting bij de eerste meting.** Dit was een handmatige dump-restore, **niet** de
 dashboard-backup van Supabase. Het bewijst dat er een werkend herstelpad bestaat en levert een
