@@ -39,10 +39,6 @@ const UITZONDERINGEN = new Map([
     'docs/frontend-veld-cross-reference.csv',
     'koppeling van veldnamen tussen scherm, database en Coupa; geen klantgegevens',
   ],
-  [
-    'docs/transdev-veld-cross-reference.csv',
-    'koppeling van veldnamen uit de gap-analyse; geen klantgegevens',
-  ],
 ]);
 
 const EMAIL =
