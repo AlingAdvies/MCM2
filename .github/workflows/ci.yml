@@ -140,6 +140,19 @@ jobs:
       - name: Schema-conformiteit en RLS-dekking
         run: npx jest --config ./test/jest-e2e.json test/schema-conformiteit.e2e-spec.ts
 
+      # Nagebootste S3 voor bestand-opslag-s3.e2e-spec.ts (#46). Geen
+      # service-container: die kan geen eigen startcommando of wachtlus aan.
+      # Zelfde image en poort als `npm run test:db` lokaal.
+      - name: Nagebootste S3 starten (Adobe S3Mock)
+        run: |
+          docker run -d --name mcm2-tests3 -p 127.0.0.1:55441:9090 adobe/s3mock:5.2.3
+          for i in $(seq 1 30); do
+            curl -s -o /dev/null http://127.0.0.1:55441/ && exit 0
+            sleep 1
+          done
+          echo "::error::S3Mock startte niet binnen 30 seconden."
+          exit 1
+
       # Alle isolatietests: via ruwe pg-queries, via de Drizzle-querylaag, en
       # het tokengebaseerde pad voor externe leveranciers (Issue #10).
       - name: Tenant- en token-isolatietests draaien (via clm_api_runtime)

@@ -230,6 +230,12 @@ periodieke restore-test — niet een providerbackup.
   maandelijks hertest. Betalende klanten — RPO 15 min, RTO 2 uur, restore
   elk kwartaal plus minstens één bewezen herstel naar een ander
   project/regio.
+- **Bijlagen (geüploade bestanden) staan niet in de database en niet in de
+  dump.** Op productie staan ze in S3 (`mcm2-bijlagen-productie-727732213368`,
+  privé, versleuteld, versiebeheer; #46). Een containerschijf is op ECS na
+  elke uitrol leeg — vóór 11-10 gingen zo alle bijlagen verloren. De uitrol
+  faalt als `/health` niet `bijlagenOpslag: "s3"` meldt. Een kopie buiten AWS
+  is nog niet ingericht (vervolgstap #46).
 
 **Wordt bewezen door** de CI-workflow zelf (`productie-poort.js` faalt de
 pipeline zichtbaar bij een gebroken rem), `docs/runbooks/backup-bewijs.json`
@@ -295,7 +301,8 @@ worden.*
 Runner is losgelaten — accepteert sinds 30-04-2026 geen nieuwe klanten meer).
 Twee ECS-services: `mcm2-api` (backend) en `web-23bd` (frontend), cluster
 `default`. Custom domain `clm.alingadvies.nl`, login end-to-end bevestigd
-sinds 2026-08-20. S3-bucket `mcm2-deploy-eu-west-1`. Laatste bevestigde
+sinds 2026-08-20. S3-buckets `mcm2-deploy-eu-west-1` en, voor bijlagen,
+`mcm2-bijlagen-productie-727732213368` (#46). Laatste bevestigde
 productie-uitrol: 2026-08-28 (migratie 0034, Coupa-schema-uitbreiding).
 
 **Supabase.** Beide projecten `eu-west-1`, Postgres 17.6, **Free plan**

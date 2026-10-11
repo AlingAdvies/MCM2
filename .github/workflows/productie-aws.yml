@@ -173,6 +173,14 @@ jobs:
           task-definition: api-task-definition.json
           container-name: Main
           image: ghcr.io/alingadvies/mcm2/api:${{ inputs.versie != '' && inputs.versie || steps.standaard_versie.outputs.tag }}
+          # Bijlagen in S3, niet op de containerschijf: die is op ECS na elke
+          # uitrol leeg (#46, bevestigd 11-10). Hier en niet met de hand in de
+          # console, zodat de instelling in de repo staat en niet stil kan
+          # verdwijnen. Rechten: inline policy `mcm2-bijlagen-productie` op
+          # de taakrol ECS-role-ccaff3ce; geen sleutel in de container.
+          environment-variables: |
+            S3_BUCKET=mcm2-bijlagen-productie-727732213368
+            S3_REGION=eu-west-1
 
       - name: mcm2-api uitrollen
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
@@ -236,6 +244,20 @@ jobs:
               .catch((e) => { console.error('MISLUKT: ' + e.message); process.exit(1); });
           "
 
+      # Niet aannemen dat de instelling aankwam: lezen wat de draaiende
+      # applicatie zelf meldt. Een api zonder S3 verliest bij de volgende
+      # uitrol weer alle bijlagen (#46) — dat moet hier rood worden, niet pas
+      # wanneer een gebruiker een "500" ziet.
+      - name: Bijlagen gaan naar S3 (gemeld door /health)
+        run: |
+          OPSLAG=$(curl -s --max-time 20 https://clm.alingadvies.nl/api/backend/health \
+            | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{console.log(JSON.parse(s).bijlagenOpslag)}catch{console.log('onleesbaar')}})")
+          echo "bijlagenOpslag: $OPSLAG"
+          if [ "$OPSLAG" != "s3" ]; then
+            echo "::error::Productie meldt bijlagenOpslag='$OPSLAG' in plaats van 's3'. Uploads gaan dan naar de containerschijf en verdwijnen bij de volgende uitrol (#46)."
+            exit 1
+          fi
+
       # ── Rem 4: terugdraaien ────────────────────────────────────────────────
       #
       # `if: always()` omdat juist een MISLUKTE run de weg terug moet tonen.
@@ -275,4 +297,8 @@ jobs:
             echo "> achterwaarts verdraagzaam zijn — kolommen toevoegen wel, kolommen"
             echo "> verwijderen niet. Staat er een verwijderende migratie in, dan is"
             echo "> terugzetten van de backup de weg, niet de rollback."
+            echo ""
+            echo "> Terug naar een image van vóór #46 (S3-bijlagen, 11-10)? Die code"
+            echo "> kent S3 niet: bijlagen in de bucket zijn dan niet te openen en"
+            echo "> nieuwe uploads gaan weer naar de containerschijf."
           } >> "$GITHUB_STEP_SUMMARY"

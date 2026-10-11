@@ -60,6 +60,7 @@
     "statusbord": "node scripts/statusbord.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1149.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",

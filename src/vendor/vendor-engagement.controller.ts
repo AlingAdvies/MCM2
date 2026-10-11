@@ -21,7 +21,11 @@ import {
   TenantContextGuard,
   type RequestMetSessie,
 } from '../auth/tenant-context.guard';
-import { BestandOpslagService } from '../survey/bestand-opslag.service';
+import {
+  BESTAND_ONTBREEKT_MELDING,
+  BestandOntbreektFout,
+  BestandOpslagService,
+} from '../survey/bestand-opslag.service';
 import { veiligeWeergavenaam } from '../survey/bestand-validatie';
 import { MAX_BESTANDSGROOTTE } from './vendor-engagement-bestand-validatie';
 import {
@@ -227,7 +231,16 @@ export class VendorEngagementController {
       return;
     }
 
-    const inhoud = await this.opslag.lees(gegevens.storageKey);
+    let inhoud: Buffer;
+    try {
+      inhoud = await this.opslag.lees(gegevens.storageKey);
+    } catch (fout) {
+      if (fout instanceof BestandOntbreektFout) {
+        res.status(404).json({ melding: BESTAND_ONTBREEKT_MELDING });
+        return;
+      }
+      throw fout;
+    }
     const naam = veiligeWeergavenaam(gegevens.originalFilename);
 
     res.setHeader('Content-Type', gegevens.contentType);

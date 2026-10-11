@@ -1,5 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 
+import { actieveOpslagSoort } from '../survey/bestand-opslag.service';
+
 /**
  * Meldt niet alleen dát de applicatie draait, maar ook wélke code dat is.
  *
@@ -30,6 +32,10 @@ import { Controller, Get } from '@nestjs/common';
  *                        laten zien — twee omgevingen kunnen precies dezelfde
  *                        code draaien.
  *
+ *   bijlagenOpslag       's3' of 'schijf' (#46). Op productie hoort hier
+ *                        's3' te staan: een schijf is op ECS na elke uitrol
+ *                        leeg. Nooit null — de keuze wordt altijd gemaakt.
+ *
  * `null` betekent: niet meegekregen. Dat is een geldige uitkomst (lokale
  * ontwikkelbuild, oude uitrol van vóór deze meting) en hoort zichtbaar te
  * blijven — een verzonnen vulling zou precies de meetfout maskeren waarvoor
@@ -46,6 +52,7 @@ export class HealthController {
       imageDigest: process.env.IMAGE_DIGEST ?? null,
       frontendImageDigest: process.env.FRONTEND_IMAGE_DIGEST ?? null,
       omgeving: process.env.OMGEVING ?? null,
+      bijlagenOpslag: actieveOpslagSoort(),
     };
   }
 }

@@ -28,7 +28,11 @@ import {
   type RequestMetSessie,
 } from '../auth/tenant-context.guard';
 import { ContractService } from '../contract/contract.service';
-import { BestandOpslagService } from './bestand-opslag.service';
+import {
+  BESTAND_ONTBREEKT_MELDING,
+  BestandOntbreektFout,
+  BestandOpslagService,
+} from './bestand-opslag.service';
 import { BijlageBeheerService } from './bijlage-beheer.service';
 import { MAX_BESTANDSGROOTTE } from './bestand-validatie';
 import { ContractmanagerService } from './contractmanager.service';
@@ -199,7 +203,16 @@ export class VragenlijstBeheerController {
     const sessie = request.sessie!;
 
     const bijlage = await this.beheer.bijlageOpzoeken(sessie.tenantId, id);
-    const inhoud = await this.opslag.lees(bijlage.storageKey);
+
+    let inhoud: Buffer;
+    try {
+      inhoud = await this.opslag.lees(bijlage.storageKey);
+    } catch (fout) {
+      if (fout instanceof BestandOntbreektFout) {
+        throw new NotFoundException(BESTAND_ONTBREEKT_MELDING);
+      }
+      throw fout;
+    }
 
     res.set({
       'Content-Type': bijlage.contentType,
