@@ -237,17 +237,38 @@ function controleerPoortenVrij() {
 
 /** Containernaam voor de wegwerpdatabase van de verify-stap (stap 2). */
 const TESTDB = 'mcm2-verify-volledig-db';
-const TESTDB_POORT = 55441;
+const TESTDB_POORT = 55443;
+
+/** De eigen nagebootste S3 van de verify-stap — zelfde image als CI. */
+const TESTS3 = 'mcm2-verify-volledig-s3';
+const TESTS3_POORT = 55444;
+const TESTS3_IMAGE = 'adobe/s3mock:5.2.3';
 
 /**
- * Start een wegwerpdatabase voor de verify-stap (stap 2).
+ * Start een wegwerpdatabase en een nagebootste S3 voor de verify-stap (stap 2).
  *
- * Los van de doorloopstack (die draait op 55500) en los van de container die
- * iemand handmatig voor `npm run verify` gebruikt (55440). Drie poorten, drie
- * doelen — dat voorkomt dat deze doorloop andermans database leegruimt.
+ * Los van de doorloopstack (55500) en los van wat `npm run test:db` neerzet
+ * (database 55440, nagebootste S3 55441). Eigen poorten, eigen doelen — dat
+ * voorkomt dat deze doorloop andermans container leegruimt of erop strandt.
+ *
+ * Tot 15-10-2026 stond de database hier óók op 55441. Dat botste op twee
+ * manieren: met een draaiende `test:db` startte deze stap niet ("port is
+ * already allocated"), en zonder `test:db` vond test/bestand-opslag-s3 op
+ * 55441 een Postgres in plaats van een S3 — vier rode tests sinds #46.
  */
 function startTestDatabase() {
   draai('docker', ['rm', '-f', TESTDB], { stil: true });
+  draai('docker', ['rm', '-f', TESTS3], { stil: true });
+
+  const s3 = draai(
+    'docker',
+    ['run', '-d', '--name', TESTS3, '-p', `127.0.0.1:${TESTS3_POORT}:9090`, TESTS3_IMAGE],
+    { stil: true },
+  );
+
+  if (!s3.ok) {
+    return { ok: false, reden: s3.uitvoer.trim() };
+  }
 
   const gestart = draai(
     'docker',
@@ -352,9 +373,34 @@ function startTestDatabase() {
         return { ok: false, reden: markering.uitvoer.trim() };
       }
 
+      // De S3-mock start in een paar seconden; wachten tot hij antwoordt,
+      // anders faalt de S3-suite op een container die nog opstart.
+      for (let s3Poging = 0; s3Poging < 30; s3Poging += 1) {
+        const s3Antwoord = draai(
+          'curl',
+          [
+            '-s',
+            '-o',
+            isWindows ? 'NUL' : '/dev/null',
+            '-w',
+            '%{http_code}',
+            '--max-time',
+            '2',
+            `http://127.0.0.1:${TESTS3_POORT}/`,
+          ],
+          { stil: true },
+        );
+        const s3Code = s3Antwoord.uitvoer.trim();
+        if (s3Code && s3Code !== '000') break;
+        draai(isWindows ? 'timeout' : 'sleep', isWindows ? ['/t', '1', '/nobreak'] : ['1'], {
+          stil: true,
+        });
+      }
+
       return {
         ok: true,
         url: `postgresql://clm_api_runtime:pw@localhost:${TESTDB_POORT}/postgres`,
+        s3: `http://127.0.0.1:${TESTS3_POORT}`,
       };
     }
 
@@ -371,6 +417,7 @@ function startTestDatabase() {
 
 function stopTestDatabase() {
   draai('docker', ['rm', '-f', TESTDB], { stil: true });
+  draai('docker', ['rm', '-f', TESTS3], { stil: true });
 }
 
 /**
@@ -831,7 +878,7 @@ function main() {
     }
 
     const verify = draai('npm', ['run', 'verify'], {
-      env: { DATABASE_URL: testDb.url },
+      env: { DATABASE_URL: testDb.url, S3_TEST_ENDPOINT: testDb.s3 },
     });
 
     stopTestDatabase();
