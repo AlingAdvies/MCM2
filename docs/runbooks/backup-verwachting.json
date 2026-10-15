@@ -152,10 +152,15 @@
     "uitrol, en de dagelijkse backupcontrole zou ze tot dan als ontbrekend melden",
     "(zelfde kip-ei als bij 0034/0035 hierboven). Bevestigd op productie",
     "(10-10, run 38068509094, health e9c2e63, verify:omgevingen: 47 migraties,",
-    "33 tabellen, geen zonderLeesrecht) — nu in de tabellenlijst."
+    "33 tabellen, geen zonderLeesrecht) — nu in de tabellenlijst.",
+    "",
+    "Migratie 0047 (15-10, contractmodule alsnog aan voor bestaande tenants)",
+    "voegt GEEN tabel toe — alleen rijen in de bestaande clm.tenant_feature.",
+    "Migratiestand bijgewerkt, tabellenlijst niet — zelfde soort wijziging",
+    "als migratie 0044/0045 hierboven."
   ],
-  "bijgewerkt": "2026-10-10",
-  "migratiestand": "0046_werkingsgebied",
+  "bijgewerkt": "2026-10-15",
+  "migratiestand": "0047_contractmodule_herstel",
   "tabellen": [
     "audit.audit_event",
     "clm.contract",

@@ -448,6 +448,11 @@ export const TEST_IDS = {
     adminA: id('04'),
     userA: id('05'),
   },
+  'contractmodule-herstel': {
+    bestaandeTenant: id('06'),
+    tenantMetBewusteKeuze: id('07'),
+    verwijderdeTenant: id('08'),
+  },
 } as const;
 
 /** Alle uitgedeelde id's, plat. Gebruikt door de bewakingstest. */

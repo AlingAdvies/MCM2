@@ -3,12 +3,14 @@
 Het SC10-concepttemplate (`sc10-basic-concept-v0.json`) staat in
 `C:\Users\cmali\OneDrive - Aling Advies\MCM2-klantdata\_platform\nis2\`.
 
-Reden: deze repo is publiek en het auteursrechtpunt uit
-`../decisions/0006-transdev-geen-voorwaarde.md` staat open. Ook in eigen
-woorden volgt het template de maatregelstructuur van de SC-documenten.
-Besluit eigenaar 14-10-2026. `.gitignore` weert `*.json` in deze map.
+Reden (14-10-2026): deze repo is publiek, en het template volgt de
+maatregelstructuur van de SC-documenten. Op 15-10-2026 besloot de eigenaar
+dat het auteursrechtpunt uit `../decisions/0006-transdev-geen-voorwaarde.md`
+niet van toepassing is; het template mag dus naar productie, maar blijft
+voorlopig buiten de repo. `.gitignore` weert `*.json` in deze map.
 
-Laden (alleen op een niet-beschermde database, nooit productie):
+Laden per tenant. Een beschermde database (zoals productie) vraagt bewust
+`--extern`:
 
     npm run seed:vragenlijsten -- <tenant-uuid> "<absoluut pad naar het json-bestand>"
 
