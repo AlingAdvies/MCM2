@@ -85,7 +85,9 @@ export class SurveyResponseController {
    * (UC1).
    *
    * Retourneert bewust geen tenant, vendor of response-ID — dezelfde
-   * terughoudendheid als bij de statusroute hierboven.
+   * terughoudendheid als bij de statusroute hierboven. Twee benoemde
+   * uitzonderingen: `contactinfo` en de organisatienaam (`organisatie`), zie
+   * VragenlijstLeesService.
    */
   @Get('questions')
   async vragen(@Req() request: RequestMetToken) {

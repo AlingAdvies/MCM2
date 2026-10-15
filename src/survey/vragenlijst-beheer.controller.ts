@@ -162,6 +162,20 @@ export class VragenlijstBeheerController {
   }
 
   /**
+   * Het resultaat van een ronde: per vraag de verdeling van de antwoorden,
+   * per leverancier zijn keuzes (NIS2-doorsnede, ADR 0006 stap 5).
+   *
+   * Geen `@VereistRol`: lezen, net als de andere GET-routes hier. 404 als de
+   * ronde niet binnen deze tenant bestaat.
+   */
+  @Get('runs/:id/resultaten')
+  async resultaten(@Req() request: RequestMetSessie, @Param('id') id: string) {
+    const sessie = request.sessie!;
+
+    return this.beheer.resultaten(sessie.tenantId, id);
+  }
+
+  /**
    * De antwoorden van één respons — wat de leverancier feitelijk heeft
    * ingevuld, in de volgorde van de vragenlijst.
    *

@@ -37,6 +37,7 @@
  *   npm run demo                       opzetten (data blijft staan)
  *   npm run demo -- --vers             database eerst weggooien en opnieuw opbouwen
  *   npm run demo -- --branch <naam>    eerst deze branch uitchecken in MCM2-frontend
+ *   node scripts/demo-stack.js tenant "<naam>"   extra tenant + admin in de draaiende demo
  *   npm run demo:af                    backend en frontend stoppen, database laten staan
  *   npm run demo:status                draait het, en wat zit erin?
  */
@@ -424,6 +425,12 @@ function backendStarten() {
       // lokale demo van staging/acceptatie kan onderscheiden, ook al draaien
       // ze soms exact dezelfde code.
       OMGEVING: 'lokale-demo',
+      // Leeg, en daardoor het logkanaal (mail.config.ts). `.env` bevat een
+      // Resend-sleutel, en dotenv laat al gezette variabelen staan — zonder
+      // deze twee regels verstuurde de demo echte uitnodigingen (gemeten
+      // 14-10). Links staan in de Excel-export en in .demo/backend.log.
+      RESEND_API_KEY: '',
+      MAIL_AFZENDER_ADRES: '',
     },
   });
 
@@ -603,7 +610,11 @@ function gekozenDemoGebruiker() {
       `SELECT u.external_subject || '|' || u.full_name ` +
       `FROM clm."user" u ` +
       `JOIN clm.tenant_membership m ON m.user_id = u.user_id ` +
-      `WHERE m.role = 'admin' ORDER BY u.full_name LIMIT 1`,
+      // Expliciet op tenant: de migratierol ziet hier ook de leden van een
+      // tweede demo-tenant (`demo-stack.js tenant`), en die kwam op naam
+      // eerder in de lijst — gemeten 14-10.
+      `WHERE m.role = 'admin' AND m.tenant_id = '${DEMO_TENANT_ID}' ` +
+      `ORDER BY u.full_name LIMIT 1`,
   );
 
   const regel = laatsteRegel(uitkomst.uitvoer);
@@ -1013,6 +1024,182 @@ function test() {
   return true;
 }
 
+// ── Tweede tenant ───────────────────────────────────────────────────────────
+
+const DEMO_PLATFORM_TENANT_ID = 'dededede-0000-4000-8000-0000000000ff';
+const DEMO_PLATFORM_USER_ID = 'dededede-0000-4000-8000-0000000000fe';
+const DEMO_PLATFORM_SUBJECT = 'demo-platformbeheerder';
+
+/**
+ * Zet in de draaiende demo een extra tenant op, met een admin die kan inloggen.
+ *
+ * ── Waarom niet via tenant-aanmaken.js ──────────────────────────────────────
+ *
+ * Dat script vangt de Entra-login op poort 5001 op, waar de demo-backend
+ * draait — en het heeft die backend zelf óók nodig. Beide tegelijk kan niet.
+ * Dit is hetzelfde patroon als test/platform-routes.e2e-spec.ts: een
+ * verzonnen platformbeheerder, een sessie via `clm.sessie_aanmaken()`, en
+ * daarna de échte `POST /platform/tenants`. De tenant krijgt zo het
+ * auditspoor van de platformroute; alleen de identiteit is verzonnen, net als
+ * bij de demo-tenant zelf.
+ *
+ * De uitnodiging wordt verzilverd met `clm.koppel_eerste_login()` — dezelfde
+ * functie die de echte eerste login aanroept, inclusief de auditregel
+ * `eerste_login_gekoppeld`. Overgeslagen is alleen de Entra-stap.
+ *
+ * Herhaalbaar: bestaat de tenant al, dan levert dit alleen een nieuwe sessie
+ * voor zijn admin op (bijvoorbeeld als de vorige na 8 uur verlopen is).
+ */
+async function tenantOpzetten(naam) {
+  if (!naam) {
+    console.error('Gebruik: node scripts/demo-stack.js tenant "<naam>"');
+    return false;
+  }
+
+  if (httpCode(`http://localhost:${API_POORT}/health`) !== '200') {
+    console.error('Er draait geen demo-backend. Start eerst: npm run demo');
+    return false;
+  }
+
+  const slug = naam
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+  const adminSubject = `demo-${slug}-admin`;
+  const adminEmail = `beheerder.${slug}@voorbeeld.nl`;
+
+  // Opzetwerk, als migratierol — zelfde figuur als maakSessie() in
+  // verify-volledig.js. clm.platform_admin mag de runtime-rol niet schrijven.
+  const opzet = [
+    `SET app.current_tenant_id = '${DEMO_PLATFORM_TENANT_ID}'; INSERT INTO clm.tenant (tenant_id, name) VALUES ('${DEMO_PLATFORM_TENANT_ID}', 'Demo-platformbeheer') ON CONFLICT DO NOTHING;`,
+    `SET app.current_tenant_id = '${DEMO_PLATFORM_TENANT_ID}'; INSERT INTO clm."user" (user_id, tenant_id, full_name, email, external_subject) VALUES ('${DEMO_PLATFORM_USER_ID}', '${DEMO_PLATFORM_TENANT_ID}', 'Demo-platformbeheerder', 'platformbeheer@voorbeeld.nl', '${DEMO_PLATFORM_SUBJECT}') ON CONFLICT DO NOTHING;`,
+    `SET app.current_tenant_id = '${DEMO_PLATFORM_TENANT_ID}'; INSERT INTO clm.tenant_membership (user_id, tenant_id, role) VALUES ('${DEMO_PLATFORM_USER_ID}', '${DEMO_PLATFORM_TENANT_ID}', 'admin') ON CONFLICT DO NOTHING;`,
+    `INSERT INTO clm.platform_admin (user_id, toelichting) VALUES ('${DEMO_PLATFORM_USER_ID}', 'lokale demo') ON CONFLICT DO NOTHING;`,
+  ];
+
+  for (const sql of opzet) {
+    const uitkomst = psql(sql);
+
+    if (!uitkomst.ok) {
+      console.error(`Opzet platformbeheerder mislukt:\n  ${uitkomst.uitvoer.trim()}`);
+      return false;
+    }
+  }
+
+  const beheerder = sessieVoor(DEMO_PLATFORM_SUBJECT, '1 hour');
+
+  if (!beheerder.ok) {
+    console.error(beheerder.reden);
+    return false;
+  }
+
+  const koppen = {
+    Cookie: `mcm2_sessie=${beheerder.token}`,
+    Origin: `http://localhost:${WEB_POORT}`,
+    'Content-Type': 'application/json',
+  };
+
+  const lijst = await fetch(`http://localhost:${API_POORT}/platform/tenants`, {
+    headers: koppen,
+  });
+
+  if (!lijst.ok) {
+    console.error(`GET /platform/tenants gaf ${lijst.status}: ${await lijst.text()}`);
+    return false;
+  }
+
+  const bestaand = (await lijst.json()).tenants.find((t) => t.naam === naam);
+  let tenantId = bestaand?.tenantId;
+
+  if (bestaand) {
+    console.log(`Tenant "${naam}" bestaat al (${tenantId}).`);
+  } else {
+    const aangemaakt = await fetch(
+      `http://localhost:${API_POORT}/platform/tenants`,
+      {
+        method: 'POST',
+        headers: koppen,
+        body: JSON.stringify({
+          naam,
+          adminNaam: `Beheerder ${naam}`,
+          adminEmail,
+        }),
+      },
+    );
+
+    if (!aangemaakt.ok) {
+      console.error(
+        `POST /platform/tenants gaf ${aangemaakt.status}: ${await aangemaakt.text()}`,
+      );
+      return false;
+    }
+
+    const tenant = await aangemaakt.json();
+    tenantId = tenant.tenantId;
+
+    const hash = createHash('sha256')
+      .update(tenant.uitnodigingstoken, 'utf8')
+      .digest('hex');
+
+    const koppeling = psql(
+      `SELECT tenant_id FROM clm.koppel_eerste_login('${adminSubject}', '${adminEmail}', '${hash}')`,
+      'clm_api_runtime',
+    );
+
+    if (!koppeling.ok || !koppeling.uitvoer.includes(tenantId)) {
+      console.error(
+        `De uitnodiging kon niet verzilverd worden:\n  ${koppeling.uitvoer.trim()}`,
+      );
+      return false;
+    }
+
+    console.log(`Tenant "${naam}" aangemaakt via de platformroute (${tenantId}).`);
+  }
+
+  const admin = sessieVoor(adminSubject, '8 hours');
+
+  if (!admin.ok || !admin.uitvoer.includes(tenantId)) {
+    console.error(
+      admin.reden ??
+        `Geen sessie in "${naam}" voor ${adminSubject}: ${admin.uitvoer.trim()}`,
+    );
+    return false;
+  }
+
+  console.log('');
+  console.log(`  Tenant-id: ${tenantId}`);
+  console.log(`  Admin:     ${adminEmail} (verzonnen identiteit)`);
+  console.log('');
+  console.log('  Inloggen als admin van deze tenant (8 uur geldig):');
+  console.log('');
+  console.log(`    http://localhost:${WEB_POORT}/demo-aanmelden#${admin.token}`);
+  console.log('');
+  console.log('  Tip: gebruik een apart (incognito)venster naast de demo-tenant.');
+  console.log('');
+
+  return true;
+}
+
+/** Sessie via `clm.sessie_aanmaken()` — zie sessieMaken() voor waarom dit mag. */
+function sessieVoor(subject, geldigheid) {
+  const token = randomBytes(32).toString('base64url');
+  const hash = createHash('sha256').update(token, 'utf8').digest('hex');
+
+  const uitkomst = psql(
+    `SELECT tenant_id FROM clm.sessie_aanmaken('${hash}', '${subject}', '${geldigheid}'::interval)`,
+  );
+
+  if (!uitkomst.ok || !/[0-9a-f]{8}-/.test(uitkomst.uitvoer)) {
+    return {
+      ok: false,
+      uitvoer: uitkomst.uitvoer,
+      reden: `sessie_aanmaken() gaf geen sessie voor '${subject}': ${uitkomst.uitvoer.trim()}`,
+    };
+  }
+
+  return { ok: true, token, uitvoer: uitkomst.uitvoer };
+}
+
 function status() {
   const draaitDb =
     laatsteRegel(draai('docker', [
@@ -1083,6 +1270,18 @@ function main() {
     argumenten.find(
       (a, i) => !a.startsWith('--') && !(branchIndex !== -1 && i === branchIndex + 1),
     ) ?? 'start';
+
+  if (opdracht === 'tenant') {
+    const naamIndex = argumenten.indexOf('tenant') + 1;
+    tenantOpzetten(argumenten[naamIndex]).then(
+      (ok) => process.exit(ok ? 0 : 1),
+      (fout) => {
+        console.error(fout);
+        process.exit(1);
+      },
+    );
+    return;
+  }
 
   const uitkomst =
     opdracht === 'af'

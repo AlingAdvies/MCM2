@@ -42,6 +42,7 @@ interface VragenlijstVorm {
   questions: VraagVorm[];
   closesAt: string | null;
   contactinfo: { naam: string | null; email: string } | null;
+  organisatie: string | null;
 }
 
 let volgnummer = 0;
@@ -312,6 +313,12 @@ describe('Vragenlijst ophalen (e2e)', () => {
 
       expect(verdacht).toEqual([]);
       expect(JSON.stringify(lijst.contactinfo)).not.toContain(TENANT_A);
+    });
+
+    it('geeft de naam van de vragende organisatie mee, niet het tenant-ID', () => {
+      // Besluit eigenaar 14-10-2026: de leverancier ziet wie de vragenlijst
+      // uitzet. De naam, nooit het ID — de lektest hierboven blijft gelden.
+      expect(lijst.organisatie).toBe(`ophalen-${TENANT_A.slice(-2)}`);
     });
   });
 

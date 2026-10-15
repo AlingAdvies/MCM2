@@ -5,6 +5,10 @@ describe('feature-registry', () => {
     expect(FEATURE_KEYS).toContain('contractmodule');
   });
 
+  it('bevat nis2module (ADR 0006 van docs/nis2)', () => {
+    expect(isFeatureKey('nis2module')).toBe(true);
+  });
+
   it('herkent een geldige sleutel', () => {
     expect(isFeatureKey('contractmodule')).toBe(true);
   });

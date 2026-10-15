@@ -90,3 +90,12 @@ graphify-out/
 ~$*
 docs/exports/
 !db/seeds/*.csv
+
+# NIS2-vragenlijsttemplates volgen de SC-normstructuur; het ©-punt uit
+# docs/nis2/decisions/0006 staat open en deze repo is publiek. Templates
+# staan in OneDrive\MCM2-klantdata\_platform\nis2\ (besluit eigenaar 14-10).
+docs/nis2/templates/*.json
+# Verdienmodel en NCSC-marktsignalen (inhoud uit een maillijst) zijn
+# intern — besluit eigenaar 15-10. Staan in dezelfde OneDrive-map.
+docs/nis2/overview/business-model.md
+docs/nis2/overview/marktsignalen-ncsc-2026-10.md
