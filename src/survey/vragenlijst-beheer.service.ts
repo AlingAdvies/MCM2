@@ -2,6 +2,12 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 
 import { DatabaseService } from '../db/database.service';
+import { optiesUit } from './antwoord-opties';
+import {
+  bouwResultaten,
+  ResultaatLeverancier,
+  RondeResultaten,
+} from './ronde-resultaten';
 
 /**
  * Vragenlijsten en rondes lezen voor de beheerkant (fase A van
@@ -267,6 +273,7 @@ interface AntwoordRij extends Record<string, unknown> {
   max_files: number;
   category_id: string | null;
   categorie_naam: string | null;
+  config: unknown;
   answer_id: string | null;
   answer_code: string | null;
   answer_codes: string[] | null;
@@ -664,6 +671,95 @@ export class VragenlijstBeheerService {
   }
 
   /**
+   * Het resultaat van één ronde: per vraag de verdeling van de gekozen
+   * opties, per leverancier zijn keuzes. Zie `ronde-resultaten.ts` voor de
+   * rekenregels (alleen ingediende antwoorden tellen).
+   *
+   * Ingetrokken deelnemers vallen erbuiten: hun uitnodiging is ongedaan
+   * gemaakt, en hun antwoorden horen dan ook niet in het totaal.
+   */
+  async resultaten(tenantId: string, runId: string): Promise<RondeResultaten> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const rondes = await tx.execute<{ template_id: string }>(
+          sql`SELECT template_id FROM clm.survey_run WHERE run_id = ${runId}`,
+        );
+
+        const ronde = rondes.rows[0];
+        if (!ronde) {
+          throw new NotFoundException('Deze ronde bestaat niet.');
+        }
+
+        const vragen = await tx.execute<{
+          question_key: string;
+          title: string;
+          answer_type: string;
+          categorie_naam: string | null;
+          config: unknown;
+        }>(
+          sql`SELECT q.question_key, q.title, q.answer_type, q.config,
+                     c.name AS categorie_naam
+                FROM clm.survey_question q
+                LEFT JOIN clm.survey_category c ON c.category_id = q.category_id
+               WHERE q.template_id = ${ronde.template_id}
+               ORDER BY q.position`,
+        );
+
+        const rijen = await tx.execute<{
+          response_id: string;
+          vendor_naam: string | null;
+          ingediend: boolean;
+          question_key: string | null;
+          answer_code: string | null;
+        }>(
+          sql`SELECT s.response_id,
+                     v.name AS vendor_naam,
+                     s.submitted_at IS NOT NULL AS ingediend,
+                     q.question_key,
+                     a.answer_code
+                FROM clm.survey_response s
+                LEFT JOIN clm.vendor v ON v.vendor_id = s.vendor_id
+                LEFT JOIN clm.survey_answer a ON a.response_id = s.response_id
+                LEFT JOIN clm.survey_question q ON q.question_id = a.question_id
+               WHERE s.run_id = ${runId}
+                 AND s.status <> 'revoked'
+               ORDER BY v.name NULLS LAST, s.created_at`,
+        );
+
+        const perRespons = new Map<string, ResultaatLeverancier>();
+        for (const r of rijen.rows) {
+          let deelnemer = perRespons.get(r.response_id);
+          if (!deelnemer) {
+            deelnemer = {
+              responseId: r.response_id,
+              vendorNaam: r.vendor_naam,
+              ingediend: r.ingediend,
+              antwoorden: {},
+            };
+            perRespons.set(r.response_id, deelnemer);
+          }
+          if (r.question_key !== null && r.answer_code !== null) {
+            deelnemer.antwoorden[r.question_key] = r.answer_code;
+          }
+        }
+
+        return bouwResultaten(
+          vragen.rows.map((v) => ({
+            questionKey: v.question_key,
+            title: v.title,
+            answerType: v.answer_type,
+            categorieNaam: v.categorie_naam,
+            config: v.config,
+          })),
+          [...perRespons.values()],
+        );
+      },
+      'medewerker',
+    );
+  }
+
+  /**
    * De antwoorden van één respons, in de volgorde van de vragenlijst.
    *
    * ── Waarom een LEFT JOIN vanaf de vraag ────────────────────────────────────
@@ -729,6 +825,7 @@ export class VragenlijstBeheerService {
                      q.max_files,
                      q.category_id,
                      c.name AS categorie_naam,
+                     q.config,
                      a.answer_id,
                      a.answer_code,
                      a.answer_codes,
@@ -785,6 +882,7 @@ export class VragenlijstBeheerService {
           maxFiles: r.max_files,
           categoryId: r.category_id,
           categorieNaam: r.categorie_naam,
+          opties: optiesUit(r.answer_type, r.config),
           antwoord: r.answer_id
             ? {
                 answerId: r.answer_id,

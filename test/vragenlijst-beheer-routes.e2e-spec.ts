@@ -516,6 +516,42 @@ describe('Vragenlijst-beheerroutes (e2e)', () => {
     });
   });
 
+  describe('het resultaat van een ronde (NIS2-doorsnede)', () => {
+    it('telt alleen ingediende antwoorden', async () => {
+      // RESPONSE_A heeft één antwoord, maar is niet ingediend: dat concept
+      // hoort niet in het resultaat.
+      const antwoord = await request(server)
+        .get(`/admin/survey/runs/${RUN_A}/resultaten`)
+        .set('Cookie', cookieA)
+        .expect(200);
+
+      const body = antwoord.body as {
+        aantalIngediend: number;
+        vragen: { questionKey: string; verdeling: Record<string, number> }[];
+      };
+
+      expect(body.aantalIngediend).toBe(0);
+      expect(body.vragen.map((v) => v.questionKey)).toEqual(['v1', 'v2']);
+      expect(body.vragen[0].verdeling).toEqual({});
+    });
+
+    it('laat een reviewer het resultaat lezen', async () => {
+      await request(server)
+        .get(`/admin/survey/runs/${RUN_A}/resultaten`)
+        .set('Cookie', cookieReviewer)
+        .expect(200);
+    });
+
+    it('geeft een andere tenant 404, geen leeg resultaat', async () => {
+      // De tegenproef op RLS: tenant B mag niet eens weten dat de ronde
+      // bestaat.
+      await request(server)
+        .get(`/admin/survey/runs/${RUN_A}/resultaten`)
+        .set('Cookie', cookieB)
+        .expect(404);
+    });
+  });
+
   describe('de antwoorden van één respons (fase C)', () => {
     interface AntwoordenBody {
       responseId: string;
@@ -527,6 +563,7 @@ describe('Vragenlijst-beheerroutes (e2e)', () => {
         questionKey: string;
         answerType: string;
         position: number;
+        opties: { code: string; label: string }[] | null;
         antwoord: {
           answerCode: string | null;
           comment: string | null;
@@ -571,6 +608,16 @@ describe('Vragenlijst-beheerroutes (e2e)', () => {
       expect(v1!.antwoord).not.toBeNull();
       expect(v1!.antwoord!.answerCode).toBe('confirmed');
       expect(v1!.antwoord!.comment).toBe('Toelichting bij v1');
+    });
+
+    it('geeft bij een confirmation-vraag geen opties mee', async () => {
+      // De opties van confirmation liggen vast in de code; alleen keuzevragen
+      // dragen ze in hun config (zie antwoord-opties.spec.ts).
+      const body = await haalAntwoorden(cookieA);
+
+      const v1 = body.antwoorden.find((a) => a.questionKey === 'v1');
+
+      expect(v1!.opties).toBeNull();
     });
 
     it('telt 1 van 2 beantwoord, zonder het instructiescherm mee te rekenen', async () => {

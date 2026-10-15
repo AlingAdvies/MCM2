@@ -94,6 +94,8 @@ export interface Vragenlijst {
   questions: Vraag[];
   closesAt: string | null;
   contactinfo: Contactinfo | null;
+  /** Naam van de vragende organisatie (tenant), zie `haalOrganisatie()`. */
+  organisatie: string | null;
 }
 
 interface VraagRij extends Record<string, unknown> {
@@ -262,6 +264,7 @@ export class VragenlijstLeesService {
         const antwoorden = await this.haalOpgeslagenAntwoorden(tx, responseId);
         const bijlagen = await this.haalOpgeslagenBijlagen(tx, responseId);
         const contactinfo = await this.haalContactinfo(tx, responseId);
+        const organisatie = await this.haalOrganisatie(tx, responseId);
 
         const categorieen = new Map<string, Categorie>();
         const losseVragen: Vraag[] = [];
@@ -317,6 +320,7 @@ export class VragenlijstLeesService {
                 ? sluit.toISOString()
                 : new Date(sluit).toISOString(),
           contactinfo,
+          organisatie,
         };
       },
       'leverancier',
@@ -467,5 +471,33 @@ export class VragenlijstLeesService {
     }
 
     return null;
+  }
+
+  /**
+   * De naam van de organisatie die de vragenlijst uitzet.
+   *
+   * ── Tweede bewuste uitzondering op "geen tenant-info" ────────────────────
+   *
+   * Besluit eigenaar 14-10-2026, bij de NIS2-doorsnede
+   * (docs/nis2/decisions/0006-transdev-geen-voorwaarde.md): de leverancier
+   * moet zien wíé het vraagt. Een anonieme vragenlijst van "een klant van u"
+   * kost respons, en respons is het kernrisico. Zelfde afweging als bij
+   * `haalContactinfo()`: de leverancier kent de afzender al uit de
+   * uitnodiging, en het gaat om een bedrijfsnaam, geen persoonsgegeven.
+   * Alleen de naam — nooit het tenant-ID (zie de lektest in
+   * test/vragenlijst-ophalen.e2e-spec.ts).
+   */
+  private async haalOrganisatie(
+    tx: TenantTransaction,
+    responseId: string,
+  ): Promise<string | null> {
+    const resultaat = await tx.execute<{ name: string }>(
+      sql`SELECT t.name
+            FROM clm.survey_response r
+            JOIN clm.tenant t ON t.tenant_id = r.tenant_id
+           WHERE r.response_id = ${responseId}`,
+    );
+
+    return resultaat.rows[0]?.name ?? null;
   }
 }

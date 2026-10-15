@@ -7,7 +7,7 @@
  *
  * Een nieuwe schakelbare feature: één regel toevoegen aan `FEATURE_KEYS`.
  */
-export const FEATURE_KEYS = ['contractmodule'] as const;
+export const FEATURE_KEYS = ['contractmodule', 'nis2module'] as const;
 
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 
