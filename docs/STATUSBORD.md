@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-10-18 11:08 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-10-19 12:38 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -19,7 +19,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 **P0 — voor elke volgende regel productiecode** — 0 open
 **Vóór de pilot** — 0 open
 **Vóór bredere productie** — 0 open
-**Later — bewust uitgesteld** — 17 open
+**Later — bewust uitgesteld** — 18 open
 
 ---
 
@@ -113,7 +113,7 @@ bestaande thema's past.
 - [#215](https://github.com/AlingAdvies/MCM2/issues/215) — Roadmap AA (AlingAdvies multitenant)
 - [#214](https://github.com/AlingAdvies/MCM2/issues/214) — Roadmap TD (Transdev/Bizaline)
 - [#212](https://github.com/AlingAdvies/MCM2/issues/212) — Tenant-lid intrekken toont foutmelding terwijl het intrekken wél slaagt (204 zonder body)
-- [#206](https://github.com/AlingAdvies/MCM2/issues/206) — FORCE ROW LEVEL SECURITY ontbreekt op 8 tabellen
+- [#206](https://github.com/AlingAdvies/MCM2/issues/206) `later` — FORCE ROW LEVEL SECURITY ontbreekt op 8 tabellen
 - [#205](https://github.com/AlingAdvies/MCM2/issues/205) — Archiveerfunctie voor vragenlijst-rondes (periode-afsluiting)
 - [#197](https://github.com/AlingAdvies/MCM2/issues/197) `later` — Vragenlijst aanmaken/importeren door tenant- of platformbeheerder ontbreekt
 - [#192](https://github.com/AlingAdvies/MCM2/issues/192) — Visuele markering voor gebruiker zonder actief tenant-membership bij historische koppelingen
