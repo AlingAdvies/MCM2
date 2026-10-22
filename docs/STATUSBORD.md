@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-10-22 11:54 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-10-22 14:49 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -19,7 +19,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 **P0 — voor elke volgende regel productiecode** — 0 open
 **Vóór de pilot** — 0 open
 **Vóór bredere productie** — 0 open
-**Later — bewust uitgesteld** — 18 open
+**Later — bewust uitgesteld** — 19 open
 
 ---
 
@@ -74,11 +74,12 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#48](https://github.com/AlingAdvies/MCM2/issues/48) — Pilot-runbook en alerting: wie kijkt wanneer naar welk signaal
 - [#58](https://github.com/AlingAdvies/MCM2/issues/58) — Backup hangt af van de ontwikkellaptop: onafhankelijke uitvoering vóór de pilot
 
-### OTAP en CI/CD (5)
+### OTAP en CI/CD (6)
 
 - [#20](https://github.com/AlingAdvies/MCM2/issues/20) `later` — Dockerfile hardenen: npm ci, multi-stage build, non-root user
 - [#22](https://github.com/AlingAdvies/MCM2/issues/22) `later` — Dependabot-configuratie
 - [#59](https://github.com/AlingAdvies/MCM2/issues/59) `later` — npm audit: 29 kwetsbaarheden in devDependencies (0 in productie) — opschonen bij de eerste major-onderhoudsronde
+- [#246](https://github.com/AlingAdvies/MCM2/issues/246) `later` — Oude productie-installatie op saxombp opruimen (verbonden met live productiedatabase)
 - [#51](https://github.com/AlingAdvies/MCM2/issues/51) — Frontend-image promoveerbaar maken: API-URL runtime i.p.v. ingebakken bij build
 - [#53](https://github.com/AlingAdvies/MCM2/issues/53) — OTAP-doorloop periodiek automatiseren zonder cross-repo koppeling
 
@@ -121,4 +122,4 @@ bestaande thema's past.
 
 ---
 
-**Totaal open:** 63
+**Totaal open:** 64
