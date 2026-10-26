@@ -1,7 +1,7 @@
 # Contract-leesscherm — design (concept, ter goedkeuring)
 
 **Datum:** 2026-10-26
-**Status:** kaartindeling goedgekeurd door eigenaar (26-10). Nog niets gebouwd; open: ongekoppelde dossiers.
+**Status:** kaartindeling goedgekeurd door eigenaar (26-10). Ongekoppelde dossiers besloten (26-10). Nog niets gebouwd.
 **Hangt af van:** #247 (bijlagen/slepen), #248 (dossier als kwestie). Zelfde branch `feat/kwestie-dossier`.
 
 ## Aanleiding
@@ -57,9 +57,9 @@ Niet overgenomen: score- en compliancekaart, levensfasen, AI-knop, zes even zwar
 | Signaal in kop | einddatum verstreken → "verlopen"; einddatum − opzegtermijn binnen `warning_days_before` → "opzeggen vóór …" | geen signaal |
 | Wat is afgesproken | contracttype, waarde, opzegtermijn, automatische verlenging, verwerkersovereenkomst, opmerking | "Nog niet vastgelegd" per ontbrekend veld |
 | Wie bel ik | `vendor_contact_id` (naam, mail, telefoon), `owner_user_id` (contractbeheerder) | "Niet vastgelegd" |
-| Wat speelt er | open dossiers gekoppeld aan dit contract, met laatste stand | "Geen open kwesties" |
-| Laatste contact | jongste datum van notitie of bijlage over de dossiers van dit contract (afgeleid, client-side) | "Nog geen contact vastgelegd" |
-| Volgend moment | vroegste volgende-stapdatum van open dossiers; anders de opzegdatum | "Geen volgende stap" |
+| Wat speelt er | (1) open dossiers gekoppeld aan dit contract, met laatste stand; (2) daaronder apart **"Speelt bij de leverancier"**: open dossiers van deze leverancier zonder contractkoppeling, met knop **"koppel aan dit contract"** (bestaande route `POST /engagements/:id/links`) | "Geen open kwesties" |
+| Laatste contact | jongste datum van notitie of bijlage over de dossiers van dit contract **én** de ongekoppelde dossiers van de leverancier (afgeleid, client-side) | "Nog geen contact vastgelegd" |
+| Volgend moment | vroegste volgende-stapdatum van open dossiers (dit contract + ongekoppelde van de leverancier); anders de opzegdatum | "Geen volgende stap" |
 | KPI-evaluatie | **bron: interne survey** (besluit eigenaar 26-10). Toont **status** (gepland / loopt / beoordeeld) **én score** van de laatste ronde over dit contract en of een volgende ronde klaarstaat. Bronnen die er al zijn: `contract_survey_template` (welke vragenlijsten bij het contract horen, incl. wachtlijst) en `survey_run.contract_id` (bestaat, nog niet gevuld). Hoe precies: uitwerken bij het bouwen. | "Nog geen KPI-evaluatie ingericht" |
 | Overige contracten | andere contracten van dezelfde leverancier, met looptijd | "Geen" |
 | Dossiers | bestaand `EngagementPanel` met `contractId` | — |
@@ -83,4 +83,6 @@ Zo min mogelijk nieuw:
 *Besloten 26-10:* kaartindeling akkoord; KPI-evaluatie = interne survey, kaart toont status én score.
 
 
-1. Telt een dossier van dezelfde leverancier dat níet aan dit contract gekoppeld is mee bij "wat speelt er"? Voorstel: nee, wel een regel "N andere dossiers bij deze leverancier".
+*Besloten 26-10 — ongekoppelde dossiers:* een ongekoppeld dossier is in de praktijk een kwestie die **de hele leverancier** raakt (bijv. een naamswijziging). Weergave als aparte regel "Speelt bij de leverancier" onder de eigen kwesties; telt mee voor laatste contact en volgend moment; met één klik aan dit contract te koppelen. Dossiers die aan een **ander** contract van dezelfde leverancier hangen, tonen hier niet.
+
+Geen openstaande vragen meer voor dit ontwerp.
