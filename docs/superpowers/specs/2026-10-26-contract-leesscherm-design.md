@@ -60,7 +60,7 @@ Niet overgenomen: score- en compliancekaart, levensfasen, AI-knop, zes even zwar
 | Wat speelt er | (1) open dossiers gekoppeld aan dit contract, met laatste stand; (2) daaronder apart **"Speelt bij de leverancier"**: open dossiers van deze leverancier zonder contractkoppeling, met knop **"koppel aan dit contract"** (bestaande route `POST /engagements/:id/links`) | "Geen open kwesties" |
 | Laatste contact | jongste datum van notitie of bijlage over de dossiers van dit contract **én** de ongekoppelde dossiers van de leverancier (afgeleid, client-side) | "Nog geen contact vastgelegd" |
 | Volgend moment | vroegste volgende-stapdatum van open dossiers (dit contract + ongekoppelde van de leverancier); anders de opzegdatum | "Geen volgende stap" |
-| KPI-evaluatie | **bron: interne survey** (besluit eigenaar 26-10). Toont **status** (gepland / loopt / beoordeeld) **én score** van de laatste ronde over dit contract en of een volgende ronde klaarstaat. Bronnen die er al zijn: `contract_survey_template` (welke vragenlijsten bij het contract horen, incl. wachtlijst) en `survey_run.contract_id` (bestaat, nog niet gevuld). Hoe precies: uitwerken bij het bouwen. | "Nog geen KPI-evaluatie ingericht" |
+| KPI-evaluatie | **Gereserveerd, nu leeg** ("KPI-evaluatie (interne survey): nog niet beschikbaar"). Doel (besluit eigenaar 26-10): bron interne survey, toont status (gepland / loopt / beoordeeld) én score. Interne survey en scoreberekening bestaan nog niet → issue #249. Later mogelijk te vullen uit en of een volgende ronde klaarstaat. Bronnen die er al zijn: `contract_survey_template` (welke vragenlijsten bij het contract horen, incl. wachtlijst) en `survey_run.contract_id` (bestaat, nog niet gevuld). Hoe precies: uitwerken bij het bouwen. | "Nog geen KPI-evaluatie ingericht" |
 | Overige contracten | andere contracten van dezelfde leverancier, met looptijd | "Geen" |
 | Dossiers | bestaand `EngagementPanel` met `contractId` | — |
 
@@ -80,7 +80,7 @@ Zo min mogelijk nieuw:
 
 ## Open vragen aan de eigenaar
 
-*Besloten 26-10:* kaartindeling akkoord; KPI-evaluatie = interne survey, kaart toont status én score.
+*Besloten 26-10:* kaartindeling akkoord; KPI-evaluatie = interne survey, kaart toont status én score. Omdat interne survey en score nog niet bestaan, blijft de kaart in deze versie **gereserveerd en leeg** (#249).
 
 
 *Besloten 26-10 — ongekoppelde dossiers:* een ongekoppeld dossier is in de praktijk een kwestie die **de hele leverancier** raakt (bijv. een naamswijziging). Weergave als aparte regel "Speelt bij de leverancier" onder de eigen kwesties; telt mee voor laatste contact en volgend moment; met één klik aan dit contract te koppelen. Dossiers die aan een **ander** contract van dezelfde leverancier hangen, tonen hier niet.
