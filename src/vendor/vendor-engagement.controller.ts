@@ -149,7 +149,7 @@ export class VendorEngagementController {
   /** #248: afronden met verplichte korte uitkomst (wordt de laatste notitie). */
   @Post('engagements/:id/afronden')
   @VereistRol('admin', 'user')
-  @HttpCode(204)
+  @HttpCode(200)
   async afronden(
     @Req() request: RequestMetSessie,
     @Param('id') id: string,
@@ -170,20 +170,24 @@ export class VendorEngagementController {
       sessie.userId,
       invoer.uitkomst,
     );
+
+    return { status: 'afgerond' as const };
   }
 
   @Post('engagements/:id/heropenen')
   @VereistRol('admin', 'user')
-  @HttpCode(204)
+  @HttpCode(200)
   async heropenen(@Req() request: RequestMetSessie, @Param('id') id: string) {
     const sessie = request.sessie!;
     await this.engagements.heropenen(sessie.tenantId, id);
+
+    return { status: 'open' as const };
   }
 
   /** #248: zet of wist de volgende stap (tekst en/of datum; null wist). */
   @Put('engagements/:id/volgende-stap')
   @VereistRol('admin', 'user')
-  @HttpCode(204)
+  @HttpCode(200)
   async volgendeStap(
     @Req() request: RequestMetSessie,
     @Param('id') id: string,
@@ -204,6 +208,13 @@ export class VendorEngagementController {
       invoer.tekst,
       invoer.datum,
     );
+
+    return {
+      volgendeStap:
+        invoer.tekst || invoer.datum
+          ? { tekst: invoer.tekst, datum: invoer.datum }
+          : null,
+    };
   }
 
   @Post('engagements/:id/links')

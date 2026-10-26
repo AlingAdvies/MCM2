@@ -283,7 +283,7 @@ describe('Vendor-dossier-notities (e2e)', () => {
       .put(`/engagements/${id}/volgende-stap`)
       .set('Cookie', cookieAdminA)
       .send({ tekst: 'Wachten op voorstel', datum: '2026-11-15' })
-      .expect(204);
+      .expect(200);
 
     expect((await haalDossier(id))?.volgendeStap).toEqual({
       tekst: 'Wachten op voorstel',
@@ -294,7 +294,7 @@ describe('Vendor-dossier-notities (e2e)', () => {
       .put(`/engagements/${id}/volgende-stap`)
       .set('Cookie', cookieAdminA)
       .send({ tekst: null, datum: null })
-      .expect(204);
+      .expect(200);
 
     expect((await haalDossier(id))?.volgendeStap).toBeNull();
   });
@@ -325,13 +325,13 @@ describe('Vendor-dossier-notities (e2e)', () => {
       .put(`/engagements/${id}/volgende-stap`)
       .set('Cookie', cookieAdminA)
       .send({ tekst: 'Bellen', datum: '2026-11-01' })
-      .expect(204);
+      .expect(200);
 
     await request(server)
       .post(`/engagements/${id}/afronden`)
       .set('Cookie', cookieAdminA)
       .send({ uitkomst: 'Akkoord bereikt, zie mail.' })
-      .expect(204);
+      .expect(200);
 
     const dossier = await haalDossier(id);
     expect(dossier?.status).toBe('afgerond');
@@ -360,12 +360,12 @@ describe('Vendor-dossier-notities (e2e)', () => {
       .post(`/engagements/${id}/afronden`)
       .set('Cookie', cookieAdminA)
       .send({ uitkomst: 'Afgehandeld.' })
-      .expect(204);
+      .expect(200);
 
     await request(server)
       .post(`/engagements/${id}/heropenen`)
       .set('Cookie', cookieAdminA)
-      .expect(204);
+      .expect(200);
 
     const dossier = await haalDossier(id);
     expect(dossier?.status).toBe('open');
