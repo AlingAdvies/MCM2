@@ -23,8 +23,12 @@ import {
 
 export const MAX_BESTANDSGROOTTE = 10 * 1024 * 1024;
 
-/** Nudge tegen een "circus van screenshots" (eis eigenaar, 24-09-2026). */
-export const MAX_BIJLAGEN_PER_ENGAGEMENT = 3;
+/**
+ * Oorspronkelijk 3, als nudge tegen een "circus van screenshots" (eis
+ * eigenaar, 24-09-2026). Op 26-10 verhoogd naar 10 (#247): een dossier is
+ * een kwestie met een doorlopende mailwisseling, niet één momentopname.
+ */
+export const MAX_BIJLAGEN_PER_ENGAGEMENT = 10;
 
 const HANDTEKENINGEN = [
   {

@@ -7,6 +7,7 @@ import {
   HttpCode,
   Param,
   Post,
+  Put,
   Req,
   Res,
   UploadedFile,
@@ -27,8 +28,13 @@ import {
   BestandOpslagService,
 } from '../survey/bestand-opslag.service';
 import { veiligeWeergavenaam } from '../survey/bestand-validatie';
-import { MAX_BESTANDSGROOTTE } from './vendor-engagement-bestand-validatie';
 import {
+  MAX_BESTANDSGROOTTE,
+  MAX_BIJLAGEN_PER_ENGAGEMENT,
+} from './vendor-engagement-bestand-validatie';
+import {
+  leesAfronding,
+  leesVolgendeStap,
   InvoerFout,
   leesNieuwEngagement,
   leesNieuweLink,
@@ -140,6 +146,66 @@ export class VendorEngagementController {
     await this.engagements.notitieIntrekken(sessie.tenantId, id, noteId);
   }
 
+  /** #248: afronden met verplichte korte uitkomst (wordt de laatste notitie). */
+  @Post('engagements/:id/afronden')
+  @VereistRol('admin', 'user')
+  @HttpCode(204)
+  async afronden(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const sessie = request.sessie!;
+
+    let invoer: ReturnType<typeof leesAfronding>;
+    try {
+      invoer = leesAfronding(body);
+    } catch (err) {
+      throw this.naarHttpFout(err);
+    }
+
+    await this.engagements.afronden(
+      sessie.tenantId,
+      id,
+      sessie.userId,
+      invoer.uitkomst,
+    );
+  }
+
+  @Post('engagements/:id/heropenen')
+  @VereistRol('admin', 'user')
+  @HttpCode(204)
+  async heropenen(@Req() request: RequestMetSessie, @Param('id') id: string) {
+    const sessie = request.sessie!;
+    await this.engagements.heropenen(sessie.tenantId, id);
+  }
+
+  /** #248: zet of wist de volgende stap (tekst en/of datum; null wist). */
+  @Put('engagements/:id/volgende-stap')
+  @VereistRol('admin', 'user')
+  @HttpCode(204)
+  async volgendeStap(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Body() body: unknown,
+  ) {
+    const sessie = request.sessie!;
+
+    let invoer: ReturnType<typeof leesVolgendeStap>;
+    try {
+      invoer = leesVolgendeStap(body);
+    } catch (err) {
+      throw this.naarHttpFout(err);
+    }
+
+    await this.engagements.volgendeStapZetten(
+      sessie.tenantId,
+      id,
+      invoer.tekst,
+      invoer.datum,
+    );
+  }
+
   @Post('engagements/:id/links')
   @VereistRol('admin', 'user')
   @HttpCode(201)
@@ -205,7 +271,7 @@ export class VendorEngagementController {
 
     if (uitkomst.status === 'te-veel-bijlagen') {
       throw new BadRequestException(
-        'Dit dossier heeft al het maximum van 3 bijlagen.',
+        `Dit dossier heeft al het maximum van ${MAX_BIJLAGEN_PER_ENGAGEMENT} bijlagen.`,
       );
     }
 

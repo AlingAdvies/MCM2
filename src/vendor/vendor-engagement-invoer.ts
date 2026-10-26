@@ -109,3 +109,66 @@ export function leesNieuweNotitie(body: unknown): { tekst: string } {
   const obj = body as Record<string, unknown>;
   return { tekst: leesNotitieTekst(obj.tekst) };
 }
+
+/** Afronden van een dossier (#248): korte uitkomst verplicht, zelfde grens als een notitie. */
+export function leesAfronding(body: unknown): { uitkomst: string } {
+  if (typeof body !== 'object' || body === null) {
+    throw new InvoerFout('body', 'Ongeldige invoer.');
+  }
+
+  const obj = body as Record<string, unknown>;
+  if (
+    typeof obj.uitkomst !== 'string' ||
+    obj.uitkomst.trim() === '' ||
+    obj.uitkomst.length > MAX_NOTITIE
+  ) {
+    throw new InvoerFout(
+      'uitkomst',
+      `uitkomst is verplicht en mag maximaal ${MAX_NOTITIE} tekens zijn.`,
+    );
+  }
+  return { uitkomst: obj.uitkomst.trim() };
+}
+
+const MAX_VOLGENDE_STAP = 300;
+const DATUM_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Volgende stap van een dossier (#248). Beide velden optioneel; null of een
+ * lege tekst wist het veld.
+ */
+export function leesVolgendeStap(body: unknown): {
+  tekst: string | null;
+  datum: string | null;
+} {
+  if (typeof body !== 'object' || body === null) {
+    throw new InvoerFout('body', 'Ongeldige invoer.');
+  }
+
+  const obj = body as Record<string, unknown>;
+
+  let tekst: string | null = null;
+  if (obj.tekst !== undefined && obj.tekst !== null) {
+    if (typeof obj.tekst !== 'string' || obj.tekst.length > MAX_VOLGENDE_STAP) {
+      throw new InvoerFout(
+        'tekst',
+        `tekst mag maximaal ${MAX_VOLGENDE_STAP} tekens zijn.`,
+      );
+    }
+    tekst = obj.tekst.trim() === '' ? null : obj.tekst.trim();
+  }
+
+  let datum: string | null = null;
+  if (obj.datum !== undefined && obj.datum !== null && obj.datum !== '') {
+    if (
+      typeof obj.datum !== 'string' ||
+      !DATUM_REGEX.test(obj.datum) ||
+      Number.isNaN(new Date(`${obj.datum}T00:00:00Z`).getTime())
+    ) {
+      throw new InvoerFout('datum', 'datum moet de vorm JJJJ-MM-DD hebben.');
+    }
+    datum = obj.datum;
+  }
+
+  return { tekst, datum };
+}
