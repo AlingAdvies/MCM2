@@ -704,6 +704,12 @@ export const vendorEngagement = clm.table(
       .notNull()
       .defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    // Migratie 0048 (#248): dossier als kwestie. CHECK-constraints staan in
+    // de migratie (status IN open/afgerond, afgerond_op gezet ⇔ afgerond).
+    status: text('status').notNull().default('open'),
+    afgerondOp: timestamp('afgerond_op', { withTimezone: true }),
+    volgendeStapTekst: text('volgende_stap_tekst'),
+    volgendeStapDatum: date('volgende_stap_datum'),
   },
   (t) => [
     index('vendor_engagement_tenant_id_idx').on(t.tenantId),

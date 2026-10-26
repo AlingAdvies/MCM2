@@ -154,8 +154,8 @@ describe('valideerEngagementBestand', () => {
     expect(resultaat).toEqual({ geldig: false, reden: 'leeg' });
   });
 
-  it('exporteert het maximum van 3 bijlagen per engagement', () => {
-    expect(MAX_BIJLAGEN_PER_ENGAGEMENT).toBe(3);
+  it('exporteert het maximum van 10 bijlagen per engagement', () => {
+    expect(MAX_BIJLAGEN_PER_ENGAGEMENT).toBe(10);
   });
 
   it('exporteert een maximum van 10 MB', () => {

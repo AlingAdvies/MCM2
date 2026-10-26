@@ -12,6 +12,7 @@ import {
   BESTAND_ONTBREEKT_MELDING,
   BestandOpslagService,
 } from '../src/survey/bestand-opslag.service';
+import { MAX_BIJLAGEN_PER_ENGAGEMENT } from '../src/vendor/vendor-engagement-bestand-validatie';
 import { TEST_IDS } from './test-ids';
 import { verwijderTestdata } from './opruimen';
 
@@ -144,7 +145,7 @@ describe('Bijlagen bij een vendor-dossier (e2e)', () => {
       .expect(400);
   });
 
-  it('weigert de vierde bijlage bij een dossier dat er al 3 heeft', async () => {
+  it('weigert een bijlage boven het maximum', async () => {
     const aanmaak = await request(server)
       .post(`/vendors/${VENDOR_A}/engagements`)
       .set('Cookie', cookieAdminA)
@@ -157,7 +158,7 @@ describe('Bijlagen bij een vendor-dossier (e2e)', () => {
     const eigenEngagementId = (aanmaak.body as EngagementBody).engagement
       .engagementId;
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < MAX_BIJLAGEN_PER_ENGAGEMENT; i++) {
       await request(server)
         .post(`/engagements/${eigenEngagementId}/attachments`)
         .set('Cookie', cookieAdminA)
@@ -172,7 +173,7 @@ describe('Bijlagen bij een vendor-dossier (e2e)', () => {
       .post(`/engagements/${eigenEngagementId}/attachments`)
       .set('Cookie', cookieAdminA)
       .attach('file', PDF_INHOUD, {
-        filename: 'bewijs-4.pdf',
+        filename: 'bewijs-te-veel.pdf',
         contentType: 'application/pdf',
       })
       .expect(400);

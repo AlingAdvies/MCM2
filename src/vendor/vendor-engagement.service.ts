@@ -49,10 +49,15 @@ export interface EngagementNote {
   createdAt: string;
 }
 
+export type EngagementStatus = 'open' | 'afgerond';
+
 export interface Engagement {
   engagementId: string;
   vendorId: string;
   titel: string;
+  status: EngagementStatus;
+  afgerondOp: string | null;
+  volgendeStap: { tekst: string | null; datum: string | null } | null;
   createdByUserId: string;
   createdByNaam: string | null;
   createdAt: string;
@@ -65,6 +70,10 @@ interface EngagementRij extends Record<string, unknown> {
   engagement_id: string;
   vendor_id: string;
   titel: string;
+  status: string;
+  afgerond_op: Date | string | null;
+  volgende_stap_tekst: string | null;
+  volgende_stap_datum: string | null;
   created_by_user_id: string;
   created_by_naam: string | null;
   created_at: Date | string;
@@ -134,6 +143,10 @@ export class VendorEngagementService {
           sql`SELECT e.engagement_id,
                      e.vendor_id,
                      e.titel,
+                     e.status,
+                     e.afgerond_op,
+                     e.volgende_stap_tekst,
+                     to_char(e.volgende_stap_datum, 'YYYY-MM-DD') AS volgende_stap_datum,
                      e.created_by_user_id,
                      u.full_name AS created_by_naam,
                      e.created_at
@@ -212,11 +225,18 @@ export class VendorEngagementService {
                 INSERT INTO clm.vendor_engagement
                        (tenant_id, vendor_id, titel, created_by_user_id)
                 VALUES (${tenantId}, ${vendorId}, ${titel}, ${createdByUserId})
-                RETURNING engagement_id, vendor_id, titel, created_by_user_id, created_at
+                RETURNING engagement_id, vendor_id, titel, status, afgerond_op,
+                          volgende_stap_tekst,
+                          to_char(volgende_stap_datum, 'YYYY-MM-DD') AS volgende_stap_datum,
+                          created_by_user_id, created_at
               )
               SELECT n.engagement_id,
                      n.vendor_id,
                      n.titel,
+                     n.status,
+                     n.afgerond_op,
+                     n.volgende_stap_tekst,
+                     n.volgende_stap_datum,
                      n.created_by_user_id,
                      u.full_name AS created_by_naam,
                      n.created_at
@@ -381,7 +401,8 @@ export class VendorEngagementService {
   }
 
   /**
-   * Voegt een bijlage toe. Server-side maximum van 3 per engagement,
+   * Voegt een bijlage toe. Server-side maximum per engagement
+   * (MAX_BIJLAGEN_PER_ENGAGEMENT),
    * afgedwongen met FOR UPDATE op de engagement-rij — zelfde aanpak als
    * BijlageService.voegToe voor max_files, om te voorkomen dat twee
    * gelijktijdige uploads samen over de grens gaan.
@@ -459,6 +480,102 @@ export class VendorEngagementService {
           status: 'opgeslagen' as const,
           attachment: this.naarAttachment(rij),
         };
+      },
+      'medewerker',
+    );
+  }
+
+  /**
+   * Rondt een dossier af (#248). De uitkomst is verplicht en wordt als
+   * laatste notitie opgeslagen (append-only), in dezelfde transactie als de
+   * statuswijziging — er is één plek voor de stand van een dossier. De
+   * volgende stap vervalt: een afgerond dossier heeft geen vervolg meer.
+   */
+  async afronden(
+    tenantId: string,
+    engagementId: string,
+    userId: string,
+    uitkomst: string,
+  ): Promise<void> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const geraakt = await tx.execute(
+          sql`UPDATE clm.vendor_engagement
+                 SET status = 'afgerond',
+                     afgerond_op = now(),
+                     volgende_stap_tekst = NULL,
+                     volgende_stap_datum = NULL
+               WHERE engagement_id = ${engagementId}
+                 AND deleted_at IS NULL
+                 AND status = 'open'`,
+        );
+
+        if (geraakt.rowCount === 0) {
+          await this.eisBestaandEngagement(tx, engagementId);
+          throw new BadRequestException('Dit dossier is al afgerond.');
+        }
+
+        await tx.execute(
+          sql`INSERT INTO clm.vendor_engagement_note
+                     (engagement_id, tenant_id, tekst, created_by_user_id)
+              VALUES (${engagementId}, ${tenantId}, ${uitkomst}, ${userId})`,
+        );
+      },
+      'medewerker',
+    );
+  }
+
+  /** Zet een afgerond dossier terug op open; de uitkomst blijft als notitie staan. */
+  async heropenen(tenantId: string, engagementId: string): Promise<void> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const geraakt = await tx.execute(
+          sql`UPDATE clm.vendor_engagement
+                 SET status = 'open', afgerond_op = NULL
+               WHERE engagement_id = ${engagementId}
+                 AND deleted_at IS NULL
+                 AND status = 'afgerond'`,
+        );
+
+        if (geraakt.rowCount === 0) {
+          await this.eisBestaandEngagement(tx, engagementId);
+          throw new BadRequestException('Dit dossier is al open.');
+        }
+      },
+      'medewerker',
+    );
+  }
+
+  /**
+   * Zet of wist de volgende stap (#248). Alleen bij een open dossier: een
+   * afgerond dossier heeft geen vervolg.
+   */
+  async volgendeStapZetten(
+    tenantId: string,
+    engagementId: string,
+    tekst: string | null,
+    datum: string | null,
+  ): Promise<void> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const geraakt = await tx.execute(
+          sql`UPDATE clm.vendor_engagement
+                 SET volgende_stap_tekst = ${tekst},
+                     volgende_stap_datum = ${datum}::date
+               WHERE engagement_id = ${engagementId}
+                 AND deleted_at IS NULL
+                 AND status = 'open'`,
+        );
+
+        if (geraakt.rowCount === 0) {
+          await this.eisBestaandEngagement(tx, engagementId);
+          throw new BadRequestException(
+            'Een afgerond dossier heeft geen volgende stap.',
+          );
+        }
       },
       'medewerker',
     );
@@ -630,6 +747,12 @@ export class VendorEngagementService {
       engagementId: r.engagement_id,
       vendorId: r.vendor_id,
       titel: r.titel,
+      status: r.status as EngagementStatus,
+      afgerondOp: r.afgerond_op ? iso(r.afgerond_op) : null,
+      volgendeStap:
+        r.volgende_stap_tekst || r.volgende_stap_datum
+          ? { tekst: r.volgende_stap_tekst, datum: r.volgende_stap_datum }
+          : null,
       createdByUserId: r.created_by_user_id,
       createdByNaam: r.created_by_naam,
       createdAt: iso(r.created_at),
