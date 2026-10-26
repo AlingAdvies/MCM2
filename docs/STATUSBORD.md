@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-10-26 15:35 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-10-26 16:33 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -25,7 +25,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 
 ## Per thema
 
-### Product — vragenlijst, leveranciers, contracten, meldingen (22)
+### Product — vragenlijst, leveranciers, contracten, meldingen (23)
 
 - [#23](https://github.com/AlingAdvies/MCM2/issues/23) `later` — MVM_V2-frontend-inconsistenties oplossen (tenant demo vs. transdev, vendors-lijstpagina)
 - [#187](https://github.com/AlingAdvies/MCM2/issues/187) `later` — Contracttype-veld toevoegen (placeholder, richting volwaardig contractmanagement)
@@ -49,6 +49,7 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 - [#189](https://github.com/AlingAdvies/MCM2/issues/189) — DPA-vlag (Ja/Nee) overnemen bij contract-import
 - [#234](https://github.com/AlingAdvies/MCM2/issues/234) — Werkingsgebied (concessie/organisatie-onderdeel) op contracten, met filter
 - [#247](https://github.com/AlingAdvies/MCM2/issues/247) — Vendor-dossier: mails en bijlagen toevoegen aan een bestaand dossier (slepen, .msg, max 10)
+- [#248](https://github.com/AlingAdvies/MCM2/issues/248) — Vendor-dossier als kwestie: open/afgerond, volgende stap, afronden met verplichte uitkomst
 
 ### Beheermenu (4)
 
@@ -123,4 +124,4 @@ bestaande thema's past.
 
 ---
 
-**Totaal open:** 65
+**Totaal open:** 66
