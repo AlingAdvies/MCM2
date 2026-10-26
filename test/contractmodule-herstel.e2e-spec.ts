@@ -70,6 +70,46 @@ describe('migratie 0047 — contractmodule herstellen', () => {
     return rows[0]?.enabled ?? null;
   }
 
+  /**
+   * Draait de migratie geïsoleerd: in één transactie, met clm.tenant in
+   * SHARE-modus vast, en daarna ROLLBACK.
+   *
+   * Waarom (26-10): de migratie raakt bewust álle tenants. Draaide hij hier
+   * met autocommit, dan kregen ook de tenants van parallel lopende suites
+   * een contractmodule-rij — en botste het met hun eigen inserts en
+   * opruimacties (afwisselend een FK-fout hier, een afgebroken transactie in
+   * sessie-route.e2e-spec.ts). Binnen de transactie ziet geen andere suite
+   * iets, en de SHARE-lock houdt tenants tegen die net verdwijnen.
+   * `controle` leest binnen dezelfde transactie, via leesBinnen().
+   */
+  async function migreerGeisoleerd(controle: () => Promise<void>) {
+    await migrator.query('BEGIN');
+    try {
+      await migrator.query('LOCK TABLE clm.tenant IN SHARE MODE');
+      await migrator.query(MIGRATIE);
+      await controle();
+    } finally {
+      await migrator.query('ROLLBACK');
+    }
+  }
+
+  /** Zoals contractmodule(), maar binnen een al geopende transactie. */
+  async function leesBinnen(tenant: string): Promise<boolean | null> {
+    await migrator.query(
+      `SELECT set_config('app.current_tenant_id', $1, true)`,
+      [tenant],
+    );
+    const { rows } = await migrator.query<{ enabled: boolean }>(
+      `SELECT enabled FROM clm.tenant_feature
+        WHERE tenant_id = $1 AND feature_key = 'contractmodule'`,
+      [tenant],
+    );
+    await migrator.query(
+      `SELECT set_config('app.current_tenant_id', '', true)`,
+    );
+    return rows[0]?.enabled ?? null;
+  }
+
   async function ruimOp(): Promise<void> {
     for (const t of ALLE) {
       await migrator.query('BEGIN');
@@ -150,29 +190,29 @@ describe('migratie 0047 — contractmodule herstellen', () => {
   it('zet de module aan voor een actieve tenant zonder rij', async () => {
     expect(await contractmodule(IDS.bestaandeTenant)).toBeNull();
 
-    await migrator.query(MIGRATIE);
-
-    expect(await contractmodule(IDS.bestaandeTenant)).toBe(true);
+    await migreerGeisoleerd(async () => {
+      expect(await leesBinnen(IDS.bestaandeTenant)).toBe(true);
+    });
   });
 
   it('laat een bewuste keuze van de platformbeheerder staan', async () => {
-    await migrator.query(MIGRATIE);
-
-    expect(await contractmodule(IDS.tenantMetBewusteKeuze)).toBe(false);
+    await migreerGeisoleerd(async () => {
+      expect(await leesBinnen(IDS.tenantMetBewusteKeuze)).toBe(false);
+    });
   });
 
   it('geeft een verwijderde tenant geen rij', async () => {
-    await migrator.query(MIGRATIE);
-
-    expect(await contractmodule(IDS.verwijderdeTenant)).toBeNull();
+    await migreerGeisoleerd(async () => {
+      expect(await leesBinnen(IDS.verwijderdeTenant)).toBeNull();
+    });
   });
 
   it('laat geen tenantcontext achter op de verbinding', async () => {
-    await migrator.query(MIGRATIE);
-
-    const { rows } = await migrator.query<{ ctx: string | null }>(
-      'SELECT clm.current_tenant_id()::text AS ctx',
-    );
-    expect(rows[0].ctx).toBeNull();
+    await migreerGeisoleerd(async () => {
+      const { rows } = await migrator.query<{ ctx: string | null }>(
+        'SELECT clm.current_tenant_id()::text AS ctx',
+      );
+      expect(rows[0].ctx).toBeNull();
+    });
   });
 });

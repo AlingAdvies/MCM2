@@ -1,7 +1,7 @@
 # Contract-leesscherm — design (concept, ter goedkeuring)
 
 **Datum:** 2026-10-26
-**Status:** concept — wacht op akkoord eigenaar. Nog niets gebouwd.
+**Status:** kaartindeling goedgekeurd door eigenaar (26-10). Nog niets gebouwd; open: ongekoppelde dossiers.
 **Hangt af van:** #247 (bijlagen/slepen), #248 (dossier als kwestie). Zelfde branch `feat/kwestie-dossier`.
 
 ## Aanleiding
@@ -60,7 +60,7 @@ Niet overgenomen: score- en compliancekaart, levensfasen, AI-knop, zes even zwar
 | Wat speelt er | open dossiers gekoppeld aan dit contract, met laatste stand | "Geen open kwesties" |
 | Laatste contact | jongste datum van notitie of bijlage over de dossiers van dit contract (afgeleid, client-side) | "Nog geen contact vastgelegd" |
 | Volgend moment | vroegste volgende-stapdatum van open dossiers; anders de opzegdatum | "Geen volgende stap" |
-| KPI-evaluatie (gereserveerd) | vragenlijstrondes over dit contract: laatste ronde (datum, ingevuld/beoordeeld, eventueel score) en of een volgende ronde klaarstaat. Bronnen die er al zijn: `contract_survey_template` (welke vragenlijsten bij het contract horen, incl. wachtlijst) en `survey_run.contract_id` (bestaat, nog niet gevuld). Hoe precies: uitwerken bij het bouwen. | "Nog geen KPI-evaluatie ingericht" |
+| KPI-evaluatie | **bron: interne survey** (besluit eigenaar 26-10). Toont **status** (gepland / loopt / beoordeeld) **én score** van de laatste ronde over dit contract en of een volgende ronde klaarstaat. Bronnen die er al zijn: `contract_survey_template` (welke vragenlijsten bij het contract horen, incl. wachtlijst) en `survey_run.contract_id` (bestaat, nog niet gevuld). Hoe precies: uitwerken bij het bouwen. | "Nog geen KPI-evaluatie ingericht" |
 | Overige contracten | andere contracten van dezelfde leverancier, met looptijd | "Geen" |
 | Dossiers | bestaand `EngagementPanel` met `contractId` | — |
 
@@ -80,7 +80,7 @@ Zo min mogelijk nieuw:
 
 ## Open vragen aan de eigenaar
 
-0. **KPI-evaluatie:** de kaart is gereserveerd. *Aanname (te bevestigen):* "KPI-evaluatie" = de interne beoordeling van de leverancier via een vragenlijstronde over dit contract. Wat moet de kaart minimaal tonen — alleen de status (gepland / loopt / beoordeeld) of ook een score?
+*Besloten 26-10:* kaartindeling akkoord; KPI-evaluatie = interne survey, kaart toont status én score.
 
-1. Is de kaartindeling goed, met "wat is afgesproken" als breedste kaart?
-2. Telt een dossier van dezelfde leverancier dat níet aan dit contract gekoppeld is mee bij "wat speelt er"? Voorstel: nee, wel een regel "N andere dossiers bij deze leverancier".
+
+1. Telt een dossier van dezelfde leverancier dat níet aan dit contract gekoppeld is mee bij "wat speelt er"? Voorstel: nee, wel een regel "N andere dossiers bij deze leverancier".
