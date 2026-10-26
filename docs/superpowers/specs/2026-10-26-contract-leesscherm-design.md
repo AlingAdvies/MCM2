@@ -19,7 +19,7 @@ Niet overgenomen: score- en compliancekaart, levensfasen, AI-knop, zes even zwar
 
 ## Plek en toegang
 
-- Nieuwe route **`/beheer/contracten/[id]`**, alleen lezen. Gebruik: pc.
+- Nieuwe route **`/beheer/leveranciers/[id]/contracten/[contractId]`**, alleen lezen. Gebruik: pc. (Onder de leverancier, omdat alle benodigde routes daar al bestaan — geen nieuwe backendroute nodig.)
 - Bereikbaar vanuit de contractenlijst en vanuit het contractblok op het leveranciersscherm (naam wordt een link).
 - Valt onder het menu Contracten, dat zonder `contractmodule` al verborgen is. Geen extra vlagcontrole nu (zie `_platform/features-en-tiers.md` buiten de repo).
 - Knop **"Bewerken"** leidt naar het bestaande formulier; daar verandert niets.
