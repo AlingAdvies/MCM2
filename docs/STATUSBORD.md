@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-10-26 16:33 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-10-26 17:44 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -19,17 +19,18 @@ oogopslag zien wat er per thema openstaat, gesorteerd op prioriteit.
 **P0 — voor elke volgende regel productiecode** — 0 open
 **Vóór de pilot** — 0 open
 **Vóór bredere productie** — 0 open
-**Later — bewust uitgesteld** — 19 open
+**Later — bewust uitgesteld** — 20 open
 
 ---
 
 ## Per thema
 
-### Product — vragenlijst, leveranciers, contracten, meldingen (23)
+### Product — vragenlijst, leveranciers, contracten, meldingen (24)
 
 - [#23](https://github.com/AlingAdvies/MCM2/issues/23) `later` — MVM_V2-frontend-inconsistenties oplossen (tenant demo vs. transdev, vendors-lijstpagina)
 - [#187](https://github.com/AlingAdvies/MCM2/issues/187) `later` — Contracttype-veld toevoegen (placeholder, richting volwaardig contractmanagement)
 - [#190](https://github.com/AlingAdvies/MCM2/issues/190) `later` — Contractdata-uploadtool: Coupa-CSV importeren in MCM2
+- [#249](https://github.com/AlingAdvies/MCM2/issues/249) `later` — Interne survey (KPI-evaluatie) met score — bron voor de KPI-kaart op het contractscherm
 - [#52](https://github.com/AlingAdvies/MCM2/issues/52) — Restrisico virusscan vastleggen als bewuste beslissing, met opschalingsvoorwaarde
 - [#83](https://github.com/AlingAdvies/MCM2/issues/83) — Gearchiveerde testrondes stapelen op in de demo-database
 - [#148](https://github.com/AlingAdvies/MCM2/issues/148) — Notificaties per tenant: signaleren wat blijft liggen
@@ -124,4 +125,4 @@ bestaande thema's past.
 
 ---
 
-**Totaal open:** 66
+**Totaal open:** 67
