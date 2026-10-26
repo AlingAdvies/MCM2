@@ -40,8 +40,10 @@ Niet overgenomen: score- en compliancekaart, levensfasen, AI-knop, zes even zwar
 │ WAT SPEELT ER      │ LAATSTE CONTACT     │ VOLGEND MOMENT            │
 │ open dossiers +    │ <datum> · <wat>     │ <datum> · <volgende stap> │
 │ laatste stand      │ (afgeleid)          │ of opzegdatum (afgeleid)  │
-├────────────────────┴─────────────────────┴───────────────────────────┤
-│ OVERIGE CONTRACTEN BIJ DEZE LEVERANCIER                              │
+├────────────────────┬─────────────────────┴───────────────────────────┤
+│ KPI-EVALUATIE      │ OVERIGE CONTRACTEN BIJ DEZE LEVERANCIER          │
+│ laatste ronde +    │                                                  │
+│ status, volgende   │                                                  │
 ├──────────────────────────────────────────────────────────────────────┤
 │ Dossiers bij dit contract (bestaand paneel: aanmaken, slepen, ...)   │
 └──────────────────────────────────────────────────────────────────────┘
@@ -58,6 +60,7 @@ Niet overgenomen: score- en compliancekaart, levensfasen, AI-knop, zes even zwar
 | Wat speelt er | open dossiers gekoppeld aan dit contract, met laatste stand | "Geen open kwesties" |
 | Laatste contact | jongste datum van notitie of bijlage over de dossiers van dit contract (afgeleid, client-side) | "Nog geen contact vastgelegd" |
 | Volgend moment | vroegste volgende-stapdatum van open dossiers; anders de opzegdatum | "Geen volgende stap" |
+| KPI-evaluatie (gereserveerd) | vragenlijstrondes over dit contract: laatste ronde (datum, ingevuld/beoordeeld, eventueel score) en of een volgende ronde klaarstaat. Bronnen die er al zijn: `contract_survey_template` (welke vragenlijsten bij het contract horen, incl. wachtlijst) en `survey_run.contract_id` (bestaat, nog niet gevuld). Hoe precies: uitwerken bij het bouwen. | "Nog geen KPI-evaluatie ingericht" |
 | Overige contracten | andere contracten van dezelfde leverancier, met looptijd | "Geen" |
 | Dossiers | bestaand `EngagementPanel` met `contractId` | — |
 
@@ -76,6 +79,8 @@ Zo min mogelijk nieuw:
 - Telefoonweergave.
 
 ## Open vragen aan de eigenaar
+
+0. **KPI-evaluatie:** de kaart is gereserveerd. *Aanname (te bevestigen):* "KPI-evaluatie" = de interne beoordeling van de leverancier via een vragenlijstronde over dit contract. Wat moet de kaart minimaal tonen — alleen de status (gepland / loopt / beoordeeld) of ook een score?
 
 1. Is de kaartindeling goed, met "wat is afgesproken" als breedste kaart?
 2. Telt een dossier van dezelfde leverancier dat níet aan dit contract gekoppeld is mee bij "wat speelt er"? Voorstel: nee, wel een regel "N andere dossiers bij deze leverancier".
