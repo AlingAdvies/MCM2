@@ -21,14 +21,17 @@ backend wacht niets functioneels.
 
 **Openstaand, in volgorde van urgentie:**
 
-1. **Issues #214 en #216 noemen Bizaline in het openbaar** (titel #214;
-   beschrijving en vragenlijst in #216). Besluit eigenaar 30-10: zakelijk
-   gevoelige passages over Bizaline horen niet in deze publieke repo. Voorstel
-   ligt bij de eigenaar: titel #214 neutraal maken, inhoud #216 naar OneDrive
-   en het issue sluiten. GitHub bewaart eerdere versies van een bewerkte
-   issuetekst zichtbaar. Ook de geparkeerde branch `docs/bizaline-sso-handoff`
-   staat op GitHub. `docs/STATUSBORD.md` wordt uit de issuetitels gemaakt en
-   volgt vanzelf.
+1. **Issue #216 en branch `docs/bizaline-sso-handoff` — wacht op besluit
+   eigenaar (30-10).** Besluit eigenaar 30-10: zakelijk gevoelige passages
+   over een partner horen niet in deze publieke repo (CLAUDE.md §9). #214 is
+   al neutraal gemaakt (titel "Roadmap TD (Transdev)"). #216 bevat
+   partnerinformatie in beschrijving én reactie; de volledige inhoud is
+   gearchiveerd in OneDrive (`MCM2-klantdata\_platform\`). Voorgelegd:
+   **A** (advies) — #216 verwijderen en vervangen door een neutraal issue met
+   `priority:later`; **B** — beschrijving neutraal en reactie verwijderen
+   (oude beschrijving blijft via "edited" zichtbaar). Daarnaast: de branch
+   `docs/bizaline-sso-handoff` van GitHub verwijderen, lokaal houden.
+   Verwijderen is onomkeerbaar: **niets doen zonder expliciet akkoord.**
 2. **Functielijst Transdev**, verwacht in de week van 2 november. Daarmee
    ADR-019 bijwerken (welke functies, welke horen bij concessiemanagement).
 3. **CCM-pilot op concessie HWGO**: eerst het peildatummodel ("wat gold op
