@@ -37,7 +37,7 @@ oorspronkelijke tekst staat in de git-historie van dit bestand.*
    productie via `productie-aws.yml` achter de vier remmen (verse backup,
    migratiestand, staging-pariteit, menselijk akkoord).
 5. **Toekomstrichting — verkennend, géén besluit:** mogelijke splitsing in
-   twee producten: TD (Transdev-maatwerk, via Bizaline) en AA (AlingAdvies,
+   twee producten: TD (Transdev-maatwerk) en AA (AlingAdvies,
    100% multitenant, verkoopbaar). Zie `docs/advies/advies-td-aa-splitsing.md` en
    `docs/advies/evaluatie-advies-td-aa-splitsing.md`; de kernvraag daaruit (één of
    twee productdeployments) staat nog open. **Bouw hier niet op vooruit.**
@@ -69,7 +69,7 @@ reproduceert precies het overzetprobleem dat "één repo, gedeelde kern"
 vermijdt.*
 
 **Drie productlabels** op elk issue: `product:kern` (raakt TD én AA),
-`product:td` (alleen Transdev/Bizaline-maatwerk), `product:aa` (alleen het
+`product:td` (alleen Transdev-maatwerk), `product:aa` (alleen het
 verkoopbare AlingAdvies-multitenant-product).
 
 **Prioriteitslabels** (vervangen sinds 03-09 de oude before-pilot/

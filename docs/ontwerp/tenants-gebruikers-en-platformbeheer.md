@@ -31,7 +31,7 @@ staat dat expliciet.
 
 **MCM2** is de backend van MyVendorManager: een multi-tenant SaaS-platform voor
 **Contract & Vendor Lifecycle Management**, gericht op Nederlandse organisaties.
-Het vervangt een eerdere C#-pilot en wordt onderdeel van de Bizaline-suite.
+Het vervangt een eerdere C#-pilot.
 
 De vastgelegde ontwerpprioriteit (MCM2-CLAUDE.md §2), in deze volgorde:
 

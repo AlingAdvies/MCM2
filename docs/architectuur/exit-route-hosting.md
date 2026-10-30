@@ -5,8 +5,8 @@
 **Laatste update:** 2026-08-12 — notificaties en agendakoppeling toegevoegd (§5b) als nieuwe
 externe afhankelijkheden, mét de regel wanneer iets binnen of buiten hoort. Voor de
 kostenkant: `aws-kostenraming-briefing.md`.
-**Status:** AWS is de waarschijnlijke bestemming, maar staat niet vast (ADR-012). Bizaline
-draait al op AWS; Azure alleen bij zwaarwegende redenen (eigenaar, 2026-08-06).
+**Status:** AWS is de waarschijnlijke bestemming, maar staat niet vast (ADR-012).
+Azure alleen bij zwaarwegende redenen (eigenaar, 2026-08-06).
 
 > **Waarvoor dit document bestaat.** Niet om te kiezen. Wel om op elk moment te kunnen
 > beantwoorden: *hoe vast zitten we nu, wat zou een verhuizing kosten, en welke keuze van
@@ -450,9 +450,8 @@ Eén ding dat de richting **bevestigt**, en drie die hem alsnog kunnen omgooien.
 
 ### Wat hem bevestigt
 
-**De Azure-beweging is geen gegeven meer.** Bizaline draait op AWS, en dat blijkt de meest
-praktische oplossing. Er was eerder een richting naar Azure — die staat nog in oudere
-Bizaline-documentatie — maar de eigenaar twijfelt daar inmiddels aan (2026-08-06). **Azure
+**De Azure-beweging is geen gegeven meer.** AWS blijkt de meest praktische oplossing. Er was
+eerder een richting naar Azure, maar de eigenaar twijfelt daar inmiddels aan (2026-08-06). **Azure
 is nog aan de orde als er zwaarwegende redenen voor zijn, niet als vanzelfsprekende
 bestemming.**
 

@@ -93,7 +93,7 @@ Wat een tenantbeheerder moet kunnen:
 
 Dit is **laag 2** uit `2026-08-03-feature-flags-en-rechten.md`: gebruikersrecht, beheerd door
 de klant. Laag 1 (tenantrecht: heeft deze klant deze module ingekocht) hoort hier
-uitdrukkelijk **niet** — dat is een besluit van Bizaline, niet van de klant, en het staat
+uitdrukkelijk **niet** — dat is een besluit van de platformleverancier, niet van de klant, en het staat
 in die spec §4 nog open. Een beheerscherm waarin de klant zijn eigen modules kan aanzetten,
 is precies de fout die die spec beschrijft.
 
@@ -342,9 +342,9 @@ volledig afgedekt, terwijl stap 3 het meeste werk en de meeste gevolgen heeft.
 ## 5. Wat dit ontwerp expliciet niet doet
 
 - **Geen laag-1 feature flags.** Welke modules een tenant heeft ingekocht is een besluit van
-  Bizaline. Zie `2026-08-03-feature-flags-en-rechten.md` §4 — die keuze staat nog open en
+  de platformleverancier. Zie `2026-08-03-feature-flags-en-rechten.md` §4 — die keuze staat nog open en
   hoort niet in een klantenscherm.
-- **Geen platformbeheer-toegang.** Een Bizaline-medewerker die meekijkt bij een klant is een
+- **Geen platformbeheer-toegang.** Een medewerker van de platformleverancier die meekijkt bij een klant is een
   derde soort recht, buiten beide lagen. Dat is Issue #57 en wordt hier niet opgelost.
 - **Geen derde rol.** `admin` en `reviewer` blijven zoals ze zijn. Een fijnmaziger
   permissiemodel is voorzien maar niet aan de orde (rechten-spec §3).

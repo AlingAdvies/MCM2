@@ -99,7 +99,7 @@ Supabase biedt managed backups (afhankelijk van het gekozen plan/tier — dit is
 | Health-check faalt in productie | Herstart de container via het CI/CD-dashboard (Fargate/ECS-equivalent) | Als herstart niet helpt binnen 15 minuten |
 | Dependency-scan meldt nieuwe kwetsbaarheid | Beoordeel Dependabot-PR, merge indien patch/minor en CI groen | Bij major-versie-impact of onduidelijke breaking-change-risico's |
 | Rollback na een mislukte release | Vorige image-tag opnieuw promoveren (gedocumenteerd commando) | Als de databasemigratie zelf niet terug te draaien is (zie Database-regels in MCM2-CLAUDE.md — geen destructieve migraties zonder eerst een schema-debt-issue) |
-| Vermoeden van een datalek | Volg het incident-responsproces (zie `incident-response.md`-skill, Bizaline IT) | Altijd — dit is per definitie een specialistenmoment |
+| Vermoeden van een datalek | Volg het incident-responsproces (zie `incident-response.md`-skill) | Altijd — dit is per definitie een specialistenmoment |
 
 ## Maandelijkse onderhoudskalender (voorstel)
 
