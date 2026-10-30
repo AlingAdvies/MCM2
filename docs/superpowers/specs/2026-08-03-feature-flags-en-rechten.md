@@ -42,7 +42,7 @@ lagen samenkomen.
 |---|---|---|
 | Vraag | Heeft deze klant deze functie? | Mag deze persoon deze functie? |
 | Verandert bij | een contract, een upgrade | een functiewissel, een nieuwe collega |
-| Wie beheert | Bizaline (leverancier) | de beheerder van de klant |
+| Wie beheert | de platformleverancier | de beheerder van de klant |
 | Voorbeeld | "Transdev heeft de IT-compliancemodule" | "Sophie mag leveranciers aanmaken, Mark alleen lezen" |
 | Bestaat in MCM2 | **nee** | **deels** — `tenant_membership.role` |
 
@@ -225,6 +225,6 @@ Geen daarvan blokkeert fase 2b.
 3. **Komt er een derde rol?** Zo ja, dan is het permissiemodel uit §3 eerder aan
    de orde dan gedacht.
 4. **Hoe verhoudt dit zich tot Issue #57** (platformbeheer-toegang tot
-   klant-tenants)? Een Bizaline-medewerker die meekijkt bij een klant is een
+   klant-tenants)? Een medewerker van de platformleverancier die meekijkt bij een klant is een
    derde soort recht, buiten beide lagen. Dat issue staat al open en hoort hier
    niet opgelost te worden.

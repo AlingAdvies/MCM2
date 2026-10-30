@@ -103,7 +103,7 @@ Compacte, gelabelde samenvatting van de sessiegeschiedenis vóór de contexthers
 
 ## AWS als toekomstig productiedoel
 
-`Historisch feit` — AWS is gekozen als beoogd productiedoel omdat MCM2/Bizaline op termijn een bestaande Bizaline-applicatie moet vervangen die al op AWS draait (gedeelde Route 53, SES, billing-account-voordelen). Dit is een bewuste "goedkoopste moment"-overweging: rechtstreeks tegen een andere provider bouwen en later naar AWS migreren zou een herbouw zijn.
+`Historisch feit` — AWS is gekozen als beoogd productiedoel omdat een bestaande toepassing in dezelfde omgeving al op AWS draait (gedeelde Route 53, SES, billing-account-voordelen). Dit is een bewuste "goedkoopste moment"-overweging: rechtstreeks tegen een andere provider bouwen en later naar AWS migreren zou een herbouw zijn.
 
 `Historisch feit` — Cognito is gekozen als federatielaag vóór het bestaande Entra ID (niet als vervanging) — Microsoft-tenants blijven inloggen via Entra ID, Cognito routeert en geeft het JWT uit. Reden: een tweede identity-provider wordt dan een configuratie-actie, geen herbouw.
 

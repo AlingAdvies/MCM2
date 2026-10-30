@@ -177,7 +177,7 @@ Format: één regel per beslissing, met datum en korte reden — zoals de
 
 ## 2. Productdoel
 
-MCM2 is de nieuwe NestJS/TypeScript-backend voor MyVendorManager (MVM_V2), onderdeel van de toekomstige Bizaline-suite.
+MCM2 is de nieuwe NestJS/TypeScript-backend voor MyVendorManager (MVM_V2).
 
 MCM2 vervangt op termijn de C#-pilot `mvm-api-pilot` en moet uitgroeien tot een veilig, multi-tenant Contract & Vendor Lifecycle Management-platform voor Nederlandse organisaties.
 
@@ -442,7 +442,7 @@ Bouw tegen een generieke identity-/claimsinterface. AWS Cognito is een mogelijke
 
 ## 9. AWS-richting en fasering
 
-AWS is het beoogde productiedoel omdat MCM2/Bizaline uiteindelijk een bestaande AWS-georiënteerde toepassing moet kunnen vervangen. Dat betekent niet dat iedere AWS-dienst nu moet worden gebouwd.
+AWS is het beoogde productiedoel. Dat betekent niet dat iedere AWS-dienst nu moet worden gebouwd.
 
 | Fase | Doel | Toegestane componenten |
 |---|---|---|

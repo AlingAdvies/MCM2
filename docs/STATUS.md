@@ -234,7 +234,7 @@ Transdev, die niet uit het statusoverzicht te krijgen was.**
    groen. `/api/backend/health` bevestigt commit `6b888d47` op productie.
 6. **Verkennend, niet gebouwd:** technisch advies opgesteld over een
    mogelijke toekomstige splitsing van MCM2 in twee producten — TD
-   (Bizaline/Transdev-maatwerk) en AA (AlingAdvies, generiek multitenant) —
+   (Transdev-maatwerk) en AA (AlingAdvies, generiek multitenant) —
    zie `docs/advies/advies-td-aa-splitsing.md`. Puur verkennend op verzoek van de
    eigenaar, geen enkele code- of architectuurwijziging als gevolg hiervan.
 
@@ -2646,7 +2646,7 @@ Drie dingen daaruit die het onthouden waard zijn:
 | `migrate:deploy` gedraaid met alleen `DATABASE_URL` gezet; het script leest `MIGRATION_DATABASE_URL` en die wees naar **productie**. Meldde "Migraties voltooid" tegen de verkeerde database. Geen schade (no-op) → **Issue #86**, opgelost in #93 | `scripts/` |
 | **`db:generate` is onbruikbaar** — snapshots lopen tot 0007 terwijl er 19 migraties zijn. Het genereerde een migratie die `sessie`, `tenant_membership` en een `user`-kolom opnieuw wilde aanmaken → **Issue #96** | `drizzle/meta/` |
 | De bewakingstest op test-id's kijkt alleen naar UUID's tussen **enkele** aanhalingstekens; dezelfde waarde binnen een template-string glipt erdoor. Nog geen issue | `test/test-ids.spec.ts` |
-| Verouderde context uit een automatisch geladen skill stelde dat Bizaline naar Azure migreert; als feit overgenomen in een architectuurdocument. Bron opgespoord, vier bestanden geactualiseerd met een gedateerd "Stand per"-kopje | buiten dit project |
+| Verouderde context uit een automatisch geladen skill stelde dat een partner naar Azure migreert; als feit overgenomen in een architectuurdocument. Bron opgespoord, vier bestanden geactualiseerd met een gedateerd "Stand per"-kopje | buiten dit project |
 | Een geldig gevormd maar niet-bestaand mailadres levert "Geslaagd" op. Geen fout, wel het bewijs dat de bounce-webhook nodig is | mailkanaal |
 
 ### Wat er op 2026-08-07 boven kwam
@@ -2690,7 +2690,7 @@ aanvinken, een ronde starten en werkende uitnodigingslinks krijgen — de eerste
 | Een dagcap-test slaagde om de verkeerde reden: met het hele `error`-veld genegeerd viel hij door naar de "geen id"-controle en gooide alsnog | `resend-mail-kanaal.spec.ts` |
 | `migrate:deploy` gedraaid met alleen `DATABASE_URL` gezet; het script leest `MIGRATION_DATABASE_URL` en die wees naar **productie**. Meldde "Migraties voltooid" tegen de verkeerde database. Geen schade (no-op), wel Issue #86 | `scripts/` |
 | Een geldig gevormd maar niet-bestaand adres levert "Geslaagd" op. Geen fout, wel het bewijs dat de bounce-webhook nodig is | mailkanaal |
-| Verouderde context uit een automatisch geladen skill stelde dat Bizaline naar Azure migreert. Dat is als feit overgenomen in een architectuurdocument. Bron opgespoord en de vier bestanden geactualiseerd; ze dragen nu een gedateerd "Stand per"-kopje | buiten dit project |
+| Verouderde context uit een automatisch geladen skill stelde dat een partner naar Azure migreert. Dat is als feit overgenomen in een architectuurdocument. Bron opgespoord en de vier bestanden geactualiseerd; ze dragen nu een gedateerd "Stand per"-kopje | buiten dit project |
 
 <details>
 <summary>Vorige stand (2026-08-04, avond)</summary>
@@ -3075,7 +3075,7 @@ Vult tenant `dededede-0000-4000-8000-000000000001` met 3 gebruikers (met members
 
 Op 2026-07-28 is de scope **gecorrigeerd door de opdrachtgever**: wat er gebouwd moet worden is **een tool waarmee een tenant zélf vragen opstelt**. De acht Transdev-vragen (`Transdev Annual Vendor IT Risk SurveyV1_0.md`) zijn de **eerste vulling en de PoC-casus** — niet de scope.
 
-Op 2026-07-29 is het openstaande niveau-besluit genomen: **niveau B**. Aanleiding was `VendorComply Help en Manual.md` (in OneDrive, `Bizaline/Producten/VendorComply/`) — de handleiding van een bestaand, werkend product. Dat leverde geen wensenlijst maar keuzes die de praktijk al hebben overleefd. Het eerdere advies (niveau A) rustte op het argument dat er nog geen tweede vraagvorm was om tegen te ontwerpen; dat verviel zodra er acht bewezen vraagtypen op tafel lagen.
+Op 2026-07-29 is het openstaande niveau-besluit genomen: **niveau B**. Aanleiding was de handleiding van een bestaand product (buiten de repo) — de handleiding van een bestaand, werkend product. Dat leverde geen wensenlijst maar keuzes die de praktijk al hebben overleefd. Het eerdere advies (niveau A) rustte op het argument dat er nog geen tweede vraagvorm was om tegen te ontwerpen; dat verviel zodra er acht bewezen vraagtypen op tafel lagen.
 
 **Wat niveau B betekent:** de tenant kiest per vraag een antwoordtype uit acht — `instruction` (leesblok), `confirmation`, `open_text`, `yes_no`, `single_choice`, `multi_choice`, `rating`, `number`, `file_upload`.
 
@@ -3852,7 +3852,7 @@ nieuwe opdracht. Bij de eerstvolgende sessie is dit relevant:
 
 Op 2026-07-30 vastgesteld door de eigenaar: gebruikers krijgen **verschillende rollen**; of autorisatie later ook op individu gaat, is een besluit voor later.
 
-De bron is `MVM_V2/src/tenant/transdev/config/job-titles.ts`, afkomstig uit `CATS rollen.csv` (Bizaline/MyVendormanager). **Ongewijzigd actueel volgens de eigenaar.** Het bevat twee lagen, en dat onderscheid is de vondst:
+De bron is `MVM_V2/src/tenant/transdev/config/job-titles.ts`, afkomstig uit `CATS rollen.csv`. **Ongewijzigd actueel volgens de eigenaar.** Het bevat twee lagen, en dat onderscheid is de vondst:
 
 | Laag | Wat | Aantal |
 |---|---|---|
@@ -3923,7 +3923,7 @@ Volledige backlog (alle 24 items, incl. Before production en Later): `gh issue l
 - **Ontwerpen (`docs/superpowers/specs/`):**
   - `2026-07-28-leveranciertoken-ontwerp.md` — toegangslaag voor leveranciers. **Uitgevoerd**, zie PR #32. Blijft de referentie voor waarom de guard doet wat hij doet.
   - `2026-07-28-vragenlijst-ontwerp.md` — vragenlijst-tool, antwoorden en certificaat-upload. **Status: bouwbaar** (niveau B, vastgesteld 2026-07-29). §0 legt de twee scopewijzigingen uit; §10 bevat de bouwvolgorde.
-- **Externe referentie:** `VendorComply Help en Manual.md` (OneDrive, `Bizaline/Producten/VendorComply/`) — handleiding van een bestaand, werkend product. Bron van de acht vraagtypen en de lifecycle. **Referentie, geen compatibiliteitseis:** geen gedeelde database, geen migratiepad. Wat is overgenomen en wat niet, staat in het ontwerp §1a.
+- **Externe referentie:** de handleiding van een bestaand product (buiten de repo) — handleiding van een bestaand, werkend product. Bron van de acht vraagtypen en de lifecycle. **Referentie, geen compatibiliteitseis:** geen gedeelde database, geen migratiepad. Wat is overgenomen en wat niet, staat in het ontwerp §1a.
 - **Klantaanlevering:** `Transdev Annual Vendor IT Risk SurveyV1_0.md` (repo-root) — de acht vragen die de eerste vulling van de tool vormen.
 - **Architectuurreviews:**
   - `docs/architecture-review/2026-07-24/` — de oorspronkelijke review (00, 02-05, 07-09; 06 is verplaatst naar `docs/archive/`)

@@ -14,7 +14,7 @@ Transdev) op dezelfde applicatie.
 
 Er tekent zich een scenario af waarin dat niet meer volstaat:
 
-- **Bizaline** ontwikkelt MCM2 feitelijk door als maatwerk voor één klant
+- **Het Transdev-spoor** ontwikkelt MCM2 feitelijk door als maatwerk voor één klant
   (Transdev), met klantspecifieke inrichting — vooral aan de voorkant.
 - **AlingAdvies** wil MCM2 juist als generiek, verkoopbaar multitenant-product
   in de markt zetten, aan meerdere klanten, met een deels eigen roadmap.
@@ -162,11 +162,10 @@ aparte repo anders zou afdwingen.
 
 ## 6. Wat dit advies niet beslist
 
-- De domeinnaam/merkkeuze (`clm.alingadvies.nl` vs. `clm.bizaline.com` vs.
+- De domeinnaam/merkkeuze (`clm.alingadvies.nl` of
   iets nieuws) — dat is een aparte DNS/Entra/certificaat-vraag.
-- Eigenaarschap van IP en aandeelhoudersverhouding tussen Bizaline en
-  AlingAdvies bij deze productsplitsing — een juridische vraag, geen
-  technische.
+- Eigendoms- en contractuele vragen bij deze productsplitsing — een
+  juridische vraag, geen technische.
 - Het exacte moment en de volgorde waarin bestaande AA-only functionaliteit
   (NIS2-scaffold, andere) daadwerkelijk als losse module wordt
   losgetrokken uit de huidige kern.

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>CCM architectuur sheet</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--ink:#1E2D4A;--muted:#5B6B80;--line:#CBD5E1;--aws:#FCE3AE;--awsline:#E0A32B;
+        --accent:#10A0BA;--accentbg:#DDF4F8;--accentink:#0B7C91;--soft:#F1F5F9}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:#fff}
+  .canvas{position:relative;width:1920px;height:1080px;background:#fff;font-family:Inter,Arial,sans-serif;color:var(--ink)}
+  .t{position:absolute}
+  .box{position:absolute;background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 22px;display:flex;flex-direction:column;gap:6px;justify-content:center}
+  .box h4{margin:0;font-size:24px;font-weight:700;line-height:1.2}
+  .box p{margin:0;font-size:19px;line-height:1.3;color:var(--muted)}
+  .box ul{margin:6px 0 0;padding-left:24px;font-size:21px;line-height:1.5;color:var(--muted)}
+  .tag{display:block;font-size:17px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .chip{display:inline-block;padding:8px 14px;border-radius:10px;background:var(--soft);font-size:20px;color:#475569;margin:0 8px 8px 0}
+  .chip.n{background:var(--accentbg);color:var(--accentink);font-weight:600}
+  svg.arrows{position:absolute;inset:0;width:1920px;height:1080px}
+</style>
+</head>
+<body>
+<div class="canvas">
+
+  <div class="t" style="left:48px;top:26px;font-size:40px;font-weight:700">MCM2 + CCM — opzet</div>
+  <div class="t" style="left:48px;top:76px;font-size:22px;color:var(--muted)">Eén applicatie met twee modules, op AWS. Doelbeeld met CCM erin; alles buiten CCM draait vandaag al zo.</div>
+
+  <div style="position:absolute;left:62px;top:126px;width:290px;height:92px;background:#fff;border:1px solid var(--line);border-radius:14px"></div>
+  <div style="position:absolute;left:55px;top:119px;width:290px;height:92px;background:#fff;border:1px solid var(--line);border-radius:14px"></div>
+  <div class="box" style="left:48px;top:112px;width:290px;height:92px">
+    <h4>Gebruikers</h4><p>Browser · medewerkers van Transdev</p>
+  </div>
+
+  <div class="box" style="left:430px;top:112px;width:470px;height:92px">
+    <h4>Inloggen</h4><p>Met het eigen Transdev-account</p>
+  </div>
+
+  <div class="t" style="left:48px;top:228px;font-size:20px;font-weight:600;letter-spacing:.08em;color:var(--muted)">UITROLSTRAAT</div>
+
+  <div class="box" style="left:48px;top:250px;width:352px;height:66px"><h4>Ontwikkelaar</h4></div>
+  <div class="box" style="left:48px;top:332px;width:352px;height:92px"><h4>Versiebeheer</h4><p>Elke wijziging vastgelegd</p></div>
+  <div class="box" style="left:48px;top:440px;width:352px;height:92px"><h4>Automatische controles</h4><p>Stijl, types, unit- en isolatietests</p></div>
+  <div class="box" style="left:48px;top:548px;width:352px;height:92px"><h4>Containerimages</h4><p>Elke versie apart bewaard</p></div>
+  <div class="box" style="left:48px;top:656px;width:352px;height:92px"><h4>Staging</h4><p>Eigen database, alleen migraties</p></div>
+  <div class="box" style="left:48px;top:764px;width:352px;height:118px"><h4>Uitrol naar productie</h4><p>Vier remmen, waarvan één menselijk akkoord</p></div>
+  <div class="box" style="left:48px;top:898px;width:352px;height:118px"><h4>Controle na de uitrol</h4><p>Migratiestand, rechten en bijlagenopslag</p></div>
+
+  <div style="position:absolute;left:430px;top:258px;width:1442px;height:778px;background:var(--aws);border:1px solid var(--awsline);border-radius:18px"></div>
+  <div class="t" style="left:454px;top:276px;font-size:24px;font-weight:700">AWS · regio Europa (eu-west-1)</div>
+
+  <div style="position:absolute;left:454px;top:312px;width:1394px;height:330px;background:#FFFBF2;border:1px dashed var(--awsline);border-radius:16px"></div>
+  <div class="t" style="left:476px;top:328px;font-size:20px;font-weight:600;color:#8A5A09">Amazon ECS — draaiende containers</div>
+
+  <div class="box" style="left:474px;top:364px;width:660px;height:256px;justify-content:flex-start;padding-top:24px">
+    <span class="tag">Schermen</span>
+    <h4>Webapplicatie</h4>
+    <p>Wat de gebruiker ziet en bedient. Eén inlog, de modules verschijnen als menu-items.</p>
+  </div>
+
+  <div class="box" style="left:1160px;top:364px;width:664px;height:256px;justify-content:flex-start;padding-top:24px">
+    <span class="tag">Logica en regels</span>
+    <h4>Applicatieserver</h4>
+    <div style="margin-top:4px">
+      <span class="chip">Contractmanagement</span>
+      <span class="chip">NIS2-uitvraag</span>
+      <span class="chip n">Concessiemanagement — CCM</span>
+    </div>
+  </div>
+
+  <div class="box" style="left:454px;top:676px;width:660px;height:120px">
+    <h4>Documentopslag</h4><p>Privé en versleuteld · contracten, bijlagen en plannen</p>
+  </div>
+
+  <div class="box" style="left:1150px;top:676px;width:400px;height:120px">
+    <h4>Uitgaande e-mail</h4><p>Uitnodigingen en meldingen</p>
+  </div>
+
+  <div class="box" style="left:454px;top:826px;width:1394px;height:190px">
+    <h4>Database</h4>
+    <div style="margin-top:4px">
+      <span class="chip">contracten</span><span class="chip">referentiegegevens</span>
+      <span class="chip">logboek</span><span class="chip n">concessies — nieuw</span>
+    </div>
+    <ul>
+      <li>Afscherming per klant en per concessie in de database zelf, niet alleen in het scherm</li>
+      <li>Aparte rollen voor de applicatie, de migraties en meelezen · dagelijkse back-up met hersteltest</li>
+    </ul>
+  </div>
+
+  <svg class="arrows" viewBox="0 0 1920 1080" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748B"/></marker></defs>
+    <g stroke="#64748B" stroke-width="2.5" marker-end="url(#a)">
+      <path d="M 338 158 L 424 158"/>
+      <path d="M 344 196 C 404 232 402 330 468 392"/>
+      <path d="M 1134 492 L 1154 492"/>
+      <path d="M 1250 620 C 1140 652 1000 656 900 670"/>
+      <path d="M 1380 620 C 1372 640 1362 656 1352 670"/>
+      <path d="M 1700 620 L 1700 820"/>
+      <path d="M 400 790 C 430 776 436 676 448 650"/>
+      <path d="M 400 850 C 428 868 436 878 448 886"/>
+      <path d="M 224 318 L 224 326"/>
+      <path d="M 224 426 L 224 434"/>
+      <path d="M 224 534 L 224 542"/>
+      <path d="M 224 642 L 224 650"/>
+      <path d="M 224 750 L 224 758"/>
+      <path d="M 224 884 L 224 892"/>
+    </g>
+  </svg>
+
+  <div class="t" style="left:454px;top:1044px;font-size:19px;color:var(--muted)">Blauw omkaderd = nieuw voor concessiemanagement. De rest staat er al.</div>
+</div>
+</body>
+</html>
