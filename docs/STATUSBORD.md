@@ -5,7 +5,7 @@ verloren bij de volgende run. Pas in plaats daarvan het issue of het label
 aan op GitHub, en draai `npm run statusbord` opnieuw (of wacht op de
 geplande workflow).
 
-**Gegenereerd:** 2026-10-30 12:57 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
+**Gegenereerd:** 2026-10-30 18:22 UTC · **Bron:** `gh issue list --repo AlingAdvies/MCM2`
 
 Dit is geen vervanging van de issues zelf (details, acceptatiecriteria,
 discussie staan daar) en geen vervanging van `docs/STATUS.md` (het
@@ -113,7 +113,7 @@ bestaande thema's past.
 - [#228](https://github.com/AlingAdvies/MCM2/issues/228) `later` — Bulk-intrekken van deelnemers in een uitgestuurde vragenlijst-ronde
 - [#216](https://github.com/AlingAdvies/MCM2/issues/216) `later` — MCM2 starten vanuit legacy Bizaline-app zonder Entra (handoff-token)
 - [#215](https://github.com/AlingAdvies/MCM2/issues/215) — Roadmap AA (AlingAdvies multitenant)
-- [#214](https://github.com/AlingAdvies/MCM2/issues/214) — Roadmap TD (Transdev/Bizaline)
+- [#214](https://github.com/AlingAdvies/MCM2/issues/214) — Roadmap TD (Transdev)
 - [#212](https://github.com/AlingAdvies/MCM2/issues/212) — Tenant-lid intrekken toont foutmelding terwijl het intrekken wél slaagt (204 zonder body)
 - [#206](https://github.com/AlingAdvies/MCM2/issues/206) `later` — FORCE ROW LEVEL SECURITY ontbreekt op 8 tabellen
 - [#205](https://github.com/AlingAdvies/MCM2/issues/205) — Archiveerfunctie voor vragenlijst-rondes (periode-afsluiting)
