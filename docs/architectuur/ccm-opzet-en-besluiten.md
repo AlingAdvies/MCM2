@@ -177,4 +177,4 @@ zolang alleen HWGO bestaat, ziet wie de module ziet die concessie.
 Zie ook: `docs/ARCHITECTUUR.md` (normatieve platformgaranties), `docs/adr/` (ADR-002, 003, 009, 010,
 011, 013, 015, 016, 017, 018, 019), `docs/advies/uitgangspunten-concessiemanagement.md`,
 `docs/superpowers/specs/2026-10-26-contract-leesscherm-design.md` (ontwerpprincipes van de schermen),
-`docs/architectuur/2026-10-30-architectuur-mcm2-ccm-met-pakketten.png` (plaat).
+`docs/architectuur/2026-10-30-architectuur-mcm2-ccm-met-pakketten-v2.png` (plaat, concept v2; v1 is de eerder gedeelde versie).
