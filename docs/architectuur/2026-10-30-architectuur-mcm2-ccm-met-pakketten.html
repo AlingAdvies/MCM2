@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCM2 en CCM</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --page:#EEF2F7; --ink:#1E2D4A; --muted:#5B6B80; --line:#CBD5E1;
+    --sheet:#FFFFFF; --aws:#FCE3AE; --awsline:#E0A32B;
+    --card:#FFFFFF; --accent:#10A0BA; --accentbg:#DDF4F8; --accentink:#0B7C91;
+    --soft:#F1F5F9; --tech:#64748B;
+  }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ --page:#0F172A; } }
+  :root[data-theme="dark"]{ --page:#0F172A; }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--page);font-family:Inter,Arial,sans-serif;color:var(--ink);display:flex;justify-content:center;padding:24px 16px}
+  .wrap{width:100%;max-width:1440px}
+  .canvas{position:relative;width:1440px;height:1150px;background:var(--sheet);transform-origin:top left}
+  .t{position:absolute}
+  .box{position:absolute;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 18px;display:flex;flex-direction:column;gap:6px;justify-content:center}
+  .box h4{margin:0;font-size:22px;font-weight:700;line-height:1.2}
+  .box p{margin:0;font-size:18px;line-height:1.3;color:var(--muted)}
+  .box ul{margin:4px 0 0;padding-left:20px;font-size:18px;line-height:1.45;color:var(--muted)}
+  .tech{margin:2px 0 0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:15px;line-height:1.35;color:var(--tech)}
+  .new{background:var(--accentbg);border:2px solid var(--accent)}
+  .tag{display:block;font-size:15px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  svg.arrows{position:absolute;inset:0;width:1440px;height:1150px;pointer-events:none}
+  .chip{display:inline-block;padding:6px 12px;border-radius:8px;background:var(--soft);font-size:17px;color:#475569;margin:0 6px 6px 0}
+  .chip.n{background:var(--accentbg);color:var(--accentink);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="scaler"><div class="canvas" id="canvas">
+
+  <div class="t" style="left:48px;top:28px;font-size:34px;font-weight:700">MCM2 + CCM — opzet</div>
+  <div class="t" style="left:48px;top:72px;font-size:19px;color:var(--muted)">Eén applicatie met twee modules, op AWS. Doelbeeld met CCM erin; alles buiten CCM draait vandaag al zo.</div>
+
+  <!-- gebruikers -->
+  <div style="position:absolute;left:62px;top:144px;width:290px;height:92px;background:#fff;border:1px solid var(--line);border-radius:12px"></div>
+  <div style="position:absolute;left:55px;top:137px;width:290px;height:92px;background:#fff;border:1px solid var(--line);border-radius:12px"></div>
+  <div class="box" style="left:48px;top:130px;width:290px;height:92px">
+    <h4>Gebruikers</h4>
+    <p>Browser · medewerkers van Transdev</p>
+  </div>
+
+  <!-- entra -->
+  <div class="box" style="left:430px;top:130px;width:470px;height:110px">
+    <h4>Inloggen</h4>
+    <p class="tech">Microsoft Entra External ID · OIDC + PKCE · jose</p>
+  </div>
+
+  <!-- uitrolstraat -->
+  <div class="t" style="left:48px;top:248px;font-size:18px;font-weight:600;letter-spacing:.08em;color:var(--muted)">UITROLSTRAAT</div>
+
+  <div class="box" style="left:48px;top:282px;width:330px;height:64px"><h4>Ontwikkelaar</h4></div>
+
+  <div class="box" style="left:48px;top:362px;width:330px;height:84px">
+    <h4>Versiebeheer</h4>
+    <p class="tech">GitHub</p>
+  </div>
+
+  <div class="box" style="left:48px;top:462px;width:330px;height:104px">
+    <h4>Automatische controles</h4>
+    <p class="tech">ESLint · Prettier · Jest · Playwright</p>
+  </div>
+
+  <div class="box" style="left:48px;top:582px;width:330px;height:84px">
+    <h4>Containerimages</h4>
+    <p class="tech">Docker · GHCR, tag = commit</p>
+  </div>
+
+  <div class="box" style="left:48px;top:682px;width:330px;height:96px">
+    <h4>Staging</h4>
+    <p class="tech">2e Supabase-project · alleen migraties</p>
+  </div>
+
+  <div class="box" style="left:48px;top:794px;width:330px;height:104px">
+    <h4>Uitrol naar productie</h4>
+    <p class="tech">GitHub Actions · 4 remmen, 1 akkoord</p>
+  </div>
+
+  <div class="box" style="left:48px;top:914px;width:330px;height:96px">
+    <h4>Controle na de uitrol</h4>
+    <p class="tech">migratiestand · rechten · /health</p>
+  </div>
+
+  <!-- AWS -->
+  <div style="position:absolute;left:430px;top:282px;width:962px;height:810px;background:var(--aws);border:1px solid var(--awsline);border-radius:16px"></div>
+  <div class="t" style="left:454px;top:300px;font-size:21px;font-weight:700">AWS · regio Europa (eu-west-1)</div>
+
+  <!-- ECS -->
+  <div style="position:absolute;left:454px;top:338px;width:914px;height:330px;background:#FFFBF2;border:1px dashed var(--awsline);border-radius:14px"></div>
+  <div class="t" style="left:474px;top:354px;font-size:18px;font-weight:600;color:#8A5A09">Amazon ECS — draaiende containers · Node 24 (Alpine)</div>
+
+  <div class="box" style="left:474px;top:392px;width:420px;height:252px;justify-content:flex-start;padding-top:20px">
+    <span class="tag">Schermen</span>
+    <h4>Webapplicatie</h4>
+    <p>Wat de gebruiker ziet en bedient. Eén inlog, de modules verschijnen als menu-items.</p>
+    <p class="tech">Next.js 15 · React 19 · Tailwind CSS · TypeScript</p>
+  </div>
+
+  <div class="box" style="left:928px;top:392px;width:420px;height:252px;justify-content:flex-start;padding-top:20px">
+    <span class="tag">Logica en regels</span>
+    <h4>Applicatieserver</h4>
+    <div style="margin-top:2px">
+      <span class="chip">Contractmanagement</span>
+      <span class="chip">NIS2-uitvraag</span>
+      <span class="chip n">Concessiemanagement — CCM</span>
+    </div>
+    <p class="tech">NestJS 11 · TypeScript · Drizzle ORM · class-validator</p>
+  </div>
+
+  <!-- S3 -->
+  <div class="box" style="left:454px;top:712px;width:460px;height:120px">
+    <h4>Documentopslag</h4>
+    <p>Privé en versleuteld · contracten, bijlagen en plannen</p>
+    <p class="tech">Amazon S3 · AWS SDK v3</p>
+  </div>
+
+  <!-- mail -->
+  <div class="box" style="left:938px;top:712px;width:300px;height:120px">
+    <h4>Uitgaande e-mail</h4>
+    <p>Uitnodigingen en meldingen</p>
+    <p class="tech">Resend</p>
+  </div>
+
+  <!-- database -->
+  <div class="box" style="left:454px;top:862px;width:914px;height:206px">
+    <h4>Database</h4>
+    <div style="margin-top:2px">
+      <span class="chip">contracten</span>
+      <span class="chip">referentiegegevens</span>
+      <span class="chip">logboek</span>
+      <span class="chip n">concessies — nieuw</span>
+    </div>
+    <ul>
+      <li>Afscherming per klant in de database zelf · per concessie in de applicatie</li>
+      <li>Aparte rollen voor de applicatie, de migraties en meelezen · dagelijkse back-up met hersteltest</li>
+    </ul>
+    <p class="tech">PostgreSQL 17.6 bij Supabase · migraties met Drizzle Kit</p>
+  </div>
+
+  <svg class="arrows" viewBox="0 0 1440 1150" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748B"/>
+      </marker>
+    </defs>
+    <g stroke="#64748B" stroke-width="2.5" marker-end="url(#a)">
+      <path d="M 338 176 L 424 176"/>
+      <path d="M 344 214 C 404 252 402 404 468 466"/>
+      <path d="M 894 512 L 922 512"/>
+      <path d="M 1000 644 C 950 678 860 688 760 706"/>
+      <path d="M 1120 644 C 1105 666 1098 678 1092 706"/>
+      <path d="M 1300 644 L 1300 856"/>
+      <path d="M 378 812 C 412 800 420 712 448 678"/>
+      <path d="M 378 852 C 412 872 420 902 448 916"/>
+      <path d="M 213 348 L 213 356"/>
+      <path d="M 213 448 L 213 456"/>
+      <path d="M 213 568 L 213 576"/>
+      <path d="M 213 668 L 213 676"/>
+      <path d="M 213 780 L 213 788"/>
+      <path d="M 213 900 L 213 908"/>
+    </g>
+  </svg>
+
+  <div class="t" style="left:454px;top:1102px;font-size:17px;color:var(--muted)">Blauw omkaderd = nieuw voor concessiemanagement. De rest staat er al.</div>
+
+</div></div></div>
+<script>
+  (function(){
+    var c = document.getElementById('canvas');
+    function fit(){
+      var w = c.parentElement.parentElement.clientWidth;
+      var s = Math.min(1, w / 1440);
+      c.style.transform = 'scale(' + s + ')';
+      c.parentElement.style.height = (1150 * s) + 'px';
+    }
+    fit(); window.addEventListener('resize', fit);
+  })();
+</script>
+</body>
+</html>
