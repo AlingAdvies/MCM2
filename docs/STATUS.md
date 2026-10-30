@@ -2,6 +2,108 @@
 
 ## Laatst bijgewerkt
 
+**2026-10-30 — Dossier als kwestie en contract-leesscherm op productie;
+ontwerp concessiemodule (CCM) herzien; ADR-018 en ADR-019 voorgesteld.**
+
+### Begin hier bij de volgende sessie
+
+**Wat er draait (volgens de laatste uitrol op 26-10; vóór een nieuwe uitrol eerst `curl .../health` controleren):**
+
+| Omgeving | Backend | Frontend | Sinds |
+| --- | --- | --- | --- |
+| Productie (AWS) | `sha-d5cc0412c945` | `sha-077eace33bb7` | 26-10, run 40410674220 |
+| Staging (saxombp) | `sha-d5cc0412c945` | `sha-077eace33bb7` | 26-10, rookproef groen |
+
+**Klaar op main, nog niet uitgerold:** frontend-PR #37 (sleepvlak duidelijker:
+dikkere rand, kleurt blauw, tekst "Loslaten om toe te voegen"). Besluit
+eigenaar 28-10: niet apart uitrollen, meenemen met de volgende uitrol. Aan de
+backend wacht niets functioneels.
+
+**Openstaand, in volgorde van urgentie:**
+
+1. **Issues #214 en #216 noemen Bizaline in het openbaar** (titel #214;
+   beschrijving en vragenlijst in #216). Besluit eigenaar 30-10: zakelijk
+   gevoelige passages over Bizaline horen niet in deze publieke repo. Voorstel
+   ligt bij de eigenaar: titel #214 neutraal maken, inhoud #216 naar OneDrive
+   en het issue sluiten. GitHub bewaart eerdere versies van een bewerkte
+   issuetekst zichtbaar. Ook de geparkeerde branch `docs/bizaline-sso-handoff`
+   staat op GitHub. `docs/STATUSBORD.md` wordt uit de issuetitels gemaakt en
+   volgt vanzelf.
+2. **Functielijst Transdev**, verwacht in de week van 2 november. Daarmee
+   ADR-019 bijwerken (welke functies, welke horen bij concessiemanagement).
+3. **CCM-pilot op concessie HWGO**: eerst het peildatummodel ("wat gold op
+   datum X") en de zoekbehoefte uitwerken met de accountmanager; nog geen
+   tabellen. Zie `docs/architectuur/ccm-opzet-en-besluiten.md` §6.
+4. **Uitgaande mail vanaf een Transdev-adres**: advies gegeven (30-10), geen
+   besluit. Voorkeur: een subdomein van de klant geverifieerd bij Resend,
+   afzenderadres per tenant als kern-configuratie (dwingt geen tweede
+   omgeving af, zie CLAUDE.md §0a). Resend-plan en domeinlimiet nog niet in
+   hun documentatie nagelezen.
+5. **Slepen rechtstreeks uit Outlook**: de klassieke Outlook geeft een
+   gesleepte mail niet als bestand door aan Chrome (vastgesteld 28-10). Via
+   de Verkenner of "Bestand → Opslaan als" werkt het wel. Nog te proberen: Edge.
+6. **KPI-kaart op het leesscherm** is gereserveerd en leeg; de interne
+   beoordeling (UC2) bestaat, score en contractkoppeling niet (#249,
+   `priority:later`).
+7. Ouder en nog steeds open: kopie van de S3-bijlagen buiten AWS (#46), oude
+   productiecontainers op saxombp (#246).
+
+### Sessie 26 t/m 30 oktober
+
+1. **Dossier als kwestie (#247, #248) en contract-leesscherm uitgerold**
+   (PR #250 + frontend #36, migratie 0048, productie 26-10). Mails en pdf's
+   slepen in één dossier, max. 10 bijlagen, geen toelichting per bestand;
+   open/afgerond, volgende stap met datum, afronden met verplichte uitkomst.
+   Leesscherm per contract via "Stand": wat is afgesproken, wie bel ik, wat
+   speelt er, laatste contact, volgend moment, KPI (gereserveerd).
+   Besluit eigenaar: de kwestie is de enige vastlegging; geen apart
+   overleg- of notulenbegrip.
+2. **Concessiemodule (CCM): kritische review van de opzet.** Besluit blijft
+   "module binnen MCM2", maar de voorwaarden zijn herzien
+   (`docs/architectuur/ccm-opzet-en-besluiten.md`):
+   - **ADR-018** (voorgesteld): afscherming tussen concessies is *redelijk*
+     en ligt in de applicatie (één centrale controle, één dekkende test);
+     tussen klanten blijft ze hard in de database. Eis eigenaar: alle
+     gebruikers zijn Transdev-medewerkers, niet hacker-proof nodig.
+   - **ADR-019** (voorgesteld): functies per tenant (CATS als stil kader,
+     functietitel van de klant in beeld) en rolbezetting per contract,
+     leverancier en concessie. Geen rechten vooraf; regels één voor één.
+     "Mag ik dit zelf" toont de bezetting, het systeem oordeelt niet. De
+     implementatieconsultant richt in via een eigen admin-account (tweede
+     identiteit); ADR-015 blijft ongewijzigd.
+   - Topologiebesluit (één of twee productieomgevingen) bewust **niet**
+     genomen.
+   - Architectuurplaten: v1 is eerder gedeeld en blijft ongewijzigd; v2
+     (`docs/architectuur/2026-10-30-architectuur-mcm2-ccm-*-v2.png`) is de
+     actuele.
+3. **Zakelijk gevoelige passages over Bizaline uit de repo gehaald**
+   (besluit eigenaar 30-10, PR #252). Neutrale vermeldingen (tenantnaam,
+   technische verhuismogelijkheid van de inlog) en toegepaste migraties
+   bleven staan. De git-historie bevat de oude teksten nog; herschrijven is
+   bewust niet gedaan.
+4. **Testreparatie:** `contractmodule-herstel.e2e-spec.ts` herhaalt migratie
+   0047 nu in een transactie met SHARE-lock en rollback; daarmee is de
+   wisselvallige rode run door parallelle suites weg.
+
+### Tussen 25 september en 26 oktober (samengevat uit de PR-titels)
+
+- 26-09: leveranciers zonder geldig e-mailadres gesignaleerd (#225); handmatige
+  verzendregistratie en heruitnodigen (#226, #227).
+- 06-10: .msg/.eml als dossierbijlage (#231); vragenlijststatus in het
+  leveranciersoverzicht (#232).
+- 07-10: script tenant-kopiëren NL → DEV (#233).
+- 10-10: werkingsgebied (concessie) op contracten (#235).
+- 11-10: klantdata uit de repo en CI-controle `check:klantdata` (#236, #237);
+  documentatie ingedeeld (#238); bijlagen in S3 op productie (#239);
+  beveiligingsupdates (#241).
+- 15-10: NIS2 dunne doorsnede (#243) en menu per tenant via features
+  (#244, migratie 0047); productie 15-10. NIS2 draait sinds 19-10 in een
+  eigen productietenant.
+
+Details per onderwerp staan in de PR's en in de memory-bestanden van de sessies.
+
+### Eerder: 2026-09-25
+
 **2026-09-25 — Excel-export uitgerold; Transdev-tenant leeggemaakt en
 development-tenant ernaast gezet; opschoonprocedure vastgelegd als
 runbook + script.**

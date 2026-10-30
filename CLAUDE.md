@@ -20,7 +20,7 @@ oorspronkelijke tekst staat in de git-historie van dit bestand.*
 > Een **multitenant vendor-compliance-platform dat in productie draait, met
 > echte klanten erop, betrouwbaar doorontwikkelen** via de bewezen OTAP-keten.
 
-**Vijf punten, actuele stand:**
+**Zes punten, actuele stand:**
 
 1. **Productie draait op AWS** (`clm.alingadvies.nl`, ECS Express Mode) en
    wordt echt gebruikt — voor klanten én demo. Staging en acceptatie draaien
@@ -41,6 +41,12 @@ oorspronkelijke tekst staat in de git-historie van dit bestand.*
    100% multitenant, verkoopbaar). Zie `docs/advies/advies-td-aa-splitsing.md` en
    `docs/advies/evaluatie-advies-td-aa-splitsing.md`; de kernvraag daaruit (één of
    twee productdeployments) staat nog open. **Bouw hier niet op vooruit.**
+6. **Concessiemanagement (CCM) wordt een module binnen MCM2** (besluit
+   30-10), alleen aan voor Transdev; nog niets gebouwd, eerst een pilot op
+   concessie HWGO. Lees vóór werk eraan `docs/architectuur/ccm-opzet-en-besluiten.md`,
+   ADR-018 (afscherming tussen concessies: redelijk, in de applicatie) en
+   ADR-019 (functies en rolbezetting, gedeeld met contracten). Het
+   topologiebesluit uit punt 5 is daarmee **niet** genomen.
 
 **Waar het werkelijk om gaat is onveranderd het gedrag, niet de techniek.**
 Dat de eigenaar een wijziging kan doen en die met vertrouwen tot in productie
@@ -388,6 +394,14 @@ weert csv/Excel/Word/pdf/zip/mail sinds PR #236, en `npm run check:klantdata`
 er toch zo'n bestand of een echt ogend adres in de voorbeelddata in zet. De
 oude bestanden staan nog in de git-historie — bewust geaccepteerd door de
 eigenaar (11-10).
+
+**Hetzelfde geldt voor zakelijke verhoudingen met partners** (besluit eigenaar
+30-10): wie voor wie levert of ontwikkelt, contractpartijen, eigendom en
+aandelen, productstrategie en interne documenten of OneDrive-paden van een
+partner horen niet in deze repo, en ook niet in issues, PR-teksten of
+commitberichten — die zijn net zo openbaar. Een partnernaam als naam van een
+tenant of in testdata mag wel. Twijfel je, schrijf het dan in OneDrive en
+verwijs vanuit de repo neutraal ("intern document, buiten de repo").
 
 ---
 
