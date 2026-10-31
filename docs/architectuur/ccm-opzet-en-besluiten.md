@@ -4,8 +4,8 @@ Context voor werk aan de concessiemodule. Compact en normatief: wat is besloten,
 en in welke volgorde het gebouwd wordt. Achtergrond en onderbouwing staan in het
 architectuurdocument (Claude Docs, concept v0.3); deze pagina is de werkversie voor in de repo.
 
-Laatst bijgewerkt: 30 oktober 2026, na kritische review. Status: besluit over de plaatsing
-genomen, afscherming voorgesteld in ADR-018, nog niets van gebouwd.
+Laatst bijgewerkt: 31 oktober 2026, werkwijze demo en MVP toegevoegd (§6). Status: besluit over
+de plaatsing genomen, afscherming voorgesteld in ADR-018, nog niets van gebouwd.
 
 ---
 
@@ -132,6 +132,41 @@ Daarna, vóór de eerste concessietabel, in deze volgorde:
 Daarna de eerste migratie voor `concessie`, samen met de centrale toegangscontrole en de dekkende
 test uit ADR-018. De rolbezetting per concessie (ADR-019) is pas nodig bij de tweede concessie:
 zolang alleen HWGO bestaat, ziet wie de module ziet die concessie.
+
+### Werkwijze: eerst een demo op dummy-data, dan de MVP in stukjes
+
+Afgesproken met de eigenaar op 31 oktober 2026. Twee fases, elk met een eigen ritme.
+
+**Fase 1: demo op dummy-data, alleen lokaal.** De schermen worden gebouwd in de echte frontend
+(`MCM2-frontend`), met de bestaande componenten en design tokens, zodat de demo eruitziet als het
+eindresultaat. De gegevens komen uit `src/data/concessie.mock.ts` via de bestaande mockstand
+(`NEXT_PUBLIC_MOCK_DATA=1`, zie `src/core/api/client.ts`). Geen achterkant, geen migraties, geen
+uitrol; alles op één feature-branch, met `main` regelmatig erin.
+
+- Begin met de twee pilotschermen: concessie-overzicht en standscherm per concessie.
+- De dummy-data is verzonnen. Het mockbestand staat in een publieke repo: geen echte namen,
+  contactgegevens of contractteksten.
+- Per scherm toetsen of het binnen de bestaande opbouw te realiseren is (dossier/kwestie,
+  bijlagen, standscherm, ADR-019). Wat een mock gratis belooft maar in het echt het zware werk is,
+  zoals zoeken en "wat gold op datum X", staat in de demo zichtbaar als "nog te toetsen".
+- De fase eindigt met een uitgeschreven MVP: welke schermen, welke gegevens, wat er bewust nog
+  niet in zit. Samen met de vorm van het mockbestand is dat de invoer voor het datamodel.
+
+**Fase 2: de MVP in stukjes door de keten.** Elk afgerond stukje gaat naar `main` (beide repo's
+samen) en via staging en rookproef naar productie. Daar staat `concessiemodule` aan voor een eigen
+tenant (Transdev DEV of AlingAdvies) en uit voor Transdev Nederland. Wie het eindresultaat wil
+zien, ziet het daar, in de echte omgeving. In gebruik nemen is daarna alleen de schakelaar
+"Modules" in platformbeheer, zonder uitrol.
+
+- De centrale controle op het entitlement aan de achterkant (voorwaarde 5) zit in het eerste
+  stukje, niet later. Zonder die controle is halfaf CCM-code op productie bereikbaar voor
+  Transdev-gebruikers.
+- Tabellen gaan pas naar `main` als het model na de pilot redelijk vastligt. Een migratie op
+  productie draai je niet terug.
+- Een account hoort bij één tenant. Een Transdev-gebruiker kan met het eigen account dus niet in
+  Transdev DEV meekijken: daar demonstreert de eigenaar zelf.
+- Voor demo's met documenten moet uploaden in de lokale demo eerst werken; dat faalt nu
+  (verwacht nog een lokale opslagdienst).
 
 ## 7. Conventies binnen de module
 
