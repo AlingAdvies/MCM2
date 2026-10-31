@@ -4,8 +4,9 @@ Context voor werk aan de concessiemodule. Compact en normatief: wat is besloten,
 en in welke volgorde het gebouwd wordt. Achtergrond en onderbouwing staan in het
 architectuurdocument (Claude Docs, concept v0.3); deze pagina is de werkversie voor in de repo.
 
-Laatst bijgewerkt: 31 oktober 2026, werkwijze demo en MVP toegevoegd (§6). Status: besluit over
-de plaatsing genomen, afscherming voorgesteld in ADR-018, nog niets van gebouwd.
+Laatst bijgewerkt: 31 oktober 2026, werkwijze demo en MVP (§6) en verplichte opleveringen met
+herinneringen (§5) toegevoegd. Status: besluit over de plaatsing genomen, afscherming voorgesteld
+in ADR-018, alleen een frontend-demo op dummy data gebouwd.
 
 ---
 
@@ -110,6 +111,33 @@ correspondentie lopen waar het kan via het bestaande dossier.
 **Zoeken.** Bestaat nog niet en is de kern van de belofte. Postgres full-text eerst, `pgvector`
 later. Vereist tekstextractie uit pdf en .msg. Resultaten filteren op toegewezen concessies.
 
+**Verplichte opleveringen en herinneringen** (besluit eigenaar 31 oktober 2026). Welke plannen
+en rapportages een concessie voorschrijft, verschilt per concessie; er is geen vaste lijst. De
+consultant richt ze per concessie in uit het eigen PvE of de eigen beschikking; daarna kan de
+CCM-beheerder ze aanpassen. Per oplevering, bewust eenvoudig:
+
+| Veld | Voorbeeld (Gooi en Vechtstreek) |
+| --- | --- |
+| Naam en grondslag | Concept-Vervoerplan · PvE bijlage 3, lid 2 |
+| Interval in maanden (leeg = eenmalig) | 12 |
+| Volgende termijn | 18 april 2027 (34 weken vóór de dienstregeling) |
+| Procedure | daarna advies Rocov en gemeenten |
+| Verantwoordelijke | een functie op de concessie (ADR-019) |
+| Vigerende versie | met het document |
+
+Geen apart statusveld: na oplevering schuift de termijn één interval door. Staat er alleen een
+periode ("2e kwartaal"), dan is de termijn de laatste dag daarvan, per concessie aan te passen.
+
+Herinneren gaat in twee stappen:
+
+- **Stap A — signaal in de schermen.** Te laat, of binnen 8 weken, op het standscherm, in
+  Documenten en in Status. Zelfde patroon als de opzegtermijnwaarschuwing bij contracten. Staat in
+  de demo.
+- **Stap B — mail, met de backend (MVP).** Aan de verantwoordelijke functie 8 en 2 weken vóór de
+  termijn; bij te laat ook aan de centrale functie. Termijnbewaking is een kern-functie: contracten
+  willen hetzelfde voor hun opzegtermijn. Hij wordt daarom in de kern gebouwd en door CCM
+  gebruikt, niet in de module. Er is nog geen meldingenlaag in MCM2 (zie §9).
+
 ## 6. Volgorde van werken
 
 0. **Pilot op HWGO met de accountmanager**: de twee schermen samen vullen, en daaruit het
@@ -196,6 +224,9 @@ zien, ziet het daar, in de echte omgeving. In gebruik nemen is daarna alleen de 
 - Het documentmodel voor de formele stukken: soorten, grenzen aan omvang en aantal.
 - Welke functies "centraal" zijn, en welke functies bij concessiemanagement horen (ADR-019).
 - Of `ref` ook opzoeklijsten voor concessies moet bevatten, of dat die in `concessie` horen.
+- De termijnbewaking met mail (stap B in §5) als kern-functie: een geplande taak, de mail via
+  `MailKanaal`, en de afzender (zie de open vraag over mailen vanaf een Transdev-adres). Samen te
+  ontwerpen met de opzegtermijn van contracten.
 
 ## 10. Wanneer dit besluit heropend wordt
 
