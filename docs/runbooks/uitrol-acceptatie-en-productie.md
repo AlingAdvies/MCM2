@@ -372,6 +372,40 @@ komen bij het starten uit de `.env`-bestanden op de server, niet uit het image.
 **Er is niets gewijzigd als deze stap faalt** — de draaiende omgeving is dan
 niet aangeraakt.
 
+### `error from registry: denied` — het GHCR-token op saxombp is verlopen
+
+*Toegevoegd 2026-11-17.* De pakketten staan in de praktijk privé (zie de
+alinea hierboven voor hoe het bedoeld was); saxombp haalt ze op met een
+GitHub-token. Het eerste token verliep op 08-11-2026 en niemand merkte het tot
+de eerstvolgende uitrol naar staging. Het huidige verloopt op **17-11-2027**.
+
+Er zijn **twee** tokens, niet verwarren:
+
+| Token (naam op github.com/settings/tokens) | Gebruikt door | Vervalt |
+|---|---|---|
+| `saxombp GHCR pull 2027` | saxombp: `/opt/mcm2/.ghcr-token` + `docker login` | 17-11-2027 |
+| `mcm2-ecs-ghcr-pull` | AWS-productie: secret `mcm2/productie/ghcr-auth` (eu-west-1) | nooit |
+
+**Vernieuwen — wat de eigenaar doet** (alleen dat kan alleen hij, op zijn
+GitHub-account `cmalinghotmail`):
+1. github.com/settings/tokens → *Generate new token (classic)*; naam met het
+   jaartal, vervaldatum één jaar, scope **alleen** `read:packages`.
+2. De code in Kladblok plakken en opslaan als `C:\Users\cmali\ghcr-token-nieuw.txt`.
+   **Niet in de chat plakken** — dan staat hij in het gespreksverslag.
+
+**Vernieuwen — wat Claude doet**, in deze volgorde:
+1. Formaat controleren zonder de code te tonen (`ghp_` + 36 tekens).
+2. Via ssh naar `/opt/mcm2/.ghcr-token.nieuw` (umask 077), daarmee
+   `docker login ghcr.io -u cmalinghotmail --password-stdin`; pas bij
+   `Login Succeeded` het oude bestand vervangen, `chmod 600`.
+3. "Login Succeeded" is geen bewijs: een echte `docker pull` van het backend-
+   én het frontend-image moet slagen.
+4. Het tekstbestand op de laptop wissen en controleren dat het weg is.
+5. De uitrol opnieuw starten; de eigenaar mag het oude token op GitHub
+   verwijderen.
+6. De nieuwe vervaldatum bijwerken in deze tabel en in
+   [onderhoudskalender.md](onderhoudskalender.md).
+
 ### "De migraties zijn niet gelukt"
 
 De nieuwe code is dan **niet** gestart; de omgeving draait nog op de vorige
