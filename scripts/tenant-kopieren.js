@@ -104,6 +104,8 @@ const NIET_GEKOPIEERD = [
   'survey_answer',
   'survey_review',
   'response_note',
+  // 0049 (#258): hoort bij survey_response, dat ook niet meegaat.
+  'survey_response_event',
   'survey_attachment',
   'vendor_engagement_attachment',
 ];

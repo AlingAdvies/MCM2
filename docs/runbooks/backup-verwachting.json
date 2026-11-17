@@ -161,10 +161,15 @@
     "",
     "Migratie 0048 (26-10, #248, dossier als kwestie) voegt GEEN tabel toe —",
     "alleen kolommen (status, afgerond_op, volgende stap) op de bestaande",
-    "clm.vendor_engagement. Migratiestand bijgewerkt, tabellenlijst niet."
+    "clm.vendor_engagement. Migratiestand bijgewerkt, tabellenlijst niet.",
+    "",
+    "Migratie 0049 (17-11, #258, uitnodigingsgeschiedenis) voegt WEL een tabel",
+    "toe: clm.survey_response_event. Die staat BEWUST NOG NIET in de",
+    "tabellenlijst hieronder — zelfde kip-ei als bij 0046: productie heeft hem",
+    "pas na de uitrol. Na bevestigde uitrol toevoegen."
   ],
-  "bijgewerkt": "2026-10-26",
-  "migratiestand": "0048_vendor_engagement_kwestie",
+  "bijgewerkt": "2026-11-17",
+  "migratiestand": "0049_survey_response_event",
   "tabellen": [
     "audit.audit_event",
     "clm.contract",

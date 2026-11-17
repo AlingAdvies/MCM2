@@ -36,6 +36,10 @@
 > staat als laatste in `VIA_API_NA_FUNCTIE`; `clm.contract_werkingsgebied`
 > verdwijnt via CASCADE met de contracten en staat in `ALLEEN_CONTROLEREN`.
 > Opnieuw bewezen op een wegwerpcontainer met drie tenants.
+>
+> **Bijgewerkt 2026-11-17 (migratie 0049, #258):** `clm.survey_response_event`
+> verdwijnt via CASCADE met `survey_response` en staat in `ALLEEN_CONTROLEREN`;
+> `clm_api_runtime` heeft er bewust geen DELETE op.
 
 ---
 

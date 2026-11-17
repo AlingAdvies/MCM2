@@ -116,11 +116,14 @@ const VIA_API_NA_FUNCTIE = [
 
 // Alleen ter controle: geen eigen DELETE, moeten na de operatie op 0 staan.
 // contract_werkingsgebied (0046) verdwijnt via CASCADE zodra contract weg is.
+// survey_response_event (0049, #258) verdwijnt via CASCADE met survey_response;
+// clm_api_runtime heeft er bewust geen DELETE op.
 const ALLEEN_CONTROLEREN = [
   'contract_survey_template',
   'import_row',
   'import_extra_contact',
   'contract_werkingsgebied',
+  'survey_response_event',
 ];
 
 // Stap 4: buiten schema clm. ref.vendor_category moet ná vendor (verwijzing

@@ -37,7 +37,7 @@ met `vendor_engagement_note`, en dossierkoppelingen
 
 | Wat | Waarom |
 |---|---|
-| `survey_run`, `survey_response`, `survey_answer`, `survey_review`, `response_note`, en koppelingen naar een inzending | Besluit eigenaar 07-10: DEV is een experimenteerplek; echte leveranciersuitnodigingen daarin geven verwarring met de echte klantomgeving |
+| `survey_run`, `survey_response`, `survey_answer`, `survey_review`, `response_note`, `survey_response_event`, en koppelingen naar een inzending | Besluit eigenaar 07-10: DEV is een experimenteerplek; echte leveranciersuitnodigingen daarin geven verwarring met de echte klantomgeving |
 | `survey_attachment`, `vendor_engagement_attachment` | De bestanden staan op de ECS-container, niet in de database, en zijn van de werkmachine niet bereikbaar (zie `tenant-opschonen.md` §7) |
 | `template_reviewer`, `tenant_feature` | Inrichting, geen klantdata |
 | `audit.audit_event` | Het auditspoor hoort bij de tenant waar het gebeurde |
