@@ -8,6 +8,10 @@ import {
   ResultaatLeverancier,
   RondeResultaten,
 } from './ronde-resultaten';
+import {
+  gebeurtenissenVanRonde,
+  type UitnodigingsGebeurtenis,
+} from './uitnodigingsgeschiedenis';
 
 /**
  * Vragenlijsten en rondes lezen voor de beheerkant (fase A van
@@ -136,6 +140,14 @@ export interface DeelnemerSamenvatting {
    * dat nooit is gebeurd.
    */
   handmatigVerzondenOp: string | null;
+  /**
+   * Adres van de contactpersoon die het eigen mailkanaal zou kiezen (primair
+   * eerst, dan de oudste). Alleen een voorinvulling voor het adresveld bij
+   * "verzonden" — wie het werkelijk kreeg, staat in de geschiedenis.
+   */
+  contactEmail: string | null;
+  /** Uitnodigingsgeschiedenis (#258), oudste eerst. Leeg als er niets is. */
+  geschiedenis: UitnodigingsGebeurtenis[];
 }
 
 export interface RondeDetail extends RondeSamenvatting {
@@ -314,6 +326,7 @@ interface DeelnemerRij extends Record<string, unknown> {
   expires_at: Date | string | null;
   submitted_at: Date | string | null;
   handmatig_verzonden_op: Date | string | null;
+  contact_email: string | null;
 }
 
 /** Datums als ISO-tekst, of null. Voorkomt dat elke aanroeper dat zelf doet. */
@@ -646,12 +659,27 @@ export class VragenlijstBeheerService {
                      s.status,
                      s.expires_at,
                      s.submitted_at,
-                     s.handmatig_verzonden_op
+                     s.handmatig_verzonden_op,
+                     c.email AS contact_email
                 FROM clm.survey_response s
                 LEFT JOIN clm.vendor v ON v.vendor_id = s.vendor_id
+                -- Zelfde keuze als RondeBeheerService.uitnodigen(): primair
+                -- eerst, dan de oudste. Twee definities van "de
+                -- contactpersoon" zouden twee verschillende adressen opleveren.
+                LEFT JOIN LATERAL (
+                       SELECT email
+                         FROM clm.vendor_contact
+                        WHERE vendor_id = s.vendor_id
+                          AND deleted_at IS NULL
+                          AND email IS NOT NULL
+                        ORDER BY is_primary DESC, created_at ASC
+                        LIMIT 1
+                     ) c ON true
                WHERE s.run_id = ${runId}
                ORDER BY v.name NULLS LAST, s.created_at`,
         );
+
+        const geschiedenis = await gebeurtenissenVanRonde(tx, runId);
 
         return {
           ...this.naarRonde(r),
@@ -663,6 +691,8 @@ export class VragenlijstBeheerService {
             expiresAt: iso(d.expires_at),
             submittedAt: iso(d.submitted_at),
             handmatigVerzondenOp: iso(d.handmatig_verzonden_op),
+            contactEmail: d.contact_email,
+            geschiedenis: geschiedenis.get(d.response_id) ?? [],
           })),
         };
       },

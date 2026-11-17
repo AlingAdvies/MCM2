@@ -43,6 +43,7 @@ import { Client } from 'pg';
  */
 const TABELLEN_IN_VOLGORDE = [
   'clm.response_note',
+  'clm.survey_response_event',
   'clm.vendor_engagement_note',
   'clm.vendor_engagement_attachment',
   'clm.vendor_engagement_link',

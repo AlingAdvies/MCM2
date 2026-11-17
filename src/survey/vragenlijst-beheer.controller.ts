@@ -5,6 +5,7 @@ import {
   Delete,
   Get,
   HttpCode,
+  Logger,
   NotFoundException,
   Param,
   Patch,
@@ -43,6 +44,8 @@ import {
   InvoerFout,
   leesBeoordelaar,
   leesHandmatigeVerzending,
+  leesIntrekken,
+  leesNietAangekomen,
   leesNieuweBeoordeling,
   leesNotitie,
   type NieuweBeoordelingInvoer,
@@ -95,6 +98,8 @@ import { VragenlijstBeheerService } from './vragenlijst-beheer.service';
 @Controller('admin/survey')
 @UseGuards(TenantContextGuard, RolGuard)
 export class VragenlijstBeheerController {
+  private readonly logger = new Logger(VragenlijstBeheerController.name);
+
   constructor(
     private readonly beheer: VragenlijstBeheerService,
     private readonly rondes: RondeBeheerService,
@@ -701,10 +706,25 @@ export class VragenlijstBeheerController {
     @Req() request: RequestMetSessie,
     @Param('id') id: string,
     @Param('responseId') responseId: string,
+    @Body() body: unknown,
   ) {
     const sessie = request.sessie!;
 
-    return this.rondes.trekDeelnemerIn(sessie.tenantId, id, responseId);
+    let invoer: ReturnType<typeof leesIntrekken>;
+
+    try {
+      invoer = leesIntrekken(body);
+    } catch (err) {
+      throw this.naarHttpFout(err);
+    }
+
+    return this.rondes.trekDeelnemerIn(
+      sessie.tenantId,
+      id,
+      responseId,
+      sessie.userId,
+      invoer.toelichting,
+    );
   }
 
   /**
@@ -739,6 +759,44 @@ export class VragenlijstBeheerController {
       id,
       responseId,
       invoer.verzondenOp,
+      sessie.userId,
+      invoer.adres,
+      invoer.toelichting,
+    );
+  }
+
+  /**
+   * Registreert dat een uitnodiging niet is aangekomen (#258). Zie
+   * `RondeBeheerService.registreerNietAangekomen()`.
+   *
+   * @VereistRol('admin'): zelfde grens als de andere schrijfroutes hier.
+   */
+  @Post('runs/:id/participants/:responseId/niet-aangekomen')
+  @VereistRol('admin')
+  @HttpCode(200)
+  async registreerNietAangekomen(
+    @Req() request: RequestMetSessie,
+    @Param('id') id: string,
+    @Param('responseId') responseId: string,
+    @Body() body: unknown,
+  ) {
+    const sessie = request.sessie!;
+
+    let invoer: ReturnType<typeof leesNietAangekomen>;
+
+    try {
+      invoer = leesNietAangekomen(body);
+    } catch (err) {
+      throw this.naarHttpFout(err);
+    }
+
+    return this.rondes.registreerNietAangekomen(
+      sessie.tenantId,
+      id,
+      responseId,
+      sessie.userId,
+      invoer.adres,
+      invoer.toelichting,
     );
   }
 
@@ -764,6 +822,7 @@ export class VragenlijstBeheerController {
       id,
       responseId,
       GELDIGHEID_STANDAARD_DAGEN,
+      sessie.userId,
     );
 
     return {
@@ -845,6 +904,30 @@ export class VragenlijstBeheerController {
     );
 
     const perResponse = new Map(verzending.map((v) => [v.responseId, v]));
+
+    // Uitnodigingsgeschiedenis (#258): alleen wat echt de deur uit ging.
+    //
+    // Een fout hier mag het antwoord NIET breken. De tokens hieronder bestaan
+    // nergens anders meer; een 500 zou ze onherroepelijk laten verdwijnen
+    // terwijl de mails al verstuurd zijn. Een ontbrekende tijdlijnregel is
+    // vervelend, een kwijtgeraakte link is erger.
+    try {
+      await this.rondes.registreerMailVerzendingen(
+        sessie.tenantId,
+        sessie.userId,
+        uitnodigingen.flatMap((u) =>
+          perResponse.get(u.responseId)?.echtVerstuurd && u.contactEmail
+            ? [{ responseId: u.responseId, adres: u.contactEmail }]
+            : [],
+        ),
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Uitnodigingsgeschiedenis niet vastgelegd voor ronde ${id}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
 
     return {
       // De tokens blijven in het antwoord staan, óók als de mail geslaagd is.

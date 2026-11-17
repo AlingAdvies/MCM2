@@ -344,6 +344,13 @@
       "when": 1787068800022,
       "tag": "0048_vendor_engagement_kwestie",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1787068800023,
+      "tag": "0049_survey_response_event",
+      "breakpoints": true
     }
   ]
 }

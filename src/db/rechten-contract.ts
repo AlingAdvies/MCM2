@@ -145,6 +145,12 @@ export const TABELRECHTEN: Readonly<Record<string, Tabelrechten>> = {
   'clm.response_note': NIET_VERWIJDEREN,
   'clm.template_reviewer': ['SELECT', 'INSERT', 'DELETE'],
 
+  // clm.survey_response_event (0049, #258): uitnodigingsgeschiedenis. Strenger
+  // dan een notitie: ook geen UPDATE, want er is niets zacht te verwijderen —
+  // een verkeerd geregistreerde verzending blijft zichtbaar staan (besluit
+  // 26-09 bij 0044).
+  'clm.survey_response_event': ['SELECT', 'INSERT'],
+
   // clm.vendor_engagement (0040): een dossier verdwijnt niet, wordt zacht
   // verwijderd via deleted_at -- zelfde patroon als response_note.
   'clm.vendor_engagement': NIET_VERWIJDEREN,

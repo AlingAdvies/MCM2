@@ -1134,7 +1134,7 @@ describe('Ronde-beheerroutes (e2e)', () => {
         `/admin/survey/runs/${runId}/participants/${responseId}/handmatig-verzonden`,
       )
       .set('Cookie', cookieAdminA)
-      .send({ verzondenOp })
+      .send({ verzondenOp, adres: 'contact+vendor1@example.test' })
       .expect(200);
 
     expect(
@@ -1198,7 +1198,7 @@ describe('Ronde-beheerroutes (e2e)', () => {
         `/admin/survey/runs/${runId}/participants/${responseId}/handmatig-verzonden`,
       )
       .set('Cookie', cookieAdminA)
-      .send({ verzondenOp: morgen })
+      .send({ verzondenOp: morgen, adres: 'contact+vendor1@example.test' })
       .expect(400);
   });
 
@@ -1215,7 +1215,10 @@ describe('Ronde-beheerroutes (e2e)', () => {
         `/admin/survey/runs/${runId}/participants/${responseId}/handmatig-verzonden`,
       )
       .set('Cookie', cookieAdminA)
-      .send({ verzondenOp: eersteVerzendmoment })
+      .send({
+        verzondenOp: eersteVerzendmoment,
+        adres: 'contact+vendor1@example.test',
+      })
       .expect(200);
 
     const tweedeVerzendmoment = new Date(Date.now() - 60 * 1000).toISOString();
@@ -1225,7 +1228,10 @@ describe('Ronde-beheerroutes (e2e)', () => {
         `/admin/survey/runs/${runId}/participants/${responseId}/handmatig-verzonden`,
       )
       .set('Cookie', cookieAdminA)
-      .send({ verzondenOp: tweedeVerzendmoment })
+      .send({
+        verzondenOp: tweedeVerzendmoment,
+        adres: 'contact+vendor1@example.test',
+      })
       .expect(200);
 
     expect(
@@ -1242,8 +1248,189 @@ describe('Ronde-beheerroutes (e2e)', () => {
         `/admin/survey/runs/${runId}/participants/00000000-0000-0000-0000-00000000dead/handmatig-verzonden`,
       )
       .set('Cookie', cookieAdminA)
-      .send({ verzondenOp })
+      .send({ verzondenOp, adres: 'contact+vendor1@example.test' })
       .expect(404);
+  });
+
+  // ── Uitnodigingsgeschiedenis (#258) ─────────────────────────────────────
+
+  interface Gebeurtenis {
+    soort: string;
+    adres: string | null;
+    toelichting: string | null;
+    plaatsgevondenOp: string;
+    doorNaam: string | null;
+  }
+
+  async function deelnemerVan(runId: string, responseId: string) {
+    const ronde = await request(server)
+      .get(`/admin/survey/runs/${runId}`)
+      .set('Cookie', cookieAdminA)
+      .expect(200);
+
+    return (
+      ronde.body as {
+        deelnemers: Array<{
+          responseId: string;
+          status: string;
+          handmatigVerzondenOp: string | null;
+          contactEmail: string | null;
+          geschiedenis: Gebeurtenis[];
+        }>;
+      }
+    ).deelnemers.find((d) => d.responseId === responseId)!;
+  }
+
+  it('weigert een handmatige verzending zonder adres', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${responseId}/handmatig-verzonden`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({ verzondenOp: new Date(Date.now() - 60 * 1000).toISOString() })
+      .expect(400);
+
+    // Er mag dan ook niets in de geschiedenis staan.
+    expect((await deelnemerVan(runId, responseId)).geschiedenis).toEqual([]);
+  });
+
+  it('bouwt de geschiedenis op over versturen, intrekken, nieuwe link en terugkomen', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    // Uitnodigen via het logkanaal verstuurt niets echt — dus nog geen regel,
+    // wel het contactadres als voorinvulling.
+    const vooraf = await deelnemerVan(runId, responseId);
+    expect(vooraf.geschiedenis).toEqual([]);
+    expect(vooraf.contactEmail).toBe('contact+vendor1@example.test');
+
+    const eersteKeer = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${responseId}/handmatig-verzonden`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({ verzondenOp: eersteKeer, adres: 'info@vendor1.example.test' })
+      .expect(200);
+
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${responseId}/niet-aangekomen`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({ adres: 'info@vendor1.example.test', toelichting: 'Onbestelbaar' })
+      .expect(200);
+
+    await request(server)
+      .post(`/admin/survey/runs/${runId}/participants/${responseId}/intrekken`)
+      .set('Cookie', cookieAdminA)
+      .send({ toelichting: 'Gebeld: moet naar IT-beveiliging' })
+      .expect(200);
+
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${responseId}/heruitnodigen`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({})
+      .expect(200);
+
+    // Na de nieuwe link is "laatst verstuurd" leeg — de vorige verzending
+    // hoort niet bij deze link. Maar ze is niet verdwenen.
+    const naNieuweLink = await deelnemerVan(runId, responseId);
+    expect(naNieuweLink.handmatigVerzondenOp).toBeNull();
+
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${responseId}/handmatig-verzonden`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({
+        verzondenOp: new Date(Date.now() - 60 * 1000).toISOString(),
+        adres: 'security@vendor1.example.test',
+      })
+      .expect(200);
+
+    const na = await deelnemerVan(runId, responseId);
+
+    expect(na.geschiedenis.map((g) => g.soort)).toEqual([
+      'verstuurd',
+      'niet_aangekomen',
+      'ingetrokken',
+      'nieuwe_link',
+      'verstuurd',
+    ]);
+    expect(na.geschiedenis[0].adres).toBe('info@vendor1.example.test');
+    expect(na.geschiedenis[0].plaatsgevondenOp).toBe(eersteKeer);
+    expect(na.geschiedenis[1].toelichting).toBe('Onbestelbaar');
+    expect(na.geschiedenis[2].toelichting).toBe(
+      'Gebeld: moet naar IT-beveiliging',
+    );
+    expect(na.geschiedenis[4].adres).toBe('security@vendor1.example.test');
+    expect(na.status).toBe('pending');
+  });
+
+  it('legt bij een tweede intrekking geen tweede regel vast', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    for (let i = 0; i < 2; i++) {
+      await request(server)
+        .post(
+          `/admin/survey/runs/${runId}/participants/${responseId}/intrekken`,
+        )
+        .set('Cookie', cookieAdminA)
+        .send({})
+        .expect(200);
+    }
+
+    const d = await deelnemerVan(runId, responseId);
+    expect(d.geschiedenis.map((g) => g.soort)).toEqual(['ingetrokken']);
+    expect(d.geschiedenis[0].toelichting).toBeNull();
+  });
+
+  it('weigert een reviewer die "kwam niet aan" wil registreren', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${responseId}/niet-aangekomen`,
+      )
+      .set('Cookie', cookieReviewer)
+      .send({})
+      .expect(403);
+  });
+
+  it('laat tenant B geen "kwam niet aan" registreren bij tenant A', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${responseId}/niet-aangekomen`,
+      )
+      .set('Cookie', cookieAdminB)
+      .send({})
+      .expect(404);
+
+    expect((await deelnemerVan(runId, responseId)).geschiedenis).toEqual([]);
+  });
+
+  it('weigert een ongeldig adres bij "kwam niet aan"', async () => {
+    const runId = await nieuweRonde();
+    const responseId = await nodigUit(runId, VENDOR_1);
+
+    await request(server)
+      .post(
+        `/admin/survey/runs/${runId}/participants/${responseId}/niet-aangekomen`,
+      )
+      .set('Cookie', cookieAdminA)
+      .send({ adres: 'Jan de Vries' })
+      .expect(400);
   });
 
   // ── Heruitnodigen na intrekken ───────────────────────────────────────────

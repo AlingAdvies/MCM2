@@ -8,6 +8,7 @@ import { sql } from 'drizzle-orm';
 
 import { DatabaseService } from '../db/database.service';
 import { genereerToken, hashToken } from './survey-token';
+import { legGebeurtenisVast } from './uitnodigingsgeschiedenis';
 import {
   magOvergaan,
   mogelijkeOvergangen,
@@ -428,11 +429,17 @@ export class RondeBeheerService {
    * maken — dat hoort niet bij "ik heb me vergist bij het uitnodigen".
    * Alleen 'pending' mag naar 'revoked'; een 'submitted' of al 'revoked'
    * respons levert een 409 op, met de reden erbij.
+   *
+   * Legt sinds #258 een gebeurtenis 'ingetrokken' vast, met de optionele
+   * reden ("gebeld, moet naar IT"). Een tweede intrekking van een al
+   * ingetrokken respons verandert niets en legt dus ook niets vast.
    */
   async trekDeelnemerIn(
     tenantId: string,
     runId: string,
     responseId: string,
+    userId: string,
+    toelichting: string | null = null,
   ): Promise<{ responseId: string; status: string }> {
     return this.db.withTenant(
       tenantId,
@@ -475,6 +482,14 @@ export class RondeBeheerService {
               RETURNING response_id, status`,
         );
 
+        await legGebeurtenisVast(tx, {
+          tenantId,
+          responseId,
+          soort: 'ingetrokken',
+          userId,
+          toelichting,
+        });
+
         return {
           responseId: bijgewerkt.rows[0].response_id,
           status: bijgewerkt.rows[0].status,
@@ -511,12 +526,21 @@ export class RondeBeheerService {
    * Geen aparte intrek-route: een tweede aanroep overschrijft de eerdere
    * datum. Dat is bewust minder streng dan `trekDeelnemerIn()` — een verkeerd
    * gezette datum is een correctie, geen bewijs dat ongedaan gemaakt wordt.
+   *
+   * ── Sinds #258: de kolom is "laatst verstuurd", de geschiedenis staat apart ──
+   *
+   * Elke registratie legt daarnaast een gebeurtenis 'verstuurd' vast, mét het
+   * adres. Het overschrijven hierboven raakt dus alleen de kolom waar de
+   * statusberekening op leunt; eerdere verzendingen blijven in de tijdlijn.
    */
   async registreerHandmatigeVerzending(
     tenantId: string,
     runId: string,
     responseId: string,
     verzondenOp: Date,
+    userId: string,
+    adres: string,
+    toelichting: string | null = null,
   ): Promise<{ responseId: string; handmatigVerzondenOp: string }> {
     return this.db.withTenant(
       tenantId,
@@ -536,6 +560,16 @@ export class RondeBeheerService {
             'Deze deelnemer bestaat niet binnen deze ronde.',
           );
         }
+
+        await legGebeurtenisVast(tx, {
+          tenantId,
+          responseId,
+          soort: 'verstuurd',
+          userId,
+          adres,
+          toelichting,
+          plaatsgevondenOp: verzondenOp,
+        });
 
         return {
           responseId: bijgewerkt.rows[0].response_id,
@@ -569,12 +603,17 @@ export class RondeBeheerService {
    * link misschien al heeft. Een 'submitted' respons opnieuw uitnodigen zou
    * een ingediend antwoord laten overschrijven; dat hoort net zo min hier als
    * bij trekDeelnemerIn().
+   *
+   * Zet `handmatig_verzonden_op` terug op NULL: de nieuwe link is nog niet
+   * verstuurd. Sinds #258 verdwijnt de vorige verzending daarmee niet meer —
+   * die staat in de tijdlijn, en deze methode voegt er 'nieuwe_link' aan toe.
    */
   async heruitnodigen(
     tenantId: string,
     runId: string,
     responseId: string,
     geldigheidDagen: number,
+    userId: string,
   ): Promise<{
     responseId: string;
     vendorId: string;
@@ -650,12 +689,99 @@ export class RondeBeheerService {
           );
         }
 
+        await legGebeurtenisVast(tx, {
+          tenantId,
+          responseId,
+          soort: 'nieuwe_link',
+          userId,
+        });
+
         return {
           responseId: bijgewerkt.rows[0].response_id,
           vendorId: bijgewerkt.rows[0].vendor_id,
           token,
           expiresAt: iso(bijgewerkt.rows[0].expires_at)!,
         };
+      },
+      'medewerker',
+    );
+  }
+
+  /**
+   * Registreert dat een verstuurde uitnodiging niet is aangekomen —
+   * onbestelbaar, of "werkt hier niet meer" (#258).
+   *
+   * Alleen een gebeurtenis, geen statuswijziging en geen wijziging aan
+   * `handmatig_verzonden_op`: een eigen status voor "kwam niet aan" is bewust
+   * uitgesteld (besluit eigenaar 17-11). De tijdlijn laat het zien.
+   *
+   * Mag op elke status: de terugmelding kan binnenkomen nadat de link al is
+   * ingetrokken of opnieuw is uitgegeven.
+   */
+  async registreerNietAangekomen(
+    tenantId: string,
+    runId: string,
+    responseId: string,
+    userId: string,
+    adres: string | null,
+    toelichting: string | null,
+  ): Promise<{ responseId: string }> {
+    return this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        const gevonden = await tx.execute(
+          sql`SELECT 1 FROM clm.survey_response
+               WHERE response_id = ${responseId} AND run_id = ${runId}`,
+        );
+
+        if (gevonden.rows.length === 0) {
+          throw new NotFoundException(
+            'Deze deelnemer bestaat niet binnen deze ronde.',
+          );
+        }
+
+        await legGebeurtenisVast(tx, {
+          tenantId,
+          responseId,
+          soort: 'niet_aangekomen',
+          userId,
+          adres,
+          toelichting,
+        });
+
+        return { responseId };
+      },
+      'medewerker',
+    );
+  }
+
+  /**
+   * Legt de verzendingen via het eigen mailkanaal vast als 'verstuurd' (#258).
+   *
+   * Een aparte transactie ná het versturen, niet erin: versturen gebeurt
+   * bewust buiten de transactie die de tokens uitgeeft (zie de controller).
+   * Alleen wat echt is verstuurd hoort hier — een testkanaal dat niets
+   * verzond, levert geen regel op.
+   */
+  async registreerMailVerzendingen(
+    tenantId: string,
+    userId: string,
+    verzendingen: readonly { responseId: string; adres: string }[],
+  ): Promise<void> {
+    if (verzendingen.length === 0) return;
+
+    await this.db.withTenant(
+      tenantId,
+      async (tx) => {
+        for (const v of verzendingen) {
+          await legGebeurtenisVast(tx, {
+            tenantId,
+            responseId: v.responseId,
+            soort: 'verstuurd',
+            userId,
+            adres: v.adres,
+          });
+        }
       },
       'medewerker',
     );

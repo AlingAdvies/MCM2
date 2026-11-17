@@ -937,6 +937,38 @@ export const surveyResponse = clm.table(
   ],
 );
 
+// clm.survey_response_event (0049, #258): uitnodigingsgeschiedenis per
+// deelnemer. Append-only — geen UPDATE, geen DELETE, ook geen zacht
+// verwijderen. Zie src/survey/uitnodigingsgeschiedenis.ts.
+export const surveyResponseEvent = clm.table(
+  'survey_response_event',
+  {
+    eventId: uuid('event_id').primaryKey().defaultRandom(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenant.tenantId, { onDelete: 'restrict' }),
+    responseId: uuid('response_id')
+      .notNull()
+      .references(() => surveyResponse.responseId, { onDelete: 'cascade' }),
+    soort: text('soort').notNull(),
+    adres: text('adres'),
+    toelichting: text('toelichting'),
+    plaatsgevondenOp: timestamp('plaatsgevonden_op', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdByUserId: uuid('created_by_user_id')
+      .notNull()
+      .references(() => user.userId, { onDelete: 'restrict' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    index('survey_response_event_tenant_id_idx').on(t.tenantId),
+    index('survey_response_event_response_id_idx').on(t.responseId),
+  ],
+);
+
 // ─── clm schema: vragenlijst-cluster ──────────────────────────────────────
 // Zie docs/superpowers/specs/2026-07-28-vragenlijst-ontwerp.md.
 // Niveau B: de tenant kiest per vraag een antwoordtype uit acht.

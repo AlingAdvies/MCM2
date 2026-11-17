@@ -228,9 +228,108 @@ export function leesUitnodigingen(body: unknown): Uitnodigingen {
   };
 }
 
+/**
+ * Grenzen voor de uitnodigingsgeschiedenis (#258, migratie 0049). Zelfde
+ * waarden als de CHECK-constraints daar: 320 is de maximale lengte van een
+ * e-mailadres, 500 die van een dossiernotitie (0043).
+ */
+export const ADRES_MAX_TEKENS = 320;
+export const TOELICHTING_MAX_TEKENS = 500;
+
+/**
+ * Leest een e-mailadres. Bewust geen volledige RFC-controle — die geeft vooral
+ * valse afwijzingen. Een `@` met iets ervoor en erna vangt de vergissing die
+ * hier telt: een naam of telefoonnummer in het adresveld.
+ */
+function leesAdres(waarde: unknown, verplicht: boolean): string | null {
+  if (waarde === undefined || waarde === null || waarde === '') {
+    if (verplicht) {
+      throw new InvoerFout('adres', 'Vul in naar welk adres u het stuurde.');
+    }
+    return null;
+  }
+
+  if (typeof waarde !== 'string') {
+    throw new InvoerFout('adres', 'Het adres moet tekst zijn.');
+  }
+
+  const adres = waarde.trim();
+
+  if (adres === '') {
+    if (verplicht) {
+      throw new InvoerFout('adres', 'Vul in naar welk adres u het stuurde.');
+    }
+    return null;
+  }
+
+  if (adres.length > ADRES_MAX_TEKENS || !/^[^\s@]+@[^\s@]+$/.test(adres)) {
+    throw new InvoerFout('adres', 'Dit is geen geldig e-mailadres.');
+  }
+
+  return adres;
+}
+
+/** Optionele toelichting; leeg of alleen spaties telt als niets. */
+function leesToelichting(waarde: unknown): string | null {
+  if (waarde === undefined || waarde === null) return null;
+
+  if (typeof waarde !== 'string') {
+    throw new InvoerFout('toelichting', 'De toelichting moet tekst zijn.');
+  }
+
+  const toelichting = waarde.trim();
+
+  if (toelichting === '') return null;
+
+  if (toelichting.length > TOELICHTING_MAX_TEKENS) {
+    throw new InvoerFout(
+      'toelichting',
+      `Een toelichting is maximaal ${TOELICHTING_MAX_TEKENS} tekens.`,
+    );
+  }
+
+  return toelichting;
+}
+
+/**
+ * Body die mag ontbreken. Intrekken werd tot #258 zonder body aangeroepen;
+ * een client die dat nog doet, blijft werken.
+ */
+function leesOptioneelObject(body: unknown): Record<string, unknown> {
+  if (body === undefined || body === null) return {};
+  return leesObject(body);
+}
+
 /** Invoer voor het registreren van een handmatige verzending. */
 export interface HandmatigeVerzending {
   verzondenOp: Date;
+  /** Naar welk adres — verplicht sinds #258. */
+  adres: string;
+  toelichting: string | null;
+}
+
+/** Invoer bij intrekken: alleen een optionele reden. */
+export interface IntrekInvoer {
+  toelichting: string | null;
+}
+
+export function leesIntrekken(body: unknown): IntrekInvoer {
+  const invoer = leesOptioneelObject(body);
+  return { toelichting: leesToelichting(invoer.toelichting) };
+}
+
+/** Invoer bij "kwam niet aan": adres en toelichting zijn allebei optioneel. */
+export interface NietAangekomenInvoer {
+  adres: string | null;
+  toelichting: string | null;
+}
+
+export function leesNietAangekomen(body: unknown): NietAangekomenInvoer {
+  const invoer = leesOptioneelObject(body);
+  return {
+    adres: leesAdres(invoer.adres, false),
+    toelichting: leesToelichting(invoer.toelichting),
+  };
 }
 
 export function leesHandmatigeVerzending(body: unknown): HandmatigeVerzending {
@@ -256,7 +355,11 @@ export function leesHandmatigeVerzending(body: unknown): HandmatigeVerzending {
     );
   }
 
-  return { verzondenOp: datum };
+  return {
+    verzondenOp: datum,
+    adres: leesAdres(invoer.adres, true)!,
+    toelichting: leesToelichting(invoer.toelichting),
+  };
 }
 
 /**
