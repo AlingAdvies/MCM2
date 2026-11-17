@@ -166,7 +166,9 @@
     "Migratie 0049 (17-11, #258, uitnodigingsgeschiedenis) voegt WEL een tabel",
     "toe: clm.survey_response_event. Die staat BEWUST NOG NIET in de",
     "tabellenlijst hieronder — zelfde kip-ei als bij 0046: productie heeft hem",
-    "pas na de uitrol. Na bevestigde uitrol toevoegen."
+    "pas na de uitrol. Bevestigd op productie",
+    "(17-11, run 44064197577, health 21b5811, verify:omgevingen: 50 migraties,",
+    "34 tabellen, geen zonderLeesrecht) — nu in de tabellenlijst."
   ],
   "bijgewerkt": "2026-11-17",
   "migratiestand": "0049_survey_response_event",
@@ -187,6 +189,7 @@
     "clm.survey_category",
     "clm.survey_question",
     "clm.survey_response",
+    "clm.survey_response_event",
     "clm.survey_review",
     "clm.survey_run",
     "clm.survey_template",

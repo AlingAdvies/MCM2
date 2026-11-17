@@ -303,7 +303,7 @@ staan nog open.
 
 Geen ritme, geen vervaldatum, geen procedure voor: het Supabase-productie- en
 stagingwachtwoord, de Resend-sleutel, het Telegram-token, de OIDC-secrets, het
-GHCR-token op `saxombp` (verloopt ~8 november 2026), de AWS Secrets
+GHCR-token op `saxombp` (sinds 17-11-2026 met procedure, vervalt 17-11-2027), de AWS Secrets
 Manager-secrets voor productie (`mcm2/productie/*`), en het GHCR-token dat ECS
 gebruikt om images te pullen. De GitHub→AWS-authenticatie zelf is hiervan
 uitgezonderd (zie §6) — dat is het enige stuk van de keten dat structureel

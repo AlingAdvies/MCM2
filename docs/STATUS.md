@@ -2606,7 +2606,7 @@ handmatig te starten is (PR #122).
 | **#46** | Uploads op een containerschijf: weg bij image-vervanging | **Harde datum**: pilot ~1 september. Dit zijn compliance-bewijsstukken |
 | — | Geen bewaking die waarschuwt als een omgeving omvalt | Je zou het merken doordat iemand belt |
 | — | Geen incidentplan | NIS2 kent een meldplicht binnen 24 uur; die klok loopt of je een plan hebt of niet |
-| — | Geen sleutelrotatie | Het GHCR-token op saxombp **verloopt rond 08-11-2026**; dan stopt elke uitrol |
+| — | Geen sleutelrotatie | Het GHCR-token op saxombp verliep 08-11-2026; op 17-11 vervangen, vervalt nu **17-11-2027** (procedure: `uitrol-acceptatie-en-productie.md`). Andere sleutels: nog geen rotatie |
 | **#58** | Backup hangt aan deze laptop | Er leeft een echte tenant |
 | **#12** | Echte cloudomgeving | Nodig vóór de pilot |
 
